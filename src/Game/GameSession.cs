@@ -59,7 +59,7 @@ public partial class GameSession : Node3D
         if (Lanes) BuildLaneDressing();
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
-        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Touch };
+        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile }; // touch laptops still have a mouse
         AddChild(Camera);
         var home = World.Nests[Local.Me].Pos;
         // start behind our own nest, looking out toward the middle of the yard
@@ -306,6 +306,20 @@ public partial class GameSession : Node3D
         if (on) _ai.Add(Lanes ? new LaneAI(Sim, Local.Me, Difficulty.Normal) : new AIController(Sim, Local.Me, Difficulty.Normal) { Passive = true });
     }
 
+    /// During a battle on a computer the mouse stays inside the game window, so pushing it against
+    /// any edge scrolls the map (in a window it would otherwise slide off onto the desktop).
+    void ConfineMouse()
+    {
+        if (Demo || Settings.Mobile) return;
+        var want = _paused || _ended || !DisplayServer.WindowIsFocused() ? Godot.Input.MouseModeEnum.Visible : Godot.Input.MouseModeEnum.Confined;
+        if (Godot.Input.MouseMode != want) Godot.Input.MouseMode = want;
+    }
+
+    public override void _ExitTree()
+    {
+        if (!Demo) Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible; // back to the menu: free the mouse
+    }
+
     public int TrailToggles; // the tutorial watches these
     public void ToggleTrails() { TrailToggles++; _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
     public void SetPaused(bool p) { _paused = p && Net == null; }
@@ -333,6 +347,7 @@ public partial class GameSession : Node3D
         UpdateAudio(dt);
         if (Demo) DemoCamera(dt);
         if (Lanes) UpdateMounds();
+        ConfineMouse();
         CheckEnd();
     }
 

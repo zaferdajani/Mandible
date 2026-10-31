@@ -203,7 +203,8 @@ public partial class PlayerInput : Node
             case Godot.Key.Home: case Godot.Key.Backspace: SelectNest(); return;
             case Godot.Key.Space: if (LastAlert.HasValue) Cam.PanTo(LastAlert.Value); return;
             case Godot.Key.F11:
-                DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);
+                Settings.Fullscreen = DisplayServer.WindowGetMode() != DisplayServer.WindowMode.Fullscreen;
+                Settings.ApplyDisplay(save: true);
                 return;
         }
         // control groups: the number row or the numpad; Ctrl (or Cmd on a Mac) saves, the number alone recalls

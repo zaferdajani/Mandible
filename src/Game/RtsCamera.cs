@@ -14,7 +14,7 @@ public partial class RtsCamera : Node3D
     public float Distance = 70, TargetDistance = 70;
     public const float MinDist = 14, MaxDist = 175;
     public bool UserControl = true;
-    public bool EdgeScroll = !Settings.Touch;
+    public bool EdgeScroll = !Settings.Mobile;
     Vector3 _focusTarget;
     float _yawTarget;
     bool _rotating;

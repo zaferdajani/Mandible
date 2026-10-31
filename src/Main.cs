@@ -23,6 +23,7 @@ public partial class Main : Node
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://test_args.txt"));
         }
         if (args.Count > 0) GD.Print($"[args] {string.Join(" ", args)}");
+        TestRun = args.Count > 0;
         foreach (var a in args)
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
@@ -58,6 +59,7 @@ public partial class Main : Node
             }
         }
         Settings.Load();
+        if (args.Count == 0) Settings.ApplyDisplay(); // test runs keep the window size they asked for
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
         GetTree().Root.SizeChanged += ApplyOrientation;
         ApplyOrientation();
@@ -70,6 +72,7 @@ public partial class Main : Node
     }
 
     string _layout;
+    public bool TestRun; // started by a test harness: no update checks, keep the window as asked
 
     /// The device was rotated (or the window resized): in portrait the UI is laid out on a narrower
     /// canvas so it stays a usable size, and the HUD moves the selection panel to the top.
@@ -188,6 +191,7 @@ public partial class MainMenu : CanvasLayer
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", CycleGraphics),
+            (DisplayLabel(), ToggleDisplay),
             ("Quit", () => GetTree().Quit()));
         _diff = Column(
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
@@ -196,10 +200,72 @@ public partial class MainMenu : CanvasLayer
             ("Back", () => { _diff.Visible = false; if (_lanes) PickHero(); else PickRace(); }));
         _diff.Visible = false;
 
-        var credit = UiTheme.Text("Godot 4.7  ·  original art, sound and music generated for Mandible", 13, null, new Color(UiTheme.Dim, 0.7f));
+        BuildUpdateBanner();
+
+        var credit = UiTheme.Text($"Mandible {Updater.Version}  ·  Godot 4.7  ·  original art, sound and music generated for Mandible", 13, null, new Color(UiTheme.Dim, 0.7f));
         credit.HorizontalAlignment = HorizontalAlignment.Center;
         UiTheme.Place(credit, 0, 1, 1, 1, 0, -34, 0, -10);
         _root.AddChild(credit);
+    }
+
+    Updater _updater;
+    Button _updateButton;
+
+    /// Top-right corner: quietly checks GitHub for a newer release and offers it.
+    void BuildUpdateBanner()
+    {
+        _updater = new Updater();
+        AddChild(_updater);
+        _updateButton = new Button { Visible = false, CustomMinimumSize = new Vector2(0, 46) };
+        _updateButton.AddThemeFontSizeOverride("font_size", 16);
+        UiTheme.Place(_updateButton, 1, 0, 1, 0, -560, 20, -20, 66);
+        _updateButton.Pressed += () =>
+        {
+            App.Audio.Ui("ui_click");
+            if (_updater.State == Updater.Phase.Available) _updater.Install();
+            else if (_updater.State == Updater.Phase.Failed) _updater.Check();
+        };
+        _root.AddChild(_updateButton);
+        _updater.Changed += RefreshUpdate;
+        if (!App.TestRun || OS.GetEnvironment("MANDIBLE_FAKE_VERSION") != "") _updater.Check();
+    }
+
+    void RefreshUpdate()
+    {
+        var u = _updater;
+        _updateButton.Visible = u.State is Updater.Phase.Available or Updater.Phase.Downloading or Updater.Phase.Installing or Updater.Phase.Failed;
+        _updateButton.Disabled = u.State is Updater.Phase.Downloading or Updater.Phase.Installing;
+        _updateButton.Text = u.State switch
+        {
+            Updater.Phase.Available => u.CanInstallInPlace ? $"New version {u.Latest} available  ·  click to update" : $"New version {u.Latest}  ·  click to download",
+            Updater.Phase.Failed => $"{u.Status}  ·  click to retry",
+            _ => u.Status,
+        };
+        _updateButton.AddThemeColorOverride("font_color", u.State == Updater.Phase.Failed ? UiTheme.Dim : new Color(0.6f, 1f, 0.55f));
+        if (u.State == Updater.Phase.Available && OS.GetEnvironment("MANDIBLE_AUTO_INSTALL") == "1") u.Install(); // update self-test
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_updater?.State == Updater.Phase.Downloading && _updater.Progress >= 0)
+            _updateButton.Text = $"Downloading {_updater.Latest}  ·  {_updater.Progress * 100:0}%";
+    }
+
+    static string DisplayLabel() => Settings.Mobile ? "Display: device" : $"Display: {(Settings.Fullscreen ? "Fullscreen" : "Window")}  (F11)";
+
+    void ToggleDisplay()
+    {
+        if (Settings.Mobile) return;
+        Settings.Fullscreen = !Settings.Fullscreen;
+        Settings.ApplyDisplay(save: true);
+        foreach (var n in _main.GetChildren())
+            if (n is Button b && b.Text.StartsWith("Display")) b.Text = DisplayLabel();
+    }
+
+    public override void _UnhandledKeyInput(InputEvent e)
+    {
+        // F11 also works in the menus
+        if (Visible && e is InputEventKey { Pressed: true, Echo: false } k && k.PhysicalKeycode == Key.F11) ToggleDisplay();
     }
 
     void CycleGraphics()
@@ -227,7 +293,7 @@ public partial class MainMenu : CanvasLayer
         UiTheme.Place(v, 0.5f, 0, 0.5f, 0, -190, 380, 190, 820);
         foreach (var (label, act) in items)
         {
-            var b = new Button { Text = label, CustomMinimumSize = new Vector2(380, 58) };
+            var b = new Button { Text = label, CustomMinimumSize = new Vector2(380, 52) };
             b.AddThemeFontSizeOverride("font_size", 20);
             b.AddThemeFontOverride("font", UiTheme.Title);
             b.Pressed += () => { App.Audio.Ui("ui_click"); act(); };
