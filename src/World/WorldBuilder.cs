@@ -73,7 +73,7 @@ public static class WorldBuilder
 
     static ShaderMaterial Mat(World w, string code, bool fow = true)
     {
-        var m = new ShaderMaterial { Shader = new Shader { Code = code } };
+        var m = new ShaderMaterial { Shader = Shaders.Get(code) };
         m.SetShaderParameter("noise_a", w.NoiseA);
         m.SetShaderParameter("noise_b", w.NoiseB);
         m.SetShaderParameter("normal_a", w.NormalA);

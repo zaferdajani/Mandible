@@ -91,7 +91,7 @@ public sealed class AntRenderer
     {
         var root = new Node3D { Name = "Ants" };
         parent.AddChild(root);
-        var shader = new Shader { Code = Shaders.Ant };
+        var shader = Shaders.Get(Shaders.Ant);
         for (int team = 0; team < 3; team++)
             for (int t = 0; t < 13; t++)
             {
@@ -103,7 +103,7 @@ public sealed class AntRenderer
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
             }
         // translucent wings for every flyer, beating in their own batch
-        var wingShader = new Shader { Code = Shaders.Wing };
+        var wingShader = Shaders.Get(Shaders.Wing);
         foreach (var (team, type) in new[] { (0, AntType.Flyer), (1, AntType.Flyer), (0, AntType.Marshal), (1, AntType.Marshal), (Config.Wild, AntType.Wasp) })
         {
             var wm = new ShaderMaterial { Shader = wingShader };
@@ -113,24 +113,24 @@ public sealed class AntRenderer
             _wings[(team, type)].Node.SortingOffset = 5;
         }
         var silk = AntMesh.Silk();
-        var silkMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Silk } };
+        var silkMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Silk) };
         _cocoons = new Batch(root, silk, silkMat, true, "Cocoons");
         _blobs = new Batch(root, silk, silkMat, true, "WebShots");
-        var webMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Web } };
+        var webMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Web) };
         _webs = new Batch(root, new PlaneMesh { Size = Vector2.One }, webMat, false, "Webs");
-        var pipMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Pip } };
+        var pipMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pip) };
         _pips = new Batch(root, new QuadMesh { Size = Vector2.One }, pipMat, false, "Pips");
         _pips.Node.SortingOffset = 101;
         _labelRoot = new Node3D { Name = "Labels" };
         root.AddChild(_labelRoot);
-        var crumbMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Food } };
+        var crumbMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Food) };
         crumbMat.SetShaderParameter("kind", 0);
         _crumbs = new Batch(root, AntMesh.Crumb(), crumbMat, false, "Crumbs");
 
-        var ringMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Ring } };
+        var ringMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Ring) };
         ringMat.SetShaderParameter("color", new Color(0.55f, 1.0f, 0.45f, 0.95f));
         _rings = new Batch(root, new PlaneMesh { Size = Vector2.One }, ringMat, false, "Rings");
-        var barMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Bar } };
+        var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
     }

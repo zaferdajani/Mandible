@@ -18,9 +18,9 @@ public sealed class Effects
     public Effects(Node3D parent, Heightfield hf)
     {
         _hf = hf;
-        var mat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Particle } };
+        var mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Particle) };
         _batch = new Batch(parent, new QuadMesh { Size = Vector2.One }, mat, false, "Particles");
-        var shader = new Shader { Code = Shaders.Marker };
+        var shader = Shaders.Get(Shaders.Marker);
         for (int i = 0; i < _markers.Length; i++)
         {
             var m = new ShaderMaterial { Shader = shader };

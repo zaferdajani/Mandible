@@ -53,7 +53,7 @@ public sealed class NestChambers
             grains.SetInstanceTransform(i, new Transform3D(new Basis(Vector3.Up, rng.R(0, 6)) * Basis.FromScale(Vector3.One * s), new Vector3(q.X, gy(q) + s * 0.25f, q.Y)));
             grains.SetInstanceCustomData(i, new Color(rng.R(0.5f, 1f), 0, rng.R(0, 0.3f), rng.F()));
         }
-        var pebbleMat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Pebble } };
+        var pebbleMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pebble) };
         pebbleMat.SetShaderParameter("noise_b", _w.NoiseB);
         pebbleMat.SetShaderParameter("map_size", Config.MapSize);
         _w.RegisterFow(pebbleMat);
@@ -82,7 +82,7 @@ public sealed class NestChambers
                 break;
             case Upgrade.Wings:
                 item = AntMesh.Wings(AntType.Flyer);
-                var wm = new ShaderMaterial { Shader = new Shader { Code = Shaders.Wing } };
+                var wm = new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) };
                 mat = wm;
                 count = 10; scale = 2.2f;
                 break;
@@ -98,7 +98,7 @@ public sealed class NestChambers
                 break;
             default:
                 item = AntMesh.Silk();
-                mat = new ShaderMaterial { Shader = new Shader { Code = Shaders.Silk } };
+                mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Silk) };
                 count = 7; scale = 2.4f;
                 break;
         }

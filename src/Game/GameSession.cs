@@ -39,13 +39,18 @@ public partial class GameSession : Node3D
 
     public override void _Ready()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         World = WorldBuilder.Build(this, Seed);
+        long tWorld = sw.ElapsedMilliseconds;
         Sim = new Sim(World);
         Orders = Net != null ? Net : new DirectOrders(Sim);
+        long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
+        long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
         Chambers = new NestChambers(World, this);
         BuildLighting();
+        GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Touch };
         AddChild(Camera);

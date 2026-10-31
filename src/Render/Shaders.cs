@@ -2,6 +2,16 @@ namespace Mandible;
 
 public static class Shaders
 {
+    static readonly System.Collections.Generic.Dictionary<string, Godot.Shader> _cache = new();
+
+    /// One shared Shader per source: the renderer compiles every Shader object separately, so
+    /// creating one per rock, leaf or crumb stalled the first frame for many seconds.
+    public static Godot.Shader Get(string code)
+    {
+        if (!_cache.TryGetValue(code, out var s)) _cache[code] = s = new Godot.Shader { Code = code };
+        return s;
+    }
+
     const string Fow = @"
 uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
 uniform float map_size = 320.0;
