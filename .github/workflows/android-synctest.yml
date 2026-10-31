@@ -80,15 +80,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            adb install -r build/Mandible.apk
-            adb shell "run-as com.mandible.warbeneaththegrass sh -c 'mkdir -p files && echo --synctest=600 > files/test_args.txt'"
-            adb shell "run-as com.mandible.warbeneaththegrass ls -la files"
-            adb logcat -c
-            adb shell am start -n com.mandible.warbeneaththegrass/com.godot.game.GodotApp
-            for i in $(seq 1 100); do sleep 15; n=$(adb logcat -d | grep -c "\[synctest\]"); echo "after $((i*15))s - $n sync lines"; adb logcat -d | grep -E "\[args\]|\[synctest\]" | tail -n 1; if adb logcat -d | grep -q "synctest\] done"; then break; fi; if [ $i -eq 4 ]; then adb logcat -d | grep -iE "godot|mono|dotnet|fatal|crash" | tail -n 40; fi; done
-            adb logcat -d | grep -o "\[synctest\].*" | tee synctest-android.txt
-            adb logcat -d | grep -iE "godot|mono|fatal|crash" | tail -n 80 > logcat-tail.txt || true
+          script: bash tools/android-synctest.sh build/Mandible.apk 600
 
       - name: Upload sync trail
         if: always()

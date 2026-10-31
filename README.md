@@ -37,15 +37,25 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | Space | Jump to the last alert |
 | Esc / F1 / F11 | Pause / help / fullscreen |
 
+## Lane War (hero mode)
+
+Main menu, then **Lane War**. Three lanes run between the nests. Every 30 seconds each mound sends free waves of soldiers down every lane (gunners join after 5 minutes, majors after 10, elite waves after 15; waves grow a level stronger every 5 minutes). Two **mound guardians** stand on each lane and two at each queen; the queen cannot be hurt until her two guardians fall. You steer one **hero** (Warlord, Acid Matron or Sky Marshal): right-click to move or attack, **Q** for its ability, **1-4** to buy Mandibles, Carapace, Swift Legs or Royal Jelly with food from kills and your foragers, **Space** to find it. It levels to 10, heals in the pool at your nest and respawns after a short timer. Wild bugs live in the jungle between the lanes. Kill the enemy queen to win.
+
+## Phones and tablets
+
+The game follows the device's rotation: landscape either way, or portrait (the selection panel moves to the top).
+
 ## Multiplayer (LAN and internet, Windows / macOS / Android / iOS)
 
-Main menu, then **Multiplayer**. One player hosts, the other joins. The host picks a colony (black garden ants or red fire ants); the guest leads the other.
+Main menu, then **Multiplayer**. One player hosts, the other joins. The host picks the mode (Colony War or Lane War) and a colony (black garden ants or red fire ants); the guest leads the other colony. In Lane War each player picks a hero in the lobby. Both players need the same release.
 
 - **Same Wi-Fi or LAN:** choose *Host on this network*. The game appears automatically in the other player's *Games on your network* list.
 - **Over the internet:** choose *Host over the internet*. Mandible asks the router to open UDP port 47010 (UPnP) and shows your internet address to send to your friend, who types it into *Join*. If the router refuses, forward UDP 47010 to the host PC manually.
 - Phones on mobile data usually cannot *host* (carrier NAT) but can join a PC host.
 
-The game uses deterministic lockstep: both machines run the identical simulation and only orders cross the network (a few hundred bytes a second), so it stays light on mobile data. Input delay adapts to the measured ping. Checksums are compared every second; a mismatch is reported in the HUD.
+How it works: **deterministic lockstep**. Both machines run the identical simulation at a fixed 30 ticks a second; only player orders cross the network (a few hundred bytes a second), so it stays light on mobile data. Orders are grouped into turns of 3 ticks and scheduled a few turns ahead (2 on a LAN, up to 6 on slow links, chosen from the measured ping), so both machines apply every order on exactly the same tick. A machine never runs ahead of the orders it has received; if a packet is late the game pauses for a moment instead of guessing. Every 10 turns the machines compare a checksum of the whole game state; a mismatch is reported in the HUD.
+
+Tested: two-process matches with 0 desyncs; 240 ms and 500 ms round trips with jitter run at full speed with no stalls (input delay adapts to 2 and 5 turns); and `--synctest` trails are bit-identical on Windows x64 and macOS ARM64.
 
 Touch: tap to select, drag to box-select, tap the ground to order the selection, long-press for attack-move, double-tap empty ground to deselect, two fingers to pan / pinch-zoom / twist-rotate.
 
@@ -87,4 +97,6 @@ The two commands above run a full networked AI-vs-AI match between two processes
 \\ash
 powershell -File tools/balance.ps1 -Diff Normal -Games 8
 \\n
-The command above plays black vs red on 8 different maps at once and prints who won each.
+The command above plays black vs red on 8 different maps at once and prints who won each. `tools/lanebalance.ps1` does the same for every Lane War hero matchup.
+
+`--synctest=600` plays fixed matches in both modes and prints the state checksum every 30 s: compare the trail across platforms (the macOS and Android-emulator workflows run it in the cloud). Set `MANDIBLE_NETLAG=250` before a `--nettest` pair to simulate a slow, jittery internet link.
