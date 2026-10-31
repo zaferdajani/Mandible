@@ -1,0 +1,74 @@
+name: Build macOS App (Godot .NET, universal)
+
+# Builds a universal (Apple Silicon + Intel) Mandible.app on a cloud Mac, ad-hoc signed,
+# then launches the exported app headless and plays a short AI match to prove it really runs on macOS.
+on:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Cache Godot and export templates
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-mono
+
+      - name: Download Godot (.NET) and export templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          curl -fsSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_macos.universal.zip"
+          curl -fsSL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
+          unzip -q godot.zip && unzip -q templates.tpz && rm godot.zip templates.tpz
+
+      - name: Install export templates
+        run: |
+          dest="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable.mono"
+          mkdir -p "$dest"
+          cp -R ~/godot/templates/* "$dest/"
+          echo "GODOT=$(ls -d ~/godot/Godot_mono.app)/Contents/MacOS/Godot" >> $GITHUB_ENV
+
+      - name: Build C# and import assets
+        run: |
+          dotnet build -c ExportRelease
+          "$GODOT" --headless --path . --import || true
+
+      - name: Export the macOS app
+        run: |
+          mkdir -p build/macos
+          "$GODOT" --headless --path . --export-release "macOS" build/macos/Mandible-macOS.zip
+          ls -la build/macos
+
+      - name: Smoke test - run the exported app on this Mac
+        run: |
+          cd build/macos
+          unzip -q Mandible-macOS.zip -d run
+          app=$(find run -name "*.app" -maxdepth 2 | head -1)
+          codesign --verify --deep --verbose=2 "$app" || true
+          exe="$app/Contents/MacOS/$(ls "$app/Contents/MacOS/" | head -1)"
+          lipo -info "$exe" || true
+          "$exe" --headless -- --simtest=90,Normal,Normal 2>&1 | tee smoke.log | tail -n 8
+          grep -q "\[simtest\] finished" smoke.log
+
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mandible-macOS
+          path: build/macos/Mandible-macOS.zip

@@ -161,7 +161,7 @@ public sealed class AIController
         ProdKind pick;
         if (workers < wantWorkers && workers < soldiers * 2 + 20) pick = ProdKind.Worker;
         else if (Config.Unlocked(ProdKind.Major, c.Tier) && majors * 4 < soldiers) pick = ProdKind.Major;
-        else if (Config.Unlocked(ProdKind.Gunner, c.Tier) && gunners * 3 < soldiers) pick = ProdKind.Gunner;
+        else if (Config.Unlocked(ProdKind.Gunner, c.Tier) && gunners * (c.Race == Race.BlackGarden ? 3 : 7) < soldiers) pick = ProdKind.Gunner; // fire ants have no acid
         else if (Config.Unlocked(ProdKind.Flyer, c.Tier) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
         else pick = ProdKind.Soldier;
         Q(pick); // a major simply waits until the food is there

@@ -20,6 +20,16 @@ public static class Capture
         app.Menu.OpenLobby();
         await Wait(3f);
         await Shot("01b_lobby");
+        app.Menu.PickRace();
+        await Wait(2.5f);
+        await Shot("01c_races");
+        int g = 0;
+        foreach (var tab in new[] { "Colonies", "Castes", "Wildlife", "Foraging", "Food", "Colony Needs" })
+        {
+            app.Menu.ShowGuide(tab);
+            await Wait(tab == "Castes" ? 3f : 1.5f);
+            await Shot($"01d{(char)('a' + g++)}_guide_{tab.Replace(" ", "").ToLower()}");
+        }
 
         app.StartBattle(Difficulty.Normal);
         await Wait(3);
@@ -73,6 +83,36 @@ public static class Capture
         await Wait(2.5f);
         await Shot("07_selected");
         Log(s, "end");
+
+        // click-inspect a food pile
+        FoodSource berry = null;
+        foreach (var f in s.World.Food) if (f.Alive && f.Kind == FoodKind.Berry && (berry == null || f.Pos.DistanceTo(nest) < berry.Pos.DistanceTo(nest))) berry = f;
+        if (berry != null)
+        {
+            s.Fog.RevealAll = true;
+            s.Camera.JumpTo(berry.Pos + new Vector2(3, -3), 30);
+            await Wait(1.5f);
+            var screen = s.Camera.Cam.UnprojectPosition(s.World.HF.Point(berry.Pos, 0.5f));
+            var picked = s.Input.PickFood(screen);
+            GD.Print($"[selftest] click on berry picks {(picked == berry ? "it  PASS" : "something else  FAIL")}");
+            s.Input.ClearSelection();
+            s.Input.InspectFood = berry;
+            s.Sim.Col[Local.Me].SugarT = 12; s.Sim.Col[Local.Me].JuiceT = 20; s.Sim.Col[Local.Me].ProteinT = 8;
+            await Wait(1f);
+            await Shot("08b_food_inspect");
+        }
+
+        // lead the red fire ants instead
+        app.StartBattle(Difficulty.Normal, 1);
+        await Wait(3);
+        s = app.Session;
+        var redNest = s.World.Nests[1].Pos;
+        float camD = new Vector2(s.Camera.Focus.X, s.Camera.Focus.Z).DistanceTo(redNest);
+        GD.Print($"[selftest] playing red: Local.Me={Local.Me}, camera starts {camD:0} from the red nest  {(Local.Me == 1 && camD < 30 ? "PASS" : "FAIL")}");
+        await Shot("19_red_start");
+        s.Camera.JumpTo(redNest + new Vector2(-5, 7), 22);
+        await Wait(2);
+        await Shot("20_red_close");
         _app.GetTree().Quit();
     }
 
@@ -276,10 +316,15 @@ public static class Capture
         bool shotTaken = false;
         var net = new Lockstep();
         app.AddChild(net);
-        net.OnStart += () => app.StartMultiplayer(net, autoPlay: true, fastForward: shotDir != null ? 0 : 7);
+        net.OnStart += () =>
+        {
+            GD.Print($"[nettest] start: this side leads team {net.Me} ({Local.ColonyName(net.Me)})");
+            app.StartMultiplayer(net, autoPlay: true, fastForward: shotDir != null ? 0 : 7);
+        };
         bool host = parts[0].StartsWith("host");
         if (host)
         {
+            if (parts[0] == "host-red") net.HostTeam = 1; // the host leads the red fire ants
             net.OnConnected += () => net.StartMatch();
             if (net.Host("HostBot", false) != Error.Ok) { GD.Print($"[nettest] host failed: {net.Status}"); app.GetTree().Quit(1); return; }
         }
@@ -329,11 +374,11 @@ public static class Capture
     }
 
     /// Headless AI-vs-AI match:  --headless -- --simtest=<seconds>
-    public static void SimTest(Main app, float seconds, Difficulty a, Difficulty b)
+    public static void SimTest(Main app, float seconds, Difficulty a, Difficulty b, uint seed = 20261031)
     {
         var root = new Node3D();
         app.AddChild(root);
-        var world = WorldBuilder.Build(root, 20261031);
+        var world = WorldBuilder.Build(root, seed);
         var sim = new Sim(world);
         var ais = new[] { new AIController(sim, 0, a), new AIController(sim, 1, b) };
         const float dt = 1f / 30f;
@@ -383,6 +428,8 @@ public static class Capture
                         if (sim.Ants[i].Root > 0) rooted++;
                     }
                 GD.Print($"[simtest]    black warrior states: {string.Join(" ", states)} rooted {rooted} queue [{string.Join(",", c0.Queue.ConvertAll(q => q.Kind.ToString()))}] researching {(c0.Researching ? c0.ResearchKind.ToString() : "-")}");
+                string By(Colony c) => $"crumb {c.GatheredBy[0]:0} berry {c.GatheredBy[1]:0} sugar {c.GatheredBy[2]:0} seed {c.GatheredBy[3]:0} corpse {c.GatheredBy[4]:0}";
+                GD.Print($"[simtest]    food black: {By(c0)} | red: {By(c1)}");
                 GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} wings {c0.T(Upgrade.Wings)}/{c1.T(Upgrade.Wings)} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m ants={alive} | black {p.Count[0]}w {p.Count[1]}s {p.Count[2]}m pop {p.PopUsed}/{p.PopCap} food {p.Food:0} gathered {p.Gathered:0} killed {p.Killed} | red {e.Count[0]}w {e.Count[1]}s {e.Count[2]}m pop {e.PopUsed}/{e.PopCap} food {e.Food:0} gathered {e.Gathered:0} killed {e.Killed} | tick avg {total / ticks:0.00}ms worst {worst:0.0}ms");
                 worst = 0;

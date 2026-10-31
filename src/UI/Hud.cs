@@ -90,10 +90,43 @@ public partial class Hud : CanvasLayer
         h.AddChild(menu);
         _root.AddChild(bar);
 
+        // food effects: shown only while that kind of food keeps arriving
+        var fx = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
+        fx.AddThemeConstantOverride("separation", 8);
+        UiTheme.Place(fx, 1, 0, 1, 0, -700, 68, -12, 98);
+        var kinds = new[] { FoodKind.Sugar, FoodKind.Berry, FoodKind.Corpse };
+        var names = new[] { "Sugar: workers faster", "Fruit: ants heal", "Protein: brood faster" };
+        for (int i = 0; i < 3; i++)
+        {
+            var chip = new PanelContainer { Visible = false, TooltipText = Config.FoodEffect(kinds[i]) };
+            chip.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.08f, 0.07f, 0.04f, 0.85f), new Color(FoodIcon.Tint(kinds[i]), 0.8f), 1, 12, 4));
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 6);
+            row.AddChild(new FoodIcon { Kind = kinds[i], CustomMinimumSize = new Vector2(20, 20) });
+            var l = UiTheme.Text(names[i], 13, UiTheme.Bold, UiTheme.Ink);
+            row.AddChild(l);
+            chip.AddChild(row);
+            fx.AddChild(chip);
+            _fx[i] = chip;
+            _fxLabel[i] = l;
+            _fxName[i] = names[i];
+        }
+        _root.AddChild(fx);
+
         var title = UiTheme.Text("MANDIBLE", 22, UiTheme.Title, new Color(UiTheme.Gold, 0.85f));
         UiTheme.Place(title, 0, 0, 0, 0, 22, 16, 300, 56);
         title.MouseFilter = Control.MouseFilterEnum.Ignore;
         _root.AddChild(title);
+    }
+
+    readonly PanelContainer[] _fx = new PanelContainer[3];
+    readonly Label[] _fxLabel = new Label[3];
+    readonly string[] _fxName = new string[3];
+
+    void SetEffect(int i, float t)
+    {
+        _fx[i].Visible = t > 0;
+        if (t > 0) _fxLabel[i].Text = $"{_fxName[i]}  {t:0}s";
     }
 
     static Label Stat(HBoxContainer h, string caption, Color c)
@@ -431,6 +464,9 @@ public partial class Hud : CanvasLayer
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";
         _pop.AddThemeColorOverride("font_color", c.PopUsed >= c.PopCap ? new Color(1, 0.45f, 0.3f) : UiTheme.Ink);
         _clock.Text = $"{(int)sim.Time / 60}:{(int)sim.Time % 60:00}";
+        SetEffect(0, c.SugarT);
+        SetEffect(1, c.JuiceT);
+        SetEffect(2, c.ProteinT);
         for (int i = 0; i < _prod.Length; i++)
         {
             var k = (ProdKind)i;
@@ -518,6 +554,7 @@ public partial class Hud : CanvasLayer
             single = id;
         }
         foreach (var ch in _selIcons.GetChildren()) ch.QueueFree();
+        _selDetail.TooltipText = "";
         if (Game.Input.NestSelected)
         {
             var c = sim.Col[Local.Me];
@@ -538,9 +575,27 @@ public partial class Hud : CanvasLayer
             _selHp.Value = a.Hp / a.MaxHp;
             _selDetail.Text = wild
                  ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood:0} food."
-                : $"Red colony.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}";
+                : $"{Local.ColonyName(a.Team)}.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}";
             AddIcon(a.Type, 1);
             return;
+        }
+        if (alive == 0 && Game.Input.InspectFood is { } food)
+        {
+            if (!food.Alive) { Game.Input.InspectFood = null; }
+            else
+            {
+                var race = sim.Col[Local.Me].Race;
+                bool fav = Config.Favoured(race, food.Kind);
+                float per = Config.FoodValue(food.Kind) * (fav ? Config.FoodBonus(race) : 1f);
+                _selTitle.Text = Config.FoodName(food.Kind);
+                _selTitle.AddThemeColorOverride("font_color", FoodIcon.Tint(food.Kind));
+                _selHp.Value = food.Amount / Mathf.Max(1, food.Max);
+                _selDetail.Text = $"{(int)food.Amount} / {(int)food.Max} loads  ·  {Config.FoodNutrient(food.Kind)}  ·  {per:0.#} food per load{(fav ? " (favourite)" : "")}\n{Config.FoodEffectShort(food.Kind)}";
+                _selDetail.TooltipText = Config.FoodEffect(food.Kind);
+                var icon = new FoodIcon { Kind = food.Kind, CustomMinimumSize = new Vector2(40, 40) };
+                _selIcons.AddChild(icon);
+                return;
+            }
         }
         _selTitle.AddThemeColorOverride("font_color", UiTheme.Gold);
         if (alive == 0)

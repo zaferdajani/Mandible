@@ -13,13 +13,15 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-1";
+    const string Version = "mandible-mp-2";
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }
     public Phase State { get; private set; } = Phase.Idle;
     public bool IsHost { get; private set; }
-    public int Me => IsHost ? 0 : 1;
+    /// The host picks a race (colony); the guest leads the other one.
+    public int HostTeam;
+    public int Me => IsHost ? HostTeam : 1 - HostTeam;
     public string MyName = "Player", PeerName = "";
     public int Delay = 2;
     public uint Seed;
@@ -99,7 +101,7 @@ public partial class Lockstep : Node, IOrders
         float ping = PingMs < 0 ? 60 : PingMs;
         Delay = Math.Clamp((int)Math.Ceiling((ping * 0.5f + 60f) / (TicksPerTurn * 1000f / 30f)) + 1, 2, 6);
         Seed = (uint)GD.Randi();
-        Send(Packet(2, w => { w.Write(Seed); w.Write(Delay); }));
+        Send(Packet(2, w => { w.Write(Seed); w.Write(Delay); w.Write((byte)HostTeam); }));
         Begin();
     }
 
@@ -180,7 +182,7 @@ public partial class Lockstep : Node, IOrders
 
     void Send(byte[] data)
     {
-        if (_peer == null || _remote == 0) return;
+        if (_peer == null || _remote == 0 || State == Phase.Closed) return;
         _peer.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
         _peer.SetTargetPeer((int)_remote);
         _peer.PutPacket(data);
@@ -189,7 +191,7 @@ public partial class Lockstep : Node, IOrders
     public override void _Process(double delta)
     {
         _clock += delta;
-        if (_peer == null || State == Phase.Idle) return;
+        if (_peer == null || State is Phase.Idle or Phase.Closed) return;
         _peer.Poll();
         while (_peer.GetAvailablePacketCount() > 0)
         {
@@ -241,6 +243,7 @@ public partial class Lockstep : Node, IOrders
             case 2: // start
                 Seed = r.ReadUInt32();
                 Delay = r.ReadInt32();
+                HostTeam = r.ReadByte();
                 Begin();
                 break;
             case 3: // orders for a turn

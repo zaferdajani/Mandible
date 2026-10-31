@@ -135,7 +135,7 @@ public sealed class AntRenderer
         _bars.Node.SortingOffset = 100;
     }
 
-    static ShaderMaterial AntMat(Shader s, int team, AntType type, bool dead)
+    internal static ShaderMaterial AntMat(Shader s, int team, AntType type, bool dead)
     {
         var m = new ShaderMaterial { Shader = s };
         if (team == Config.Wild)

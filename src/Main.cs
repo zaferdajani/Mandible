@@ -22,7 +22,7 @@ public partial class Main : Node
                 var parts = a.Substring(10).Split(',');
                 var da = parts.Length > 1 ? System.Enum.Parse<Difficulty>(parts[1]) : Difficulty.Normal;
                 var db = parts.Length > 2 ? System.Enum.Parse<Difficulty>(parts[2]) : Difficulty.Normal;
-                Capture.SimTest(this, float.Parse(parts[0]), da, db);
+                Capture.SimTest(this, float.Parse(parts[0]), da, db, parts.Length > 3 ? uint.Parse(parts[3]) : 20261031);
                 return;
             }
             if (a.StartsWith("--nettest="))
@@ -61,11 +61,12 @@ public partial class Main : Node
         _menu.Visible = true;
     }
 
-    public void StartBattle(Difficulty d)
+    /// Starts a battle against the AI; team 0 leads the black garden ants, team 1 the red fire ants.
+    public void StartBattle(Difficulty d, int team = Config.Player)
     {
-        Local.Me = Config.Player;
+        Local.Me = team;
         Audio.FadeMusic(1);
-        if (_menu != null) _menu.Visible = false;
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         Swap(new GameSession { Demo = false, Diff = d, App = this });
     }
 
@@ -74,7 +75,7 @@ public partial class Main : Node
     {
         Local.Me = net.Me;
         Audio.FadeMusic(1);
-        if (_menu != null) _menu.Visible = false;
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         Swap(new GameSession { Demo = false, App = this, Net = net, Seed = net.Seed, AutoPlayLocal = autoPlay, FastForward = fastForward });
     }
 
@@ -116,16 +117,16 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(sub);
 
         _main = Column(
-            ("Begin Battle", () => { _main.Visible = false; _diff.Visible = true; }),
+            ("Begin Battle", PickRace),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
-            ("Field Manual", ShowManual),
+            ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", CycleGraphics),
             ("Quit", () => GetTree().Quit()));
         _diff = Column(
-            ("Easy  ·  a gentle colony", () => App.StartBattle(Difficulty.Easy)),
-            ("Normal  ·  a fair war", () => App.StartBattle(Difficulty.Normal)),
-            ("Hard  ·  a ravenous swarm", () => App.StartBattle(Difficulty.Hard)),
-            ("Back", () => { _diff.Visible = false; _main.Visible = true; }));
+            ("Easy  ·  a gentle colony", () => App.StartBattle(Difficulty.Easy, _team)),
+            ("Normal  ·  a fair war", () => App.StartBattle(Difficulty.Normal, _team)),
+            ("Hard  ·  a ravenous swarm", () => App.StartBattle(Difficulty.Hard, _team)),
+            ("Back", () => { _diff.Visible = false; PickRace(); }));
         _diff.Visible = false;
 
         var credit = UiTheme.Text("Godot 4.7  ·  original art, sound and music generated for Mandible", 13, null, new Color(UiTheme.Dim, 0.7f));
@@ -170,39 +171,49 @@ public partial class MainMenu : CanvasLayer
         return v;
     }
 
-    void ShowManual()
+    int _team;
+    Control _overlay;
+
+    void CloseOverlay()
     {
-        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.6f) };
-        UiTheme.Place(dim, 0, 0, 1, 1, 0, 0, 0, 0);
-        var p = new PanelContainer();
-        UiTheme.Place(p, 0.5f, 0.5f, 0.5f, 0.5f, -420, -240, 420, 240);
-        var v = new VBoxContainer();
-        var t = UiTheme.Text("FIELD MANUAL", 32, UiTheme.Title, UiTheme.Gold);
-        t.HorizontalAlignment = HorizontalAlignment.Center;
-        v.AddChild(t);
-        foreach (var line in new[]
+        _overlay?.QueueFree();
+        _overlay = null;
+        _lobby?.QueueFree();
+        _lobby = null;
+    }
+
+    /// Leaves the menu on its main page with no picker, guide or lobby open (they would catch clicks in battle).
+    public void CloseScreens()
+    {
+        CloseOverlay();
+        _diff.Visible = false;
+        _main.Visible = true;
+    }
+
+    public void PickRace()
+    {
+        _main.Visible = false;
+        _diff.Visible = false;
+        CloseOverlay();
+        var picker = new RacePicker
         {
-            "You command the black colony. The red wood-ants hold the thatch mound across the yard.",
-            "Workers find food and lay trails home; every trail they reinforce brings more workers.",
-            "Soldiers and big-headed majors fight. Fallen ants become food for whoever hauls them home.",
-            "Feed the queen royal jelly to unlock new castes and heroes; a greater queen hatches stronger heroes.",
-            "Wild beetles, spiders and wasps guard the richest food. Slay them to level your warriors.",
-            "Dig chambers to raise more brood. Kill the red queen to win.",
-            "",
-            "Drag to select · Right-click to command · A attack-move · Z/X/C/V brood · Tab trails · F1 help in battle",
-        })
-        {
-            var l = UiTheme.Text(line, 16);
-            l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            l.HorizontalAlignment = HorizontalAlignment.Center;
-            v.AddChild(l);
-        }
-        var b = new Button { Text = "Close", CustomMinimumSize = new Vector2(160, 46), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
-        b.Pressed += () => { App.Audio.Ui("ui_click"); dim.QueueFree(); };
-        v.AddChild(b);
-        p.AddChild(v);
-        dim.AddChild(p);
-        _root.AddChild(dim);
+            OnPick = team => { App.Audio.Ui("ui_click"); _team = team; CloseOverlay(); _diff.Visible = true; },
+            OnBack = () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; },
+        };
+        _overlay = picker;
+        _root.AddChild(picker);
+    }
+
+    void ShowGuide() => ShowGuide("Colonies");
+
+    public void ShowGuide(string tab)
+    {
+        CloseOverlay();
+        _main.Visible = false;
+        _diff.Visible = false;
+        var guide = new FieldGuide { StartTab = tab, OnClose =() => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; } };
+        _overlay = guide;
+        _root.AddChild(guide);
     }
 }
 
@@ -222,7 +233,7 @@ public partial class Lobby : Control
 
     public override void _Ready()
     {
-        UiTheme.Place(this, 0.5f, 0, 0.5f, 0, -360, 360, 360, 900);
+        UiTheme.Place(this, 0.5f, 0, 0.5f, 0, -380, 330, 380, 930);
         var p = new PanelContainer();
         UiTheme.Place(p, 0, 0, 1, 1, 0, 0, 0, 0);
         AddChild(p);
@@ -238,6 +249,18 @@ public partial class Lobby : Control
         _name = new LineEdit { Text = DefaultName(), SizeFlagsHorizontal = SizeFlags.ExpandFill, MaxLength = 20 };
         nameRow.AddChild(_name);
         v.AddChild(nameRow);
+
+        // the host picks the colony; whoever joins leads the other one
+        var raceRow = new HBoxContainer();
+        raceRow.AddChild(UiTheme.Text("If you host, you lead", 16, UiTheme.Bold, UiTheme.Dim));
+        Button black = null, red = null;
+        black = Btn(Config.RaceName(Race.BlackGarden), () => { _hostTeam = 0; black.ButtonPressed = true; red.ButtonPressed = false; });
+        red = Btn(Config.RaceName(Race.RedFire), () => { _hostTeam = 1; black.ButtonPressed = false; red.ButtonPressed = true; });
+        black.ToggleMode = red.ToggleMode = true;
+        black.ButtonPressed = true;
+        raceRow.AddChild(black);
+        raceRow.AddChild(red);
+        v.AddChild(raceRow);
 
         var hostRow = new HBoxContainer();
         _hostLan = Btn("Host on this network", () => Host(false));
@@ -308,6 +331,7 @@ public partial class Lobby : Control
     void Host(bool internet)
     {
         var net = NewNet();
+        net.HostTeam = _hostTeam;
         if (net.Host(Name(), internet) != Error.Ok) App.Audio.Ui("ui_error");
         _hostLan.Disabled = _hostNet.Disabled = _join.Disabled = true;
     }
@@ -321,6 +345,7 @@ public partial class Lobby : Control
     }
 
     string Name() => _name.Text.Trim() == "" ? "Commander" : _name.Text.Trim();
+    int _hostTeam;
 
     void Back()
     {

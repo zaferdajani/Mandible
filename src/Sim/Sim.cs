@@ -95,6 +95,10 @@ public sealed class Colony
     public int QueenId = -1;
     public bool Alive = true;
     public float FoodMult = 1f;
+    public Race Race => Config.RaceOf(Team);
+    // food effects: each delivery tops these up; they run while the supply keeps flowing
+    public float SugarT, JuiceT, ProteinT;
+    public readonly float[] GatheredBy = new float[5]; // per FoodKind, for stats and balance tests
     public readonly int[] Count = new int[13];
     public float Gathered, Spent;
     public int Produced, Lost, Killed;
@@ -173,6 +177,9 @@ public sealed class Sim
             a.DmgMul *= 1 + 0.22f * a.Forge;
             a.Size *= 1 + 0.1f * a.Forge;
             a.SpeedMul = 1 - 0.08f * a.Forge;
+            var race = Col[a.Team].Race;
+            if (race == Race.BlackGarden) a.MaxHp *= Config.BlackWarriorHp;
+            if (a.Type == AntType.Gunner) a.DmgMul *= race == Race.BlackGarden ? Config.BlackAcidMul : Config.RedGunnerMul;
         }
         if (Config.IsHero(a.Type))
         {
@@ -516,7 +523,7 @@ public sealed class Sim
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level);
         }
-        foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); }
+        foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); Mix(F(c.SugarT)); Mix(F(c.JuiceT)); Mix(F(c.ProteinT)); }
         Mix((uint)W.Food.Count);
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
@@ -563,6 +570,9 @@ public sealed class Sim
         c.PopUsed = 0;
         for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop;
         c.QueenAlarm -= dt;
+        c.SugarT = Mathf.Max(0, c.SugarT - dt);
+        c.JuiceT = Mathf.Max(0, c.JuiceT - dt);
+        c.ProteinT = Mathf.Max(0, c.ProteinT - dt);
         if (!c.Alive || c.Queue.Count == 0) { c.PopBlocked = false; return; }
         var item = c.Queue[0];
         if (item.Kind != ProdKind.Chamber && c.PopUsed + Config.ProdPop(item.Kind) > c.PopCap)
@@ -572,7 +582,11 @@ public sealed class Sim
             return;
         }
         c.PopBlocked = false;
-        item.Progress += dt * Config.BroodSpeed(c.T(Upgrade.Queen)); // greater queens lay faster
+        // greater queens lay faster; protein feeds the larvae; each race has its own brood rhythm
+        float brood = Config.BroodSpeed(c.T(Upgrade.Queen)) * (c.ProteinT > 0 ? 1.3f : 1f);
+        if (c.Race == Race.RedFire) brood *= Config.RedBrood;
+        else if (item.Kind == ProdKind.Worker) brood *= Config.BlackWorkerBrood;
+        item.Progress += dt * brood;
         if (item.Progress < item.Time) return;
         c.Queue.RemoveAt(0);
         var nest = NestEntrance(c.Team);
@@ -715,6 +729,8 @@ public sealed class Sim
             a.Hp -= a.PoisonDps * dt;
             if (a.Hp <= 0) { Kill(i, a.PoisonSrc >= 0 && Ants[a.PoisonSrc].Alive ? a.PoisonSrc : -1); return; }
         }
+        // fruit water: the whole colony slowly mends while it keeps coming in
+        if (a.Team < 2 && Col[a.Team].JuiceT > 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.015f * dt);
         a.AttackAnim = Mathf.Max(0, a.AttackAnim - dt * 3.5f);
         Vector2 desired = Vector2.Zero;
         float speedMul = 1f;
@@ -872,6 +888,15 @@ public sealed class Sim
             dmg *= 2.5f + 0.3f * (a.Level - 1);
             a.AbilityCd = 5f - 0.4f * (a.Level - 1);
             Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
+        }
+        bool fire = a.Team < 2 && Col[a.Team].Race == Race.RedFire && Config.IsWarrior(a.Type) && !Config.Ranged(a.Type);
+        if (fire && a.Pos.DistanceTo(NestEntrance(a.Team)) < 40) dmg *= Config.RedHomeDamage;
+        if (fire && t.Alive && t.Type != AntType.Queen)
+        {
+            // fire-ant venom keeps burning after the bite
+            t.PoisonDps = t.PoisonT > 0 ? Mathf.Max(t.PoisonDps, dmg * Config.RedVenomDps) : dmg * Config.RedVenomDps;
+            t.PoisonT = 3f;
+            t.PoisonSrc = i;
         }
         if (Config.Ranged(a.Type)) Events.Add(new SimEvent { Kind = EvKind.Spit, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
         else Events.Add(new SimEvent { Kind = EvKind.Bite, Pos = t.Pos, Team = a.Team, Type = a.Type });
@@ -1154,6 +1179,8 @@ public sealed class Sim
     // ------------------------------------------------------------------ foraging
     static readonly float[] SensorAngles = { -0.6f, 0f, 0.6f };
 
+    float TrailMul(int team) => Col[team].Race == Race.BlackGarden ? Config.BlackTrailMul : Config.RedTrailMul;
+
     Vector2 WorkerLogic(int i, ref Ant a, UnitStats st, float dt, bool think, ref float speedMul)
     {
         // bite whoever is chewing on us
@@ -1169,15 +1196,23 @@ public sealed class Sim
         if (a.State == AntState.Return)
         {
             a.Deposit -= dt;
-            if (a.Deposit <= 0) { a.Deposit = 0.12f; Ph.Deposit(a.Team, a.Pos, 0.9f); }
+            if (a.Deposit <= 0) { a.Deposit = 0.12f; Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
+            if (a.CarryKind == FoodKind.Seed) speedMul = 0.8f; // seeds are heavy
             var to = nest - a.Pos;
             if (to.Length() < 1.8f)
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
-                float gain = (a.CarryKind == FoodKind.Berry || a.CarryKind == FoodKind.Sugar ? 5f : 4f) * c.FoodMult;
+                float gain = Config.FoodValue(a.CarryKind) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
                 c.Food += gain;
                 c.Gathered += gain;
+                c.GatheredBy[(int)a.CarryKind] += gain;
+                switch (a.CarryKind)
+                {
+                    case FoodKind.Sugar: c.SugarT = Mathf.Min(Config.EffectMax, c.SugarT + Config.EffectPerDelivery); break;
+                    case FoodKind.Berry: c.JuiceT = Mathf.Min(Config.EffectMax, c.JuiceT + Config.EffectPerDelivery); break;
+                    case FoodKind.Corpse: c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery); break;
+                }
                 Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = nest, Team = a.Team });
                 a.Heading += DMath.Pi;
                 if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
@@ -1221,7 +1256,7 @@ public sealed class Sim
                 a.State = AntState.Return;
                 a.FoodTarget = null;
                 if (a.Assigned == null && f.Amount > 3) a.Assigned = f;
-                Ph.Deposit(a.Team, a.Pos, 3f);
+                Ph.Deposit(a.Team, a.Pos, 3f * TrailMul(a.Team));
                 Events.Add(new SimEvent { Kind = EvKind.Pickup, Pos = f.Pos, Team = a.Team });
                 return Vector2.Zero;
             }
@@ -1280,6 +1315,7 @@ public sealed class Sim
             float diff = MathX.AngleDiff(a.Heading, want);
             float turn = (a.Type == AntType.Major ? 5f : 8f) * dt;
             a.Heading += Mathf.Clamp(diff, -turn, turn);
+            if (a.Type == AntType.Worker && a.Team < 2 && Col[a.Team].SugarT > 0) speedMul *= 1.15f; // sugar energy
             targetSpeed = st.Speed * a.SpeedMul * (a.BuffT > 0 ? 1.2f : 1f) * speedMul * (Mathf.Abs(diff) > 1.3f ? 0.35f : 1f);
         }
         a.Speed = Mathf.MoveToward(a.Speed, targetSpeed, st.Speed * dt * 6);

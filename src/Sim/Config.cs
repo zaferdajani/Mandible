@@ -215,15 +215,79 @@ public static class Config
     public static readonly Color PlayerUi = new(1.0f, 0.78f, 0.29f);
     public static readonly Color EnemyUi = new(1.0f, 0.27f, 0.18f);
     public static readonly Color WildUi = new(0.78f, 0.55f, 1.0f);
-    public static Color TeamUi(int team) => team == Player ? PlayerUi : team == Enemy ? EnemyUi : WildUi;
+    public static Color TeamUi(int team) => team == Local.Me ? PlayerUi : team < 2 ? EnemyUi : WildUi;
+
+    // ------------------------------------------------------------------ races
+    // The black colony is always black garden ants and the red colony fire ants: the player picks
+    // a race by picking which colony to lead. All modifiers depend only on the team, so lockstep holds.
+    public static Race RaceOf(int team) => team == 0 ? Race.BlackGarden : Race.RedFire;
+
+    public const float BlackTrailMul = 1.35f;     // longer-lasting, stronger recruitment trails
+    public const float BlackWorkerBrood = 1.4f;   // huge colonies: workers hatch 40% faster
+    public const float BlackWarriorHp = 0.93f;    // small-bodied, stingless
+    public const float BlackAcidMul = 1.3f;       // formic acid: gunners hit 30% harder
+    public const float RedTrailMul = 0.85f;
+    public const float RedVenomDps = 0.25f;       // venom: share of a bite dealt again per second for 3 s
+    public const float RedHomeDamage = 1.15f;     // the mound boils over: +15% damage near home
+    public const float RedGunnerMul = 0.75f;      // no acid gland: weak spitters
+    public const float RedBrood = 1.12f;          // several queens per mound: all brood 12% faster
+    /// Carbohydrates feed the black colony's honeydew economy; flesh and seeds the red predators.
+    public static bool Favoured(Race r, FoodKind k) => r == Race.BlackGarden
+        ? k is FoodKind.Sugar or FoodKind.Berry or FoodKind.Crumb
+        : k is FoodKind.Corpse or FoodKind.Seed;
+    public static float FoodBonus(Race r) => r == Race.BlackGarden ? 1.2f : 1.25f;
+
+    public static string RaceName(Race r) => r == Race.BlackGarden ? "Black Garden Ants" : "Red Fire Ants";
+    public static string RaceLatin(Race r) => r == Race.BlackGarden ? "Lasius niger" : "Solenopsis invicta";
+    public static string RaceMotto(Race r) => r == Race.BlackGarden ? "The Garden Legion: numbers, trails and honeydew" : "The Fire Swarm: venom, fury and flesh";
+    public static string[] RaceStrengths(Race r) => r == Race.BlackGarden
+        ? new[] { "Workers hatch 40% faster: the largest colonies in the yard", "Trail masters: 35% stronger pheromone trails recruit foragers faster", "Honeydew farmers: sugar, fruit and crumbs worth 20% more", "Formic acid: gunners spit 30% harder" }
+        : new[] { "Venom sting: soldiers, majors and heroes poison what they bite", "Mound fury: warriors deal 15% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
+    public static string[] RaceWeaknesses(Race r) => r == Race.BlackGarden
+        ? new[] { "Small and stingless: warriors have 7% less health", "Protein (corpses, seeds) gives no bonus" }
+        : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
+
+    // ------------------------------------------------------------------ food
+    public const float EffectPerDelivery = 1.2f; // seconds of colony effect added per load delivered
+    public const float EffectMax = 30f;
+
+    public static float FoodValue(FoodKind k) => k switch { FoodKind.Seed => 6f, FoodKind.Berry or FoodKind.Sugar => 5f, _ => 4f };
+    public static string FoodName(FoodKind k) => k switch
+    {
+        FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",
+        FoodKind.Seed => "Seed Cache", _ => "Insect Carcass",
+    };
+    public static string FoodNutrient(FoodKind k) => k switch
+    {
+        FoodKind.Crumb => "Bread and fruit scraps (carbohydrate)", FoodKind.Berry => "Fruit sugar and water", FoodKind.Sugar => "Pure sugar (carbohydrate)",
+        FoodKind.Seed => "Fat and protein, heavy", _ => "Protein",
+    };
+    public static string FoodEffect(FoodKind k) => k switch
+    {
+        FoodKind.Sugar => "Energy: while honeydew keeps arriving, workers run 15% faster.",
+        FoodKind.Berry => "Water: while fruit keeps arriving, every ant regenerates 1.5% health per second.",
+        FoodKind.Corpse => "Protein feeds the larvae: while it keeps arriving, the queen lays 30% faster.",
+        FoodKind.Seed => "Dense: each load is worth 6 food, but carriers walk 20% slower.",
+        _ => "No special effect.",
+    };
+    public static string FoodEffectShort(FoodKind k) => k switch
+    {
+        FoodKind.Sugar => "Effect: keeps your workers 15% faster while it flows",
+        FoodKind.Berry => "Effect: all your ants slowly heal while it flows",
+        FoodKind.Corpse => "Effect: the queen lays 30% faster while it flows",
+        FoodKind.Seed => "Heavy: carriers walk 20% slower",
+        _ => "No special effect",
+    };
 }
 
-/// Which colony this machine plays and views. 0 (black) in single player; in multiplayer the host is 0, the guest 1.
+public enum Race { BlackGarden, RedFire }
+
+/// Which colony this machine plays and views. The player picks black or red; in multiplayer the host picks, the guest takes the other.
 public static class Local
 {
     public static int Me = Config.Player;
     public static int Foe => 1 - Me;
-    public static string ColonyName(int team) => team == 0 ? "Black Colony" : "Red Colony";
+    public static string ColonyName(int team) => Config.RaceName(Config.RaceOf(team));
 }
 
 /// Small fast deterministic RNG (xorshift).

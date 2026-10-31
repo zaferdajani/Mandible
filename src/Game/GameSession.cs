@@ -86,7 +86,7 @@ public partial class GameSession : Node3D
             AddChild(Input);
             Hud = new Hud { Game = this };
             AddChild(Hud);
-            Hud.Alert(Net == null ? "Defend the queen. Destroy the red colony." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
+            Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
         }
     }
 
@@ -190,7 +190,7 @@ public partial class GameSession : Node3D
 
     public void ToggleTrails() { _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
     public void SetPaused(bool p) { _paused = p && Net == null; }
-    public void Restart() { if (Net != null) QuitToMenu(); else App.StartBattle(Diff); }
+    public void Restart() { if (Net != null) QuitToMenu(); else App.StartBattle(Diff, Local.Me); }
     public void QuitToMenu() { Net?.Leave(); App.ShowMenu(); }
 
     // ------------------------------------------------------------- frame

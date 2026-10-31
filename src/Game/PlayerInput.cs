@@ -9,6 +9,7 @@ public partial class PlayerInput : Node
     public readonly List<int> Selection = new();
     public bool NestSelected;
     public int Inspect = -1, InspectSerial;
+    public FoodSource InspectFood;
     enum Mode { None, AttackMove, Gather }
     Mode _mode;
     bool _leftDown;
@@ -234,6 +235,7 @@ public partial class PlayerInput : Node
         }
         NestSelected = false;
         Inspect = -1;
+        InspectFood = null;
         if (ids.Count > 0) Game.Audio.Ui("ui_click", -6);
     }
 
@@ -290,7 +292,26 @@ public partial class PlayerInput : Node
         if (!shift) SetSelection(new List<int>());
         // clicking an enemy or wild bug shows its details
         int other = Pick(screen, false);
-        if (other >= 0) { Inspect = other; InspectSerial = Sim.Ants[other].Serial; Game.Audio.Ui("ui_click", -8); }
+        if (other >= 0) { Inspect = other; InspectSerial = Sim.Ants[other].Serial; Game.Audio.Ui("ui_click", -8); return; }
+        // clicking food shows what it is, how much is left and what it does for the colony
+        var food = PickFood(screen);
+        if (food != null) { InspectFood = food; Game.Audio.Ui("ui_click", -8); }
+    }
+
+    /// The visible food pile under the cursor, if any.
+    public FoodSource PickFood(Vector2 screen)
+    {
+        if (!Cam.ScreenToGround(screen, out var g)) return null;
+        var p = new Vector2(g.X, g.Z);
+        FoodSource best = null;
+        float bestD = float.MaxValue;
+        foreach (var f in Game.World.Food)
+        {
+            if (!f.Alive || (Game.Fog != null && !Game.Fog.Visible(f.Pos))) continue;
+            float d = f.Pos.DistanceTo(p) - f.Radius;
+            if (d < 1.5f && d < bestD) { bestD = d; best = f; }
+        }
+        return best;
     }
 
     void BoxSelect(Rect2 r, bool shift)
@@ -323,6 +344,8 @@ public partial class PlayerInput : Node
         }
         SetSelection(ids);
     }
+
+    public void ClearSelection() => SetSelection(new List<int>());
 
     public void SelectArmy()
     {
