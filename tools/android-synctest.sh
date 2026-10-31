@@ -10,7 +10,8 @@ adb install -r "$APK"
 # phones have no command line: hand the arguments over in a file inside the app's own storage
 adb shell "run-as $PKG sh -c 'mkdir -p files && echo --synctest=$SECONDS_TO_PLAY > files/test_args.txt'"
 adb logcat -c
-adb shell am start -n "$PKG/com.godot.game.GodotApp"
+# start it exactly as tapping the home-screen icon does (the launcher activity's class name varies)
+adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
 
 for i in $(seq 1 110); do
     sleep 15
