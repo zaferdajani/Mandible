@@ -138,8 +138,35 @@ public partial class PlayerInput : Node
         }
     }
 
+    /// Lane War keys: Q ability, 1-4 shop, Space/F2 back to the hero; colony controls do nothing.
+    bool LaneKey(InputEventKey k)
+    {
+        int item = k.Keycode switch { Godot.Key.Key1 => 0, Godot.Key.Key2 => 1, Godot.Key.Key3 => 2, Godot.Key.Key4 => 3, _ => -1 };
+        if (item >= 0) { Game.TryBuy(item); return true; }
+        switch (k.Keycode)
+        {
+            case Godot.Key.Q: Game.TryAbility(); return true;
+            case Godot.Key.Space: case Godot.Key.F2: FocusHero(); return true;
+            case Godot.Key.Z: case Godot.Key.X: case Godot.Key.C: case Godot.Key.V: case Godot.Key.F: case Godot.Key.B: case Godot.Key.D:
+            case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.W: case Godot.Key.E: case Godot.Key.R: case Godot.Key.T:
+            case Godot.Key.F3: case Godot.Key.G:
+                return true;
+        }
+        return false;
+    }
+
+    /// Selects your hero and brings the camera to it.
+    public void FocusHero()
+    {
+        int id = Sim.HeroId[Local.Me];
+        if (id < 0) return;
+        SetSelection(new List<int> { id });
+        Cam.PanTo(Sim.Ants[id].Pos);
+    }
+
     void OnKey(InputEventKey k)
     {
+        if (Game.Lanes && LaneKey(k)) return;
         switch (k.Keycode)
         {
             case Godot.Key.Escape:
@@ -222,6 +249,7 @@ public partial class PlayerInput : Node
     void SetSelection(List<int> ids, bool add = false)
     {
         ids = WithSquads(ids);
+        if (Game.Lanes) ids = ids.FindAll(id => Config.IsHero(Sim.Ants[id].Type)); // only the hero takes orders
         if (!add)
         {
             foreach (int id in Selection) Sim.Ants[id].Selected = false;
@@ -243,6 +271,13 @@ public partial class PlayerInput : Node
     {
         for (int i = Selection.Count - 1; i >= 0; i--)
             if (!Sim.Ants[Selection[i]].Alive || Sim.Ants[Selection[i]].Team != Local.Me) { Sim.Ants[Selection[i]].Selected = false; Selection.RemoveAt(i); }
+        // Lane War: you always steer your hero, including the moment it respawns
+        if (Game.Lanes && Selection.Count == 0 && Inspect < 0 && InspectFood == null && Sim.HeroId[Local.Me] >= 0)
+        {
+            int hero = Sim.HeroId[Local.Me];
+            Selection.Add(hero);
+            Sim.Ants[hero].Selected = true;
+        }
     }
 
     bool OnScreen(int id, out Vector2 sp)

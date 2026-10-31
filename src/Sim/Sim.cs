@@ -36,6 +36,11 @@ public struct Ant
     public float BuffT, BuffMul;      // war cry
     public float PoisonT, PoisonDps;  // acid
     public int PoisonSrc;
+    // lane war
+    public bool Guardian;             // an immobile mound guardian (lane tower)
+    public byte Lane, LaneStep;       // lane creep: lane index + 1 and the waypoint it is heading for
+    public bool Manual;               // a player-steered hero: its ability fires only on command
+    public float CastReq;             // seconds left on a pending ability command
 }
 
 public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady }
@@ -117,7 +122,7 @@ public sealed class Colony
 
 public enum QueueResult { Ok, NoFood, QueueFull, MaxChambers, Dead, Locked, HeroExists }
 
-public sealed class Sim
+public sealed partial class Sim
 {
     public readonly World W;
     public readonly Pheromones Ph = new();
@@ -134,16 +139,21 @@ public sealed class Sim
     int _serial;
     public int Winner = -1;
 
-    public Sim(World w)
+    public Sim(World w, GameMode mode = GameMode.Colony, AntType hero0 = AntType.Warlord, AntType hero1 = AntType.Warlord)
     {
         W = w;
+        Mode = mode;
+        HeroType[0] = hero0;
+        HeroType[1] = hero1;
+        if (mode == GameMode.Lanes) BuildLanes();
         foreach (var c in Col)
         {
             c.Food = Config.StartFood;
             var nest = W.Nests[c.Team].Pos;
             var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
             c.QueenId = Spawn(c.Team, AntType.Queen, nest + toCenter * 3.4f, toCenter.AngleD());
-            for (int i = 0; i < 18; i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, DMath.Tau));
+            for (int i = 0; i < (mode == GameMode.Lanes ? 12 : 18); i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, DMath.Tau));
+            if (mode == GameMode.Lanes) { SetupLaneColony(c); continue; }
             var start = NewSquad(c.Team, AntType.Soldier);
             for (int i = 0; i < 6; i++)
             {
@@ -153,6 +163,8 @@ public sealed class Sim
             }
         }
         foreach (var camp in W.Camps)
+        {
+            if (mode == GameMode.Lanes && NearLane(camp.Pos, 16)) continue; // the lanes are kept clear; bugs live in the jungle between them
             for (int i = 0; i < camp.Bugs.Length; i++)
             {
                 var (type, level) = camp.Bugs[i];
@@ -161,6 +173,7 @@ public sealed class Sim
                 Ants[id].State = AntState.Idle;
                 Ants[id].Home = camp.Pos;
             }
+        }
     }
 
     void ApplyLevel(ref Ant a)
@@ -195,6 +208,7 @@ public sealed class Sim
             a.DmgMul *= 1 + 0.25f * q;
             a.Size *= 1 + 0.12f * q;
         }
+        if (Mode == GameMode.Lanes && a.Team < 2) ApplyLaneStats(ref a);
         a.Hp = a.MaxHp * frac;
     }
 
@@ -203,6 +217,7 @@ public sealed class Sim
     {
         var c = Col[team];
         if (!c.Alive) return ResearchResult.Dead;
+        if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
         int next = c.T(u) + 1;
         if (next > Config.MaxTier(u)) return ResearchResult.Maxed;
         if (c.T(Upgrade.Queen) < Config.QueenNeeded(u, next)) return ResearchResult.Locked;
@@ -494,6 +509,7 @@ public sealed class Sim
     {
         var c = Col[team];
         if (!c.Alive) return QueueResult.Dead;
+        if (Mode == GameMode.Lanes) return QueueResult.Locked; // the mound sends its waves on its own
         if (!Config.Unlocked(kind, c.Tier)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
@@ -525,6 +541,7 @@ public sealed class Sim
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level);
         }
         foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); Mix(F(c.SugarT)); Mix(F(c.JuiceT)); Mix(F(c.ProteinT)); }
+        if (Mode == GameMode.Lanes) for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
         Mix((uint)W.Food.Count);
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
@@ -560,6 +577,7 @@ public sealed class Sim
         TickShowers();
         TickWebs(dt);
         TickSquads(dt);
+        if (Mode == GameMode.Lanes) TickLanes(dt);
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) TickAnt(i, dt);
         Ph.Update(dt);
@@ -734,11 +752,11 @@ public sealed class Sim
         if (a.PoisonT > 0)
         {
             a.PoisonT -= dt;
-            a.Hp -= a.PoisonDps * dt;
+            if (a.Type != AntType.Queen || !QueenShielded(a.Team)) a.Hp -= a.PoisonDps * dt;
             if (a.Hp <= 0) { Kill(i, a.PoisonSrc >= 0 && Ants[a.PoisonSrc].Alive ? a.PoisonSrc : -1); return; }
         }
         // fruit water: the whole colony slowly mends while it keeps coming in
-        if (a.Team < 2 && Col[a.Team].JuiceT > 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.015f * dt);
+        if (a.Team < 2 && Col[a.Team].JuiceT > 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp && a.Type != AntType.Queen && !a.Guardian) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.015f * dt);
         a.AttackAnim = Mathf.Max(0, a.AttackAnim - dt * 3.5f);
         Vector2 desired = Vector2.Zero;
         float speedMul = 1f;
@@ -749,7 +767,7 @@ public sealed class Sim
         {
             if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type));
             if (a.Target >= 0 && Ants[a.Target].Alive) TryBite(i, a.Target, st);
-            a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f);
+            if (Mode != GameMode.Lanes) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f); // in Lane War her guardians are her only protection
             a.Height = W.HF.Sample(a.Pos.X, a.Pos.Y);
             a.Gait += dt * 0.05f;
             return;
@@ -778,7 +796,12 @@ public sealed class Sim
         }
 
         if (a.Team == Config.Wild && a.State == AntState.Engage) WildAbility(i, ref a, st);
-        if (Config.IsHero(a.Type) && think) HeroAbility(i, ref a, st);
+        if (Config.IsHero(a.Type) && think && (!a.Manual || a.CastReq > 0))
+        {
+            HeroAbility(i, ref a, st);
+            if (a.AbilityCd > 0) a.CastReq = 0;
+        }
+        a.CastReq -= dt;
         a.AbilityCd -= dt;
         a.BuffT -= dt;
 
@@ -799,12 +822,20 @@ public sealed class Sim
                 }
                 break;
             case AntState.AttackMove:
+                if (think && a.Lane > 0 && a.LaneStep == 4 && LaneSiege(ref a)) break;
                 if (think)
                 {
                     int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type));
                     if (e >= 0) { Engage(ref a, e, AntState.AttackMove); break; }
                 }
                 desired = a.Goal - a.Pos;
+                // lane creeps pass through their waypoints rather than having to stand on them (crowds jostle)
+                if (a.Lane > 0)
+                {
+                    if (desired.Length() < (a.LaneStep < 4 ? 9f : 3.5f) && NextLaneStep(ref a)) { desired = a.Goal - a.Pos; break; }
+                    UnstickCreep(ref a, dt);
+                    desired = a.Goal - a.Pos;
+                }
                 if (desired.Length() < 0.9f) { desired = Vector2.Zero; a.Anchor = a.Pos; a.State = AntState.Idle; }
                 break;
             case AntState.Idle:
@@ -905,6 +936,7 @@ public sealed class Sim
             a.AbilityCd = 5f - 0.4f * (a.Level - 1);
             Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
         }
+        if (a.Guardian && Config.IsHero(t.Type)) dmg *= 1.6f; // guardians punish heroes who dive under them
         bool fire = a.Team < 2 && Col[a.Team].Race == Race.RedFire && Config.IsWarrior(a.Type) && !Config.Ranged(a.Type);
         if (fire && a.Pos.DistanceTo(NestEntrance(a.Team)) < 40) dmg *= Config.RedHomeDamage;
         if (fire && t.Alive && t.Type != AntType.Queen)
@@ -1123,6 +1155,7 @@ public sealed class Sim
     {
         ref var t = ref Ants[target];
         if (!t.Alive) return;
+        if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
         t.Hp -= dmg;
         t.HitFlash = 1;
         t.DamagedT = 3f;
@@ -1182,6 +1215,7 @@ public sealed class Sim
             Team = t.Team, AntType = t.Type, Heading = t.Heading,
         });
         Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type });
+        if (Mode == GameMode.Lanes) LaneDeath(id, killer);
         if (t.Type == AntType.Queen && c != null)
         {
             c.Alive = false;
@@ -1306,6 +1340,7 @@ public sealed class Sim
     // ------------------------------------------------------------------ locomotion
     void Move(int i, ref Ant a, UnitStats st, Vector2 desired, float speedMul, float dt)
     {
+        if (a.Guardian) { a.Speed = 0; return; } // rooted in its mound
         float radius = a.Size * 0.3f;
         float targetSpeed = 0;
         bool fly = Config.Flies(a.Type);

@@ -5,7 +5,7 @@ namespace Mandible;
 
 /// Computer colony: balances brood production, expands chambers, defends the mound and
 /// sends growing raids at the opposing nest.
-public sealed class AIController
+public sealed class AIController : IColonyAI
 {
     readonly Sim _sim;
     readonly int _team;

@@ -360,6 +360,63 @@ public partial class RacePicker : ColorRect
     }
 }
 
+/// Lane War: choose the hero you will steer.
+public partial class HeroPicker : ColorRect
+{
+    public int Team;
+    public Action<AntType> OnPick;
+    public Action OnBack;
+
+    public override void _Ready()
+    {
+        Color = new Color(0, 0, 0, 0.55f);
+        UiTheme.Place(this, 0, 0, 1, 1, 0, 0, 0, 0);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 14);
+        UiTheme.Place(v, 0.06f, 0.06f, 0.94f, 0.94f, 0, 0, 0, 0);
+        AddChild(v);
+        var t = UiTheme.Text("CHOOSE YOUR HERO", 34, UiTheme.Title, UiTheme.Gold);
+        t.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(t);
+        var sub = UiTheme.Text("Lane War: three lanes, waves of soldiers on both sides, guardians as towers. You steer one hero; it levels up to 10 and buys upgrades with food.", 15, null, UiTheme.Dim);
+        sub.HorizontalAlignment = HorizontalAlignment.Center;
+        sub.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        v.AddChild(sub);
+        var h = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        h.AddThemeConstantOverride("separation", 18);
+        foreach (var type in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
+        {
+            var p = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            p.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.07f, 0.055f, 0.04f, 1f), new Color(UiTheme.Gold, 0.6f), 2, 10, 14));
+            var col = new VBoxContainer();
+            col.AddThemeConstantOverride("separation", 8);
+            col.AddChild(new AntPortrait { Type = type, Team = Team, CustomMinimumSize = new Vector2(0, 330) });
+            var name = UiTheme.Text(Config.Of(type).Name.ToUpper(), 24, UiTheme.Title, UiTheme.Gold);
+            name.HorizontalAlignment = HorizontalAlignment.Center;
+            col.AddChild(name);
+            var st = Config.Of(type);
+            var stats = UiTheme.Text($"HP {st.Hp}  ·  Bite {st.Damage}  ·  Speed {st.Speed}{(Config.Ranged(type) ? "  ·  ranged" : "")}{(Config.Flies(type) ? "  ·  flies" : "")}", 14, UiTheme.Bold, UiTheme.Dim);
+            stats.HorizontalAlignment = HorizontalAlignment.Center;
+            col.AddChild(stats);
+            var blurb = UiTheme.Text(Lane.HeroBlurb(type), 15, null, UiTheme.Ink);
+            blurb.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            blurb.CustomMinimumSize = new Vector2(240, 0);
+            col.AddChild(blurb);
+            var b = new Button { Text = $"Play the {st.Name}", CustomMinimumSize = new Vector2(0, 50) };
+            b.AddThemeFontOverride("font", UiTheme.Title);
+            b.AddThemeFontSizeOverride("font_size", 17);
+            b.Pressed += () => OnPick?.Invoke(type);
+            col.AddChild(b);
+            p.AddChild(col);
+            h.AddChild(p);
+        }
+        v.AddChild(h);
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(200, 46), SizeFlagsHorizontal = SizeFlags.ShrinkCenter };
+        back.Pressed += () => OnBack?.Invoke();
+        v.AddChild(back);
+    }
+}
+
 /// The Field Guide: colonies, castes, wildlife, how foraging works, food and what a colony needs.
 public partial class FieldGuide : ColorRect
 {

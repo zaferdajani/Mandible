@@ -113,6 +113,48 @@ public static class Capture
         s.Camera.JumpTo(redNest + new Vector2(-5, 7), 22);
         await Wait(2);
         await Shot("20_red_close");
+
+        // Lane War
+        app.ShowMenu();
+        app.Menu.PickHero();
+        await Wait(2.5f);
+        await Shot("21_hero_pick");
+        app.StartLanes(Difficulty.Normal, 0, AntType.Warlord);
+        await Wait(3);
+        s = app.Session;
+        int heroId = s.Sim.HeroId[0];
+        GD.Print($"[selftest] lane war: hero {(heroId >= 0 && s.Sim.Ants[heroId].Type == AntType.Warlord ? "spawned" : "MISSING")}, guardians {s.Sim.GuardiansLeft(0)}/{s.Sim.GuardiansLeft(1)}, queen shielded {s.Sim.QueenShielded(1)}  {(heroId >= 0 && s.Sim.GuardiansLeft(0) == 8 && s.Sim.QueenShielded(1) ? "PASS" : "FAIL")}");
+        s.Input.FocusHero();
+        await Wait(1.5f);
+        GD.Print($"[selftest] lane war: hero selected {(s.Input.Selection.Count == 1 && s.Input.Selection[0] == heroId ? "PASS" : "FAIL")}");
+        s.Sim.Col[0].Food += 400;
+        var press = new InputEventKey { Keycode = Key.Key1, Pressed = true };
+        Input.ParseInputEvent(press);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key1, Pressed = false });
+        await Wait(0.6f);
+        GD.Print($"[selftest] lane war: key 1 bought Mandibles {(s.Sim.Items[0, 0] == 1 ? "PASS" : "FAIL")}");
+        await Shot("22_lane_start");
+        // let both sides play for a while
+        s.Autopilot(true);
+        s.Fog.RevealAll = true;
+        s.FastForward = 5;
+        await Wait(18);
+        s.FastForward = 0;
+        var mid = (s.World.Nests[0].Pos + s.World.Nests[1].Pos) * 0.5f;
+        int fighting = -1;
+        for (int i = 0; i < s.Sim.High; i++) if (s.Sim.Ants[i].Alive && s.Sim.Ants[i].Lane > 0 && s.Sim.Ants[i].State == AntState.Engage) { fighting = i; break; }
+        s.Camera.JumpTo(fighting >= 0 ? s.Sim.Ants[fighting].Pos : mid, 40);
+        await Wait(2f);
+        await Shot("23_lane_clash");
+        s.Camera.JumpTo(mid, 230);
+        await Wait(2f);
+        await Shot("24_lane_overview");
+        s.Autopilot(false);
+        s.Input.FocusHero();
+        s.Camera.TargetDistance = 34;
+        await Wait(2.5f);
+        await Shot("25_lane_hero");
+        Log(s, "lane war");
         _app.GetTree().Quit();
     }
 
@@ -325,6 +367,7 @@ public static class Capture
         if (host)
         {
             if (parts[0] == "host-red") net.HostTeam = 1; // the host leads the red fire ants
+            if (parts[0] == "host-lanes") { net.Mode = GameMode.Lanes; net.MyHero = AntType.Matron; }
             net.OnConnected += () => net.StartMatch();
             if (net.Host("HostBot", false) != Error.Ok) { GD.Print($"[nettest] host failed: {net.Status}"); app.GetTree().Quit(1); return; }
         }
@@ -374,6 +417,55 @@ public static class Capture
     }
 
     /// Headless AI-vs-AI match:  --headless -- --simtest=<seconds>
+    /// Headless Lane War: two lane AIs with different heroes play out a match; prints the state each minute.
+    public static void LaneTest(Main app, float seconds, Difficulty a, Difficulty b, uint seed, AntType h0, AntType h1)
+    {
+        var root = new Node3D();
+        app.AddChild(root);
+        var world = WorldBuilder.Build(root, seed);
+        var sim = new Sim(world, GameMode.Lanes, h0, h1);
+        var ais = new IColonyAI[] { new LaneAI(sim, 0, a), new LaneAI(sim, 1, b) };
+        const float dt = 1f / 30f;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        float next = 60;
+        string Side(int t)
+        {
+            int id = sim.HeroId[t];
+            string hero = id >= 0 ? $"{sim.HeroType[t]} Lv{sim.Ants[id].Level} hp {sim.Ants[id].Hp:0}/{sim.Ants[id].MaxHp:0}" : $"{sim.HeroType[t]} dead {sim.HeroRespawn[t]:0}s";
+            int creeps = 0;
+            for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == t && sim.Ants[i].Lane > 0) creeps++;
+            ref var q = ref sim.Ants[sim.Col[t].QueenId];
+            return $"{hero} items {sim.Items[t, 0]}/{sim.Items[t, 1]}/{sim.Items[t, 2]} food {sim.Col[t].Food:0} guardians {sim.GuardiansLeft(t)} creeps {creeps} hero-kills {sim.HeroKills[t]} queen {q.Hp:0}";
+        }
+        GD.Print($"[lanetest] wild bugs in the jungle: {sim.WildCount}");
+        while (sim.Time < seconds && sim.Winner < 0)
+        {
+            sim.Tick(dt);
+            foreach (var ai in ais) ai.Tick(dt);
+            if (sim.Time >= next)
+            {
+                next += 60;
+                GD.Print($"[lanetest] t={sim.Time / 60:0}m | black {Side(0)} | red {Side(1)}");
+                for (int t = 0; t < 2; t++)
+                {
+                    var groups = new Dictionary<string, int>();
+                    for (int i = 0; i < sim.High; i++)
+                    {
+                        ref var c = ref sim.Ants[i];
+                        if (!c.Alive || c.Team != t || c.Lane == 0) continue;
+                        string k = $"L{c.Lane}s{c.LaneStep}:{c.State}@{(int)c.Pos.X / 20 * 20},{(int)c.Pos.Y / 20 * 20}[st{(int)c.Stuck} sp{c.Speed:0.#} goal {(int)c.Goal.X},{(int)c.Goal.Y}]";
+                        groups[k] = groups.GetValueOrDefault(k) + 1;
+                    }
+                    var parts = new List<string>();
+                    foreach (var kv in groups) if (kv.Value >= 3) parts.Add($"{kv.Key} x{kv.Value}");
+                    GD.Print($"[lanetest]    team {t} creeps: {string.Join("  ", parts)}");
+                }
+            }
+        }
+        GD.Print($"[lanetest] finished t={sim.Time / 60:0.0}m winner={(sim.Winner < 0 ? "none" : sim.Winner == 0 ? "black" : "red")} wall {sw.Elapsed.TotalSeconds:0}s");
+        app.GetTree().Quit();
+    }
+
     public static void SimTest(Main app, float seconds, Difficulty a, Difficulty b, uint seed = 20261031)
     {
         var root = new Node3D();

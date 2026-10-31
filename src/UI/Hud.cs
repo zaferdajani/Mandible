@@ -40,11 +40,19 @@ public partial class Hud : CanvasLayer
         _root.AddChild(Box);
 
         BuildTopBar();
+        if (Game.Lanes) _pop.GetParent<Control>().Visible = false; // no brood to raise in Lane War
         BuildMinimap();
         BuildSelection();
+        int colonyFrom = _root.GetChildCount();
         BuildProduction();
         BuildResearch();
         BuildCommands();
+        if (Game.Lanes)
+        {
+            // Lane War has no brood or research: the mound sends waves on its own and you steer one hero
+            for (int i = colonyFrom; i < _root.GetChildCount(); i++) if (_root.GetChild(i) is Control ctl) ctl.Visible = false;
+            BuildLanePanel();
+        }
 
         _alert = UiTheme.Text("", 24, UiTheme.Title, UiTheme.Gold);
         _alert.HorizontalAlignment = HorizontalAlignment.Center;
@@ -56,6 +64,7 @@ public partial class Hud : CanvasLayer
         UiTheme.Place(_hint, 0.5f, 1, 0.5f, 1, -420, -24, 420, -4);
         _hint.HorizontalAlignment = HorizontalAlignment.Center;
         _hint.MouseFilter = Control.MouseFilterEnum.Ignore;
+        if (Game.Lanes) _hint.Text = LaneHint;
         _root.AddChild(_hint);
 
         BuildHelp();
@@ -467,6 +476,7 @@ public partial class Hud : CanvasLayer
         SetEffect(0, c.SugarT);
         SetEffect(1, c.JuiceT);
         SetEffect(2, c.ProteinT);
+        if (Game.Lanes) RefreshLanes();
         for (int i = 0; i < _prod.Length; i++)
         {
             var k = (ProdKind)i;

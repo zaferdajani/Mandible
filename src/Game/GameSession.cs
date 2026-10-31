@@ -24,10 +24,13 @@ public partial class GameSession : Node3D
     public uint Seed = 20261031;
     public IOrders Orders;
     public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
+    public GameMode Mode = GameMode.Colony;
+    public AntType[] Heroes = { AntType.Warlord, AntType.Warlord }; // Lane War hero of each team
+    public bool Lanes => Mode == GameMode.Lanes;
     const float TickDt = 1f / 30f;
     float _acc, _alpha, _stall;
     bool _netEnded;
-    readonly List<AIController> _ai = new();
+    readonly List<IColonyAI> _ai = new();
     Image _pherImg;
     ImageTexture _pherTex;
     byte[] _pherPx;
@@ -42,7 +45,7 @@ public partial class GameSession : Node3D
         var sw = System.Diagnostics.Stopwatch.StartNew();
         World = WorldBuilder.Build(this, Seed);
         long tWorld = sw.ElapsedMilliseconds;
-        Sim = new Sim(World);
+        Sim = new Sim(World, Mode, Heroes[0], Heroes[1]);
         Orders = Net != null ? Net : new DirectOrders(Sim);
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
@@ -50,6 +53,7 @@ public partial class GameSession : Node3D
         Effects = new Effects(this, World.HF);
         Chambers = new NestChambers(World, this);
         BuildLighting();
+        if (Lanes) BuildLaneDressing();
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Touch };
@@ -76,8 +80,16 @@ public partial class GameSession : Node3D
         {
             Fog = new FogOfWar(World);
             Ants.VisibleToPlayer = Fog.Visible;
-            if (Net == null) _ai.Add(new AIController(Sim, Local.Foe, Diff));
-            if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
+            if (Lanes)
+            {
+                if (Net == null) _ai.Add(new LaneAI(Sim, Local.Foe, Diff));
+                if (AutoPlayLocal) _ai.Add(new LaneAI(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
+            }
+            else
+            {
+                if (Net == null) _ai.Add(new AIController(Sim, Local.Foe, Diff));
+                if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
+            }
             if (Net != null)
             {
                 Net.OnDisconnected += () => { if (!_ended) { _netEnded = true; } };
@@ -86,7 +98,8 @@ public partial class GameSession : Node3D
             AddChild(Input);
             Hud = new Hud { Game = this };
             AddChild(Hud);
-            Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
+            if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
+            else Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
         }
     }
 
@@ -182,15 +195,111 @@ public partial class GameSession : Node3D
         }
     }
 
+    readonly List<(int id, int serial, Node3D mound)> _mounds = new();
+
+    /// Lane War scenery: worn dirt paths along the three lanes and an earth mound under every guardian.
+    void BuildLaneDressing()
+    {
+        var hf = World.HF;
+        var grad = new Gradient();
+        grad.SetColor(0, new Color(1, 1, 1, 0));
+        grad.AddPoint(0.35f, new Color(1, 1, 1, 1));
+        grad.AddPoint(0.65f, new Color(1, 1, 1, 1));
+        grad.SetColor(grad.GetPointCount() - 1, new Color(1, 1, 1, 0));
+        var path = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.25f, 0.19f, 0.13f, 0.55f), AlbedoTexture = new GradientTexture2D { Gradient = grad, Width = 64, Height = 4 },
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        };
+        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = new QuadMesh { Size = new Vector2(7f, 3.2f) } };
+        var xforms = new List<Transform3D>();
+        foreach (var lane in Sim.Lanes)
+            for (int i = 0; i + 1 < lane.Length; i++)
+            {
+                var a = lane[i];
+                var b = lane[i + 1];
+                float len = a.DistanceTo(b);
+                var dir = (b - a) / len;
+                for (float d = 9; d < len - 1; d += 2.6f)
+                {
+                    var p = a + dir * d;
+                    // lie flat on the ground, the strip's width across the lane
+                    var basis = new Basis(Vector3.Up, -Mathf.Atan2(dir.Y, dir.X)) * new Basis(Vector3.Right, -Mathf.Pi / 2);
+                    xforms.Add(new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) + 0.06f, p.Y)));
+                }
+            }
+        mm.InstanceCount = xforms.Count;
+        for (int i = 0; i < xforms.Count; i++) mm.SetInstanceTransform(i, xforms[i]);
+        AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = path, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Name = "LanePaths" });
+
+        var soil = new StandardMaterial3D { AlbedoColor = new Color(0.36f, 0.27f, 0.18f), Roughness = 1 };
+        for (int i = 0; i < Sim.High; i++)
+        {
+            ref var g = ref Sim.Ants[i];
+            if (!g.Alive || !g.Guardian) continue;
+            var mound = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh { TopRadius = 1.6f, BottomRadius = 4.2f, Height = 1.1f, RadialSegments = 24, Rings = 2 },
+                MaterialOverride = soil, Position = new Vector3(g.Pos.X, hf.Sample(g.Pos.X, g.Pos.Y) + 0.1f, g.Pos.Y),
+            };
+            AddChild(mound);
+            _mounds.Add((i, g.Serial, mound));
+        }
+    }
+
+    void UpdateMounds()
+    {
+        for (int i = _mounds.Count - 1; i >= 0; i--)
+        {
+            var (id, serial, mound) = _mounds[i];
+            if (Sim.Valid(id, serial)) continue;
+            // the guardian fell: its mound slumps into the ground
+            mound.CreateTween().TweenProperty(mound, "scale", new Vector3(1.2f, 0.05f, 1.2f), 1.5f);
+            _mounds.RemoveAt(i);
+        }
+    }
+
+    /// Lane War shop, with feedback when the purchase is not possible.
+    public void TryBuy(int item)
+    {
+        int team = Local.Me;
+        if (item < 3 && Sim.Items[team, item] >= Lane.MaxItemTier) { Hud.Alert($"{Lane.ItemNames[item]} is fully upgraded", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your hero is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (!Sim.CanBuy(team, item))
+        {
+            Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your hero is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
+            Audio.Ui("ui_error");
+            return;
+        }
+        Issue(new Cmd { Kind = CmdKind.BuyItem, Team = (byte)team, Arg = (byte)item });
+        Audio.Ui("research", -4);
+    }
+
+    /// Lane War: ask the hero to use its ability (it fires on the best target in reach).
+    public void TryAbility()
+    {
+        int id = Sim.HeroId[Local.Me];
+        if (id < 0) { Audio.Ui("ui_error"); return; }
+        ref var h = ref Sim.Ants[id];
+        if (h.AbilityCd > 0) { Hud.Alert($"{Config.AbilityName(h.Type)} ready in {h.AbilityCd:0}s", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        Issue(new Cmd { Kind = CmdKind.Ability, Team = (byte)Local.Me });
+        Audio.Ui("ui_click", -4);
+    }
+
     public void Autopilot(bool on)
     {
         _ai.RemoveAll(a => a.Team == Local.Me);
-        if (on) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Passive = true });
+        if (on) _ai.Add(Lanes ? new LaneAI(Sim, Local.Me, Difficulty.Normal) : new AIController(Sim, Local.Me, Difficulty.Normal) { Passive = true });
     }
 
     public void ToggleTrails() { _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
     public void SetPaused(bool p) { _paused = p && Net == null; }
-    public void Restart() { if (Net != null) QuitToMenu(); else App.StartBattle(Diff, Local.Me); }
+    public void Restart()
+    {
+        if (Net != null) QuitToMenu();
+        else if (Lanes) App.StartLanes(Diff, Local.Me, Heroes[Local.Me]);
+        else App.StartBattle(Diff, Local.Me);
+    }
     public void QuitToMenu() { Net?.Leave(); App.ShowMenu(); }
 
     // ------------------------------------------------------------- frame
@@ -208,6 +317,7 @@ public partial class GameSession : Node3D
         UpdatePheromoneTexture(dt);
         UpdateAudio(dt);
         if (Demo) DemoCamera(dt);
+        if (Lanes) UpdateMounds();
         CheckEnd();
     }
 

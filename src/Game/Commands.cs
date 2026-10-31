@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -51,7 +51,8 @@ public sealed class Cmd
     {
         var ids = new List<int>(Ids.Length);
         for (int i = 0; i < Ids.Length; i++)
-            if (sim.Valid(Ids[i], Serials[i]) && sim.Ants[Ids[i]].Team == Team) ids.Add(Ids[i]);
+            if (sim.Valid(Ids[i], Serials[i]) && sim.Ants[Ids[i]].Team == Team && (sim.Mode != GameMode.Lanes || Config.IsHero(sim.Ants[Ids[i]].Type)))
+                ids.Add(Ids[i]); // in Lane War only the hero takes orders
         switch (Kind)
         {
             case CmdKind.Move: if (ids.Count > 0) sim.CmdMove(ids, P, false); break;
@@ -72,6 +73,8 @@ public sealed class Cmd
             case CmdKind.Research: sim.StartResearch(Team, (Upgrade)Arg); break;
             case CmdKind.CancelResearch: sim.CancelResearch(Team); break;
             case CmdKind.Reinforce: if (ids.Count > 0) sim.CmdReinforce(ids); break;
+            case CmdKind.Ability: sim.CmdAbility(Team); break;
+            case CmdKind.BuyItem: sim.BuyItem(Team, Arg); break;
             case CmdKind.Rally:
                 sim.Col[Team].Rally = P;
                 sim.Col[Team].HasRally = true;

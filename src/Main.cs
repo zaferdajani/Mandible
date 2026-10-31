@@ -25,6 +25,15 @@ public partial class Main : Node
                 Capture.SimTest(this, float.Parse(parts[0]), da, db, parts.Length > 3 ? uint.Parse(parts[3]) : 20261031);
                 return;
             }
+            if (a.StartsWith("--lanetest="))
+            {
+                // --lanetest=SECONDS,Diff,Diff,seed,hero0,hero1
+                var p = a.Substring(11).Split(',');
+                Capture.LaneTest(this, float.Parse(p[0]), System.Enum.Parse<Difficulty>(p[1]), System.Enum.Parse<Difficulty>(p[2]),
+                    p.Length > 3 ? uint.Parse(p[3]) : 20261031, p.Length > 4 ? System.Enum.Parse<AntType>(p[4]) : AntType.Warlord,
+                    p.Length > 5 ? System.Enum.Parse<AntType>(p[5]) : AntType.Matron);
+                return;
+            }
             if (a.StartsWith("--nettest="))
             {
                 Audio = new AudioDirector();
@@ -70,13 +79,29 @@ public partial class Main : Node
         Swap(new GameSession { Demo = false, Diff = d, App = this });
     }
 
-    /// Starts a lockstep match: the host plays the black colony, the guest the red.
+    /// Starts a Lane War match against the AI: you steer one hero; creeps and guardians fight the lanes.
+    public void StartLanes(Difficulty d, int team, AntType hero)
+    {
+        Local.Me = team;
+        Audio.FadeMusic(1);
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
+        var heroes = new AntType[2];
+        heroes[team] = hero;
+        // the AI picks a different hero so the duel is never a mirror
+        heroes[1 - team] = hero == AntType.Warlord ? AntType.Matron : hero == AntType.Matron ? AntType.Marshal : AntType.Warlord;
+        Swap(new GameSession { Demo = false, Diff = d, App = this, Mode = GameMode.Lanes, Heroes = heroes });
+    }
+
+    /// Starts a lockstep match: the host picks the colony (and mode); the guest leads the other colony.
     public void StartMultiplayer(Lockstep net, bool autoPlay = false, int fastForward = 0)
     {
         Local.Me = net.Me;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { Demo = false, App = this, Net = net, Seed = net.Seed, AutoPlayLocal = autoPlay, FastForward = fastForward });
+        var heroes = new AntType[2];
+        heroes[net.Me] = net.MyHero;
+        heroes[1 - net.Me] = net.PeerHero;
+        Swap(new GameSession { Demo = false, App = this, Net = net, Seed = net.Seed, AutoPlayLocal = autoPlay, FastForward = fastForward, Mode = net.Mode, Heroes = heroes });
     }
 
     public GameSession Session => _session;
@@ -117,16 +142,17 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(sub);
 
         _main = Column(
-            ("Begin Battle", PickRace),
+            ("Colony War", () => { _lanes = false; PickRace(); }),
+            ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", CycleGraphics),
             ("Quit", () => GetTree().Quit()));
         _diff = Column(
-            ("Easy  ·  a gentle colony", () => App.StartBattle(Difficulty.Easy, _team)),
-            ("Normal  ·  a fair war", () => App.StartBattle(Difficulty.Normal, _team)),
-            ("Hard  ·  a ravenous swarm", () => App.StartBattle(Difficulty.Hard, _team)),
-            ("Back", () => { _diff.Visible = false; PickRace(); }));
+            ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
+            ("Normal  ·  a fair war", () => Start(Difficulty.Normal)),
+            ("Hard  ·  a ravenous swarm", () => Start(Difficulty.Hard)),
+            ("Back", () => { _diff.Visible = false; if (_lanes) PickHero(); else PickRace(); }));
         _diff.Visible = false;
 
         var credit = UiTheme.Text("Godot 4.7  ·  original art, sound and music generated for Mandible", 13, null, new Color(UiTheme.Dim, 0.7f));
@@ -157,7 +183,7 @@ public partial class MainMenu : CanvasLayer
     {
         var v = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         v.AddThemeConstantOverride("separation", 12);
-        UiTheme.Place(v, 0.5f, 0, 0.5f, 0, -190, 420, 190, 760);
+        UiTheme.Place(v, 0.5f, 0, 0.5f, 0, -190, 380, 190, 820);
         foreach (var (label, act) in items)
         {
             var b = new Button { Text = label, CustomMinimumSize = new Vector2(380, 58) };
@@ -172,7 +198,30 @@ public partial class MainMenu : CanvasLayer
     }
 
     int _team;
+    bool _lanes;
+    AntType _hero = AntType.Warlord;
     Control _overlay;
+
+    void Start(Difficulty d)
+    {
+        if (_lanes) App.StartLanes(d, _team, _hero);
+        else App.StartBattle(d, _team);
+    }
+
+    public void PickHero()
+    {
+        _main.Visible = false;
+        _diff.Visible = false;
+        CloseOverlay();
+        var picker = new HeroPicker
+        {
+            Team = _team,
+            OnPick = hero => { App.Audio.Ui("ui_click"); _hero = hero; CloseOverlay(); _diff.Visible = true; },
+            OnBack = () => { App.Audio.Ui("ui_click"); PickRace(); },
+        };
+        _overlay = picker;
+        _root.AddChild(picker);
+    }
 
     void CloseOverlay()
     {
@@ -197,7 +246,13 @@ public partial class MainMenu : CanvasLayer
         CloseOverlay();
         var picker = new RacePicker
         {
-            OnPick = team => { App.Audio.Ui("ui_click"); _team = team; CloseOverlay(); _diff.Visible = true; },
+            OnPick = team =>
+            {
+                App.Audio.Ui("ui_click");
+                _team = team;
+                CloseOverlay();
+                if (_lanes) PickHero(); else _diff.Visible = true;
+            },
             OnBack = () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; },
         };
         _overlay = picker;
@@ -233,7 +288,7 @@ public partial class Lobby : Control
 
     public override void _Ready()
     {
-        UiTheme.Place(this, 0.5f, 0, 0.5f, 0, -380, 330, 380, 930);
+        UiTheme.Place(this, 0.5f, 0, 0.5f, 0, -400, 300, 400, 1010);
         var p = new PanelContainer();
         UiTheme.Place(p, 0, 0, 1, 1, 0, 0, 0, 0);
         AddChild(p);
@@ -261,6 +316,32 @@ public partial class Lobby : Control
         raceRow.AddChild(black);
         raceRow.AddChild(red);
         v.AddChild(raceRow);
+
+        var modeRow = new HBoxContainer();
+        modeRow.AddChild(UiTheme.Text("Mode (host picks)", 16, UiTheme.Bold, UiTheme.Dim));
+        Button colony = null, lanes = null;
+        colony = Btn("Colony War", () => { _mode = GameMode.Colony; colony.ButtonPressed = true; lanes.ButtonPressed = false; });
+        lanes = Btn("Lane War", () => { _mode = GameMode.Lanes; colony.ButtonPressed = false; lanes.ButtonPressed = true; });
+        colony.ToggleMode = lanes.ToggleMode = true;
+        colony.ButtonPressed = true;
+        modeRow.AddChild(colony);
+        modeRow.AddChild(lanes);
+        v.AddChild(modeRow);
+
+        var heroRow = new HBoxContainer();
+        heroRow.AddChild(UiTheme.Text("Lane War hero", 16, UiTheme.Bold, UiTheme.Dim));
+        var heroButtons = new System.Collections.Generic.List<Button>();
+        foreach (var t in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
+        {
+            var type = t;
+            Button hb = null;
+            hb = Btn(Config.Of(t).Name, () => { _hero = type; foreach (var o in heroButtons) o.ButtonPressed = o == hb; });
+            hb.ToggleMode = true;
+            hb.ButtonPressed = t == _hero;
+            heroButtons.Add(hb);
+            heroRow.AddChild(hb);
+        }
+        v.AddChild(heroRow);
 
         var hostRow = new HBoxContainer();
         _hostLan = Btn("Host on this network", () => Host(false));
@@ -321,7 +402,7 @@ public partial class Lobby : Control
     {
         _net?.Leave();
         _net?.QueueFree();
-        _net = new Lockstep();
+        _net = new Lockstep { MyHero = _hero };
         App.AddChild(_net);
         _net.OnStart += () => App.StartMultiplayer(_net);
         _net.OnConnected += () => App.Audio.Ui("ui_ready");
@@ -332,6 +413,7 @@ public partial class Lobby : Control
     {
         var net = NewNet();
         net.HostTeam = _hostTeam;
+        net.Mode = _mode;
         if (net.Host(Name(), internet) != Error.Ok) App.Audio.Ui("ui_error");
         _hostLan.Disabled = _hostNet.Disabled = _join.Disabled = true;
     }
@@ -346,6 +428,8 @@ public partial class Lobby : Control
 
     string Name() => _name.Text.Trim() == "" ? "Commander" : _name.Text.Trim();
     int _hostTeam;
+    GameMode _mode;
+    AntType _hero = AntType.Warlord;
 
     void Back()
     {

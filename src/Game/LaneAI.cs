@@ -1,0 +1,164 @@
+using System.Collections.Generic;
+using Godot;
+
+namespace Mandible;
+
+/// Anything that plays a colony for the computer.
+public interface IColonyAI
+{
+    int Team { get; }
+    void Tick(float dt);
+}
+
+/// Plays a Lane War hero: pushes a lane behind its own creeps, trades with the enemy hero when it
+/// has the upper hand, respects enemy guardians, retreats to the healing pool, casts and shops.
+public sealed class LaneAI : IColonyAI
+{
+    readonly Sim _sim;
+    readonly int _team;
+    readonly Difficulty _diff;
+    public int Team => _team;
+    public IOrders Orders;
+    float _timer;
+    bool _retreat;
+    int _lane = 1, _shopTurn;
+    float _laneTimer;
+    readonly List<int> _one = new();
+
+    public LaneAI(Sim sim, int team, Difficulty diff)
+    {
+        _sim = sim; _team = team; _diff = diff;
+        Orders = new DirectOrders(sim);
+        sim.Col[team].FoodMult = diff switch { Difficulty.Easy => 0.75f, Difficulty.Hard => 1.3f, _ => 1f };
+    }
+
+    public void Tick(float dt)
+    {
+        _timer += dt;
+        if (_timer < 0.4f) return;
+        _timer = 0;
+        Shop();
+        int id = _sim.HeroId[_team];
+        if (id < 0) return;
+        ref var h = ref _sim.Ants[id];
+        if (!h.Alive) return;
+        var nest = _sim.W.Nests[_team].Pos;
+
+        // heal up at home when hurt; Easy heroes are greedier
+        float low = _diff == Difficulty.Easy ? 0.18f : _diff == Difficulty.Hard ? 0.35f : 0.28f;
+        if (h.Hp < h.MaxHp * low) _retreat = true;
+        if (_retreat && h.Hp > h.MaxHp * 0.9f) _retreat = false;
+        if (_retreat)
+        {
+            if (h.Pos.DistanceTo(nest) > Lane.FountainRadius * 0.6f) Order(CmdKind.Move, id, nest);
+            return;
+        }
+
+        // the ability: whenever enemies are bunched nearby
+        if (h.AbilityCd <= 0 && h.CastReq <= 0 && Enemies(h.Pos, 11) >= 2) Orders.Issue(new Cmd { Kind = CmdKind.Ability, Team = (byte)_team });
+
+        // Hard heroes switch to the lane where the enemy is pushing hardest
+        _laneTimer -= 0.4f;
+        if (_laneTimer <= 0) { _laneTimer = 45; if (_diff == Difficulty.Hard) _lane = MostThreatened(); }
+
+        // fight the enemy hero if it is close and weaker
+        int foe = _sim.HeroId[1 - _team];
+        if (foe >= 0 && _sim.Ants[foe].Alive && _sim.Ants[foe].Pos.DistanceTo(h.Pos) < 13
+            && _sim.Ants[foe].Hp / _sim.Ants[foe].MaxHp < h.Hp / h.MaxHp + 0.1f && !UnderEnemyGuardian(_sim.Ants[foe].Pos))
+        {
+            Order(CmdKind.Attack, id, Vector2.Zero, foe);
+            return;
+        }
+
+        // stand just behind the front of our wave; without a wave, hold at our outer guardian
+        var front = Front(out bool any);
+        var spot = any ? front : _sim.AlongLane(_team, _lane, 0.33f);
+        if (UnderEnemyGuardian(spot) && !CreepsNear(spot, 7)) spot = _sim.AlongLane(_team, _lane, 0.33f);
+        if (h.State != AntState.Engage || h.Pos.DistanceTo(spot) > 20) Order(CmdKind.AttackMove, id, spot);
+    }
+
+    void Shop()
+    {
+        var c = _sim.Col[_team];
+        int id = _sim.HeroId[_team];
+        if (id >= 0 && _sim.Ants[id].Hp < _sim.Ants[id].MaxHp * 0.45f && _sim.CanBuy(_team, 3)) { Buy(3); return; }
+        int item = _shopTurn % 3;
+        float reserve = _diff == Difficulty.Easy ? 1.6f : 1f;
+        if (_sim.Items[_team, item] >= Lane.MaxItemTier) { _shopTurn++; return; }
+        if (c.Food >= Lane.ItemCost(item, _sim.Items[_team, item]) * reserve && _sim.CanBuy(_team, item)) { Buy(item); _shopTurn++; }
+    }
+
+    void Buy(int item) => Orders.Issue(new Cmd { Kind = CmdKind.BuyItem, Team = (byte)_team, Arg = (byte)item });
+
+    void Order(CmdKind k, int id, Vector2 p, int target = -1)
+    {
+        _one.Clear();
+        _one.Add(id);
+        var c = Cmd.Units(k, _team, _one, _sim);
+        c.P = p;
+        if (target >= 0) { c.Target = target; c.TargetSerial = _sim.Ants[target].Serial; }
+        Orders.Issue(c);
+    }
+
+    /// Position a little behind our creep that has advanced furthest down the chosen lane.
+    Vector2 Front(out bool any)
+    {
+        any = false;
+        float best = -1;
+        Vector2 at = Vector2.Zero;
+        var enemyNest = _sim.W.Nests[1 - _team].Pos;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team != _team || a.Lane != _lane + 1) continue;
+            float progress = 1000 - a.Pos.DistanceTo(enemyNest);
+            if (progress > best) { best = progress; at = a.Pos; any = true; }
+        }
+        if (any) at += (_sim.W.Nests[_team].Pos - at).Normalized() * 4f;
+        return at;
+    }
+
+    int Enemies(Vector2 p, float r)
+    {
+        int n = 0;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (a.Alive && a.Team != _team && a.Type != AntType.Worker && a.Pos.DistanceTo(p) < r) n++;
+        }
+        return n;
+    }
+
+    bool CreepsNear(Vector2 p, float r)
+    {
+        for (int i = 0; i < _sim.High; i++)
+            if (_sim.Ants[i].Alive && _sim.Ants[i].Team == _team && _sim.Ants[i].Lane > 0 && _sim.Ants[i].Pos.DistanceTo(p) < r) return true;
+        return false;
+    }
+
+    bool UnderEnemyGuardian(Vector2 p)
+    {
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (a.Alive && a.Guardian && a.Team != _team && a.Pos.DistanceTo(p) < 8) return true;
+        }
+        return false;
+    }
+
+    /// The lane where enemy creeps stand closest to our nest.
+    int MostThreatened()
+    {
+        var nest = _sim.W.Nests[_team].Pos;
+        int lane = 1;
+        float best = float.MaxValue;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team == _team || a.Team > 1 || a.Lane == 0) continue;
+            float d = a.Pos.DistanceTo(nest);
+            if (d < best) { best = d; lane = a.Lane - 1; }
+        }
+        return lane;
+    }
+}

@@ -88,6 +88,17 @@ public partial class Minimap : Control
     {
         if (_tex == null) return;
         DrawTextureRect(_tex, new Rect2(Vector2.Zero, Size), false);
+        if (Game.Lanes)
+        {
+            // the three lanes, faintly
+            float k = Size.X / Config.MapSize;
+            foreach (var lane in Game.Sim.Lanes)
+            {
+                var line = new Vector2[lane.Length];
+                for (int i = 0; i < lane.Length; i++) line[i] = lane[i] * k;
+                DrawPolyline(line, new Color(0.95f, 0.85f, 0.55f, 0.28f), 3f, true);
+            }
+        }
         // camera footprint
         var cam = Game.Camera;
         var vp = GetViewport().GetVisibleRect().Size;
