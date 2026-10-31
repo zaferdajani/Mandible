@@ -49,7 +49,7 @@ public sealed class NestInterior
         _nest[team] = n;
         // the dark earth that fills the view through the glass: a bowl of soil below everything
         float r = Sim.NestRadius + 12f;
-        n.AddChild(new MeshInstance3D { Mesh = RoughRoom(), Scale = new Vector3(r, 17f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.3f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 17f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         // the ragged mouth of the shaft under the entrance (its inside faces show; the lip is uneven)
         n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = _wall, Position = new Vector3(0, 0, 0) });
         // the plug of soil the founders dig away (sinks and shrinks with progress)
@@ -63,9 +63,9 @@ public sealed class NestInterior
         // status over the entrance
         _status[team] = new Label3D
         {
-            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 40, OutlineSize = 12, PixelSize = 0.022f,
+            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 30, OutlineSize = 10, PixelSize = 0.014f,
             Modulate = new Color(1f, 0.9f, 0.6f), OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
-            Position = new Vector3(0, 4.6f, 0), Visible = false,
+            Position = new Vector3(0, 5.2f, 0), Visible = false, FixedSize = true,
         };
         n.AddChild(_status[team]);
     }
@@ -121,6 +121,35 @@ public sealed class NestInterior
         int row = sides + 1;
         for (int r = 0; r < rings; r++)
             for (int s = 0; s < sides; s++) { int a = start + r * row + s; k.Quad(a, a + 1, a + row + 1, a + row); }
+    });
+
+    /// The dark earth under a mound: a rough bowl from the rim (y = 0) down to y = -1, radius 1 at the rim
+    /// and narrowing with depth. Only below ground, so the sky never turns to soil.
+    static ArrayMesh _roughBowl;
+    static ArrayMesh RoughBowl() => _roughBowl ??= Build(k =>
+    {
+        const int sides = 28, rings = 8;
+        int start = k.V.Count;
+        for (int r = 0; r <= rings; r++)
+        {
+            float v = (float)r / rings;
+            float y = -v;
+            float baseR = Mathf.Lerp(1f, 0.3f, v * v);
+            for (int s = 0; s <= sides; s++)
+            {
+                float t = (float)s / sides * Mathf.Tau;
+                var dir = new Vector3(Mathf.Cos(t), 0, Mathf.Sin(t));
+                float rad = baseR * (1f + 0.12f * Lump.GetNoise3D(dir.X * 2, v * 4, dir.Z * 2));
+                k.Add(new Vector3(dir.X * rad, y, dir.Z * rad), -dir, Colors.White, new Vector2((float)s / sides, v), Vector2.Zero);
+            }
+        }
+        int row = sides + 1;
+        for (int r = 0; r < rings; r++)
+            for (int s = 0; s < sides; s++) { int a = start + r * row + s; k.Quad(a, a + 1, a + row + 1, a + row); }
+        // the bottom
+        int centre = k.Add(new Vector3(0, -1, 0), Vector3.Up, Colors.White, new Vector2(0.5f, 0.5f), Vector2.Zero);
+        int last = start + rings * row;
+        for (int s = 0; s < sides; s++) k.Tri(centre, last + s, last + s + 1);
     });
 
     /// A trodden, uneven floor disc.
@@ -196,7 +225,7 @@ public sealed class NestInterior
         room.Floor.Position = new Vector3(0, 0.02f, 0);
         // the gallery from just under the entrance down to the room's mouth
         var from = new Vector3(0, -0.9f, 0);
-        var to = centre + new Vector3(0, 0.6f, 0) - new Vector3(ch.Offset.X, 0, ch.Offset.Y).Normalized() * (w * p * 0.6f);
+        var to = centre + new Vector3(0, 0.6f, 0) - new Vector3(ch.Offset.X, 0, ch.Offset.Y).Normalized() * (w * p * 0.3f); // ends inside the room's wall
         var mid = (from + to) * 0.5f;
         float len = from.DistanceTo(to);
         room.Tunnel.Position = mid;
