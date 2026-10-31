@@ -652,7 +652,7 @@ public partial class Hud : CanvasLayer
                 _ => "Standing guard",
             };
             string xp = !Config.IsWarrior(a.Type) ? "" : a.Level >= Config.MaxLevelOf(a.Type) ? "  ·  Elite (max rank)" : $"  ·  XP {(int)a.Xp} / {Sim.NextXp(a)}";
-            if (Config.IsHero(a.Type)) xp += a.AbilityCd <= 0 ? $"  ·  {Config.AbilityName(a.Type)} ready" : $"  ·  {Config.AbilityName(a.Type)} in {a.AbilityCd:0}s";
+            if (Config.IsHero(a.Type)) xp += a.AbilityCd <= 0 ? $"  ·  {Config.AbilityName(a.Type)} ready" : $"  ·  {Config.AbilityName(a.Type)} in {Mathf.Ceil(a.AbilityCd):0}s";
             if (a.BuffT > 0) xp += "  ·  War Cry!";
             _selDetail.Text = $"{doing}.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0.#}{xp}";
             AddIcon(a.Type, 1);

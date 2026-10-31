@@ -101,7 +101,7 @@ public partial class Hud
             float next = Sim.NextXp(h);
             _heroXp.Value = next <= 0 ? 1 : h.Xp / next;
             _heroStats.Text = $"HP {(int)h.Hp} / {(int)h.MaxHp}  ·  Bite {Config.Of(type).Damage * h.DmgMul:0}  ·  Speed {Config.Of(type).Speed * h.SpeedMul:0.#}";
-            _ability.Text = h.AbilityCd > 0 ? $"Q   {Config.AbilityName(type)}   ·   {h.AbilityCd:0}s" : $"Q   {Config.AbilityName(type)}   ·   READY";
+            _ability.Text = h.AbilityCd > 0 ? $"Q   {Config.AbilityName(type)}   ·   {Mathf.Ceil(h.AbilityCd):0}s" : $"Q   {Config.AbilityName(type)}   ·   READY";
             _ability.AddThemeColorOverride("font_color", h.AbilityCd > 0 ? UiTheme.Dim : new Color(0.6f, 1f, 0.55f));
             _respawn.Text = "";
         }

@@ -6,5 +6,5 @@ $godot = "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono
 dotnet build "$root" -nologo -v q | Out-Null
 if ($LASTEXITCODE -ne 0) { dotnet build "$root" -nologo -v q; exit 1 }
 New-Item -ItemType Directory -Force $Out | Out-Null
-& $godot --path "$root" -- "--capture=$Out" *> "$Out/run.log"
-Select-String -Path "$Out/run.log" -Pattern "capture\]|selftest\]|bugshoot\]|ERROR|Exception" | Select-Object -First 40 | ForEach-Object { $_.Line }
+& $godot --path "$root" --audio-driver Dummy -- "--capture=$Out" *> "$Out/run.log"  # silent: tests never make noise
+Select-String -Path "$Out/run.log" -Pattern "selftest\]|bugshoot\]|ERROR|Exception" | ForEach-Object { $_.Line }
