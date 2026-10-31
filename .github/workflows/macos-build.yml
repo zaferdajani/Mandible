@@ -64,7 +64,14 @@ jobs:
           codesign --verify --deep --verbose=2 "$app" || true
           exe="$app/Contents/MacOS/$(ls "$app/Contents/MacOS/" | head -1)"
           lipo -info "$exe" || true
-          "$exe" --headless -- --simtest=90,Normal,Normal 2>&1 | tee smoke.log | tail -n 8
+          ls -la "$app/Contents/MacOS" "$app/Contents/Resources" | head -40
+          find "$app" -name "*.dll" | head -5
+          set +e
+          "$exe" --headless --verbose -- --simtest=90,Normal,Normal > smoke.log 2>&1
+          code=$?
+          set -e
+          echo "exit code $code"
+          tail -n 60 smoke.log
           grep -q "\[simtest\] finished" smoke.log
 
       - name: Upload macOS app
