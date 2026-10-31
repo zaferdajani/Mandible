@@ -64,8 +64,8 @@ public partial class Minimap : Control
             ref var a = ref sim.Ants[i];
             if (!a.Alive) continue;
             if (a.Team != Config.Player && fog != null && !fog.Visible(a.Pos)) continue;
-            int r = a.Type == AntType.Queen ? 3 : (a.Type == AntType.Major ? 2 : 1);
-            Dot(a.Pos, r, a.Team == Config.Player ? Config.PlayerUi : Config.EnemyUi);
+            int r = a.Type == AntType.Queen || a.Type == AntType.StagBeetle ? 3 : (a.Type == AntType.Major || Config.IsBug(a.Type) ? 2 : 1);
+            Dot(a.Pos, r, Config.TeamUi(a.Team));
         }
         _img.SetData(_res, _res, false, Image.Format.Rgba8, _px);
         _tex.Update(_img);

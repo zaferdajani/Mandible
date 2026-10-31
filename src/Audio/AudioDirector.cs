@@ -32,7 +32,7 @@ public partial class AudioDirector : Node
 
         Bank("bite", 5, "bite_");
         Bank("death", 3, "death_");
-        foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat" })
+        foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat", "levelup", "web", "web_land", "sweep", "sting", "research" })
             Bank(s, 1, s);
 
         _calm = Loop("music_calm", "Music");
@@ -94,7 +94,7 @@ public partial class AudioDirector : Node
         return true;
     }
 
-    public void At(string key, Vector3 pos, float db = 0, float gap = 0.04f, float pitchVar = 0.12f)
+    public void At(string key, Vector3 pos, float db = 0, float gap = 0.04f, float pitchVar = 0.12f, float pitch = 1f)
     {
         if (!_banks.TryGetValue(key, out var bank) || bank.Length == 0) return;
         if (!Throttle(key, gap)) return;
@@ -103,7 +103,7 @@ public partial class AudioDirector : Node
         p.Stream = bank[_rng.RandiRange(0, bank.Length - 1)];
         p.GlobalPosition = pos;
         p.VolumeDb = db + Mathf.LinearToDb(SfxVolume);
-        p.PitchScale = 1 + _rng.RandfRange(-pitchVar, pitchVar);
+        p.PitchScale = pitch * (1 + _rng.RandfRange(-pitchVar, pitchVar));
         p.Play();
     }
 

@@ -12,6 +12,7 @@ public sealed class FogOfWar
     readonly Image _img;
     public readonly ImageTexture Texture;
     float _acc;
+    public bool RevealAll; // debug / screenshot tours
 
     public FogOfWar(World w)
     {
@@ -50,6 +51,7 @@ public sealed class FogOfWar
         {
             _acc = 0;
             System.Array.Clear(_target);
+            if (RevealAll) { System.Array.Fill(_target, 1f); System.Array.Fill(_explored, (byte)255); }
             for (int i = 0; i < sim.High; i++)
             {
                 ref var a = ref sim.Ants[i];

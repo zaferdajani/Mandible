@@ -143,6 +143,8 @@ public partial class MainMenu : CanvasLayer
             "You command the black colony. The red wood-ants hold the thatch mound across the yard.",
             "Workers find food and lay trails home; every trail they reinforce brings more workers.",
             "Soldiers and big-headed majors fight. Fallen ants become food for whoever hauls them home.",
+            "Feed the queen royal jelly to unlock new castes and heroes; a greater queen hatches stronger heroes.",
+            "Wild beetles, spiders and wasps guard the richest food. Slay them to level your warriors.",
             "Dig chambers to raise more brood. Kill the red queen to win.",
             "",
             "Drag to select · Right-click to command · A attack-move · Z/X/C/V brood · Tab trails · F1 help in battle",

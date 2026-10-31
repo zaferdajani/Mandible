@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Godot;
 
 namespace Mandible;
@@ -8,6 +8,7 @@ public partial class PlayerInput : Node
     public GameSession Game;
     public readonly List<int> Selection = new();
     public bool NestSelected;
+    public int Inspect = -1, InspectSerial;
     enum Mode { None, AttackMove, Gather }
     Mode _mode;
     bool _leftDown;
@@ -97,6 +98,16 @@ public partial class PlayerInput : Node
             case Godot.Key.X: Game.TryEnqueue(ProdKind.Soldier); return;
             case Godot.Key.C: Game.TryEnqueue(ProdKind.Major); return;
             case Godot.Key.V: Game.TryEnqueue(ProdKind.Chamber); return;
+            case Godot.Key.F: Game.TryEnqueue(ProdKind.Flyer); return;
+            case Godot.Key.D: Game.TryEnqueue(ProdKind.Gunner); return;
+            case Godot.Key.Y: Game.TryEnqueue(ProdKind.Warlord); return;
+            case Godot.Key.U: Game.TryEnqueue(ProdKind.Matron); return;
+            case Godot.Key.I: Game.TryEnqueue(ProdKind.Marshal); return;
+            case Godot.Key.Q: Game.TryResearch(Upgrade.Queen); return;
+            case Godot.Key.W: Game.TryResearch(Upgrade.Wings); return;
+            case Godot.Key.E: Game.TryResearch(Upgrade.Mandibles); return;
+            case Godot.Key.R: Game.TryResearch(Upgrade.Chitin); return;
+            case Godot.Key.T: Game.TryResearch(Upgrade.SilkCutters); return;
             case Godot.Key.Tab: Game.ToggleTrails(); return;
             case Godot.Key.F2: SelectArmy(); return;
             case Godot.Key.F3: SelectWorkers(); return;
@@ -143,6 +154,7 @@ public partial class PlayerInput : Node
             Sim.Ants[id].Selected = true;
         }
         NestSelected = false;
+        Inspect = -1;
         if (ids.Count > 0) Game.Audio.Ui("ui_click", -6);
     }
 
@@ -197,6 +209,9 @@ public partial class PlayerInput : Node
             return;
         }
         if (!shift) SetSelection(new List<int>());
+        // clicking an enemy or wild bug shows its details
+        int other = Pick(screen, false);
+        if (other >= 0) { Inspect = other; InspectSerial = Sim.Ants[other].Serial; Game.Audio.Ui("ui_click", -8); }
     }
 
     void BoxSelect(Rect2 r, bool shift)
@@ -234,7 +249,7 @@ public partial class PlayerInput : Node
     {
         var ids = new List<int>();
         for (int i = 0; i < Sim.High; i++)
-            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Config.Player && (Sim.Ants[i].Type == AntType.Soldier || Sim.Ants[i].Type == AntType.Major)) ids.Add(i);
+            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Config.Player && Config.IsWarrior(Sim.Ants[i].Type)) ids.Add(i);
         SetSelection(ids);
     }
 

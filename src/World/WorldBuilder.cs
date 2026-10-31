@@ -40,6 +40,7 @@ public static class WorldBuilder
         BuildGrass(w, rng);
         BuildNestDressing(w, rng);
         PlaceFood(w, rng);
+        PlaceCamps(w);
         w.IndexObstacles();
         BuildLitter(w, rng);
         BuildMinimapBase(w, leaves, rocks);
@@ -583,6 +584,36 @@ public static class WorldBuilder
         Pair(FoodKind.Berry, Find(home, 110, 150, 5), 420, 4.2f);
         // contested prize in the middle
         Spawn(w, rng, FoodKind.Berry, Center, 1100, 6.5f);
+    }
+
+    /// Wild bug lairs beside the richest food. Rules depend only on distance to the nearest nest,
+    /// and food comes in mirrored pairs, so both colonies face identical camps.
+    static void PlaceCamps(World w)
+    {
+        void Add(Vector2 food, float radius, params (AntType, int)[] bugs)
+        {
+            float d0 = food.DistanceTo(w.Nests[0].Pos), d1 = food.DistanceTo(w.Nests[1].Pos);
+            var home = d0 < d1 ? w.Nests[0].Pos : w.Nests[1].Pos;
+            var away = (food - home).Normalized();
+            var p = food + away * (radius + 4.5f);
+            foreach (var c in w.Camps) if (c.Pos.DistanceTo(p) < 16) return;
+            w.Camps.Add(new Camp { Pos = p, Facing = away.Angle(), Bugs = bugs });
+        }
+        // the great raspberry in the middle: a stag beetle lord and his beetles, each equidistant from both nests
+        var mid = Center;
+        var bisector = new Vector2(1, 1).Normalized(); // points with x = y are equally far from both nests
+        w.Camps.Add(new Camp { Pos = mid + bisector * 11, Facing = bisector.Angle(), Bugs = new[] { (AntType.StagBeetle, 5) } });
+        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).Angle(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Wasp, 4) } });
+        foreach (var f in w.Food.ToArray())
+        {
+            float d = Mathf.Min(f.Pos.DistanceTo(w.Nests[0].Pos), f.Pos.DistanceTo(w.Nests[1].Pos));
+            if (f.Kind == FoodKind.Berry && f.Max < 1000) Add(f.Pos, f.Radius, (AntType.Spider, 3), (AntType.Beetle, 2));
+            else if (f.Kind == FoodKind.Sugar) Add(f.Pos, f.Radius, (AntType.Beetle, 2), (AntType.Wasp, 1));
+            else if (f.Kind == FoodKind.Seed && d > 75) Add(f.Pos, f.Radius, (AntType.Wasp, 2));
+            else if (f.Kind == FoodKind.Crumb && d > 110) Add(f.Pos, f.Radius, (AntType.Spider, 2));
+            else if (f.Kind == FoodKind.Crumb && d > 80) Add(f.Pos, f.Radius, (AntType.Beetle, 1));
+        }
+        foreach (var c in w.Camps) if (w.Blocked(c.Pos, 1)) c.Pos += MathX.Dir(c.Facing) * 4;
     }
 
     static readonly Dictionary<World, List<ArrayMesh>> _crumbCache = new();

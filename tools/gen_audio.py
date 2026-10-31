@@ -371,6 +371,69 @@ def ui():
     save("ui_queue", fade(x), -9)
 
 
+def levelup():
+    # bright rising oud arpeggio over a shimmering bell: a promotion
+    out = np.zeros(int(2.2 * SR))
+    for i, nn in enumerate(["D4", "F#4", "A4", "D5"]):
+        p = oud(note(nn), 1.4, 0.9)
+        s = int(i * 0.07 * SR)
+        out[s:s + len(p)] += p[: len(out) - s]
+    b = fm_bell(note("A5"), 1.6, ratio=3.01, index=1.4, decay=0.5)
+    s = int(0.28 * SR)
+    out[s:s + len(b)] += b[: len(out) - s] * 0.5
+    save("levelup", fade(add_reverb(out, 0.3, 1.5, 0.4), 0.002, 0.3), -4)
+
+
+def abilities():
+    # spider web shot: a wet elastic 'thwip' (falling band of noise plus a plucked twang)
+    n = int(0.45 * SR)
+    t = np.arange(n) / SR
+    sweep = np.zeros(n)
+    for i in range(0, n, 256):
+        f = 5000 * np.exp(-t[i] * 9) + 400
+        seg = noise(min(256, n - i))
+        sweep[i:i + len(seg)] = bp(seg, max(200, f * 0.6), min(20000, f * 1.4))
+    twang = np.sin(2 * np.pi * (180 + 300 * np.exp(-t * 20)) * t) * env_exp(n, 0.09)
+    x = sweep * env_exp(n, 0.12) + twang * 0.5
+    save("web", fade(x), -4)
+    # web lands: sticky splat
+    n = int(0.35 * SR)
+    x = lp(noise(n), 1400) * env_exp(n, 0.05) + bp(noise(n), 3000, 9000) * env_exp(n, 0.015) * 0.4
+    save("web_land", fade(x), -6)
+    # mandible sweep: whoosh into a heavy multi-crunch
+    n = int(0.9 * SR)
+    t = np.arange(n) / SR
+    whoosh = bp(noise(n), 300, 1800) * np.exp(-((t - 0.18) / 0.09) ** 2)
+    crunch = np.zeros(n)
+    for tt in np.sort(rng.uniform(0.22, 0.42, 14)):
+        c = click(0.05, 700, 6000, rng.uniform(0.006, 0.014))
+        c = resonator(c, rng.uniform(900, 1800), 4) + c
+        s = int(tt * SR)
+        crunch[s:s + len(c)] += c[: n - s] * rng.uniform(0.5, 1.0)
+    thud = np.sin(2 * np.pi * (70 + 60 * np.exp(-np.maximum(0, t - 0.22) * 25)) * t) * np.exp(-np.maximum(0, t - 0.22) / 0.12) * (t > 0.22)
+    x = whoosh * 0.6 + crunch + thud * 0.9
+    save("sweep", fade(add_reverb(x, 0.2, 1.0, 0.3)), -3)
+    # wasp: angry buzz rising into a sting
+    n = int(0.7 * SR)
+    t = np.arange(n) / SR
+    f = 180 + 60 * np.sin(2 * np.pi * 7 * t) + 80 * t
+    buzz = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * (0.6 + 0.4 * np.sin(2 * np.pi * 31 * t))
+    buzz = bp(buzz, 150, 3500) * adsr(n, 0.08, 0.15)
+    stab = click(0.08, 2000, 9000, 0.01)
+    s = int(0.42 * SR)
+    buzz[s:s + len(stab)] += stab * 2
+    save("sting", fade(buzz), -4)
+    # research complete: bright oud flourish over a soft drone
+    out = np.zeros(int(2.6 * SR))
+    for i, nn in enumerate(["A3", "D4", "F#4", "A4", "D5", "A4"]):
+        p = oud(note(nn), 1.6, 0.8)
+        s = int(i * 0.09 * SR)
+        out[s:s + len(p)] += p[: len(out) - s]
+    dr = saw_pad([note("D3"), note("A3")], 2.6, cutoff=900)
+    out += dr[: len(out)] * 1.2
+    save("research", fade(add_reverb(out, 0.3, 1.6, 0.5), 0.002, 0.4), -4)
+
+
 def horn(f0, dur, vib=5.0):
     t = t_axis(dur)
     f = f0 * (1 + 0.006 * np.sin(2 * np.pi * vib * t)) * (1 + 0.03 * np.exp(-t * 6))
@@ -501,7 +564,7 @@ def music_battle():
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    jobs = [amb_yard, swarm, bites, deaths, small_sfx, ui, alerts, music_calm, music_battle]
+    jobs = [amb_yard, swarm, bites, deaths, small_sfx, ui, alerts, levelup, abilities, music_calm, music_battle]
     only = sys.argv[1:]
     for j in jobs:
         if only and j.__name__ not in only:

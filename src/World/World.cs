@@ -29,6 +29,14 @@ public sealed class FoodSource
     public bool Alive => Amount > 0.01f;
 }
 
+/// A lair of wild bugs guarding a rich food spot.
+public sealed class Camp
+{
+    public Vector2 Pos;
+    public float Facing;
+    public (AntType type, int level)[] Bugs;
+}
+
 public sealed class Nest
 {
     public int Team;
@@ -42,6 +50,7 @@ public sealed class World
     public readonly List<Obstacle> Obstacles = new();
     public readonly List<FoodSource> Food = new();
     public readonly Nest[] Nests = new Nest[2];
+    public readonly List<Camp> Camps = new();
     public readonly List<ShaderMaterial> FowMaterials = new();
     public Node3D Root;
     public Image MinimapBase;

@@ -11,7 +11,13 @@ public partial class Hud : CanvasLayer
     Label _food, _pop, _clock, _alert, _selTitle, _selDetail, _hint;
     HBoxContainer _selIcons;
     ProgressBar _selHp;
-    readonly Button[] _prod = new Button[4];
+    readonly Button[] _prod = new Button[9];
+    readonly Control[] _prodLock = new Control[9];
+    readonly Label[] _heroStatus = new Label[9];
+    readonly Button[] _res = new Button[5];
+    readonly Label[] _resTier = new Label[5], _resCost = new Label[5];
+    ProgressBar _resBar;
+    Label _resName, _queenTitle;
     HBoxContainer _queueRow;
     readonly List<Button> _cmd = new();
     public Minimap Minimap;
@@ -35,6 +41,7 @@ public partial class Hud : CanvasLayer
         BuildMinimap();
         BuildSelection();
         BuildProduction();
+        BuildResearch();
         BuildCommands();
 
         _alert = UiTheme.Text("", 24, UiTheme.Title, UiTheme.Gold);
@@ -126,42 +133,140 @@ public partial class Hud : CanvasLayer
         head.AddChild(_queueRow);
         v.AddChild(head);
         var row = new HBoxContainer();
-        string[] keys = { "Z", "X", "C", "V" };
-        for (int i = 0; i < 4; i++)
-        {
-            var kind = (ProdKind)i;
-            var b = new Button { CustomMinimumSize = new Vector2(100, 70), TooltipText = ProdTooltip(kind, keys[i]) };
-            var g = i < 3 ? (Control)new AntGlyph { Type = (AntType)i, MouseFilter = Control.MouseFilterEnum.Ignore } : new ChamberGlyph { MouseFilter = Control.MouseFilterEnum.Ignore };
-            UiTheme.Place(g, 0, 0, 1, 1, 6, 4, -40, -20);
-            b.AddChild(g);
-            var key = UiTheme.Text(keys[i], 13, UiTheme.Bold, UiTheme.Gold);
-            UiTheme.Place(key, 1, 0, 1, 0, -22, 4, -6, 22);
-            b.AddChild(key);
-            var cost = UiTheme.Text(((int)Config.ProdCost(kind)).ToString(), 13, UiTheme.Bold, new Color(0.95f, 0.78f, 0.35f));
-            UiTheme.Place(cost, 0, 1, 1, 1, 8, -22, -6, -2);
-            b.AddChild(cost);
-            b.Pressed += () => Game.TryEnqueue(kind);
-            b.MouseEntered += () => Game.Audio.Ui("ui_hover");
-            _prod[i] = b;
-            row.AddChild(b);
-        }
+        row.AddThemeConstantOverride("separation", 4);
+        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Chamber, "V"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D") };
+        foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(70, 70)));
         v.AddChild(row);
         p.AddChild(v);
         _root.AddChild(p);
+
+        // royal chamber: one of each hero
+        var hp = new PanelContainer();
+        UiTheme.Place(hp, 1, 1, 1, 1, -452, -566, -12, -450);
+        var hv = new VBoxContainer();
+        hv.AddThemeConstantOverride("separation", 5);
+        hv.AddChild(UiTheme.Text("ROYAL CHAMBER  ·  HEROES", 13, UiTheme.Bold, UiTheme.Dim));
+        var hrow = new HBoxContainer();
+        hrow.AddThemeConstantOverride("separation", 6);
+        (ProdKind kind, string key)[] heroes = { (ProdKind.Warlord, "Y"), (ProdKind.Matron, "U"), (ProdKind.Marshal, "I") };
+        foreach (var (kind, key) in heroes)
+        {
+            var b = ProdButton(kind, key, new Vector2(138, 66));
+            var status = UiTheme.Text("", 11, UiTheme.Bold, UiTheme.Ink);
+            UiTheme.Place(status, 0, 1, 1, 1, 46, -20, -6, -2);
+            status.HorizontalAlignment = HorizontalAlignment.Right;
+            b.AddChild(status);
+            _heroStatus[(int)kind] = status;
+            hrow.AddChild(b);
+        }
+        hv.AddChild(hrow);
+        hp.AddChild(hv);
+        _root.AddChild(hp);
+    }
+
+    Button ProdButton(ProdKind kind, string key, Vector2 size)
+    {
+        int i = (int)kind;
+        var b = new Button { CustomMinimumSize = size, TooltipText = ProdTooltip(kind, key) };
+        Control g = kind == ProdKind.Chamber ? new ChamberGlyph() : new AntGlyph { Type = Config.UnitOf(kind) };
+        g.MouseFilter = Control.MouseFilterEnum.Ignore;
+        if (Config.IsHeroKind(kind)) UiTheme.Place(g, 0, 0, 0, 1, 4, 4, 50, -4);
+        else UiTheme.Place(g, 0, 0, 1, 1, 6, 4, -24, -20);
+        b.AddChild(g);
+        if (Config.IsHeroKind(kind))
+        {
+            var name = UiTheme.Text(Config.ProdName(kind), 12, UiTheme.Title, UiTheme.Gold);
+            UiTheme.Place(name, 0, 0, 1, 0, 50, 22, -4, 40);
+            b.AddChild(name);
+        }
+        var lockGlyph = new LockGlyph { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        UiTheme.Place(lockGlyph, 1, 1, 1, 1, -22, -24, -4, -4);
+        b.AddChild(lockGlyph);
+        _prodLock[i] = lockGlyph;
+        var keyLabel = UiTheme.Text(key, 13, UiTheme.Bold, UiTheme.Gold);
+        UiTheme.Place(keyLabel, 1, 0, 1, 0, -20, 4, -5, 22);
+        b.AddChild(keyLabel);
+        var cost = UiTheme.Text(((int)Config.ProdCost(kind)).ToString(), 12, UiTheme.Bold, new Color(0.95f, 0.78f, 0.35f));
+        UiTheme.Place(cost, 0, 1, 1, 1, Config.IsHeroKind(kind) ? 50 : 7, -20, -6, -2);
+        b.AddChild(cost);
+        b.Pressed += () => Game.TryEnqueue(kind);
+        b.MouseEntered += () => Game.Audio.Ui("ui_hover");
+        _prod[i] = b;
+        return b;
     }
 
     static string ProdTooltip(ProdKind k, string key)
     {
         if (k == ProdKind.Chamber)
             return $"Excavate Chamber  [{key}]\nDig a new brood chamber: +{Config.ChamberPop} brood capacity.\nCost {Config.ChamberCost} food · {Config.ChamberTime}s";
-        var s = Config.Stats[(int)k];
-        string role = k switch
+        var s = Config.Of(Config.UnitOf(k));
+        string role = Config.Role(k);
+        return $"{s.Name}  [{key}]\n{role}\nHP {s.Hp} · Bite {s.Damage} · Cost {s.Cost} food · {s.BuildTime}s · {s.Pop} brood";
+    }
+
+    static readonly string[] ResKeys = { "Q", "W", "E", "R", "T" };
+
+    void BuildResearch()
+    {
+        var p = new PanelContainer();
+        UiTheme.Place(p, 1, 1, 1, 1, -452, -444, -12, -306);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 5);
+        var head = new HBoxContainer();
+        head.AddChild(UiTheme.Text("COLONY CHAMBERS", 13, UiTheme.Bold, UiTheme.Dim));
+        _queenTitle = UiTheme.Text("", 13, UiTheme.Title, UiTheme.Gold);
+        _queenTitle.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _queenTitle.HorizontalAlignment = HorizontalAlignment.Right;
+        head.AddChild(_queenTitle);
+        v.AddChild(head);
+        var row = new HBoxContainer();
+        for (int i = 0; i < 5; i++)
         {
-            ProdKind.Worker => "Forages on its own, lays food trails and carries corpses home.",
-            ProdKind.Soldier => "Fast, aggressive fighter. The backbone of any raid.",
-            _ => "Huge-headed crusher. Slow, tough and devastating. Uses 3 brood.",
-        };
-        return $"{s.Name}  [{key}]\n{role}\nHP {s.Hp} · Bite {s.Damage} · Cost {s.Cost} food · {s.BuildTime}s";
+            var u = (Upgrade)i;
+            var b = new Button { CustomMinimumSize = new Vector2(80, 62) };
+            var g = new ResearchGlyph { Kind = u, MouseFilter = Control.MouseFilterEnum.Ignore };
+            UiTheme.Place(g, 0, 0, 1, 1, 6, 4, -30, -18);
+            b.AddChild(g);
+            var key = UiTheme.Text(ResKeys[i], 13, UiTheme.Bold, UiTheme.Gold);
+            UiTheme.Place(key, 1, 0, 1, 0, -20, 3, -5, 20);
+            b.AddChild(key);
+            var tier = UiTheme.Text("", 11, UiTheme.Bold, UiTheme.Ink);
+            UiTheme.Place(tier, 1, 1, 1, 1, -34, -20, -5, -2);
+            tier.HorizontalAlignment = HorizontalAlignment.Right;
+            b.AddChild(tier);
+            var cost = UiTheme.Text("", 12, UiTheme.Bold, new Color(0.95f, 0.78f, 0.35f));
+            UiTheme.Place(cost, 0, 1, 1, 1, 7, -20, -6, -2);
+            b.AddChild(cost);
+            b.Pressed += () => Game.TryResearch(u);
+            b.GuiInput += e =>
+            {
+                if (e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right) { Game.Sim.CancelResearch(Config.Player); Game.Audio.Ui("ui_click"); }
+            };
+            b.MouseEntered += () => Game.Audio.Ui("ui_hover");
+            _res[i] = b; _resTier[i] = tier; _resCost[i] = cost;
+            row.AddChild(b);
+        }
+        v.AddChild(row);
+        var prog = new HBoxContainer();
+        _resName = UiTheme.Text("", 12, null, UiTheme.Dim);
+        _resName.CustomMinimumSize = new Vector2(190, 0);
+        _resBar = new ProgressBar { CustomMinimumSize = new Vector2(0, 8), ShowPercentage = false, MaxValue = 1, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
+        prog.AddChild(_resName);
+        prog.AddChild(_resBar);
+        v.AddChild(prog);
+        p.AddChild(v);
+        _root.AddChild(p);
+    }
+
+    static string ResearchTooltip(Colony c, Upgrade u)
+    {
+        int next = c.T(u) + 1;
+        string head = next > Config.MaxTier(u) ? $"{Config.ResearchName(u, c.T(u))}  (complete)" : $"{Config.ResearchName(u, next)}  [{ResKeys[(int)u]}]";
+        string body = Config.ResearchDesc(u);
+        if (next > Config.MaxTier(u)) return $"{head}\n{body}";
+        int need = Config.QueenNeeded(u, next);
+        string req = c.T(Upgrade.Queen) < need ? $"\nRequires a {Config.QueenTitles[need]} queen." : "";
+        return $"{head}\n{body}{req}\nCost {Config.ResearchCost(u, next)} food · {Config.ResearchTime(u, next)}s   (right-click to cancel research)";
     }
 
     void BuildCommands()
@@ -204,7 +309,10 @@ public partial class Hud : CanvasLayer
             "Left-click / drag  select ants   ·   Shift adds   ·   Double-click selects all of that kind on screen",
             "Right-click  move / attack / gather (workers on food)   ·   A + click  attack-move",
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
-            "Z worker   ·   X soldier   ·   C major   ·   V excavate chamber (+brood capacity)",
+            "Brood:  Z worker  ·  X soldier  ·  C major  ·  V chamber  ·  F flying ant  ·  D acid gunner",
+            "Chambers:  Q royal jelly (queen level)  ·  W wings  ·  E mandible forge  ·  R chitin  ·  T silk cutters",
+            "Heroes:  Y Warlord  ·  U Acid Matron  ·  I Sky Marshal. They level to 10 and cast specials on their own.",
+            "Wild bugs guard rich food. Beetles sweep, spiders shoot webs, wasps dive and sting. Their carcasses are feasts.",
             "Click the nest, then right-click the ground to set a rally point.",
             "Arrows / screen edge pan   ·   Mouse wheel zoom   ·   Middle-drag rotate   ·   Space jump to last alert",
             "Hold Alt to show health bars   ·   F11 fullscreen   ·   Esc pause",
@@ -296,13 +404,46 @@ public partial class Hud : CanvasLayer
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";
         _pop.AddThemeColorOverride("font_color", c.PopUsed >= c.PopCap ? new Color(1, 0.45f, 0.3f) : UiTheme.Ink);
         _clock.Text = $"{(int)sim.Time / 60}:{(int)sim.Time % 60:00}";
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < _prod.Length; i++)
         {
             var k = (ProdKind)i;
-            bool ok = c.Alive && c.Food >= Config.ProdCost(k) && c.Queue.Count < Config.QueueLimit;
+            bool unlocked = Config.Unlocked(k, c.Tier);
+            bool ok = unlocked && c.Alive && c.Food >= Config.ProdCost(k) && c.Queue.Count < Config.QueueLimit;
             if (k == ProdKind.Chamber && c.PopCap + (c.PendingChambers() + 1) * Config.ChamberPop > Config.MaxPopCap) ok = false;
-            _prod[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, 0.45f);
+            if (Config.IsHeroKind(k))
+            {
+                var ht = Config.UnitOf(k);
+                bool alive = c.Count[(int)ht] > 0, queued = c.Queue.Exists(q => q.Kind == k);
+                if (alive || queued) ok = false;
+                string st = "";
+                if (alive)
+                    for (int j = 0; j < sim.High; j++)
+                        if (sim.Ants[j].Alive && sim.Ants[j].Team == Config.Player && sim.Ants[j].Type == ht) { st = $"Lv {sim.Ants[j].Level}"; break; }
+                _heroStatus[i].Text = alive ? st : queued ? "hatching" : unlocked ? $"x{Config.HeroTierMul(ht, c.T(Upgrade.Queen)):0.00}" : "";
+                _heroStatus[i].AddThemeColorOverride("font_color", alive ? new Color(0.6f, 1f, 0.5f) : UiTheme.Ink);
+            }
+            _prod[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, unlocked ? 0.45f : 0.3f);
+            _prodLock[i].Visible = !unlocked;
         }
+        for (int i = 0; i < 5; i++)
+        {
+            var u = (Upgrade)i;
+            int next = c.T(u) + 1;
+            bool maxed = next > Config.MaxTier(u);
+            var r = Game.Sim.CanResearch(Config.Player, u);
+            bool active = c.Researching && c.ResearchKind == u;
+            _res[i].Modulate = active ? new Color(1.2f, 1.1f, 0.8f) : r == ResearchResult.Ok ? Colors.White : new Color(1, 1, 1, maxed ? 0.55f : 0.35f);
+            _res[i].TooltipText = ResearchTooltip(c, u);
+            _resTier[i].Text = Config.MaxTier(u) > 1 ? $"{c.T(u)}/{Config.MaxTier(u)}" : (c.T(u) > 0 ? "done" : "");
+            _resCost[i].Text = maxed ? "" : ((int)Config.ResearchCost(u, next)).ToString();
+        }
+        _queenTitle.Text = Config.QueenTitles[c.T(Upgrade.Queen)];
+        if (c.Researching)
+        {
+            _resName.Text = Config.ResearchName(c.ResearchKind, c.T(c.ResearchKind) + 1);
+            _resBar.Value = c.ResearchProgress / c.ResearchTime;
+        }
+        else { _resName.Text = "No research underway"; _resBar.Value = 0; }
         RefreshQueue(c);
         RefreshSelection();
     }
@@ -337,7 +478,7 @@ public partial class Hud : CanvasLayer
     {
         var sim = Game.Sim;
         var sel = Game.Input.Selection;
-        int[] counts = new int[4];
+        int[] counts = new int[13];
         float hp = 0, max = 0;
         int alive = 0, single = -1;
         foreach (int id in sel)
@@ -345,7 +486,7 @@ public partial class Hud : CanvasLayer
             ref var a = ref sim.Ants[id];
             if (!a.Alive) continue;
             counts[(int)a.Type]++;
-            hp += a.Hp; max += Config.Of(a.Type).Hp;
+            hp += a.Hp; max += a.MaxHp;
             alive++;
             single = id;
         }
@@ -360,14 +501,30 @@ public partial class Hud : CanvasLayer
             AddIcon(AntType.Queen, 1);
             return;
         }
+        if (alive == 0 && sim.Valid(Game.Input.Inspect, Game.Input.InspectSerial) && (Game.Fog == null || Game.Fog.Visible(sim.Ants[Game.Input.Inspect].Pos)))
+        {
+            ref var a = ref sim.Ants[Game.Input.Inspect];
+            var st = Config.Of(a.Type);
+            bool wild = a.Team == Config.Wild;
+            _selTitle.Text = $"{st.Name}  ·  Level {a.Level}";
+            _selTitle.AddThemeColorOverride("font_color", Config.TeamUi(a.Team));
+            _selHp.Value = a.Hp / a.MaxHp;
+            _selDetail.Text = wild
+                 ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood:0} food."
+                : $"Red colony.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}";
+            AddIcon(a.Type, 1);
+            return;
+        }
+        _selTitle.AddThemeColorOverride("font_color", UiTheme.Gold);
         if (alive == 0)
         {
             var c = sim.Col[Config.Player];
-            _selTitle.Text = "Black Colony";
+            _selTitle.Text = $"Black Colony  ·  {Config.QueenTitles[c.T(Upgrade.Queen)]}";
             ref var q = ref sim.Ants[c.QueenId];
             _selHp.Value = q.Alive ? q.Hp / Config.Stats[3].Hp : 0;
             _selDetail.Text = "Nothing selected.  Drag across your ants to command them.";
             for (int t = 0; t < 3; t++) AddIcon((AntType)t, c.Count[t]);
+            foreach (int t in new[] { 8, 9, 10, 11, 12 }) if (c.Count[t] > 0) AddIcon((AntType)t, c.Count[t]);
             return;
         }
         _selHp.Value = hp / Mathf.Max(1, max);
@@ -375,7 +532,7 @@ public partial class Hud : CanvasLayer
         {
             ref var a = ref sim.Ants[single];
             var st = Config.Of(a.Type);
-            _selTitle.Text = st.Name;
+            _selTitle.Text = Config.IsWarrior(a.Type) ? $"{st.Name}  ·  Level {a.Level}" : st.Name;
             string doing = a.State switch
             {
                 AntState.Forage => "Searching for food",
@@ -387,12 +544,18 @@ public partial class Hud : CanvasLayer
                 AntState.Hold => "Holding position",
                 _ => "Standing guard",
             };
-            _selDetail.Text = $"{doing}.  HP {(int)a.Hp} / {st.Hp}  ·  Bite {st.Damage}";
+            string xp = !Config.IsWarrior(a.Type) ? "" : a.Level >= Config.MaxLevelOf(a.Type) ? "  ·  Elite (max rank)" : $"  ·  XP {(int)a.Xp} / {Sim.NextXp(a)}";
+            if (Config.IsHero(a.Type)) xp += a.AbilityCd <= 0 ? $"  ·  {Config.AbilityName(a.Type)} ready" : $"  ·  {Config.AbilityName(a.Type)} in {a.AbilityCd:0}s";
+            if (a.BuffT > 0) xp += "  ·  War Cry!";
+            _selDetail.Text = $"{doing}.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0.#}{xp}";
             AddIcon(a.Type, 1);
             return;
         }
         var parts = new List<string>();
-        for (int t = 0; t < 3; t++) if (counts[t] > 0) { AddIcon((AntType)t, counts[t]); parts.Add($"{counts[t]} {Config.Stats[t].Name.ToLower()}{(counts[t] > 1 ? "s" : "")}"); }
+        foreach (int t in new[] { 0, 1, 2, 8, 9, 10, 11, 12 }) if (counts[t] > 0) { AddIcon((AntType)t, counts[t]); parts.Add($"{counts[t]} {Config.Stats[t].Name.ToLower()}{(counts[t] > 1 ? "s" : "")}"); }
+        int vets = 0;
+        foreach (int id in sel) if (sim.Ants[id].Alive && sim.Ants[id].Level > 1) vets++;
+        if (vets > 0) parts.Add($"{vets} veteran{(vets > 1 ? "s" : "")}");
         _selTitle.Text = $"{alive} ants";
         _selDetail.Text = string.Join(" · ", parts) + ".  Right-click to command.";
     }
@@ -424,6 +587,17 @@ public partial class QueueSlot : Control
         DrawRect(r, UiTheme.Bronze, false, 1);
         string s = Kind switch { ProdKind.Worker => "W", ProdKind.Soldier => "S", ProdKind.Major => "M", _ => "+" };
         DrawString(UiTheme.Bold, new Vector2(0, Size.Y * 0.7f), s, HorizontalAlignment.Center, Size.X, 14, UiTheme.Ink);
+    }
+}
+
+public partial class LockGlyph : Control
+{
+    public override void _Draw()
+    {
+        var s = Size;
+        var col = new Color(1f, 0.55f, 0.35f);
+        DrawArc(new Vector2(s.X / 2, s.Y * 0.45f), s.X * 0.26f, Mathf.Pi, Mathf.Tau, 12, col, 2f, true);
+        DrawRect(new Rect2(s.X * 0.18f, s.Y * 0.45f, s.X * 0.64f, s.Y * 0.5f), col);
     }
 }
 

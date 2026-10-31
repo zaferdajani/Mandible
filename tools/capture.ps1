@@ -7,4 +7,4 @@ dotnet build "$root" -nologo -v q | Out-Null
 if ($LASTEXITCODE -ne 0) { dotnet build "$root" -nologo -v q; exit 1 }
 New-Item -ItemType Directory -Force $Out | Out-Null
 & $godot --path "$root" -- "--capture=$Out" *> "$Out/run.log"
-Select-String -Path "$Out/run.log" -Pattern "capture\]|selftest\]|ERROR|Exception" | Select-Object -First 40 | ForEach-Object { $_.Line }
+Select-String -Path "$Out/run.log" -Pattern "capture\]|selftest\]|bugshoot\]|ERROR|Exception" | Select-Object -First 40 | ForEach-Object { $_.Line }

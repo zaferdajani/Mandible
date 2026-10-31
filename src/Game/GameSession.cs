@@ -19,13 +19,14 @@ public partial class GameSession : Node3D
     public Hud Hud;
     public PlayerInput Input;
     public AudioDirector Audio => App.Audio;
+    public NestChambers Chambers;
     readonly List<AIController> _ai = new();
     Image _pherImg;
     ImageTexture _pherTex;
     byte[] _pherPx;
     float _pherAcc, _trailView = 0.18f, _trailTarget = 0.18f;
     bool _paused, _ended;
-    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd;
+    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd;
     float _demoT;
     DirectionalLight3D _sun;
 
@@ -35,6 +36,7 @@ public partial class GameSession : Node3D
         Sim = new Sim(World);
         Ants = new AntRenderer(this);
         Effects = new Effects(this, World.HF);
+        Chambers = new NestChambers(World, this);
         BuildLighting();
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo };
@@ -89,8 +91,8 @@ public partial class GameSession : Node3D
             TonemapMode = Environment.ToneMapper.Aces,
             TonemapExposure = 1.1f,
             TonemapWhite = 6f,
-            SsaoEnabled = true, SsaoRadius = 1.4f, SsaoIntensity = 2.6f, SsaoPower = 1.6f, SsaoDetail = 0.8f,
-            SsilEnabled = true, SsilRadius = 6f, SsilIntensity = 0.5f,
+            SsaoEnabled = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") == null, SsaoRadius = 1.4f, SsaoIntensity = 2.6f, SsaoPower = 1.6f, SsaoDetail = 0.8f,
+            SsilEnabled = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") == null, SsilRadius = 6f, SsilIntensity = 0.5f,
             GlowEnabled = true, GlowIntensity = 0.45f, GlowBloom = 0.04f, GlowHdrThreshold = 1.1f,
             FogEnabled = true, FogLightColor = new Color(0.74f, 0.76f, 0.72f), FogDensity = 0.0012f, FogAerialPerspective = 0.25f, FogSkyAffect = 0.3f,
             AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.06f, AdjustmentBrightness = 1.0f,
@@ -100,7 +102,7 @@ public partial class GameSession : Node3D
         {
             LightColor = new Color(1f, 0.92f, 0.8f), LightEnergy = 1.5f, ShadowEnabled = true,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits, DirectionalShadowMaxDistance = 240,
-            LightAngularDistance = 1.0f, ShadowBias = 0.04f, ShadowNormalBias = 1.2f, ShadowBlur = 1.2f,
+            LightAngularDistance = 1.0f, ShadowBias = 0.05f, ShadowNormalBias = 2.2f, ShadowBlur = 1.2f,
         };
         _sun.RotationDegrees = new Vector3(-40, 140, 0);
         AddChild(_sun);
@@ -116,6 +118,37 @@ public partial class GameSession : Node3D
             case QueueResult.NoFood: Hud.Alert("Not enough food", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.QueueFull: Hud.Alert("The brood chamber is full", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
+            case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
+            case QueueResult.Locked:
+                Hud.Alert(LockReason(k), new Color(1, 0.5f, 0.35f));
+                Audio.Ui("ui_error");
+                break;
+        }
+    }
+
+    static string LockReason(ProdKind k) => k switch
+    {
+        ProdKind.Major or ProdKind.Warlord => $"{Config.ProdName(k)} needs a Matriarch queen (Royal Jelly, Q)",
+        ProdKind.Gunner or ProdKind.Matron => $"{Config.ProdName(k)} needs an Empress queen (Royal Jelly, Q)",
+        ProdKind.Marshal => "The Sky Marshal needs an Ancient Empress and the Wing Chamber",
+        _ => "Flying ants need the Wing Chamber (W)",
+    };
+
+    public void TryResearch(Upgrade u)
+    {
+        var r = Sim.StartResearch(Config.Player, u);
+        var c = Sim.Col[Config.Player];
+        var bad = new Color(1, 0.5f, 0.35f);
+        switch (r)
+        {
+            case ResearchResult.Ok: Audio.Ui("ui_queue"); Hud.Alert($"Research begun: {Config.ResearchName(u, c.T(u) + 1)}", UiTheme.Dim); break;
+            case ResearchResult.NoFood: Hud.Alert("Not enough food", bad); Audio.Ui("ui_error"); break;
+            case ResearchResult.Busy: Hud.Alert("The colony is already researching (right-click it to cancel)", bad); Audio.Ui("ui_error"); break;
+            case ResearchResult.Maxed: Hud.Alert("Already fully developed", bad); Audio.Ui("ui_error"); break;
+            case ResearchResult.Locked:
+                Hud.Alert($"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
+                Audio.Ui("ui_error");
+                break;
         }
     }
 
@@ -146,7 +179,8 @@ public partial class GameSession : Node3D
         Input?.Prune();
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
-        Ants.Update(Sim);
+        Chambers.UpdateVisibility(Fog);
+        Ants.Update(Sim, Camera.Cam);
         Effects.Update(_paused ? 0 : dt);
         UpdateFood();
         UpdatePheromoneTexture(dt);
@@ -199,16 +233,93 @@ public partial class GameSession : Node3D
                     _combat += 0.04f;
                     if (seen && Audible(e.Pos))
                     {
-                        Audio.At("bite", wp, e.Type == AntType.Major ? 2 : -3, 0.035f);
-                        Effects.Burst(wp, e.Type == AntType.Major ? 3 : 1, 1, 2.2f, 0.12f, 0.4f);
+                        bool bug = Config.IsBug(e.Type);
+                        if (bug) Audio.At("bite", wp, 3, 0.05f, 0.08f, 0.6f);
+                        else Audio.At("bite", wp, e.Type == AntType.Major ? 2 : -3, 0.035f);
+                        Effects.Burst(wp, bug || e.Type == AntType.Major ? 3 : 1, 1, 2.2f, 0.12f, 0.4f);
                     }
                     break;
                 case EvKind.Death:
                     if (seen)
                     {
-                        Audio.At("death", wp, e.Type == AntType.Worker ? -2 : 1, 0.05f);
-                        Effects.Burst(wp, 8, 1, 3.5f, 0.16f, 0.6f);
-                        Effects.Burst(wp, 4, 0, 1.2f, 0.6f, 1.0f);
+                        bool bug = Config.IsBug(e.Type);
+                        Audio.At("death", wp, bug ? 4 : e.Type == AntType.Worker ? -2 : 1, 0.05f, 0.08f, bug ? 0.55f : 1f);
+                        Effects.Burst(wp, bug ? 22 : 8, 1, bug ? 5 : 3.5f, bug ? 0.3f : 0.16f, 0.7f);
+                        Effects.Burst(wp, bug ? 10 : 4, 0, 1.5f, bug ? 1.4f : 0.6f, 1.2f);
+                        if (bug && !Demo && Audible(e.Pos)) Hud.Alert($"{Config.Of(e.Type).Name} slain! Its carcass is a feast.", new Color(0.85f, 0.7f, 1f));
+                    }
+                    break;
+                case EvKind.WebShot:
+                    if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
+                    break;
+                case EvKind.WebLand:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos))
+                    {
+                        Effects.Burst(wp, 14, 3, 3f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("web_land", wp, 0, 0.1f);
+                    }
+                    break;
+                case EvKind.Sweep:
+                    _combat += 0.15f;
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(0.85f, 0.6f, 0.3f), e.Radius * 0.6f);
+                        Effects.Burst(wp, 26, 0, 6f, 0.9f, 1.1f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 4, 0.2f, 0.05f, e.Type == AntType.StagBeetle ? 0.8f : 1f);
+                    }
+                    break;
+                case EvKind.Sting:
+                    if (seen && Audible(e.Pos)) { Audio.At("sting", wp, 2, 0.15f); Effects.Burst(wp, 6, 1, 3f, 0.2f, 0.6f); }
+                    break;
+                case EvKind.ResearchDone:
+                {
+                    var at = Chambers.Build(e.Team, e.Upgrade, e.Tier);
+                    if (!Demo && e.Team == Config.Player)
+                    {
+                        string what = e.Upgrade == Upgrade.Queen ? $"Our queen has become {Config.QueenTitles[e.Tier]}!" : $"{Config.ResearchName(e.Upgrade, e.Tier)} complete";
+                        Hud.Alert(what, new Color(1f, 0.85f, 0.4f));
+                        Audio.Ui("research", -2);
+                        Effects.Burst(World.HF.Point(at, 1f), 24, 2, 4f, 0.3f, 1.4f);
+                    }
+                    break;
+                }
+                case EvKind.Spit:
+                {
+                    var from = World.HF.Point(e.Pos, 0.8f);
+                    var to = World.HF.Point(e.To, 0.5f);
+                    if (seen)
+                    {
+                        for (int s = 0; s < 4; s++) Effects.Burst(from.Lerp(to, 0.25f * s + 0.2f), 2, 1, 0.8f, e.Type == AntType.Matron ? 0.3f : 0.18f, 0.35f);
+                        if (Audible(e.Pos)) Audio.At("web", from, -6, 0.06f, 0.1f, 1.7f);
+                    }
+                    break;
+                }
+                case EvKind.WarCry:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.75f, 0.25f), e.Radius * 0.55f);
+                        Effects.Burst(wp + Vector3.Up, 30, 2, 6f, 0.3f, 1.2f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, 0, 0.5f, 0.02f, 1.35f);
+                        if (!Demo && e.Team == Config.Player) Hud.Alert("WAR CRY! Our warriors fight with fury.", new Color(1f, 0.8f, 0.35f));
+                    }
+                    break;
+                case EvKind.AcidBurst:
+                {
+                    var to = World.HF.Point(e.To, 0.5f);
+                    if (Demo || Fog == null || Fog.Visible(e.To))
+                    {
+                        Effects.Marker(to, new Color(0.5f, 1f, 0.2f), e.Radius * 0.6f);
+                        Effects.Burst(to, 40, 1, 5f, 0.35f, 1.3f);
+                        if (Audible(e.To)) Audio.At("web_land", to, 4, 0.15f, 0.05f, 0.7f);
+                    }
+                    break;
+                }
+                case EvKind.DiveBomb:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.9f, 0.6f), e.Radius * 0.65f);
+                        Effects.Burst(wp, 36, 0, 7f, 1.0f, 1.2f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 5, 0.2f, 0.05f, 1.15f);
                     }
                     break;
                 case EvKind.Pickup:
@@ -225,6 +336,18 @@ public partial class GameSession : Node3D
                     {
                         Audio.Ui("ui_ready", -4);
                         if (e.Prod == ProdKind.Chamber) Hud.Alert("A new chamber is dug: brood capacity increased");
+                    }
+                    break;
+                case EvKind.LevelUp:
+                    if (seen)
+                    {
+                        Effects.Burst(wp + Vector3.Up * 0.8f, 16, 2, 4.5f, 0.28f, 1.1f);
+                        if (Audible(e.Pos)) Audio.At("levelup", wp, e.Team == Config.Player ? 0 : -6, 0.15f, 0.04f);
+                    }
+                    if (!Demo && e.Team == Config.Player && _levelAlertCd <= 0)
+                    {
+                        Hud.Alert($"A {Config.Of(e.Type).Name.ToLower()} has been promoted!", new Color(1f, 0.85f, 0.4f));
+                        _levelAlertCd = 6;
                     }
                     break;
                 case EvKind.Shower:
@@ -264,7 +387,7 @@ public partial class GameSession : Node3D
                     break;
             }
         }
-        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60;
+        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60;
     }
 
     void UpdateAudio(float dt)

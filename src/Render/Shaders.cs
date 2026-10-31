@@ -19,9 +19,16 @@ uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
 uniform vec3 leg_color : source_color = vec3(0.06, 0.045, 0.035);
 uniform float dead = 0.0;
+uniform int pattern = 0;      // 0 ant, 1 beetle (grooved metallic shell), 2 wolf spider (striped, hairy)
+uniform float irid = 0.0;     // structural-colour sheen strength
+uniform float hero = 0.0;     // gold-inlaid armour of hero ants
+uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
 varying float v_part;
 varying float v_flash;
 varying vec3 v_local;
+varying float v_w;
+
+float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_x(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
@@ -70,31 +77,105 @@ void vertex() {
     v_part = part;
     v_flash = INSTANCE_CUSTOM.w;
     v_local = VERTEX;
+    v_w = w;
     VERTEX = p;
     NORMAL = n;
 }
 
 void fragment() {
+    // part ids arrive interpolated (12.9999...), so snap them before comparing
+    float part = floor(v_part + 0.5);
     vec3 c = body_color;
     float rough = 0.34;
-    if (v_part == 12.0 || v_part == 9.0 || v_part == 10.0) c = head_color;
-    if (v_part == 13.0) {
+    if (part == 12.0 || part == 9.0 || part == 10.0) c = head_color;
+    float cc = 0.7;
+    float metal = 0.0;
+    if (part == 13.0) {
         c = gaster_color;
-        // tergite bands
-        float band = smoothstep(0.42, 0.5, fract(v_local.z * 18.0 + 0.3));
-        c *= 1.0 - band * 0.35;
+        if (pattern == 1) {
+            // elytra: fine longitudinal grooves and a raised suture
+            float groove = smoothstep(0.30, 0.5, abs(fract(v_local.x * 34.0) - 0.5));
+            c *= 0.55 + 0.45 * groove;
+            float pits = step(0.82, hash3(floor(v_local * vec3(34.0, 60.0, 60.0))));
+            c *= 1.0 - pits * 0.35 * (1.0 - groove);
+        } else if (pattern == 2) {
+            // wolf spider abdomen: dark cardiac mark and chevrons on a mottled ground
+            float heart = 1.0 - smoothstep(0.025, 0.045, abs(v_local.x) - (v_local.z + 0.24) * 0.12);
+            float chev = smoothstep(0.4, 0.5, fract((v_local.z + abs(v_local.x) * 1.4) * 14.0)) * step(v_local.z, -0.25);
+            c = mix(c, c * 0.35, max(heart * step(-0.3, v_local.z), chev * 0.7));
+        } else {
+            // tergite bands
+            float band = smoothstep(0.42, 0.5, fract(v_local.z * 18.0 + 0.3));
+            c *= 1.0 - band * 0.35;
+        }
     }
-    if (v_part >= 1.0 && v_part <= 8.0) { c = leg_color; rough = 0.45; BACKLIGHT = leg_color * 0.6; }
-    if (v_part == 9.0 || v_part == 10.0) c *= 0.6;
-    if (v_part == 11.0) { c = vec3(0.01); rough = 0.08; }
+    if (pattern == 3) {
+        // wasp: black thorax with yellow flecks, yellow face, banded abdomen
+        if (part == 13.0) c = mix(body_color, gaster_color, step(0.45, fract(v_local.z * 9.0 + 0.15)));
+        if (part == 0.0) c = mix(body_color, head_color, step(0.06, abs(v_local.x)) * step(0.1, v_local.z) * 0.9);
+        if (part == 12.0) c = mix(head_color, body_color, smoothstep(0.31, 0.34, v_local.y));
+    }
+    if (pattern == 2 && part == 12.0) {
+        // pale stripes either side of a dark median band
+        float ax = abs(v_local.x);
+        float pale = smoothstep(0.022, 0.032, ax) * (1.0 - smoothstep(0.06, 0.075, ax));
+        c = mix(c * 0.55, c * 1.9, pale);
+    }
+    if (pattern == 1 && part == 0.0) {
+        // pronotum: punctured, with a dark midline
+        c *= 1.0 - (1.0 - smoothstep(0.004, 0.01, abs(v_local.x))) * 0.5;
+    }
+    if (part >= 1.0 && part <= 8.0) {
+        c = leg_color; rough = 0.45; BACKLIGHT = leg_color * 0.6;
+        if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
+        if (pattern == 1) c *= 0.8 + 0.2 * step(0.85, v_w);
+    }
+    if (part == 9.0 || part == 10.0) c *= 0.6;
+    if (part == 11.0) { c = vec3(0.01); rough = 0.08; }
+    if (pattern == 2) {
+        // velvet hair: matte, speckled, soft sheen
+        float hair = hash3(floor(v_local * 320.0));
+        c *= 0.8 + 0.4 * hair;
+        if (part != 11.0) { rough = 0.78; cc = 0.0; }
+    }
+    if (pattern == 1 && part != 11.0) { rough = 0.22; cc = 0.85; metal = 0.35; }
+    if (pattern == 3 && part != 11.0) { rough = 0.3; cc = 0.5; }
+    if (hero > 0.0 && part != 11.0) {
+        // gold filigree: bands on the abdomen, a crest on the head, edged mandibles
+        float gband = part == 13.0 ? step(0.8, fract(v_local.z * 11.0 + 0.1)) : 0.0;
+        float crest = part == 12.0 ? smoothstep(0.02, 0.0, abs(v_local.x)) * step(0.17, v_local.y) : 0.0;
+        float jaw = (part == 9.0 || part == 10.0) ? step(0.75, v_w) : 0.0;
+        float g = max(max(gband, crest), jaw) * hero;
+        c = mix(c, vec3(0.95, 0.68, 0.2), g);
+        metal = mix(metal, 0.9, g);
+        rough = mix(rough, 0.2, g);
+    }
+    // structural colour: hue shifts with viewing angle, strongest at grazing angles
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+    vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
+    c += rainbow * irid * (0.06 + 0.5 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
     ALBEDO = c * (1.0 - dead * 0.35);
     ROUGHNESS = rough + dead * 0.3;
+    METALLIC = metal;
     SPECULAR = 0.6;
-    CLEARCOAT = 0.7;
+    CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.18;
-    RIM = 0.35;
+    RIM = pattern == 2 ? 0.6 : 0.35;
     RIM_TINT = 0.6;
-    EMISSION = vec3(1.0, 0.25, 0.08) * v_flash * 0.8;
+    // brief warm flicker when bitten; kept subtle so big targets under constant attack keep their colour
+    EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08);
+    if (part == 13.0 && length(acid) > 0.0) {
+        // translucent acid sac: smooth glossy green with a slow inner glow, gold bands still on top
+        float pulse = 0.75 + 0.25 * sin(TIME * 2.2);
+        float bands = hero * step(0.8, fract(v_local.z * 11.0 + 0.1));
+        ALBEDO = mix(acid * 0.6, vec3(0.95, 0.68, 0.2), bands);
+        EMISSION += acid * 0.22 * pulse * (1.0 - bands);
+        CLEARCOAT = 1.0;
+        CLEARCOAT_ROUGHNESS = 0.15;
+        ROUGHNESS = 0.25;
+        METALLIC = bands * 0.8;
+        BACKLIGHT = vec3(0.0);
+    }
 }
 ";
 
@@ -383,6 +464,110 @@ void fragment() {
 }
 ";
 
+    public const string Wing = @"
+shader_type spatial;
+render_mode blend_mix, cull_disabled, depth_draw_never, shadows_disabled;
+uniform vec3 tint : source_color = vec3(0.85, 0.88, 0.9);
+uniform vec3 vein : source_color = vec3(0.12, 0.08, 0.04);
+varying vec2 v_uv;
+varying float v_fly;
+vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
+vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
+void vertex() {
+    float side = floor(COLOR.r * 255.0 + 0.5) < 1.5 ? 1.0 : -1.0;
+    float fly = INSTANCE_CUSTOM.y;
+    float phase = TIME * INSTANCE_CUSTOM.x + float(INSTANCE_ID) * 1.37;
+    vec3 hinge = vec3(UV2.x, UV2.y, COLOR.b - 0.5);
+    vec3 p = VERTEX - hinge;
+    vec3 n = NORMAL;
+    // in flight the wings swing out from the folded pose and beat about the body axis
+    p = rot_y(p, -side * fly * 0.95); n = rot_y(n, -side * fly * 0.95);
+    float beat = fly * (sin(phase) * 0.8 + 0.2);
+    p = rot_z(p, side * beat); n = rot_z(n, side * beat);
+    VERTEX = p + hinge;
+    NORMAL = n;
+    v_uv = UV;
+    v_fly = fly;
+}
+void fragment() {
+    float along = abs(fract(v_uv.y * 3.0 + v_uv.x * 0.6) - 0.5);
+    float cross = abs(fract(v_uv.x * 4.0) - 0.5);
+    float veins = max(1.0 - smoothstep(0.0, 0.04, 0.5 - along), (1.0 - smoothstep(0.0, 0.03, 0.5 - cross)) * step(0.15, v_uv.x));
+    float edge = 1.0 - smoothstep(0.0, 0.08, min(v_uv.y, 1.0 - v_uv.y));
+    veins = max(veins, edge * 0.8);
+    float fres = pow(1.0 - clamp(abs(dot(NORMAL, VIEW)), 0.0, 1.0), 2.0);
+    vec3 film = 0.5 + 0.5 * cos(6.2831 * (fres * 1.3 + v_uv.x * 0.3 + vec3(0.0, 0.33, 0.67)));
+    ALBEDO = mix(tint + film * 0.25, vein, veins);
+    ROUGHNESS = 0.15;
+    SPECULAR = 0.8;
+    // a beating wing is a blur
+    ALPHA = mix(0.22, 0.8, veins) * (1.0 - v_fly * 0.45) + fres * 0.15;
+}
+";
+
+    public const string Web = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+varying float v_a;
+void vertex() { v_a = INSTANCE_CUSTOM.x; }
+void fragment() {
+    vec2 p = UV - 0.5;
+    float r = length(p) * 2.0;
+    float ang = atan(p.y, p.x);
+    float spokes = 1.0 - smoothstep(0.0, 0.04, abs(sin(ang * 7.0 + r * 0.6)) * max(r, 0.08));
+    float q = fract(r * 7.0 + sin(ang * 7.0) * 0.06);
+    float rings = 1.0 - smoothstep(0.0, 0.07, min(q, 1.0 - q));
+    float fade = 1.0 - smoothstep(0.75, 1.0, r);
+    float threads = max(spokes, rings * 0.85) * fade;
+    ALBEDO = vec3(0.93, 0.93, 0.9);
+    EMISSION = vec3(0.12);
+    ROUGHNESS = 0.3;
+    ALPHA = (threads * 0.9 + fade * 0.1) * v_a;
+}
+";
+
+    public const string Silk = @"
+shader_type spatial;
+render_mode blend_mix, cull_back, depth_draw_opaque;
+varying vec3 lpos;
+varying float v_a;
+float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void vertex() { lpos = VERTEX; v_a = INSTANCE_CUSTOM.x; }
+void fragment() {
+    float strands = abs(sin(lpos.z * 90.0 + lpos.x * 40.0 + sin(lpos.y * 70.0) * 2.0));
+    float fuzz = hash(floor(lpos * 300.0));
+    ALBEDO = vec3(0.9, 0.9, 0.86) * (0.8 + 0.2 * strands) * (0.9 + 0.1 * fuzz);
+    ROUGHNESS = 0.55;
+    BACKLIGHT = vec3(0.6);
+    ALPHA = v_a * (0.75 + 0.25 * strands);
+}
+";
+
+    public const string Pip = @"
+shader_type spatial;
+render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled, blend_mix;
+varying float v_own;
+void vertex() {
+    v_own = INSTANCE_CUSTOM.x;
+    float s = length(MODEL_MATRIX[0].xyz);
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+}
+void fragment() {
+    vec2 p = UV - 0.5;
+    // military chevron: a thick 'V' pointing down, with a dark outline
+    float d = abs(abs(p.x) * 0.9 - p.y - 0.05) - 0.11;   // distance to the V band
+    d = max(d, abs(p.x) - 0.42);
+    float outer = 1.0 - smoothstep(0.0, 0.03, d - 0.05);
+    float inner = 1.0 - smoothstep(0.0, 0.03, d);
+    float shine = smoothstep(0.1, -0.2, p.y) * 0.25;
+    vec3 gold = vec3(0.85, 0.52, 0.08) + shine;
+    vec3 red = vec3(0.75, 0.16, 0.08) + shine;
+    vec3 fill = mix(red, gold, v_own);
+    ALBEDO = mix(vec3(0.08, 0.04, 0.01), fill, inner);
+    ALPHA = outer;
+}
+";
+
     public const string Particle = @"
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
@@ -395,7 +580,7 @@ void vertex() {
 void fragment() {
     float r = length(UV - 0.5) * 2.0;
     float a = (1.0 - smoothstep(0.2, 1.0, r));
-    vec3 col = v_c.z < 0.5 ? vec3(0.62, 0.52, 0.40) : (v_c.z < 1.5 ? vec3(0.78, 0.82, 0.30) : vec3(1.0, 0.85, 0.5));
+    vec3 col = v_c.z < 0.5 ? vec3(0.62, 0.52, 0.40) : (v_c.z < 1.5 ? vec3(0.78, 0.82, 0.30) : (v_c.z < 2.5 ? vec3(1.0, 0.85, 0.5) : vec3(0.95, 0.95, 0.92)));
     ALBEDO = col;
     ALPHA = a * v_c.x;
 }

@@ -21,8 +21,8 @@ public sealed class AIController
         _sim = sim; _team = team; _diff = diff;
         var c = sim.Col[team];
         c.FoodMult = diff switch { Difficulty.Easy => 0.75f, Difficulty.Hard => 1.3f, _ => 1f };
-        _firstWave = diff switch { Difficulty.Easy => 300, Difficulty.Hard => 150, _ => 210 };
-        _waveSize = diff switch { Difficulty.Easy => 12, Difficulty.Hard => 22, _ => 16 };
+        _firstWave = diff switch { Difficulty.Easy => 330, Difficulty.Hard => 180, _ => 250 };
+        _waveSize = diff switch { Difficulty.Easy => 14, Difficulty.Hard => 26, _ => 20 };
         _nextWave = _firstWave;
     }
 
@@ -36,6 +36,61 @@ public sealed class AIController
         Produce(c);
         Defend(c);
         Raid(c);
+        Creep(c);
+    }
+
+    float _nextCreep = 75;
+
+    /// Between raids, clear the weakest wild lair the idle army can safely beat: food and veterans.
+    void Creep(Colony c)
+    {
+        if (Passive || _sim.Time < _nextCreep) return;
+        _nextCreep = _sim.Time + 20;
+        var nest = _sim.W.Nests[_team].Pos;
+        _tmp.Clear();
+        float army = 0;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type)) continue;
+            if (a.State == AntState.Idle || a.State == AntState.Move)
+            {
+                _tmp.Add(i);
+                army += Config.Of(a.Type).Hp * a.DmgMul * (a.MaxHp / Config.Of(a.Type).Hp) * Config.Of(a.Type).Damage;
+            }
+        }
+        if (_tmp.Count < 6) { Regroup(nest); return; }
+        Camp best = null;
+        float bestScore = float.MaxValue;
+        foreach (var camp in _sim.W.Camps)
+        {
+            float threat = 0;
+            for (int i = 0; i < _sim.High; i++)
+            {
+                ref var b = ref _sim.Ants[i];
+                if (b.Alive && b.Team == Config.Wild && b.Anchor.DistanceTo(camp.Pos) < 8) threat += b.MaxHp * Config.Of(b.Type).Damage * b.DmgMul;
+            }
+            if (threat <= 0 || army < threat * (_diff == Difficulty.Hard ? 1.6f : 2.2f)) continue;
+            float score = camp.Pos.DistanceTo(nest) + threat * 0.0004f;
+            if (camp.Pos.DistanceTo(_sim.W.Nests[1 - _team].Pos) < camp.Pos.DistanceTo(nest) * 0.8f) continue; // not on the enemy's doorstep
+            if (score < bestScore) { bestScore = score; best = camp; }
+        }
+        if (best != null) _sim.CmdMove(_tmp, best.Pos, true);
+        else Regroup(nest);
+    }
+
+    readonly List<int> _stray = new();
+
+    void Regroup(Vector2 nest)
+    {
+        _stray.Clear();
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (a.Alive && a.Team == _team && Config.IsWarrior(a.Type) && a.State == AntState.Idle && a.Pos.DistanceTo(nest) > 60) _stray.Add(i);
+        }
+        var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
+        if (_stray.Count > 0) _sim.CmdMove(_stray, nest + toCenter * 14, false);
     }
 
     void Produce(Colony c)
@@ -50,11 +105,48 @@ public sealed class AIController
             if (c.Food >= Config.ChamberCost) _sim.Enqueue(_team, ProdKind.Chamber);
             return;
         }
+        // tech timing: when research is due, bank food for it, but never below a working economy and a home guard
+        int warriors = soldiers + majors + c.Count[(int)AntType.Gunner] + c.Count[(int)AntType.Flyer];
+        if (Research(c) && workers >= wantWorkers * 0.7f && warriors >= 18 && c.QueenAlarm <= 0) return;
+        // a hero whenever one is available and not alive
+        foreach (var hk in new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
+            if (Config.Unlocked(hk, c.Tier) && c.Count[(int)Config.UnitOf(hk)] == 0 && !c.Queue.Exists(q => q.Kind == hk))
+            {
+                if (_sim.Enqueue(_team, hk) == QueueResult.Ok) return;
+                if (c.Food < Config.ProdCost(hk) && workers > 25) return; // save up for the hero
+            }
+        int gunners = c.Count[(int)AntType.Gunner], flyers = c.Count[(int)AntType.Flyer];
         ProdKind pick;
         if (workers < wantWorkers && workers < soldiers * 2 + 20) pick = ProdKind.Worker;
-        else if (_sim.Time > 200 && majors * 4 < soldiers) pick = ProdKind.Major;
+        else if (Config.Unlocked(ProdKind.Major, c.Tier) && majors * 4 < soldiers) pick = ProdKind.Major;
+        else if (Config.Unlocked(ProdKind.Gunner, c.Tier) && gunners * 3 < soldiers) pick = ProdKind.Gunner;
+        else if (Config.Unlocked(ProdKind.Flyer, c.Tier) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
         else pick = ProdKind.Soldier;
         _sim.Enqueue(_team, pick); // a major simply waits until the food is there
+    }
+
+    // the colony's tech path: queen first, then forges, wings and silk cutters as she unlocks them
+    static readonly (Upgrade u, int tier, float after)[] Plan =
+    {
+        (Upgrade.Queen, 2, 150), (Upgrade.Mandibles, 1, 200), (Upgrade.Chitin, 1, 240), (Upgrade.Wings, 1, 300),
+        (Upgrade.Queen, 3, 330), (Upgrade.Mandibles, 2, 420), (Upgrade.Chitin, 2, 460), (Upgrade.SilkCutters, 1, 500),
+        (Upgrade.Queen, 4, 560), (Upgrade.Mandibles, 3, 650), (Upgrade.Chitin, 3, 700), (Upgrade.Queen, 5, 780),
+    };
+
+    /// Starts the next research when affordable; returns true while the colony is saving up for it.
+    bool Research(Colony c)
+    {
+        if (c.Researching) return false;
+        float pace = _diff switch { Difficulty.Easy => 1.5f, Difficulty.Hard => 0.8f, _ => 1f };
+        foreach (var (u, tier, after) in Plan)
+        {
+            if (c.T(u) >= tier) continue;
+            if (_sim.Time < after * pace) return false;
+            var r = _sim.StartResearch(_team, u);
+            if (r == ResearchResult.Ok) return false;
+            return r == ResearchResult.NoFood;
+        }
+        return false;
     }
 
     void Defend(Colony c)
@@ -64,7 +156,7 @@ public sealed class AIController
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (!a.Alive || a.Team == _team || a.Type == AntType.Worker) continue;
+            if (!a.Alive || a.Team == _team || a.Team == Config.Wild || a.Type == AntType.Worker) continue;
             if (a.Pos.DistanceTo(nest) < 48) { threat = i; break; }
         }
         if (threat < 0) return;
@@ -72,7 +164,7 @@ public sealed class AIController
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (!a.Alive || a.Team != _team || (a.Type != AntType.Soldier && a.Type != AntType.Major)) continue;
+            if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type)) continue;
             if (a.State == AntState.Engage) continue;
             if (a.Pos.DistanceTo(nest) < 90) _tmp.Add(i);
         }
@@ -87,11 +179,11 @@ public sealed class AIController
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (!a.Alive || a.Team != _team || (a.Type != AntType.Soldier && a.Type != AntType.Major)) continue;
-            if ((a.State == AntState.Idle || a.State == AntState.Move) && a.Pos.DistanceTo(nest) < 70) _tmp.Add(i);
+            if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type)) continue;
+            if (a.State == AntState.Idle || a.State == AntState.Move) _tmp.Add(i); // wherever they stand, even back from a lair
         }
         int army = 0;
-        foreach (int i in _tmp) army += _sim.Ants[i].Type == AntType.Major ? 3 : 1;
+        foreach (int i in _tmp) army += Config.Of(_sim.Ants[i].Type).Pop;
         if (army < _waveSize) return;
         var target = _sim.W.Nests[1 - _team].Pos;
         // keep a small home guard

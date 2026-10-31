@@ -90,6 +90,52 @@ public static class UiTheme
     }
 }
 
+/// Icons for the colony chambers: crown, wings, mandibles, chitin shield, silk cutters.
+public partial class ResearchGlyph : Control
+{
+    public Upgrade Kind;
+
+    public override void _Draw()
+    {
+        var c = Size / 2;
+        float u = Mathf.Min(Size.X, Size.Y) / 10f;
+        var col = UiTheme.Gold;
+        float lw = Mathf.Max(1.5f, u * 0.35f);
+        switch (Kind)
+        {
+            case Upgrade.Queen:
+                DrawColoredPolygon(new[] { c + new Vector2(-u * 3.4f, u * 2f), c + new Vector2(-u * 3.4f, -u * 1.6f), c + new Vector2(-u * 1.7f, 0), c + new Vector2(0, -u * 2.8f), c + new Vector2(u * 1.7f, 0), c + new Vector2(u * 3.4f, -u * 1.6f), c + new Vector2(u * 3.4f, u * 2f) }, col);
+                DrawCircle(c + new Vector2(0, -u * 3.2f), u * 0.55f, col);
+                DrawCircle(c + new Vector2(-u * 3.4f, -u * 2f), u * 0.5f, col);
+                DrawCircle(c + new Vector2(u * 3.4f, -u * 2f), u * 0.5f, col);
+                break;
+            case Upgrade.Wings:
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    DrawColoredPolygon(new[] { c, c + new Vector2(s * u * 4.2f, -u * 3f), c + new Vector2(s * u * 4.6f, -u * 1.4f), c + new Vector2(s * u * 0.8f, u * 0.4f) }, new Color(col, 0.85f));
+                    DrawColoredPolygon(new[] { c + new Vector2(0, u * 0.4f), c + new Vector2(s * u * 3.6f, u * 1.2f), c + new Vector2(s * u * 3.2f, u * 2.6f), c + new Vector2(s * u * 0.6f, u * 1.2f) }, new Color(col, 0.6f));
+                }
+                break;
+            case Upgrade.Mandibles:
+                for (int s = -1; s <= 1; s += 2)
+                    DrawPolyline(new[] { c + new Vector2(s * u * 1.2f, u * 3f), c + new Vector2(s * u * 3f, 0), c + new Vector2(s * u * 2.2f, -u * 2.6f), c + new Vector2(s * u * 0.3f, -u * 3.2f) }, col, lw * 1.6f, true);
+                DrawCircle(c + new Vector2(0, u * 3.2f), u * 1.4f, col);
+                break;
+            case Upgrade.Chitin:
+                DrawColoredPolygon(new[] { c + new Vector2(0, -u * 3.6f), c + new Vector2(u * 3f, -u * 2.4f), c + new Vector2(u * 2.6f, u * 1.4f), c + new Vector2(0, u * 3.6f), c + new Vector2(-u * 2.6f, u * 1.4f), c + new Vector2(-u * 3f, -u * 2.4f) }, col);
+                DrawLine(c + new Vector2(-u * 2.4f, -u * 0.6f), c + new Vector2(u * 2.4f, -u * 0.6f), new Color(0.1f, 0.07f, 0.04f), lw);
+                DrawLine(c + new Vector2(-u * 1.8f, u * 1.4f), c + new Vector2(u * 1.8f, u * 1.4f), new Color(0.1f, 0.07f, 0.04f), lw);
+                break;
+            default:
+                // a web being cut
+                for (int k = 0; k < 6; k++) DrawLine(c, c + MathX.Dir(k * Mathf.Tau / 6) * u * 3.6f, new Color(col, 0.7f), lw * 0.6f);
+                DrawArc(c, u * 2.2f, 0, Mathf.Tau, 18, new Color(col, 0.7f), lw * 0.6f);
+                DrawLine(c + new Vector2(-u * 3.5f, u * 3.5f), c + new Vector2(u * 3.5f, -u * 3.5f), col, lw * 1.6f);
+                break;
+        }
+    }
+}
+
 /// Top-down ant silhouette used for icons.
 public partial class AntGlyph : Control
 {
@@ -102,9 +148,48 @@ public partial class AntGlyph : Control
         float u = Mathf.Min(s.X, s.Y) / 10f;
         var c = new Vector2(s.X / 2, s.Y / 2 + u * 0.4f);
         float head = Type switch { AntType.Soldier => 1.35f, AntType.Major => 1.8f, _ => 1f };
-        float gaster = Type == AntType.Queen ? 1.6f : 1f;
+        float gaster = Type == AntType.Queen ? 1.6f : Type == AntType.Gunner || Type == AntType.Matron ? 1.35f : 1f;
+        if (Type == AntType.Warlord) head = 1.7f;
         var col = Tint;
         float lw = Mathf.Max(1.5f, u * 0.28f);
+        if (Config.IsBug(Type))
+        {
+            bool spider = Type == AntType.Spider;
+            col = Config.WildUi;
+            int legs = spider ? 4 : 3;
+            for (int side = -1; side <= 1; side += 2)
+                for (int i = 0; i < legs; i++)
+                {
+                    float t = (i - (legs - 1) * 0.5f) / legs;
+                    var hip = c + new Vector2(0, t * u * 2f - u * 0.5f);
+                    var knee = hip + new Vector2(side * u * (spider ? 2.4f : 1.8f), t * u * 2.2f - u * 0.8f);
+                    var foot = knee + new Vector2(side * u * (spider ? 1.2f : 0.8f), t * u * 1.6f + u * 1.4f);
+                    DrawPolyline(new[] { hip, knee, foot }, col, lw, true);
+                }
+            if (spider)
+            {
+                DrawCircle(c + new Vector2(0, u * 1.6f), u * 1.6f, col);
+                DrawCircle(c - new Vector2(0, u * 0.8f), u * 1.1f, col);
+            }
+            else
+            {
+                DrawSetTransform(c + new Vector2(0, u * 0.6f), 0, new Vector2(1, 1.45f));
+                DrawCircle(Vector2.Zero, u * 1.7f, col);
+                DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+                DrawCircle(c - new Vector2(0, u * 1.9f), u * 0.9f, col);
+                if (Type == AntType.StagBeetle)
+                    for (int side = -1; side <= 1; side += 2)
+                        DrawPolyline(new[] { c + new Vector2(side * u * 0.5f, -u * 2.5f), c + new Vector2(side * u * 1.6f, -u * 4f), c + new Vector2(side * u * 0.4f, -u * 4.6f) }, col, lw * 1.5f, true);
+            }
+            return;
+        }
+        if (Type == AntType.Flyer)
+            for (int side = -1; side <= 1; side += 2)
+            {
+                // two pairs of swept wings
+                DrawColoredPolygon(new[] { c + new Vector2(side * u * 0.3f, -u * 0.3f), c + new Vector2(side * u * 4.2f, -u * 2.2f), c + new Vector2(side * u * 4.4f, -u * 1.2f), c + new Vector2(side * u * 0.5f, u * 0.2f) }, new Color(col, 0.45f));
+                DrawColoredPolygon(new[] { c + new Vector2(side * u * 0.3f, u * 0.2f), c + new Vector2(side * u * 3.4f, u * 0.6f), c + new Vector2(side * u * 3.2f, u * 1.5f), c + new Vector2(side * u * 0.4f, u * 0.7f) }, new Color(col, 0.35f));
+            }
         // legs
         for (int side = -1; side <= 1; side += 2)
             for (int i = 0; i < 3; i++)
@@ -122,6 +207,8 @@ public partial class AntGlyph : Control
         DrawCircle(c + new Vector2(0, u * 0.75f), u * 0.35f, col);
         DrawCircle(c, u * 0.62f, col);
         DrawCircle(hc, u * 0.8f * head, col);
+        if (Config.IsHero(Type))
+            DrawColoredPolygon(new[] { hc + new Vector2(-u * 1.1f, -u * 1.0f * head), hc + new Vector2(-u * 1.1f, -u * 2.0f * head), hc + new Vector2(-u * 0.5f, -u * 1.5f * head), hc + new Vector2(0, -u * 2.3f * head), hc + new Vector2(u * 0.5f, -u * 1.5f * head), hc + new Vector2(u * 1.1f, -u * 2.0f * head), hc + new Vector2(u * 1.1f, -u * 1.0f * head) }, new Color(1f, 0.85f, 0.35f));
         if (Type != AntType.Worker && Type != AntType.Queen)
             for (int side = -1; side <= 1; side += 2)
                 DrawPolyline(new[] { hc + new Vector2(side * u * 0.4f * head, -u * 0.6f * head), hc + new Vector2(side * u * 0.5f * head, -u * 1.3f * head), hc + new Vector2(0, -u * 1.5f * head) }, col, lw * 1.2f, true);

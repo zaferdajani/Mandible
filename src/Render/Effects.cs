@@ -10,8 +10,8 @@ public sealed class Effects
     readonly List<P> _ps = new();
     readonly Batch _batch;
     readonly Rng _rng = new(99);
-    readonly MeshInstance3D[] _markers = new MeshInstance3D[4];
-    readonly float[] _markerT = new float[4];
+    readonly MeshInstance3D[] _markers = new MeshInstance3D[8];
+    readonly float[] _markerT = new float[8];
     int _nextMarker;
     readonly Heightfield _hf;
 
@@ -40,11 +40,12 @@ public sealed class Effects
         }
     }
 
-    public void Marker(Vector3 at, Color c)
+    public void Marker(Vector3 at, Color c, float scale = 1f)
     {
         var m = _markers[_nextMarker];
         _markerT[_nextMarker] = 0;
         m.Visible = true;
+        m.Scale = new Vector3(scale, 1, scale);
         m.GlobalPosition = at + Vector3.Up * 0.15f;
         ((ShaderMaterial)m.MaterialOverride).SetShaderParameter("color", c);
         _nextMarker = (_nextMarker + 1) % _markers.Length;
