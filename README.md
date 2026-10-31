@@ -21,6 +21,7 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | Z X C V F D | Raise worker / soldier / major / excavate a chamber / flying ant / acid gunner |
 | Q W E R T | Colony chambers: royal jelly (queen level) / wings / mandible forge / chitin armory / silk cutters |
 | Y U I | Hatch a hero: Warlord / Acid Matron / Sky Marshal |
+| B | Send the selected squads home to heal and re-hatch fallen members |
 | Ctrl+1–9, 1–9 | Save and recall control groups |
 | F2 / F3 / Home | Select army / select workers / jump to nest |
 | Tab | Show your pheromone trails |

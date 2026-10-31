@@ -58,6 +58,8 @@ public static class Capture
             mine.Add(s.Sim.Spawn(Config.Player, i % 9 == 0 ? AntType.Major : AntType.Soldier, c + new Vector2(-26, 22) + rng.InDisk(9), -0.8f));
             theirs.Add(s.Sim.Spawn(Config.Enemy, i % 10 == 0 ? AntType.Major : AntType.Soldier, c + new Vector2(26, -22) + rng.InDisk(9), 2.3f));
         }
+        s.Sim.FormSquads(mine);
+        s.Sim.FormSquads(theirs);
         s.Sim.CmdMove(mine, c + new Vector2(10, -8), true);
         s.Sim.CmdMove(theirs, c + new Vector2(-10, 8), true);
         s.Camera.JumpTo(c + new Vector2(-6, 6), 46);
@@ -198,6 +200,7 @@ public static class Capture
             foreach (int id in parade) { s.Sim.Ants[id].Pos = spiderCamp.Pos + MathX.Dir(spiderCamp.Facing) * 16 + new Rng((uint)id).InDisk(3); }
             var army = new List<int>(parade);
             for (int k = 0; k < 12; k++) army.Add(s.Sim.Spawn(Config.Player, AntType.Soldier, spiderCamp.Pos + MathX.Dir(spiderCamp.Facing) * 18 + new Rng((uint)(k + 40)).InDisk(4), spiderCamp.Facing + Mathf.Pi));
+            s.Sim.FormSquads(army);
             s.Sim.CmdMove(army, spiderCamp.Pos, true);
             s.Camera.JumpTo(spiderCamp.Pos + MathX.Dir(spiderCamp.Facing) * 6, 30);
             await Wait(3.2f);
@@ -210,6 +213,7 @@ public static class Capture
         var stag = Find(AntType.StagBeetle);
         var squad = new List<int>();
         for (int i = 0; i < 22; i++) squad.Add(s.Sim.Spawn(Config.Player, i % 6 == 0 ? AntType.Major : AntType.Soldier, stag.Pos + MathX.Dir(stag.Facing) * 20 + new Rng((uint)(i + 3)).InDisk(6), stag.Facing + Mathf.Pi));
+        s.Sim.FormSquads(squad);
         s.Sim.CmdMove(squad, stag.Pos, true);
         s.Camera.JumpTo(stag.Pos + MathX.Dir(stag.Facing) * 4, 30);
         await Wait(3.5f);
@@ -228,6 +232,29 @@ public static class Capture
             s.Camera.JumpTo(s.Sim.Ants[best].Pos, 16);
             await Wait(1.5f);
             await Shot($"{n++:00}_veterans");
+        }
+        // the battered squads march home, heal and hatch replacements for the fallen
+        var survivors = new List<int>();
+        foreach (int id in squad) if (s.Sim.Ants[id].Alive) survivors.Add(id);
+        if (survivors.Count > 0)
+        {
+            string Strength()
+            {
+                var parts = new List<string>();
+                foreach (var q in s.Sim.Squads) if (q.Team == Config.Player && q.Alive) parts.Add($"{q.Type}{q.Count}/{q.Size}");
+                return string.Join(" ", parts);
+            }
+            GD.Print($"[bugshoot] squads before reinforcing: {Strength()} food {s.Sim.Col[Config.Player].Food:0}");
+            s.Sim.Col[Config.Player].Food += 600;
+            s.Sim.Col[Config.Player].PopCap = 400; // the tour spawned far past the brood cap; give the recruits room
+            s.Sim.CmdReinforce(survivors);
+            s.Camera.JumpTo(s.Sim.W.Nests[Config.Player].Pos, 34);
+            Engine.TimeScale = 4;
+            await Wait(12f); // real seconds: about 48 s of game time
+            Engine.TimeScale = 1;
+            await Wait(0.5f);
+            await Shot($"{n++:00}_reinforced");
+            GD.Print($"[bugshoot] squads after reinforcing: {Strength()} food {s.Sim.Col[Config.Player].Food:0}");
         }
     }
 
@@ -335,7 +362,9 @@ public static class Capture
                 for (int i = 0; i < sim.High; i++)
                     if (sim.Ants[i].Alive && sim.Ants[i].Level > 1 && sim.Ants[i].Team < 2)
                     { if (sim.Ants[i].Team == 0) v0++; else v1++; top = System.Math.Max(top, sim.Ants[i].Level); }
-                GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top}");
+                int sq0 = 0, sq1 = 0, full = 0, ranked = 0;
+                foreach (var sq in sim.Squads) if (sq.Alive) { if (sq.Team == 0) sq0++; else sq1++; if (sq.Count == sq.Size) full++; if (sq.Level > 1) ranked++; }
+                GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top} squads {sq0}/{sq1} full {full} ranked {ranked}");
                 string Heroes(int team)
                 {
                     var parts = new System.Collections.Generic.List<string>();

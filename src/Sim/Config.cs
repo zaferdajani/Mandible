@@ -135,8 +135,17 @@ public static class Config
         _ => "",
     };
 
-    public static float ProdCost(ProdKind k) => k == ProdKind.Chamber ? ChamberCost : Of(UnitOf(k)).Cost;
-    public static float ProdTime(ProdKind k) => k == ProdKind.Chamber ? ChamberTime : Of(UnitOf(k)).BuildTime;
+    /// Warriors hatch as squads; workers and heroes hatch alone.
+    public static int SquadSize(AntType t) => t switch { AntType.Soldier => 6, AntType.Gunner => 4, AntType.Flyer => 4, AntType.Major => 3, _ => 1 };
+    public static int SquadSize(ProdKind k) => k == ProdKind.Chamber ? 1 : SquadSize(UnitOf(k));
+    public static bool InSquads(AntType t) => SquadSize(t) > 1;
+    /// A squad is 10% cheaper than its members bought one by one, and hatches faster than one at a time.
+    public static float ProdCost(ProdKind k) => k == ProdKind.Chamber ? ChamberCost : Of(UnitOf(k)).Cost * SquadSize(k) * (SquadSize(k) > 1 ? 0.9f : 1f);
+    public static float ProdTime(ProdKind k) => k == ProdKind.Chamber ? ChamberTime : Of(UnitOf(k)).BuildTime * (SquadSize(k) > 1 ? SquadSize(k) * 0.55f : 1f);
+    public static int ProdPop(ProdKind k) => k == ProdKind.Chamber ? 0 : Of(UnitOf(k)).Pop * SquadSize(k);
+    /// Squads rank up together; they share every kill, so they need more experience than a lone ant.
+    public static int SquadXp(int level) => (int)(LevelXp[System.Math.Min(level, MaxLevel)] * 2.5f);
+    public const float ReinforceRadius = 18f;
     public static string ProdName(ProdKind k) => k == ProdKind.Chamber ? "Excavate Chamber" : Of(UnitOf(k)).Name;
 
     // ---------------------------------------------------------------- research

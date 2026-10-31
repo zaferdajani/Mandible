@@ -32,12 +32,13 @@ public struct Ant
     public Vector2 PrevPos;           // state at the previous tick, for smooth rendering between ticks
     public float PrevHeading, PrevAlt;
     public int HeroTier;              // queen tier a hero hatched under
+    public int SquadP1;               // squad id + 1 (0 = not in a squad)
     public float BuffT, BuffMul;      // war cry
     public float PoisonT, PoisonDps;  // acid
     public int PoisonSrc;
 }
 
-public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb }
+public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady }
 
 public struct SimEvent
 {
@@ -64,6 +65,18 @@ sealed class WebShotFx
 }
 
 public enum ResearchResult { Ok, NoFood, Locked, Maxed, Busy, Dead }
+
+/// A pack of warriors hatched together. It ranks up as one, and refills and heals at its nest.
+public sealed class Squad
+{
+    public int Id, Team, Size, Level = 1, Forge;
+    public AntType Type;
+    public float Xp, RecruitT;
+    public bool Recalled;                     // ordered home to reinforce
+    public readonly List<int> Members = new();
+    public int Count => Members.Count;
+    public bool Alive => Members.Count > 0;
+}
 
 public sealed class ProdItem
 {
@@ -127,10 +140,12 @@ public sealed class Sim
             var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
             c.QueenId = Spawn(c.Team, AntType.Queen, nest + toCenter * 3.4f, toCenter.AngleD());
             for (int i = 0; i < 18; i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, DMath.Tau));
+            var start = NewSquad(c.Team, AntType.Soldier);
             for (int i = 0; i < 6; i++)
             {
                 int id = Spawn(c.Team, AntType.Soldier, nest + toCenter * 8 + Rng.InDisk(4), toCenter.AngleD());
                 Ants[id].State = AntState.Idle;
+                Join(start, id);
             }
         }
         foreach (var camp in W.Camps)
@@ -235,6 +250,7 @@ public sealed class Sim
     void GrantXp(int id, float xp)
     {
         ref var a = ref Ants[id];
+        if (a.SquadP1 > 0) { SquadXp(Squads[a.SquadP1 - 1], xp); return; }
         int max = Config.MaxLevelOf(a.Type);
         if (!a.Alive || !Config.IsWarrior(a.Type) || a.Level >= max) return;
         a.Xp += xp;
@@ -244,6 +260,117 @@ public sealed class Sim
             ApplyLevel(ref a);
             a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.35f); // promotion heals
             Events.Add(new SimEvent { Kind = EvKind.LevelUp, Pos = a.Pos, Team = a.Team, Type = a.Type });
+        }
+    }
+
+    // ------------------------------------------------------------------ squads
+    public Squad NewSquad(int team, AntType type)
+    {
+        var s = new Squad { Id = Squads.Count, Team = team, Type = type, Size = Config.SquadSize(type), Forge = Col[team].T(Upgrade.Mandibles) };
+        Squads.Add(s);
+        return s;
+    }
+
+    void Join(Squad s, int id)
+    {
+        ref var a = ref Ants[id];
+        a.SquadP1 = s.Id + 1;
+        a.Forge = s.Forge;
+        if (a.Level != s.Level) { a.Level = s.Level; ApplyLevel(ref a); a.Hp = a.MaxHp; }
+        s.Members.Add(id);
+    }
+
+    /// Groups freshly spawned ants into squads of their type, as the brood chamber would (tests and tours).
+    public void FormSquads(List<int> ids)
+    {
+        var open = new Dictionary<(int, AntType), Squad>();
+        foreach (int id in ids)
+        {
+            ref var a = ref Ants[id];
+            if (!a.Alive || a.SquadP1 > 0 || !Config.InSquads(a.Type)) continue;
+            if (!open.TryGetValue((a.Team, a.Type), out var s) || s.Count >= s.Size) open[(a.Team, a.Type)] = s = NewSquad(a.Team, a.Type);
+            Join(s, id);
+        }
+    }
+
+    public Squad SquadOf(int id) => id >= 0 && id < High && Ants[id].Alive && Ants[id].SquadP1 > 0 ? Squads[Ants[id].SquadP1 - 1] : null;
+
+    /// Experience goes to the squad; on promotion every member ranks up and is partly healed.
+    void SquadXp(Squad s, float xp)
+    {
+        if (!s.Alive || s.Level >= Config.MaxLevel) return;
+        s.Xp += xp;
+        while (s.Level < Config.MaxLevel && s.Xp >= Config.SquadXp(s.Level + 1))
+        {
+            s.Level++;
+            foreach (int m in s.Members)
+            {
+                ref var a = ref Ants[m];
+                a.Level = s.Level;
+                ApplyLevel(ref a);
+                a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.35f);
+            }
+            Events.Add(new SimEvent { Kind = EvKind.LevelUp, Pos = Centroid(s), Team = s.Team, Type = s.Type });
+        }
+    }
+
+    public Vector2 Centroid(Squad s)
+    {
+        var c = Vector2.Zero;
+        foreach (int m in s.Members) c += Ants[m].Pos;
+        return s.Count > 0 ? c / s.Count : c;
+    }
+
+    /// Sends the squads of these ants home to heal and refill their ranks.
+    public void CmdReinforce(List<int> ids)
+    {
+        var done = new HashSet<int>();
+        foreach (int id in ids)
+        {
+            var s = SquadOf(id);
+            if (s == null || !done.Add(s.Id)) continue;
+            s.Recalled = true;
+            var nest = NestEntrance(s.Team);
+            var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
+            CmdMove(s.Members, nest + toCenter * 10, false);
+        }
+    }
+
+    /// Out of combat near its own nest, a squad heals and re-hatches its fallen, one recruit at a time, paid in food.
+    void TickSquads(float dt)
+    {
+        foreach (var s in Squads)
+        {
+            if (!s.Alive) continue;
+            var col = Col[s.Team];
+            var nest = NestEntrance(s.Team);
+            bool fighting = false;
+            foreach (int m in s.Members) if (Ants[m].State == AntState.Engage || Ants[m].DamagedT > 0) { fighting = true; break; }
+            var at = Centroid(s);
+            if (fighting || !col.Alive || at.DistanceTo(nest) > Config.ReinforceRadius) continue;
+            foreach (int m in s.Members) { ref var a = ref Ants[m]; a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.08f * dt); }
+            if (s.Count >= s.Size) { if (s.Recalled) { s.Recalled = false; Events.Add(new SimEvent { Kind = EvKind.SquadReady, Pos = at, Team = s.Team, Type = s.Type }); } continue; }
+            s.RecruitT -= dt;
+            if (s.RecruitT > 0) continue;
+            var st = Config.Of(s.Type);
+            if (col.PopUsed + st.Pop > col.PopCap)
+            {
+                if (s.Recalled) Events.Add(new SimEvent { Kind = EvKind.PopBlocked, Team = s.Team }); // the alert has its own cooldown
+                s.RecruitT = 1f;
+                continue;
+            }
+            if (col.Food < st.Cost) { s.RecruitT = 1f; continue; }
+            col.Food -= st.Cost;
+            col.Spent += st.Cost;
+            int id = Spawn(s.Team, s.Type, nest + Rng.InDisk(1.2f), Rng.R(0, DMath.Tau));
+            if (id < 0) continue;
+            Join(s, id);
+            ref var r = ref Ants[id];
+            r.Goal = at + Rng.InDisk(3);
+            r.State = AntState.Move;
+            col.PopUsed += st.Pop;
+            s.RecruitT = st.BuildTime * 0.8f;
+            Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = nest, Team = s.Team, Type = s.Type });
         }
     }
 
@@ -391,6 +518,7 @@ public sealed class Sim
         }
         foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); }
         Mix((uint)W.Food.Count);
+        foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
     }
 
@@ -423,6 +551,7 @@ public sealed class Sim
         foreach (var c in Col) { TickColony(c, dt); TickResearch(c, dt); }
         TickShowers();
         TickWebs(dt);
+        TickSquads(dt);
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) TickAnt(i, dt);
         Ph.Update(dt);
@@ -436,7 +565,7 @@ public sealed class Sim
         c.QueenAlarm -= dt;
         if (!c.Alive || c.Queue.Count == 0) { c.PopBlocked = false; return; }
         var item = c.Queue[0];
-        if (item.Kind != ProdKind.Chamber && c.PopUsed + Config.Of(Config.UnitOf(item.Kind)).Pop > c.PopCap)
+        if (item.Kind != ProdKind.Chamber && c.PopUsed + Config.ProdPop(item.Kind) > c.PopCap)
         {
             if (!c.PopBlocked) Events.Add(new SimEvent { Kind = EvKind.PopBlocked, Team = c.Team });
             c.PopBlocked = true;
@@ -454,15 +583,20 @@ public sealed class Sim
         else
         {
             var type = Config.UnitOf(item.Kind);
-            int id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f), Rng.R(0, DMath.Tau));
+            var squad = Config.InSquads(type) ? NewSquad(c.Team, type) : null;
+            var squadGoal = c.HasRally ? c.Rally : nest + (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized() * 10 + Rng.InDisk(5);
+            for (int n = 0; n < Config.SquadSize(type); n++)
+            {
+            int id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f + n * 0.3f), Rng.R(0, DMath.Tau));
             if (id >= 0)
             {
+                if (squad != null) Join(squad, id);
                 c.Produced++;
                 ref var a = ref Ants[id];
                 if (type != AntType.Worker)
                 {
                     var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
-                    a.Goal = c.HasRally ? c.Rally + Rng.InDisk(3) : nest + toCenter * 10 + Rng.InDisk(6);
+                    a.Goal = squadGoal + (squad != null ? MathX.Dir(n * 2.39996f) * 1.4f * Mathf.Sqrt(n) : Rng.InDisk(3));
                     a.State = AntState.Move;
                 }
                 else if (c.HasRally && !W.Blocked(c.Rally, 0))
@@ -471,6 +605,7 @@ public sealed class Sim
                     if (f != null) { a.Assigned = f; a.FoodTarget = f; a.State = AntState.Gather; }
                 }
                 Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = nest, Team = c.Team, Type = type });
+            }
             }
         }
         Events.Add(new SimEvent { Kind = EvKind.ProdDone, Pos = nest, Team = c.Team, Prod = item.Kind });
@@ -753,6 +888,7 @@ public sealed class Sim
     readonly List<int> _near = new();
     readonly List<WebShotFx> _shots = new();
     public readonly List<WebZone> Webs = new();
+    public readonly List<Squad> Squads = new();
 
     /// Ground ants (not flyers) of the colonies within r of p.
     List<int> AntsNear(Vector2 p, float r, bool groundOnly = true)
@@ -974,6 +1110,7 @@ public sealed class Sim
     {
         ref var t = ref Ants[id];
         t.Alive = false;
+        if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);
         var c = t.Team < 2 ? Col[t.Team] : null;
         if (c != null) { c.Count[(int)t.Type]--; c.Lost++; }

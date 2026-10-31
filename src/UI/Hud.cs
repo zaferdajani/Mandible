@@ -216,7 +216,10 @@ public partial class Hud : CanvasLayer
             return $"Excavate Chamber  [{key}]\nDig a new brood chamber: +{Config.ChamberPop} brood capacity.\nCost {Config.ChamberCost} food · {Config.ChamberTime}s";
         var s = Config.Of(Config.UnitOf(k));
         string role = Config.Role(k);
-        return $"{s.Name}  [{key}]\n{role}\nHP {s.Hp} · Bite {s.Damage} · Cost {s.Cost} food · {s.BuildTime}s · {s.Pop} brood";
+        int n = Config.SquadSize(k);
+        string what = n > 1 ? $"{s.Name} squad (x{n})" : s.Name;
+        string squad = n > 1 ? "\nHatches as a squad that ranks up together and refills at the nest (B)." : "";
+        return $"{what}  [{key}]\n{role}{squad}\nEach: HP {s.Hp} · Bite {s.Damage}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
     }
 
     static readonly string[] ResKeys = { "Q", "W", "E", "R", "T" };
@@ -298,7 +301,7 @@ public partial class Hud : CanvasLayer
             ("Army  F2", "Select every soldier and major.", () => Game.Input.SelectArmy()),
             ("Workers  F3", "Select every worker.", () => Game.Input.SelectWorkers()),
             ("Trails  Tab", "Show your colony's food pheromone trails.", () => Game.ToggleTrails()),
-            ("Nest  Home", "Jump to your nest and select it.", () => Game.Input.SelectNest()),
+            ("Reinforce  B", "Send the selected squads home: out of combat at the nest they heal and re-hatch fallen members (food per recruit).", () => Game.Input.Reinforce()),
         };
         foreach (var (label, tip, act) in cmds)
         {
@@ -330,6 +333,7 @@ public partial class Hud : CanvasLayer
             "Wild bugs guard rich food. Beetles sweep, spiders shoot webs, wasps dive and sting. Their carcasses are feasts.",
             "Click the nest, then right-click the ground to set a rally point.",
             "Arrows / screen edge pan   ·   Mouse wheel zoom   ·   Middle-drag rotate   ·   Space jump to last alert",
+            "Warriors hatch in squads that rank up together. B sends squads home to heal and refill their fallen.",
             "Hold Alt to show health bars   ·   F11 fullscreen   ·   Esc pause",
         }, ("Close", () => _help.Visible = false));
     }
@@ -576,9 +580,15 @@ public partial class Hud : CanvasLayer
         }
         var parts = new List<string>();
         foreach (int t in new[] { 0, 1, 2, 8, 9, 10, 11, 12 }) if (counts[t] > 0) { AddIcon((AntType)t, counts[t]); parts.Add($"{counts[t]} {Config.Stats[t].Name.ToLower()}{(counts[t] > 1 ? "s" : "")}"); }
-        int vets = 0;
-        foreach (int id in sel) if (sim.Ants[id].Alive && sim.Ants[id].Level > 1) vets++;
-        if (vets > 0) parts.Add($"{vets} veteran{(vets > 1 ? "s" : "")}");
+        var squads = new System.Collections.Generic.HashSet<int>();
+        int missing = 0, topRank = 1;
+        foreach (int id in sel)
+        {
+            var sq = sim.SquadOf(id);
+            if (sq != null && squads.Add(sq.Id)) { missing += sq.Size - sq.Count; topRank = System.Math.Max(topRank, sq.Level); }
+        }
+        if (squads.Count > 0) parts.Insert(0, $"{squads.Count} squad{(squads.Count > 1 ? "s" : "")}, best rank {topRank}");
+        if (missing > 0) parts.Add($"{missing} fallen: B to reinforce");
         _selTitle.Text = $"{alive} ants";
         _selDetail.Text = string.Join(" · ", parts) + ".  Right-click to command.";
     }

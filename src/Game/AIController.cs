@@ -58,9 +58,25 @@ public sealed class AIController
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
+        Reinforce(c);
         Defend(c);
         Raid(c);
         Creep(c);
+    }
+
+    /// Battered squads that are not fighting go home to heal and refill.
+    void Reinforce(Colony c)
+    {
+        var nest = _sim.W.Nests[_team].Pos;
+        foreach (var s in _sim.Squads)
+        {
+            if (s.Team != _team || !s.Alive || s.Recalled || s.Count * 2 > s.Size) continue;
+            if (_sim.Centroid(s).DistanceTo(nest) < Config.ReinforceRadius) continue;
+            bool fighting = false;
+            foreach (int m in s.Members) if (_sim.Ants[m].State == AntState.Engage) { fighting = true; break; }
+            if (fighting) continue;
+            Orders.Issue(Cmd.Units(CmdKind.Reinforce, _team, s.Members, _sim));
+        }
     }
 
     float _nextCreep = 75;
@@ -132,12 +148,14 @@ public sealed class AIController
         // tech timing: when research is due, bank food for it, but never below a working economy and a home guard
         int warriors = soldiers + majors + c.Count[(int)AntType.Gunner] + c.Count[(int)AntType.Flyer];
         if (Research(c) && workers >= wantWorkers * 0.7f && warriors >= 18 && c.QueenAlarm <= 0) return;
-        // a hero whenever one is available and not alive
+        // squads cost a lot at once: never let a beaten colony's economy shrink below what can rebuild them
+        if (workers < 32 && workers < wantWorkers) { Q(ProdKind.Worker); return; }
+        // a hero whenever one is available and not alive, saved for only while a home guard stands
         foreach (var hk in new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
             if (Config.Unlocked(hk, c.Tier) && c.Count[(int)Config.UnitOf(hk)] == 0 && !c.Queue.Exists(q => q.Kind == hk))
             {
                 if (Q(hk) == QueueResult.Ok) return;
-                if (c.Food < Config.ProdCost(hk) && workers > 25) return; // save up for the hero
+                if (c.Food < Config.ProdCost(hk) && warriors >= 12) return;
             }
         int gunners = c.Count[(int)AntType.Gunner], flyers = c.Count[(int)AntType.Flyer];
         ProdKind pick;

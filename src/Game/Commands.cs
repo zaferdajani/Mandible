@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -71,6 +71,7 @@ public sealed class Cmd
             case CmdKind.CancelLast: sim.CancelLast(Team); break;
             case CmdKind.Research: sim.StartResearch(Team, (Upgrade)Arg); break;
             case CmdKind.CancelResearch: sim.CancelResearch(Team); break;
+            case CmdKind.Reinforce: if (ids.Count > 0) sim.CmdReinforce(ids); break;
             case CmdKind.Rally:
                 sim.Col[Team].Rally = P;
                 sim.Col[Team].HasRally = true;

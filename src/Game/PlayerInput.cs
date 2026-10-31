@@ -155,6 +155,7 @@ public partial class PlayerInput : Node
             case Godot.Key.C: Game.TryEnqueue(ProdKind.Major); return;
             case Godot.Key.V: Game.TryEnqueue(ProdKind.Chamber); return;
             case Godot.Key.F: Game.TryEnqueue(ProdKind.Flyer); return;
+            case Godot.Key.B: Reinforce(); return;
             case Godot.Key.D: Game.TryEnqueue(ProdKind.Gunner); return;
             case Godot.Key.Y: Game.TryEnqueue(ProdKind.Warlord); return;
             case Godot.Key.U: Game.TryEnqueue(ProdKind.Matron); return;
@@ -196,8 +197,30 @@ public partial class PlayerInput : Node
     }
 
     // ------------------------------------------------------------- selection
+    /// Squads move as one: selecting any member selects the whole pack.
+    List<int> WithSquads(List<int> ids)
+    {
+        var all = new List<int>(ids);
+        foreach (int id in ids)
+        {
+            var s = Sim.SquadOf(id);
+            if (s != null) foreach (int m in s.Members) if (!all.Contains(m)) all.Add(m);
+        }
+        return all;
+    }
+
+    public void Reinforce()
+    {
+        Prune();
+        if (Selection.Count == 0) return;
+        Game.Issue(Cmd.Units(CmdKind.Reinforce, Local.Me, Selection, Sim));
+        Game.Hud.Alert("Squads returning to the nest to heal and reinforce", UiTheme.Dim);
+        Game.Audio.Ui("ui_click");
+    }
+
     void SetSelection(List<int> ids, bool add = false)
     {
+        ids = WithSquads(ids);
         if (!add)
         {
             foreach (int id in Selection) Sim.Ants[id].Selected = false;

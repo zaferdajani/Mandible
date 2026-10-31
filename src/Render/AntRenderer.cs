@@ -223,7 +223,7 @@ public sealed class AntRenderer
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
             }
             // veteran chevrons: one gold pip per level above the first
-            if (Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && a.Level > 1)
+            if (Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && a.SquadP1 == 0 && a.Level > 1)
             {
                 float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);
                 var top = o + Vector3.Up * (barY + 0.45f);
@@ -255,6 +255,37 @@ public sealed class AntRenderer
                 float dist = camPos.DistanceTo(o);
                 label.PixelSize = (hero ? 0.0045f : 0.008f) + dist * (hero ? 0.00005f : 0.0001f);
                 label.GlobalPosition = o + Vector3.Up * (barY + (hero ? 0.7f : 0.9f));
+            }
+        }
+        // one banner per squad: rank chevrons over the pack, and its strength when it has lost members
+        foreach (var s in sim.Squads)
+        {
+            if (!s.Alive) continue;
+            var c = Vector2.Zero;
+            foreach (int m in s.Members) c += sim.Ants[m].PrevPos.Lerp(sim.Ants[m].Pos, alpha);
+            c /= s.Count;
+            if (s.Team != Local.Me && !VisibleToPlayer(c)) continue;
+            float size = Config.Of(s.Type).Size;
+            float alt = Config.CruiseAlt(s.Type);
+            var top = new Vector3(c.X, hf.Sample(c.X, c.Y) + alt + size * 0.55f + 1.4f, c.Y);
+            if (camPos.DistanceTo(top) > 200) continue;
+            float pip = Mathf.Clamp(0.35f + size * 0.12f, 0.45f, 0.7f);
+            for (int p = 0; p < s.Level - 1; p++)
+                _pips.Add(Basis.FromScale(Vector3.One * pip), top + camRight * (p - (s.Level - 2) * 0.5f) * pip * 1.1f, new Color(s.Team == Local.Me ? 1 : 0, 0, 0, 1));
+            if (s.Team == Local.Me && s.Count < s.Size)
+            {
+                if (labelsUsed >= _labels.Count)
+                {
+                    var nl = new Label3D { Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 44, OutlineSize = 10, Font = UiTheme.Title, OutlineModulate = new Color(0, 0, 0, 0.85f), RenderPriority = 10 };
+                    _labelRoot.AddChild(nl);
+                    _labels.Add(nl);
+                }
+                var l = _labels[labelsUsed++];
+                l.Visible = true;
+                l.Text = $"{s.Count}/{s.Size}";
+                l.Modulate = s.Count * 2 <= s.Size ? new Color(1f, 0.45f, 0.35f) : new Color(0.9f, 0.85f, 0.7f);
+                l.PixelSize = 0.006f + camPos.DistanceTo(top) * 0.00006f;
+                l.GlobalPosition = top + Vector3.Up * (s.Level > 1 ? 0.8f : 0.2f);
             }
         }
         for (int l = labelsUsed; l < _labels.Count; l++) _labels[l].Visible = false;

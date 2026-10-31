@@ -397,6 +397,9 @@ public partial class GameSession : Node3D
                         _levelAlertCd = 6;
                     }
                     break;
+                case EvKind.SquadReady:
+                    if (!Demo && e.Team == Local.Me) { Hud.Alert($"A {Config.Of(e.Type).Name.ToLower()} squad is back at full strength", new Color(0.7f, 1f, 0.55f)); Audio.Ui("ui_ready", -6); }
+                    break;
                 case EvKind.Shower:
                     Effects.Burst(wp + Vector3.Up * 6, 18, 2, 5, 0.4f, 1.6f);
                     if (!Demo && e.Pos.DistanceTo(World.Nests[Local.Me].Pos) < e.Pos.DistanceTo(World.Nests[Local.Foe].Pos))
