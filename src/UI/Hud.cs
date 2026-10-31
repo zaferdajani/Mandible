@@ -94,6 +94,12 @@ public partial class Hud : CanvasLayer
         _food = Stat(h, "Food", new Color(0.95f, 0.78f, 0.35f));
         _pop = Stat(h, "Brood", UiTheme.Ink);
         _clock = Stat(h, "", UiTheme.Dim);
+        if (!Game.Lanes)
+        {
+            var nestBtn = new Button { Text = "Nest  N", TooltipText = "Glass Earth: see the chambers under your mound without losing the surface (N)" };
+            nestBtn.Pressed += () => Game.ToggleNestView();
+            h.AddChild(nestBtn);
+        }
         var menu = new Button { Text = "Menu", TooltipText = "Pause (Esc)" };
         menu.Pressed += () => { Game.Audio.Ui("ui_click"); TogglePause(); };
         h.AddChild(menu);
@@ -240,8 +246,10 @@ public partial class Hud : CanvasLayer
         v.AddChild(head);
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 4);
-        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Chamber, "V"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D") };
-        foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(70, 70)));
+        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D") };
+        foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(84, 70)));
+        _prod[(int)ProdKind.Chamber] = new Button { Visible = false }; // chambers are dug by workers now (V / L in the chambers panel)
+        _prodLock[(int)ProdKind.Chamber] = new Control();
         v.AddChild(row);
         p.AddChild(v);
         _root.AddChild(p);
@@ -314,6 +322,22 @@ public partial class Hud : CanvasLayer
     }
 
     static readonly string[] ResKeys = { "Q", "W", "E", "R", "T" };
+    readonly Button[] _dig = new Button[2];
+
+    void RefreshDig(Colony c)
+    {
+        var sim = Game.Sim;
+        for (int i = 0; i < 2; i++)
+        {
+            var k = i == 0 ? ChamberKind.Brood : ChamberKind.Storage;
+            var r = sim.CanDig(Local.Me, k);
+            int built = sim.ChamberCount(Local.Me, k, true), all = sim.ChamberCount(Local.Me, k, false);
+            _dig[i].Modulate = r == Sim.DigResult.Ok ? Colors.White : new Color(1, 1, 1, 0.4f);
+            _dig[i].TooltipText = k == ChamberKind.Brood
+                ? $"Brood Chamber  [V]\nWorkers dig a warm room near the surface for eggs and larvae: +{Config.ChamberPop} brood capacity.\n{built} built{(all > built ? $", {all - built} being dug" : "")}.  Cost {Sim.BroodCost:0} food, about {Sim.BroodWork / Sim.MaxDiggers:0}s with {Sim.MaxDiggers} workers."
+                : $"Storage  [L]\nWorkers dig a store at mid depth: the colony can hold {Config.StorageFoodCap:0} more food (now {c.FoodCap:0}).\n{built} of {Sim.MaxStorages} built.  Cost {Sim.StorageCost:0} food, about {Sim.StorageWork / Sim.MaxDiggers:0}s with {Sim.MaxDiggers} workers.";
+        }
+    }
 
     void BuildResearch()
     {
@@ -329,10 +353,30 @@ public partial class Hud : CanvasLayer
         head.AddChild(_queenTitle);
         v.AddChild(head);
         var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 3);
+        // rooms the workers dig: brood chambers and stores first
+        foreach (var (kind, key) in new[] { (ChamberKind.Brood, "V"), (ChamberKind.Storage, "L") })
+        {
+            var k = kind;
+            var db = new Button { CustomMinimumSize = new Vector2(58, 62) };
+            var dg = new ChamberGlyph { MouseFilter = Control.MouseFilterEnum.Ignore, Store = kind == ChamberKind.Storage };
+            UiTheme.Place(dg, 0, 0, 1, 1, 5, 4, -22, -18);
+            db.AddChild(dg);
+            var dk = UiTheme.Text(key, 13, UiTheme.Bold, UiTheme.Gold);
+            UiTheme.Place(dk, 1, 0, 1, 0, -18, 3, -4, 20);
+            db.AddChild(dk);
+            var dc = UiTheme.Text(((int)(kind == ChamberKind.Brood ? Sim.BroodCost : Sim.StorageCost)).ToString(), 12, UiTheme.Bold, new Color(0.95f, 0.78f, 0.35f));
+            UiTheme.Place(dc, 0, 1, 1, 1, 6, -20, -4, -2);
+            db.AddChild(dc);
+            db.Pressed += () => Game.TryDig(k);
+            db.MouseEntered += () => Game.Audio.Ui("ui_hover");
+            row.AddChild(db);
+            _dig[kind == ChamberKind.Brood ? 0 : 1] = db;
+        }
         for (int i = 0; i < 5; i++)
         {
             var u = (Upgrade)i;
-            var b = new Button { CustomMinimumSize = new Vector2(80, 62) };
+            var b = new Button { CustomMinimumSize = new Vector2(62, 62) };
             var g = new ResearchGlyph { Kind = u, MouseFilter = Control.MouseFilterEnum.Ignore };
             UiTheme.Place(g, 0, 0, 1, 1, 6, 4, -30, -18);
             b.AddChild(g);
@@ -520,8 +564,10 @@ public partial class Hud : CanvasLayer
         ApplyLayout();
         if (!Game.Lanes) RefreshGroups();
         var c = sim.Col[Local.Me];
-        _food.Text = ((int)c.Food).ToString();
+        _food.Text = Game.Lanes ? ((int)c.Food).ToString() : $"{(int)c.Food} / {(int)c.FoodCap}";
+        _food.AddThemeColorOverride("font_color", !Game.Lanes && c.Food >= c.FoodCap * 0.95f ? new Color(1, 0.55f, 0.35f) : new Color(0.95f, 0.78f, 0.35f));
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";
+        if (!Game.Lanes) RefreshDig(c);
         _pop.AddThemeColorOverride("font_color", c.PopUsed >= c.PopCap ? new Color(1, 0.45f, 0.3f) : UiTheme.Ink);
         _clock.Text = $"{(int)sim.Time / 60}:{(int)sim.Time % 60:00}";
         SetEffect(0, c.SugarT);
@@ -620,9 +666,20 @@ public partial class Hud : CanvasLayer
         {
             var c = sim.Col[Local.Me];
             ref var q = ref sim.Ants[c.QueenId];
-            _selTitle.Text = "The Nest";
-            _selHp.Value = q.Alive ? q.Hp / Config.Stats[3].Hp : 0;
-            _selDetail.Text = $"Queen {(int)Mathf.Max(0, q.Hp)} / {Config.Stats[3].Hp}.  Right-click the ground to set a rally point.  {c.Count[0]} workers · {c.Count[1]} soldiers · {c.Count[2]} majors.";
+            _selTitle.Text = c.Founded ? "The Nest" : "The Nest  ·  being dug";
+            _selHp.Value = q.Alive ? q.Hp / q.MaxHp : 0;
+            var rooms = new List<string>();
+            foreach (var ch in c.Chambers)
+            {
+                if (ch.Kind == ChamberKind.Royal && !c.Founded) { rooms.Add($"shaft and royal chamber {ch.Progress * 100:0}% ({ch.Diggers} digging)"); continue; }
+                int n = sim.ChamberCount(Local.Me, ch.Kind, true);
+                if (ch.Kind is ChamberKind.Brood or ChamberKind.Storage && ch != sim.ChamberOf(Local.Me, ch.Kind)) continue; // listed once with a count
+                string entry = n > 1 ? $"{n} {Sim.ChamberName(ch.Kind).ToLower()}s" : Sim.ChamberName(ch.Kind).ToLower();
+                if (ch.Digging) entry += $" ({ch.Progress * 100:0}%)";
+                rooms.Add(entry);
+            }
+            string where = q.Alive ? (q.Layer > 0 ? "in her chamber" : c.Founded ? "going below" : "waiting on the surface") : "dead";
+            _selDetail.Text = $"Queen {(int)Mathf.Max(0, q.Hp)} / {(int)q.MaxHp}, {where}.  Rooms: {string.Join(", ", rooms)}.  Food {(int)c.Food} / {(int)c.FoodCap}.  N looks inside · right-click the ground for a rally point · right-click the nest with warriors to garrison.";
             AddIcon(AntType.Queen, 1);
             return;
         }
@@ -752,13 +809,23 @@ public partial class LockGlyph : Control
 
 public partial class ChamberGlyph : Control
 {
+    public bool Store; // a store shows seeds instead of eggs
+
     public override void _Draw()
     {
         var c = Size / 2;
         float u = Mathf.Min(Size.X, Size.Y) / 10f;
         DrawArc(c + new Vector2(0, u), u * 3.6f, Mathf.Pi, Mathf.Tau, 24, UiTheme.Gold, u * 0.5f, true);
-        DrawCircle(c + new Vector2(-u * 1.4f, u * 1.6f), u * 1.0f, UiTheme.Gold);
-        DrawCircle(c + new Vector2(u * 1.5f, u * 1.4f), u * 0.8f, UiTheme.Gold);
+        if (Store)
+        {
+            for (int i = 0; i < 3; i++) DrawCircle(c + new Vector2((i - 1) * u * 1.6f, u * 1.6f), u * 0.75f, UiTheme.Gold);
+            DrawCircle(c + new Vector2(0, u * 0.2f), u * 0.75f, UiTheme.Gold);
+        }
+        else
+        {
+            DrawCircle(c + new Vector2(-u * 1.4f, u * 1.6f), u * 1.0f, UiTheme.Gold);
+            DrawCircle(c + new Vector2(u * 1.5f, u * 1.4f), u * 0.8f, UiTheme.Gold);
+        }
         DrawLine(c + new Vector2(-u * 4, u * 3), c + new Vector2(u * 4, u * 3), UiTheme.Gold, u * 0.4f);
         DrawString(UiTheme.Bold, c + new Vector2(u * 2.6f, -u * 2.6f), "+", HorizontalAlignment.Left, -1, (int)(u * 4), UiTheme.Gold);
     }

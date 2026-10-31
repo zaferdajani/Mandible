@@ -15,6 +15,8 @@ public partial class RtsCamera : Node3D
     public const float MinDist = 14, MaxDist = 175;
     public bool UserControl = true;
     public bool EdgeScroll = !Settings.Mobile;
+    public bool NestView;           // Glass Earth: the camera may come lower and closer to look into the nest
+    public Vector2 Focus2D => new(Focus.X, Focus.Z);
     Vector3 _focusTarget;
     float _yawTarget;
     bool _rotating;
@@ -58,7 +60,7 @@ public partial class RtsCamera : Node3D
         if (!UserControl) return;
         if (e is InputEventMouseButton mb)
         {
-            if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) TargetDistance = Mathf.Max(MinDist, TargetDistance * 0.88f);
+            if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) TargetDistance = Mathf.Max(NestView ? 9 : MinDist, TargetDistance * 0.88f);
             if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) TargetDistance = Mathf.Min(MaxDist, TargetDistance * 1.13f);
             if (mb.ButtonIndex == MouseButton.Middle) _rotating = mb.Pressed;
         }
@@ -104,7 +106,8 @@ public partial class RtsCamera : Node3D
         }
         _focusTarget.X = Mathf.Clamp(_focusTarget.X, 0, Config.MapSize);
         _focusTarget.Z = Mathf.Clamp(_focusTarget.Z, 0, Config.MapSize);
-        if (HF != null) _focusTarget.Y = Mathf.Lerp(_focusTarget.Y, HF.Sample(_focusTarget.X, _focusTarget.Z), Mathf.Min(1, dt * 4));
+        // looking into the nest, the camera's focus sinks to chamber depth so the rooms fill the view
+        if (HF != null) _focusTarget.Y = Mathf.Lerp(_focusTarget.Y, HF.Sample(_focusTarget.X, _focusTarget.Z) - (NestView ? 5f : 0f), Mathf.Min(1, dt * 4));
         float k = 1 - Mathf.Exp(-dt * 10);
         Focus = Focus.Lerp(_focusTarget, k);
         Distance = Mathf.Lerp(Distance, TargetDistance, 1 - Mathf.Exp(-dt * 8));
@@ -115,7 +118,7 @@ public partial class RtsCamera : Node3D
     public void Apply()
     {
         float t = Mathf.Clamp((Distance - MinDist) / (MaxDist - MinDist), 0, 1);
-        float pitch = Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f));
+        float pitch = Mathf.Lerp(Mathf.DegToRad(NestView ? 24 : 30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f));
         var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(Yaw) * Mathf.Cos(pitch)) * Distance;
         var pos = Focus + offset;
         if (HF != null) pos.Y = Mathf.Max(pos.Y, HF.Sample(pos.X, pos.Z) + 3);

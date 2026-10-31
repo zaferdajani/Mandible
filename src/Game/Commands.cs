@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -16,7 +16,8 @@ public sealed class Cmd
     public int[] Serials = System.Array.Empty<int>();
     public Vector2 P;
     public int Target = -1, TargetSerial, FoodId = -1;
-    public byte Arg; // ProdKind or Upgrade
+    public byte Arg;   // ProdKind, Upgrade, item or ChamberKind
+    public byte Layer; // Move / AttackMove: 0 the surface, 1 + team inside that nest (garrison or raid)
 
     public static Cmd Units(CmdKind k, int team, List<int> ids, Sim sim)
     {
@@ -31,7 +32,7 @@ public sealed class Cmd
         w.Write((ushort)Ids.Length);
         for (int i = 0; i < Ids.Length; i++) { w.Write((ushort)Ids[i]); w.Write(Serials[i]); }
         w.Write(P.X); w.Write(P.Y);
-        w.Write(Target); w.Write(TargetSerial); w.Write(FoodId); w.Write(Arg);
+        w.Write(Target); w.Write(TargetSerial); w.Write(FoodId); w.Write(Arg); w.Write(Layer);
     }
 
     public static Cmd Read(BinaryReader r)
@@ -41,7 +42,7 @@ public sealed class Cmd
         c.Ids = new int[n]; c.Serials = new int[n];
         for (int i = 0; i < n; i++) { c.Ids[i] = r.ReadUInt16(); c.Serials[i] = r.ReadInt32(); }
         c.P = new Vector2(r.ReadSingle(), r.ReadSingle());
-        c.Target = r.ReadInt32(); c.TargetSerial = r.ReadInt32(); c.FoodId = r.ReadInt32(); c.Arg = r.ReadByte();
+        c.Target = r.ReadInt32(); c.TargetSerial = r.ReadInt32(); c.FoodId = r.ReadInt32(); c.Arg = r.ReadByte(); c.Layer = r.ReadByte();
         return c;
     }
 
@@ -55,8 +56,9 @@ public sealed class Cmd
                 ids.Add(Ids[i]); // in Lane War only the hero takes orders
         switch (Kind)
         {
-            case CmdKind.Move: if (ids.Count > 0) sim.CmdMove(ids, P, false); break;
-            case CmdKind.AttackMove: if (ids.Count > 0) sim.CmdMove(ids, P, true); break;
+            case CmdKind.Move: if (ids.Count > 0) sim.CmdMove(ids, P, false, Layer); break;
+            case CmdKind.AttackMove: if (ids.Count > 0) sim.CmdMove(ids, P, true, Layer); break;
+            case CmdKind.Dig: sim.Dig(Team, (ChamberKind)Arg); break;
             case CmdKind.Attack:
                 if (ids.Count > 0 && sim.Valid(Target, TargetSerial) && sim.Ants[Target].Team != Team) sim.CmdAttack(ids, Target);
                 break;

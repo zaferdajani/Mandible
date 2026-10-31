@@ -198,14 +198,29 @@ uniform sampler2D normal_a : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_b : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
+// Glass Earth: within xray_radius of xray_center the soil turns to glass (screen-door dither keeps it cheap and sort-free)
+uniform vec2 xray_center = vec2(-1000.0);
+uniform float xray_radius = 20.0;
+uniform float xray_on = 0.0;
 varying vec3 wpos;
 varying vec3 vcol;
 void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     vcol = COLOR.rgb;
 }
+float bayer(vec2 px) {
+    ivec2 p = ivec2(mod(px, 4.0));
+    int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+    return (float(m[p.y * 4 + p.x]) + 0.5) / 16.0;
+}
 void fragment() {
     vec2 uv = wpos.xz;
+    float glass_d = distance(uv, xray_center);
+    float glass = xray_on * (1.0 - smoothstep(xray_radius - 6.0, xray_radius, glass_d));
+    if (glass > 0.001) {
+        float keep = mix(1.0, 0.09, glass);
+        if (bayer(FRAGCOORD.xy) > keep) discard;
+    }
     float n1 = texture(noise_a, uv * 0.0035).r;
     float n2 = texture(noise_a, uv * 0.017 + 0.3).r;
     float g = texture(noise_b, uv * 0.09).r;
@@ -235,6 +250,9 @@ void fragment() {
     col = mix(col, thatch, vcol.b);
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1);
+    // the glass itself: a cool sheen with a bright rim where it meets the soil
+    float rim = glass * smoothstep(xray_radius - 6.0, xray_radius - 1.5, glass_d);
+    col = mix(col, col * 0.6 + vec3(0.22, 0.30, 0.34), glass * 0.55) + vec3(0.35, 0.45, 0.5) * rim * 0.6;
     ALBEDO = col;
     ROUGHNESS = mix(0.95, 0.72, wet);
     vec3 na = texture(normal_a, uv * 0.11).rgb;

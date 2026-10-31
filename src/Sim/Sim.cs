@@ -41,9 +41,13 @@ public struct Ant
     public byte Lane, LaneStep;       // lane creep: lane index + 1 and the waypoint it is heading for
     public bool Manual;               // a player-steered hero: its ability fires only on command
     public float CastReq;             // seconds left on a pending ability command
+    // the nest
+    public byte Layer;                // 0 the surface, 1 + team: inside that colony's nest
+    public byte GoalLayer;            // layer the current Move / AttackMove / Dig goal is on
+    public int DigP1;                 // chamber id + 1 this worker is digging (0 = none)
 }
 
-public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady }
+public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull }
 
 public struct SimEvent
 {
@@ -55,6 +59,7 @@ public struct SimEvent
     public Upgrade Upgrade;
     public int Tier;
     public float Radius;
+    public ChamberKind Chamber;
 }
 
 public sealed class WebZone
@@ -104,6 +109,11 @@ public sealed class Colony
     // food effects: each delivery tops these up; they run while the supply keeps flowing
     public float SugarT, JuiceT, ProteinT;
     public readonly float[] GatheredBy = new float[5]; // per FoodKind, for stats and balance tests
+    // the nest: dug by workers; nothing hatches until the queen is below ground
+    public bool Founded;
+    public float FoodCap = Config.BaseFoodCap;
+    public readonly List<NestChamber> Chambers = new();
+    public bool StoreFullWarned;
     public readonly int[] Count = new int[13];
     public float Gathered, Spent;
     public int Produced, Lost, Killed;
@@ -152,15 +162,11 @@ public sealed partial class Sim
             var nest = W.Nests[c.Team].Pos;
             var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
             c.QueenId = Spawn(c.Team, AntType.Queen, nest + toCenter * 3.4f, toCenter.AngleD());
-            for (int i = 0; i < (mode == GameMode.Lanes ? 12 : 18); i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, DMath.Tau));
-            if (mode == GameMode.Lanes) { SetupLaneColony(c); continue; }
-            var start = NewSquad(c.Team, AntType.Soldier);
-            for (int i = 0; i < 6; i++)
-            {
-                int id = Spawn(c.Team, AntType.Soldier, nest + toCenter * 8 + Rng.InDisk(4), toCenter.AngleD());
-                Ants[id].State = AntState.Idle;
-                Join(start, id);
-            }
+            // a founding colony: the queen and a handful of workers on bare soil; the nest is theirs to dig
+            for (int i = 0; i < (mode == GameMode.Lanes ? 12 : Config.StartWorkers); i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(5), Rng.R(0, DMath.Tau));
+            AddChamber(c.Team, ChamberKind.Royal, FoundingWork, false);
+            RecountCapacity(c);
+            if (mode == GameMode.Lanes) { FoundInstantly(c.Team); SetupLaneColony(c); continue; }
         }
         foreach (var camp in W.Camps)
         {
@@ -218,6 +224,7 @@ public sealed partial class Sim
         var c = Col[team];
         if (!c.Alive) return ResearchResult.Dead;
         if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
+        if (!c.Founded) return ResearchResult.Locked;
         int next = c.T(u) + 1;
         if (next > Config.MaxTier(u)) return ResearchResult.Maxed;
         if (c.T(Upgrade.Queen) < Config.QueenNeeded(u, next)) return ResearchResult.Locked;
@@ -239,6 +246,11 @@ public sealed partial class Sim
         c.ResearchKind = u;
         c.ResearchProgress = 0;
         c.ResearchTime = Config.ResearchTime(u, next);
+        // the upgrade is a room: workers dig it (or enlarge it) and the research runs at the pace of their digging
+        var k = KindOf(u);
+        var ch = ChamberOf(team, k) ?? AddChamber(team, k, 0, false);
+        ch.Done = 0;
+        ch.Work = c.ResearchTime * 2.5f; // four diggers beat the old research time a little; two match it
         return ResearchResult.Ok;
     }
 
@@ -250,16 +262,20 @@ public sealed partial class Sim
         c.Food += cost;
         c.Spent -= cost;
         c.Researching = false;
+        var ch = ChamberOf(team, KindOf(c.ResearchKind));
+        if (ch != null) { ch.Work = ch.Done; if (!ch.Built) ch.Work = ch.Done = 0; } // an unbuilt room stays a hole in the plan
     }
 
     void TickResearch(Colony c, float dt)
     {
         if (!c.Researching || !c.Alive) return;
-        c.ResearchProgress += dt;
-        if (c.ResearchProgress < c.ResearchTime) return;
+        var ch = ChamberOf(c.Team, KindOf(c.ResearchKind));
+        c.ResearchProgress = ch == null ? c.ResearchTime : ch.Progress * c.ResearchTime;
+        if (ch != null && ch.Digging) return;
         c.Researching = false;
         var u = c.ResearchKind;
         c.Tier[(int)u]++;
+        if (ch != null) { ch.Built = true; ch.Tier = c.Tier[(int)u]; }
         // chitin hardens every warrior; royal jelly grows the queen
         if (u == Upgrade.Chitin || u == Upgrade.Queen)
             for (int i = 0; i < High; i++)
@@ -428,8 +444,9 @@ public sealed partial class Sim
     }
 
     // ------------------------------------------------------------------ commands
-    public void CmdMove(List<int> ids, Vector2 p, bool attack)
+    public void CmdMove(List<int> ids, Vector2 p, bool attack, int layer = 0)
     {
+        if (layer > 0 && (layer > 2 || !Col[layer - 1].Founded)) layer = 0; // no such underground yet
         float spacing = 0;
         foreach (int id in ids) spacing = Mathf.Max(spacing, Ants[id].Size);
         spacing *= 0.95f;
@@ -441,6 +458,8 @@ public sealed partial class Sim
             var off = k == 0 ? Vector2.Zero : MathX.Dir(k * 2.39996f) * spacing * Mathf.Sqrt(k) * 0.9f;
             k++;
             a.Goal = ClampMap(p + off);
+            a.GoalLayer = (byte)layer;
+            if (a.DigP1 > 0) a.DigP1 = 0; // an ordered worker drops its shovel
             a.State = attack ? AntState.AttackMove : AntState.Move;
             a.Forced = false;
             a.Target = -1;
@@ -510,6 +529,7 @@ public sealed partial class Sim
         var c = Col[team];
         if (!c.Alive) return QueueResult.Dead;
         if (Mode == GameMode.Lanes) return QueueResult.Locked; // the mound sends its waves on its own
+        if (!c.Founded || kind == ProdKind.Chamber) return QueueResult.Locked; // no brood before the nest; chambers are dug, not laid
         if (!Config.Unlocked(kind, c.Tier)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
@@ -538,9 +558,14 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level);
+            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer);
         }
-        foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); Mix(F(c.SugarT)); Mix(F(c.JuiceT)); Mix(F(c.ProteinT)); }
+        foreach (var c in Col)
+        {
+            Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); Mix(F(c.SugarT)); Mix(F(c.JuiceT)); Mix(F(c.ProteinT));
+            Mix(c.Founded ? 1u : 0u); Mix(F(c.FoodCap));
+            foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
+        }
         if (Mode == GameMode.Lanes) for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
         Mix((uint)W.Food.Count);
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
@@ -577,6 +602,7 @@ public sealed partial class Sim
         TickShowers();
         TickWebs(dt);
         TickSquads(dt);
+        TickNest(dt);
         if (Mode == GameMode.Lanes) TickLanes(dt);
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) TickAnt(i, dt);
@@ -622,7 +648,7 @@ public sealed partial class Sim
             var squadGoal = c.HasRally ? c.Rally : nest + (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized() * 10 + Rng.InDisk(5);
             for (int n = 0; n < Config.SquadSize(type); n++)
             {
-            int id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f + n * 0.3f), Rng.R(0, DMath.Tau));
+            int id = Hatch(c, type, n);
             if (id >= 0)
             {
                 if (squad != null) Join(squad, id);
@@ -632,6 +658,7 @@ public sealed partial class Sim
                 {
                     var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
                     a.Goal = squadGoal + (squad != null ? MathX.Dir(n * 2.39996f) * 1.4f * Mathf.Sqrt(n) : Rng.InDisk(3));
+                    a.GoalLayer = 0;
                     a.State = AntState.Move;
                 }
                 else if (c.HasRally && !W.Blocked(c.Rally, 0))
@@ -644,6 +671,24 @@ public sealed partial class Sim
             }
         }
         Events.Add(new SimEvent { Kind = EvKind.ProdDone, Pos = nest, Team = c.Team, Prod = item.Kind });
+    }
+
+    /// New ants hatch in a brood chamber and find their own way up the shaft (or at the entrance before the nest exists).
+    int Hatch(Colony c, AntType type, int n)
+    {
+        var nest = NestEntrance(c.Team);
+        int id;
+        if (c.Founded && ChamberCount(c.Team, ChamberKind.Brood, true) > 0)
+        {
+            NestChamber room = null;
+            int pick = Rng.I(0, ChamberCount(c.Team, ChamberKind.Brood, true));
+            foreach (var ch in c.Chambers) if (ch.Kind == ChamberKind.Brood && ch.Built && pick-- == 0) room = ch;
+            var p = ChamberPos(c.Team, room) + Rng.InDisk(1.2f);
+            id = Spawn(c.Team, type, p, Rng.R(0, DMath.Tau));
+            if (id >= 0) { Ants[id].Layer = (byte)NestLayer(c.Team); Ants[id].Anchor = p; }
+        }
+        else id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f + n * 0.3f), Rng.R(0, DMath.Tau));
+        return id;
     }
 
     float _nextShower = 150;
@@ -692,7 +737,7 @@ public sealed partial class Sim
 
     // ------------------------------------------------------------------ queries
     /// Nearest enemy; ground units cannot reach targets flying high above them.
-    public int FindEnemy(Vector2 p, int team, float radius, bool air = false)
+    public int FindEnemy(Vector2 p, int team, float radius, bool air = false, int layer = 0)
     {
         int best = -1;
         float bestD = radius * radius;
@@ -707,7 +752,7 @@ public sealed partial class Sim
                 for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
                 {
                     ref var b = ref Ants[j];
-                    if (!b.Alive || b.Team == team) continue;
+                    if (!b.Alive || b.Team == team || b.Layer != layer) continue;
                     if (!air && b.Alt > 2.2f) continue;
                     float d = p.DistanceSquaredTo(b.Pos);
                     // prefer fighters over workers, workers over the queen when at equal range
@@ -765,11 +810,16 @@ public sealed partial class Sim
 
         if (a.Type == AntType.Queen)
         {
-            if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type));
+            if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
             if (a.Target >= 0 && Ants[a.Target].Alive) TryBite(i, a.Target, st);
             if (Mode != GameMode.Lanes) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f); // in Lane War her guardians are her only protection
-            a.Height = W.HF.Sample(a.Pos.X, a.Pos.Y);
-            a.Gait += dt * 0.05f;
+            var walk = a.Team < 2 ? QueenWalk(ref a) : Vector2.Zero;
+            if (walk.LengthSquared() > 0.01f)
+            {
+                var gait = st; gait.Speed = 3.2f; // she only ever walks once: down into her chamber
+                Move(i, ref a, gait, walk, 1f, dt);
+            }
+            else { a.Height = W.HF.Sample(a.Pos.X, a.Pos.Y); a.Gait += dt * 0.05f; }
             return;
         }
 
@@ -825,8 +875,9 @@ public sealed partial class Sim
                 if (think && a.Lane > 0 && a.LaneStep == 4 && LaneSiege(ref a)) break;
                 if (think)
                 {
-                    int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type));
+                    int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
                     if (e >= 0) { Engage(ref a, e, AntState.AttackMove); break; }
+                    if (a.Team < 2 && a.Layer == 0 && RaidNest(ref a)) break;
                 }
                 desired = a.Goal - a.Pos;
                 // lane creeps pass through their waypoints rather than having to stand on them (crowds jostle)
@@ -836,15 +887,26 @@ public sealed partial class Sim
                     UnstickCreep(ref a, dt);
                     desired = a.Goal - a.Pos;
                 }
-                if (desired.Length() < 0.9f) { desired = Vector2.Zero; a.Anchor = a.Pos; a.State = AntState.Idle; }
+                if (desired.Length() < 0.9f)
+                {
+                    // arrived at an enemy mound with nobody left outside: break in rather than stand about
+                    if (a.Team < 2 && a.Layer == 0 && RaidNest(ref a)) { desired = a.Goal - a.Pos; break; }
+                    desired = Vector2.Zero; a.Anchor = a.Pos; a.State = AntState.Idle;
+                }
                 break;
             case AntState.Idle:
             case AntState.Hold:
+                if (think && a.State == AntState.Idle && a.Team < 2 && a.Layer == 0 && Config.IsWarrior(a.Type) && a.Pos.DistanceTo(W.Nests[1 - a.Team].Pos) < 10)
+                {
+                    // idle warriors at the enemy's door go in after the queen
+                    a.Goal = W.Nests[1 - a.Team].Pos;
+                    if (RaidNest(ref a)) { a.State = AntState.AttackMove; desired = a.Goal - a.Pos; break; }
+                }
                 if (think)
                 {
                     float r = a.State == AntState.Hold ? st.Reach + a.Size * 0.5f + 1f : st.Aggro;
                     if (a.Type == AntType.Worker) r = st.Aggro;
-                    int e = FindEnemy(a.Pos, a.Team, r, Config.Flies(a.Type) || Config.Ranged(a.Type));
+                    int e = FindEnemy(a.Pos, a.Team, r, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
                     if (e >= 0)
                     {
                         if (a.State == AntState.Hold) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
@@ -868,8 +930,12 @@ public sealed partial class Sim
             case AntState.Engage:
                 desired = EngageLogic(i, ref a, st, think);
                 break;
+            case AntState.Dig:
+                desired = DigLogic(ref a);
+                break;
         }
 
+        if (a.Team < 2) desired = Layering(ref a, desired);
         Move(i, ref a, st, desired, speedMul, dt);
     }
 
@@ -886,7 +952,7 @@ public sealed partial class Sim
     {
         if (!Valid(a.Target, a.TargetSerial))
         {
-            int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type));
+            int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
             if (e >= 0 && !a.Forced) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
             else
             {
@@ -907,7 +973,7 @@ public sealed partial class Sim
         // switch to a closer threat now and then
         if (think && !a.Forced)
         {
-            int e = FindEnemy(a.Pos, a.Team, st.Reach + 2f, Config.Flies(a.Type) || Config.Ranged(a.Type));
+            int e = FindEnemy(a.Pos, a.Team, st.Reach + 2f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
             if (e >= 0 && e != a.Target && Ants[e].Type != AntType.Queen) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
         }
         float reach = st.Reach + t.Size * 0.38f + a.Size * 0.3f;
@@ -952,7 +1018,7 @@ public sealed partial class Sim
         {
             // cleave: every bite also catches the enemies crowding the warlord
             var tp = t.Pos;
-            foreach (int j in EnemiesNear(tp, 2.6f, a.Team, false).ToArray()) if (j != target) Damage(j, dmg * 0.5f, i);
+            foreach (int j in EnemiesNear(tp, 2.6f, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * 0.5f, i);
         }
         Damage(target, dmg, i);
     }
@@ -978,7 +1044,7 @@ public sealed partial class Sim
                 for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
                 {
                     ref var b = ref Ants[j];
-                    if (!b.Alive || b.Team >= 2 || (groundOnly && b.Alt > 1.5f)) continue;
+                    if (!b.Alive || b.Team >= 2 || b.Layer != 0 || (groundOnly && b.Alt > 1.5f)) continue;
                     if (b.Pos.DistanceSquaredTo(p) < r * r) _near.Add(j);
                 }
             }
@@ -1027,7 +1093,7 @@ public sealed partial class Sim
     }
 
     /// Enemies of `team` (colonies and wild bugs) within r of p.
-    List<int> EnemiesNear(Vector2 p, float r, int team, bool groundOnly)
+    List<int> EnemiesNear(Vector2 p, float r, int team, bool groundOnly, int layer = 0)
     {
         _near.Clear();
         int cr = (int)(r / SpatialHash.Cell) + 1;
@@ -1041,7 +1107,7 @@ public sealed partial class Sim
                 for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
                 {
                     ref var b = ref Ants[j];
-                    if (!b.Alive || b.Team == team || (groundOnly && b.Alt > 1.5f)) continue;
+                    if (!b.Alive || b.Team == team || b.Layer != layer || (groundOnly && b.Alt > 1.5f)) continue;
                     if (b.Pos.DistanceSquaredTo(p) < r * r) _near.Add(j);
                 }
             }
@@ -1059,7 +1125,7 @@ public sealed partial class Sim
         {
             case AntType.Warlord:
             {
-                if (EnemiesNear(a.Pos, 10, a.Team, false).Count < 3) return;
+                if (EnemiesNear(a.Pos, 10, a.Team, false, a.Layer).Count < 3) return;
                 float mul = (1.3f + 0.03f * lv) * (1 + 0.1f * (tierMul - 1));
                 int cr = 4;
                 int cx = (int)(a.Pos.X / SpatialHash.Cell), cz = (int)(a.Pos.Y / SpatialHash.Cell);
@@ -1088,7 +1154,7 @@ public sealed partial class Sim
                 if (a.Pos.DistanceTo(to) > 11) return;
                 float r = 3.5f + 0.15f * lv;
                 float dmg = (40 + 8 * lv) * a.DmgMul;
-                foreach (int j in EnemiesNear(to, r, a.Team, false).ToArray())
+                foreach (int j in EnemiesNear(to, r, a.Team, false, a.Layer).ToArray())
                 {
                     ref var b = ref Ants[j];
                     b.PoisonT = 4;
@@ -1103,14 +1169,14 @@ public sealed partial class Sim
             }
             case AntType.Marshal:
             {
-                var foes = EnemiesNear(a.Pos, 12, a.Team, true);
+                var foes = EnemiesNear(a.Pos, 12, a.Team, true, a.Layer);
                 if (foes.Count < 2) return;
                 var to = Ants[foes[0]].Pos;
                 float r = 3.2f + 0.12f * lv;
                 float dmg = (35 + 7 * lv) * a.DmgMul;
                 a.Pos = ClampMap(to + (a.Pos - to).Normalized() * 1.5f);
                 a.Alt = 0.6f;
-                foreach (int j in EnemiesNear(to, r, a.Team, true).ToArray())
+                foreach (int j in EnemiesNear(to, r, a.Team, true, a.Layer).ToArray())
                 {
                     Ants[j].Root = Mathf.Max(Ants[j].Root, 1.2f + 0.1f * lv);
                     Damage(j, dmg, i);
@@ -1237,10 +1303,11 @@ public sealed partial class Sim
         if (a.Target >= 0 && Valid(a.Target, a.TargetSerial) && a.Pos.DistanceTo(Ants[a.Target].Pos) < 2f) TryBite(i, a.Target, st);
 
         var nest = NestEntrance(a.Team);
-        // the colony swarms out to defend its queen
+        // the colony swarms to defend its queen, down the shaft if the fight is below
         if (think && Col[a.Team].QueenAlarm > 0 && a.Pos.DistanceTo(nest) < 26)
         {
-            int e = FindEnemy(a.Pos, a.Team, 12, Config.Flies(a.Type) || Config.Ranged(a.Type));
+            int e = FindEnemy(a.Pos, a.Team, 12, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+            if (e < 0 && a.Layer == 0 && Col[a.Team].Founded) e = FindEnemy(nest, a.Team, NestRadius, true, NestLayer(a.Team));
             if (e >= 0) { a.Prev = AntState.Forage; a.State = AntState.Engage; a.Target = e; a.TargetSerial = Ants[e].Serial; a.Forced = false; return Vector2.Zero; }
         }
         if (a.State == AntState.Return)
@@ -1254,6 +1321,13 @@ public sealed partial class Sim
                 a.Carrying = false;
                 var c = Col[a.Team];
                 float gain = Config.FoodValue(a.CarryKind) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
+                if (c.Food + gain > c.FoodCap)
+                {
+                    // the stores are full: the surplus is eaten on the spot
+                    gain = Mathf.Max(0, c.FoodCap - c.Food);
+                    if (!c.StoreFullWarned) { c.StoreFullWarned = true; Events.Add(new SimEvent { Kind = EvKind.StoreFull, Pos = nest, Team = a.Team }); }
+                }
+                else if (c.Food + gain < c.FoodCap * 0.9f) c.StoreFullWarned = false;
                 c.Food += gain;
                 c.Gathered += gain;
                 c.GatheredBy[(int)a.CarryKind] += gain;
@@ -1350,7 +1424,7 @@ public sealed partial class Sim
             var dest = a.Pos + desired; // when desired is a full vector this is the destination
             // look-ahead obstacle steering: slide along the rim of rocks (flyers pass over)
             var ahead = a.Pos + MathX.Dir(want) * (2.2f + radius);
-            if (!fly) foreach (var o in W.ObstaclesNear(ahead))
+            if (!fly && a.Layer == 0) foreach (var o in W.ObstaclesNear(ahead))
             {
                 float rr = o.R + radius + 0.4f;
                 if (o.R <= 0 || dest.DistanceTo(o.P) < o.R + 1.5f) continue; // heading for this very thing
@@ -1386,7 +1460,7 @@ public sealed partial class Sim
                 {
                     if (j == i) continue;
                     ref var b = ref Ants[j];
-                    if (!b.Alive || Config.Flies(b.Type) != fly) continue;
+                    if (!b.Alive || Config.Flies(b.Type) != fly || b.Layer != a.Layer) continue;
                     float rb = b.Size * 0.3f;
                     float min = radius + rb;
                     var d = pos - b.Pos;
@@ -1402,10 +1476,16 @@ public sealed partial class Sim
         }
         pos += push * 0.6f;
 
-        // hard obstacle resolution
-        if (!fly) foreach (var o in W.ObstaclesNear(pos))
+        if (a.Layer > 0)
         {
-            if (o.R <= 0) continue;
+            // underground: no rocks, but the tunnels only reach so far from the shaft
+            var centre = W.Nests[a.Layer - 1].Pos;
+            var d = pos - centre;
+            if (d.Length() > NestRadius) pos = centre + d.Normalized() * NestRadius;
+        }
+        else foreach (var o in W.ObstaclesNear(pos)) // hard obstacle resolution
+        {
+            if (fly || o.R <= 0) continue;
             float rr = o.R + radius;
             var d = pos - o.P;
             float l = d.Length();

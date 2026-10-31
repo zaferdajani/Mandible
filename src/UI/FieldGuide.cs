@@ -448,7 +448,7 @@ public partial class FieldGuide : ColorRect
 
         var tabs = new HBoxContainer();
         tabs.AddThemeConstantOverride("separation", 6);
-        foreach (var name in new[] { "Colonies", "Castes", "Wildlife", "Foraging", "Food", "Colony Needs" })
+        foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Colony Needs" })
         {
             var b = new Button { Text = name, ToggleMode = true, CustomMinimumSize = new Vector2(130, 38) };
             b.Pressed += () => Show(name);
@@ -471,6 +471,7 @@ public partial class FieldGuide : ColorRect
         _page.AddChild(name switch
         {
             "Colonies" => Colonies(),
+            "The Nest" => NestPage(),
             "Castes" => Castes(),
             "Wildlife" => Wildlife(),
             "Foraging" => Foraging(),
@@ -620,6 +621,21 @@ public partial class FieldGuide : ColorRect
             v.AddChild(p);
         }
         return v;
+    }
+
+    static Control NestPage()
+    {
+        return Rich(
+            "[b]How a colony is founded, and how the nest grows[/b]\n\n" +
+            "[color=#e8c27a]Founding.[/color]  A real colony begins as a single mated queen (in this game: a queen with a few workers) on bare soil. The workers dig a shaft; until it is done the queen is exposed on the surface. " +
+            "[i]In game:[/i] your workers dig at once. A plug of soil over the entrance sinks as they go, with the progress shown above it. When the shaft and royal chamber are ready the queen walks down and only then starts to lay.\n\n" +
+            "[color=#e8c27a]Depth has a purpose.[/color]  Brood is kept shallow where the sun warms the soil, stores sit at mid depth, and the queen lives deepest, farthest from danger. " +
+            "[i]In game:[/i] rooms are laid out the same way. New ants hatch in the brood chambers and climb out of the shaft on their own.\n\n" +
+            "[color=#e8c27a]Workers build everything.[/color]  There are no builders or buildings: the same workers that forage dig new rooms with their mandibles, carrying the soil out grain by grain. " +
+            "[i]In game:[/i] order a room (V brood chamber, L store, Q W E R T the upgrade rooms) and up to four workers go below to dig it; the time depends on how many are digging. Brood chambers raise how many ants you can keep; stores raise how much food you can hold; the other rooms carry the colony's upgrades.\n\n" +
+            "[color=#e8c27a]The nest is a fortress.[/color]  Raiders have to come in through the entrance and down the galleries, where the defenders meet them. " +
+            "[i]In game:[/i] enemies at your mound break in and head for the royal chamber. Right-click your own nest with warriors to garrison it; when the queen is attacked, nearby ants rush below.\n\n" +
+            "[color=#e8c27a]Seeing inside.[/color]  Press [b]N[/b] for Glass Earth: the ground over your nest turns translucent and the galleries and rooms show at their real depths, with eggs, stored food and the queen inside. The surface and everything approaching stays visible around and over the glass, so you never lose sight of the yard while you look.");
     }
 
     static Control Needs()

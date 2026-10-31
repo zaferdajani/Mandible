@@ -36,6 +36,7 @@ public partial class Main : Node
                 Capture.SimTest(this, float.Parse(parts[0]), da, db, parts.Length > 3 ? uint.Parse(parts[3]) : 20261031);
                 return;
             }
+            if (a == "--raidtest") { Capture.RaidTest(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));

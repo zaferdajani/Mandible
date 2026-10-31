@@ -19,7 +19,7 @@ public partial class GameSession : Node3D
     public Hud Hud;
     public PlayerInput Input;
     public AudioDirector Audio => App.Audio;
-    public NestChambers Chambers;
+    public NestInterior Interior;
     public Lockstep Net;          // null in single player
     public uint Seed = 20261031;
     public IOrders Orders;
@@ -54,12 +54,12 @@ public partial class GameSession : Node3D
         Ants = new AntRenderer(this);
         long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
-        Chambers = new NestChambers(World, this);
+        Interior = new NestInterior(this);
         BuildLighting();
         if (Lanes) BuildLaneDressing();
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
-        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile }; // touch laptops still have a mouse
+        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile && !App.TestRun }; // touch laptops still have a mouse; test runs leave the cursor wherever it is
         AddChild(Camera);
         var home = World.Nests[Local.Me].Pos;
         // start behind our own nest, looking out toward the middle of the yard
@@ -300,6 +300,49 @@ public partial class GameSession : Node3D
         Audio.Ui("ui_click", -4);
     }
 
+    /// Orders workers to dig a brood chamber or a store.
+    public void TryDig(ChamberKind k)
+    {
+        var bad = new Color(1, 0.5f, 0.35f);
+        switch (Sim.CanDig(Local.Me, k))
+        {
+            case Sim.DigResult.Ok:
+                Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)Local.Me, Arg = (byte)k });
+                Hud.Alert($"Workers are digging a new {Sim.ChamberName(k).ToLower()}", UiTheme.Dim);
+                Audio.Ui("ui_queue");
+                break;
+            case Sim.DigResult.NoFood: Hud.Alert("Not enough food", bad); Audio.Ui("ui_error"); break;
+            case Sim.DigResult.NotFounded: Hud.Alert("The nest is still being dug", bad); Audio.Ui("ui_error"); break;
+            case Sim.DigResult.TooMany: Hud.Alert(k == ChamberKind.Brood ? "The nest cannot hold more brood chambers" : $"At most {Sim.MaxStorages} stores", bad); Audio.Ui("ui_error"); break;
+            default: Audio.Ui("ui_error"); break;
+        }
+    }
+
+    /// Glass Earth: the ground over your nest turns translucent so the chambers show; the surface stays in view.
+    public bool NestView { get; private set; }
+    float _glass; // 0..1 animated
+
+    public void ToggleNestView()
+    {
+        if (Demo) return;
+        NestView = !NestView;
+        Audio.Ui("ui_click", -4);
+        var home = World.Nests[Local.Me].Pos;
+        if (NestView && Camera.Focus2D.DistanceTo(home) > 30) { Camera.PanTo(home); Camera.TargetDistance = Mathf.Min(Camera.TargetDistance, 40); }
+        if (NestView && !Sim.Col[Local.Me].Founded) Hud.Alert("Nothing below yet: the workers are still digging", UiTheme.Dim);
+        else if (NestView) Hud.Alert("Glass Earth: looking into the nest (N to close)", UiTheme.Dim);
+    }
+
+    void UpdateGlass(float dt)
+    {
+        _glass = Mathf.MoveToward(_glass, NestView ? 1 : 0, dt * 3);
+        var nest = World.Nests[Local.Me].Pos;
+        World.TerrainMaterial.SetShaderParameter("xray_center", nest);
+        World.TerrainMaterial.SetShaderParameter("xray_radius", Sim.NestRadius + 9f);
+        World.TerrainMaterial.SetShaderParameter("xray_on", _glass);
+        Camera.NestView = NestView && Camera.Focus2D.DistanceTo(nest) < 40;
+    }
+
     public void Autopilot(bool on)
     {
         _ai.RemoveAll(a => a.Team == Local.Me);
@@ -339,7 +382,8 @@ public partial class GameSession : Node3D
         Input?.Prune();
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
-        Chambers.UpdateVisibility(Fog);
+        Interior.Update(Fog, NestView, _alpha);
+        if (!Demo) UpdateGlass(dt);
         Ants.Update(Sim, Camera.Cam, _alpha);
         Effects.Update(_paused ? 0 : dt);
         UpdateFood();
@@ -465,16 +509,28 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.ResearchDone:
                 {
-                    var at = Chambers.Build(e.Team, e.Upgrade, e.Tier);
                     if (!Demo && e.Team == Local.Me)
                     {
                         string what = e.Upgrade == Upgrade.Queen ? $"Our queen has become {Config.QueenTitles[e.Tier]}!" : $"{Config.ResearchName(e.Upgrade, e.Tier)} complete";
                         Hud.Alert(what, new Color(1f, 0.85f, 0.4f));
                         Audio.Ui("research", -2);
-                        Effects.Burst(World.HF.Point(at, 1f), 24, 2, 4f, 0.3f, 1.4f);
+                        Effects.Burst(World.HF.Point(e.Pos, 1f), 24, 2, 4f, 0.3f, 1.4f);
                     }
                     break;
                 }
+                case EvKind.NestFounded:
+                    if (!Demo && e.Team == Local.Me) { Hud.Alert("The nest is dug. The queen goes below to lay.", new Color(1f, 0.85f, 0.4f)); Audio.Ui("research", -2); }
+                    Effects.Burst(World.HF.Point(e.Pos, 0.5f), 30, 2, 4f, 0.3f, 1.2f);
+                    break;
+                case EvKind.QueenInside:
+                    if (!Demo && e.Team == Local.Me) { Hud.Alert("The queen is in her chamber. Brood can hatch now (Z for a worker).  Press N to look inside.", UiTheme.Gold); Audio.Ui("ui_ready", -4); }
+                    break;
+                case EvKind.ChamberDone:
+                    if (!Demo && e.Team == Local.Me) { Hud.Alert($"{Sim.ChamberName(e.Chamber)} dug{(e.Chamber == ChamberKind.Brood ? ": brood capacity increased" : e.Chamber == ChamberKind.Storage ? ": the colony can store more food" : "")}", new Color(0.7f, 1f, 0.55f)); Audio.Ui("ui_ready", -6); }
+                    break;
+                case EvKind.StoreFull:
+                    if (!Demo && e.Team == Local.Me) { Hud.Alert("The stores are full: food is going to waste. Dig a store (L) or spend it.", new Color(1, 0.55f, 0.35f)); Audio.Ui("ui_error"); }
+                    break;
                 case EvKind.Spit:
                 {
                     var from = World.HF.Point(e.Pos, 0.8f);
@@ -527,7 +583,6 @@ public partial class GameSession : Node3D
                     if (!Demo && e.Team == Local.Me && e.Prod != ProdKind.Worker)
                     {
                         Audio.Ui("ui_ready", -4);
-                        if (e.Prod == ProdKind.Chamber) Hud.Alert("A new chamber is dug: brood capacity increased");
                     }
                     break;
                 case EvKind.LevelUp:
@@ -557,7 +612,7 @@ public partial class GameSession : Node3D
                 case EvKind.PopBlocked:
                     if (!Demo && e.Team == Local.Me && _popAlertCd <= 0)
                     {
-                        Hud.Alert("Brood capacity reached: excavate a chamber (V)", new Color(1, 0.55f, 0.35f));
+                        Hud.Alert("Brood capacity reached: have workers dig a brood chamber (V)", new Color(1, 0.55f, 0.35f));
                         Audio.Ui("ui_error");
                         _popAlertCd = 8;
                     }

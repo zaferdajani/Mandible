@@ -1,4 +1,5 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 
@@ -38,6 +39,27 @@ public static class Capture
         s.Camera.JumpTo(nest + new Vector2(6, -8), 58);
         await Wait(2);
         await Shot("02_nest");
+        s.Camera.JumpTo(nest + new Vector2(5, -7), 18);
+        await Wait(2);
+        await Shot("02b_founding_dig");
+        // the founders finish the nest and the queen goes below
+        s.FastForward = 7;
+        for (int w = 0; w < 60 && !(s.Sim.Col[0].Founded && s.Sim.Ants[s.Sim.Col[0].QueenId].Layer > 0); w++) await Wait(0.5f);
+        s.FastForward = 0;
+        GD.Print($"[selftest] nest founded {s.Sim.Col[0].Founded}, queen inside {s.Sim.Ants[s.Sim.Col[0].QueenId].Layer > 0}, rooms {s.Sim.Col[0].Chambers.Count}  {(s.Sim.Col[0].Founded && s.Sim.Ants[s.Sim.Col[0].QueenId].Layer > 0 ? "PASS" : "FAIL")}");
+        s.ToggleNestView();
+        s.Camera.JumpTo(nest, 26);
+        await Wait(2.5f);
+        await Shot("03_glass_earth");
+        s.Camera.TargetDistance = 14;
+        await Wait(2);
+        await Shot("03b_glass_close");
+        s.ToggleNestView();
+        // a starting squad for the control self-test
+        var guard = new List<int>();
+        var toC = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
+        for (int i = 0; i < 6; i++) { int id = s.Sim.Spawn(Config.Player, AntType.Soldier, nest + toC * 8 + new Rng((uint)(i + 9)).InDisk(3), toC.Angle()); s.Sim.Ants[id].State = AntState.Idle; guard.Add(id); }
+        s.Sim.FormSquads(guard);
         s.Camera.JumpTo(nest + new Vector2(5, -7), 18);
         await Wait(2);
         await Shot("03_closeup");
@@ -253,7 +275,8 @@ public static class Capture
         // a fully developed colony: every chamber dug, heroes and new castes on parade
         var col = s.Sim.Col[Config.Player];
         foreach (var (u, tier) in new[] { (Upgrade.Queen, 5), (Upgrade.Wings, 1), (Upgrade.Mandibles, 3), (Upgrade.Chitin, 3), (Upgrade.SilkCutters, 1) })
-            for (int k = col.T(u) + 1; k <= tier; k++) { col.Tier[(int)u] = k; s.Chambers.Build(Config.Player, u, k); }
+            for (int k = col.T(u) + 1; k <= tier; k++) col.Tier[(int)u] = k;
+        s.Sim.DevelopNest(Config.Player);
         var home = s.World.Nests[Config.Player].Pos;
         var toC = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - home).Normalized();
         var side = new Vector2(-toC.Y, toC.X);
@@ -272,9 +295,13 @@ public static class Capture
         s.Camera.JumpTo(s.Sim.Ants[parade[1]].Pos, 14);
         await Wait(1.2f);
         await Shot($"{n++:00}_matron_close");
-        s.Camera.JumpTo(home - toC * 6, 46);
-        await Wait(1.5f);
+        // the developed nest through the glass earth: every room, the stores full, the queen below
+        s.Sim.Col[Config.Player].Food = s.Sim.Col[Config.Player].FoodCap;
+        s.ToggleNestView();
+        s.Camera.JumpTo(home, 30);
+        await Wait(2.5f);
         await Shot($"{n++:00}_chambers");
+        s.ToggleNestView();
         // heroes and a squad take on the spider lair: webs, war cry, acid
         var spiderCamp = Find(AntType.Spider);
         if (spiderCamp != null)
@@ -467,28 +494,44 @@ public static class Capture
             await Wait(2.4f); // a finished step shows its tick for a moment before moving on
             GD.Print($"[selftest] tutorial {what}: now on step {tut.StepIndex + 1} '{tut.StepTitle}'  {(tut.StepIndex >= step ? "PASS" : "FAIL")}");
         }
+        async Task FastUntil(System.Func<bool> done, float maxReal)
+        {
+            s.FastForward = 7;
+            for (float t = 0; t < maxReal && !done(); t += 0.5f) await Wait(0.5f);
+            s.FastForward = 0;
+        }
         s.Camera.JumpTo(nest + new Vector2(40, -40), 90);
         await Expect(1, "camera moved");
+        await FastUntil(() => s.Sim.Col[0].Founded, 20);
+        await Expect(2, "nest founded");
+        s.ToggleNestView();
+        await Wait(1.5f);
+        await Shot("tut_02_glass");
+        s.ToggleNestView();
+        await Expect(3, "looked inside with N");
+        s.TryEnqueue(ProdKind.Worker);
+        await Expect(4, "worker queued");
+        s.TryEnqueue(ProdKind.Soldier);
+        await FastUntil(() => s.Sim.Col[0].Count[(int)AntType.Soldier] >= 6, 30);
+        await Expect(5, "squad hatched");
         s.Input.SelectArmy();
-        await Expect(2, "soldiers selected");
+        await Expect(6, "soldiers selected");
         s.Input.CommandAt(nest + new Vector2(20, -20), false);
-        await Expect(3, "move ordered");
+        await Expect(7, "move ordered");
         s.Input.SaveGroup(1);
         s.Input.ClearSelection();
         s.Input.RecallGroup(1);
         await Wait(0.5f);
-        await Shot("tut_02_groups");
-        await Expect(4, "group saved and recalled");
+        await Shot("tut_03_groups");
+        await Expect(8, "group saved and recalled");
         s.ToggleTrails(); s.ToggleTrails();
-        await Expect(5, "trails toggled");
+        await Expect(9, "trails toggled");
         foreach (var f in s.World.Food) if (f.Alive && f.Kind == FoodKind.Seed) { s.Input.ClearSelection(); s.Input.InspectFood = f; break; }
-        await Expect(6, "food inspected");
-        s.TryEnqueue(ProdKind.Worker);
-        await Expect(7, "worker queued");
-        s.TryEnqueue(ProdKind.Soldier);
-        await Expect(8, "squad queued");
+        await Expect(10, "food inspected");
+        s.TryDig(ChamberKind.Brood);
+        await Expect(11, "brood chamber ordered");
         s.TryResearch(Upgrade.Queen);
-        await Expect(9, "queen research");
+        await Expect(12, "queen research");
         await Shot("tut_03_lair_step");
         // let research finish and look at the labelled chambers by the nest
         s.FastForward = 7;
@@ -505,6 +548,40 @@ public static class Capture
         s.Camera.JumpTo(new Vector2(160, 10), 120);
         await Wait(2);
         await Shot("tut_06_edge_side");
+        app.GetTree().Quit();
+    }
+
+    /// Headless raid probe: 20 black soldiers attack-move onto the red mound of a founded colony;
+    /// prints where they are, what they are doing and the red queen's health every few seconds.
+    public static void RaidTest(Main app)
+    {
+        var root = new Node3D();
+        app.AddChild(root);
+        var world = WorldBuilder.Build(root, 20261031);
+        var sim = new Sim(world);
+        sim.DevelopNest(0); sim.DevelopNest(1);
+        var red = world.Nests[1].Pos;
+        var ids = new List<int>();
+        var rng = new Rng(3);
+        for (int i = 0; i < 20; i++) ids.Add(sim.Spawn(0, AntType.Soldier, red + new Vector2(-22, 0) + rng.InDisk(4), 0));
+        sim.FormSquads(ids);
+        sim.CmdMove(ids, red, true);
+        const float dt = 1f / 30f;
+        for (int tick = 1; tick <= 30 * 90; tick++)
+        {
+            sim.Tick(dt);
+            if (tick % 150 != 0) continue;
+            var states = new Dictionary<string, int>();
+            foreach (int id in ids)
+            {
+                ref var a = ref sim.Ants[id];
+                string k = a.Alive ? $"{a.State}/L{a.Layer}/goalL{a.GoalLayer}/d{a.Pos.DistanceTo(red):0}" : "dead";
+                states[k] = states.GetValueOrDefault(k) + 1;
+            }
+            ref var q = ref sim.Ants[sim.Col[1].QueenId];
+            GD.Print($"[raidtest] t={tick / 30}s queen hp {q.Hp:0} L{q.Layer} | " + string.Join("  ", states.Select(kv => $"{kv.Key} x{kv.Value}")));
+            if (!q.Alive) break;
+        }
         app.GetTree().Quit();
     }
 
@@ -633,6 +710,15 @@ public static class Capture
                 GD.Print($"[simtest]    black warrior states: {string.Join(" ", states)} rooted {rooted} queue [{string.Join(",", c0.Queue.ConvertAll(q => q.Kind.ToString()))}] researching {(c0.Researching ? c0.ResearchKind.ToString() : "-")}");
                 string By(Colony c) => $"crumb {c.GatheredBy[0]:0} berry {c.GatheredBy[1]:0} sugar {c.GatheredBy[2]:0} seed {c.GatheredBy[3]:0} corpse {c.GatheredBy[4]:0}";
                 GD.Print($"[simtest]    food black: {By(c0)} | red: {By(c1)}");
+                string Digs(Colony c)
+                {
+                    var parts = new List<string>();
+                    int diggers = 0;
+                    for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == c.Team && sim.Ants[i].DigP1 > 0) diggers++;
+                    foreach (var ch in c.Chambers) if (ch.Digging) parts.Add($"{ch.Kind} {ch.Progress * 100:0}% x{ch.Diggers}");
+                    return $"cap {c.FoodCap:0} rooms {c.Chambers.Count} assigned {diggers} [{string.Join(", ", parts)}]";
+                }
+                GD.Print($"[simtest]    digs black: {Digs(c0)} | red: {Digs(c1)}");
                 GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} wings {c0.T(Upgrade.Wings)}/{c1.T(Upgrade.Wings)} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m ants={alive} | black {p.Count[0]}w {p.Count[1]}s {p.Count[2]}m pop {p.PopUsed}/{p.PopCap} food {p.Food:0} gathered {p.Gathered:0} killed {p.Killed} | red {e.Count[0]}w {e.Count[1]}s {e.Count[2]}m pop {e.PopUsed}/{e.PopCap} food {e.Food:0} gathered {e.Gathered:0} killed {e.Killed} | tick avg {total / ticks:0.00}ms worst {worst:0.0}ms");
                 worst = 0;

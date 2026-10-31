@@ -25,8 +25,11 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | Right-click | Move, attack an enemy, or send workers to a food pile |
 | A, then click | Attack-move |
 | S / H / G | Stop / hold position / gather |
-| Z X C V F D | Raise worker / soldier / major / excavate a chamber / flying ant / acid gunner |
-| Q W E R T | Colony chambers: royal jelly (queen level) / wings / mandible forge / chitin armory / silk cutters |
+| Z X C F D | Raise worker / soldier / major / flying ant / acid gunner (the queen lays them in a brood chamber) |
+| V / L | Workers dig a brood chamber (+brood capacity) / a store (+food capacity) |
+| Q W E R T | Workers dig or enlarge the upgrade rooms: royal chamber (queen level) / wings / mandible forge / chitin armory / silk cutters |
+| N | Glass Earth: see the chambers under your mound without losing the surface |
+| Right-click your nest | With warriors selected: garrison the royal chamber |
 | Y U I | Hatch a hero: Warlord / Acid Matron / Sky Marshal |
 | B | Send the selected squads home to heal and re-hatch fallen members |
 | Ctrl+1–9, 1–9 | Save and recall control groups |
@@ -36,6 +39,10 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | Arrows, screen edge, wheel, middle-drag | Pan, zoom, rotate |
 | Space | Jump to the last alert |
 | Esc / F1 / F11 | Pause / help / fullscreen |
+
+## The nest
+
+A match begins the way a real colony does: a queen and eight workers on bare soil. The workers dig the shaft and royal chamber (a plug of soil over the hole sinks as they go, with the progress shown above it), then the queen walks down to her chamber and only then starts to lay. Every room after that is dug by workers too: brood chambers near the warm surface set how many ants you can keep, stores at mid depth set how much food you can hold, and the upgrade rooms carry the colony's research. New ants hatch below and climb out of the shaft. Enemies must break in through the entrance to reach the queen; warriors can garrison inside. Press **N** for Glass Earth: the ground over your nest turns translucent and shows the galleries and rooms at their real depths while the surface stays in view.
 
 ## Lane War (hero mode)
 

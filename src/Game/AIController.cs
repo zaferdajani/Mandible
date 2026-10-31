@@ -32,6 +32,11 @@ public sealed class AIController : IColonyAI
         return r;
     }
 
+    void Dig(ChamberKind k)
+    {
+        if (_sim.CanDig(_team, k) == Sim.DigResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)_team, Arg = (byte)k });
+    }
+
     void Move(List<int> ids, Vector2 p, bool attack)
     {
         var c = Cmd.Units(attack ? CmdKind.AttackMove : CmdKind.Move, _team, ids, _sim);
@@ -135,14 +140,19 @@ public sealed class AIController : IColonyAI
 
     void Produce(Colony c)
     {
+        if (!c.Founded) return; // the founders are digging; nothing can hatch yet
         if (c.Queue.Count >= 3) return;
         int workers = c.Count[0], soldiers = c.Count[1], majors = c.Count[2];
         int wantWorkers = _diff switch { Difficulty.Easy => 40, Difficulty.Hard => 100, _ => 75 };
-        int capAhead = c.PopCap + c.PendingChambers() * Config.ChamberPop;
-        // dig ahead of need, saving up for it rather than spending on brood
-        if (c.PopUsed + 14 >= capAhead && capAhead < Config.MaxPopCap && c.PendingChambers() == 0)
+        // more stores before the food rots in full ones
+        if (c.Food > c.FoodCap * 0.8f && _sim.CanDig(_team, ChamberKind.Storage) == Sim.DigResult.Ok) { Dig(ChamberKind.Storage); return; }
+        // dig brood chambers ahead of need, saving up for them rather than spending on brood
+        int digging = 0;
+        foreach (var ch in c.Chambers) if (ch.Kind == ChamberKind.Brood && !ch.Built) digging++;
+        int capAhead = c.PopCap + digging * Config.ChamberPop;
+        if (c.PopUsed + 14 >= capAhead && capAhead < Config.MaxPopCap && digging == 0)
         {
-            if (c.Food >= Config.ChamberCost) Q(ProdKind.Chamber);
+            if (c.Food >= Sim.BroodCost) Dig(ChamberKind.Brood);
             return;
         }
         // tech timing: when research is due, bank food for it, but never below a working economy and a home guard
@@ -226,9 +236,17 @@ public sealed class AIController : IColonyAI
         }
         int army = 0;
         foreach (int i in _tmp) army += Config.Of(_sim.Ants[i].Type).Pop;
-        // the yard is dangerous now: if the full wave never comes together, go with what there is
+        // the yard is dangerous now: if the full wave never comes together, go with what there is;
+        // and a colony that clearly outnumbers its rival does not wait for a parade-ground wave
         bool overdue = _sim.Time > _nextWave + 150;
-        if (army < _waveSize && !(overdue && army >= _waveSize * 0.6f)) return;
+        int enemyArmy = 0;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var b = ref _sim.Ants[i];
+            if (b.Alive && b.Team == 1 - _team && Config.IsWarrior(b.Type)) enemyArmy += Config.Of(b.Type).Pop;
+        }
+        bool stronger = overdue && army >= 8 && army >= enemyArmy * 1.2f;
+        if (army < _waveSize && !(overdue && army >= _waveSize * 0.6f) && !stronger) return;
         var target = _sim.W.Nests[1 - _team].Pos;
         // keep a small home guard
         int guard = _tmp.Count / 6;

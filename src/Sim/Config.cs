@@ -8,7 +8,7 @@ public enum AntType
     Gunner = 9, Warlord = 10, Matron = 11, Marshal = 12,
 }
 
-public enum AntState { Idle, Forage, Gather, Return, Move, AttackMove, Engage, Hold }
+public enum AntState { Idle, Forage, Gather, Return, Move, AttackMove, Engage, Hold, Dig }
 
 public enum ProdKind { Worker, Soldier, Major, Chamber, Flyer, Gunner, Warlord, Matron, Marshal }
 
@@ -82,7 +82,11 @@ public static class Config
     } * (IsBug(t) ? 1 : 1 + (level - 1) * 0.5f);
 
     public const float StartFood = 250f;
-    public const int StartPopCap = 60;
+    public const int StartPopCap = 20;      // the shaft and royal chamber alone; brood chambers add ChamberPop each
+    public const int FoundingPop = 12;      // before the nest is dug nothing can hatch anyway
+    public const float BaseFoodCap = 400f;  // what the first store holds; each extra store adds StorageFoodCap
+    public const float StorageFoodCap = 400f;
+    public const int StartWorkers = 10;
     public const int ChamberPop = 50;
     public const int MaxPopCap = 460;
     public const float ChamberCost = 100f;

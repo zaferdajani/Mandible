@@ -93,9 +93,28 @@ public partial class Tutorial : Control
             "You command from above. Ants are tiny, so zoom in to see them and zoom out to see the whole yard.",
             () => Game.Camera.Focus.DistanceTo(_camAt) > 15 || Mathf.Abs(Game.Camera.Distance - _camDist) > 15,
             begin: () => { _camAt = Game.Camera.Focus; _camDist = Game.Camera.Distance; });
+        Add("Found the colony",
+            "Watch your workers dig the nest: the plug of soil over the hole sinks as they go, and the status shows above it. Nothing to press.",
+            "A real colony starts as a queen with a few workers on bare ground. Until the shaft and royal chamber are dug she is out in the open, so this is the most dangerous time.",
+            () => Me.Founded, () => nest);
+        Add("Look inside",
+            "Press N. The earth over your nest turns to glass: watch the queen walk down to her chamber. Press N again to close it.",
+            "Glass Earth shows the shaft, the galleries and every room at its depth while the surface stays in view around it, so nothing can sneak up while you look.",
+            () => _base < 0 ? false : Game.NestView ? (_base = 1) < 0 : _base == 1,
+            () => nest, begin: () => _base = 0);
+        Add("Hatch a worker",
+            "Press Z (or click the first brood button). The queen lays it in a brood chamber and it climbs out of the shaft.",
+            "More workers bring more food, and food pays for everything else. Brood hatches only once the queen is in her chamber.",
+            () => Me.Count[(int)AntType.Worker] > _startCount || Me.Queue.Exists(q => q.Kind == ProdKind.Worker),
+            begin: () => _startCount = Me.Count[(int)AntType.Worker]);
+        Add("Hatch a squad",
+            "Press X to hatch a squad of six soldiers. Wait for them to come up out of the nest.",
+            "Your army grows a squad at a time. Soldiers are your fighters; a squad ranks up together.",
+            () => Me.Count[(int)AntType.Soldier] >= 6,
+            begin: () => _startCount = Me.Count[(int)AntType.Soldier]);
         Add("Select your soldiers",
-            "Drag a box with the left mouse button around the soldiers standing in front of your nest.",
-            "Soldiers are your fighters. They hatch in squads of six that rank up together.",
+            "Drag a box with the left mouse button around the soldiers near your nest (or press F2).",
+            "F2 selects your whole army at once, anywhere on the map.",
             () => CountSelected(AntType.Soldier) >= 3, () => nest + toCenter * 8);
         Add("Move them",
             "With the soldiers selected, right-click on open ground to send them there.",
@@ -116,19 +135,14 @@ public partial class Tutorial : Control
             "Left-click any food pile (a crumb, seed or berry) to see what it is, how much is left and what it does for your colony.",
             "Each food has a different effect: sugar speeds workers, fruit heals, insect protein makes the queen lay faster. Your race also prefers some foods.",
             () => Game.Input.InspectFood != null, () => NearestFood(nest));
-        Add("Hatch a worker",
-            "Press Z (or click the first brood button) to have the queen lay a worker for 15 food.",
-            "More workers bring more food, and food pays for everything else.",
-            () => Me.Count[(int)AntType.Worker] > _startCount || Me.Queue.Exists(q => q.Kind == ProdKind.Worker),
-            begin: () => _startCount = Me.Count[(int)AntType.Worker]);
-        Add("Hatch a squad",
-            "Press X to hatch a squad of six soldiers.",
-            "Your army grows a squad at a time. Watch the brood count in the top bar: when it is full, press V to dig a new chamber for more brood.",
-            () => Me.Queue.Exists(q => q.Kind == ProdKind.Soldier) || Me.Count[(int)AntType.Soldier] > _startCount,
-            begin: () => _startCount = Me.Count[(int)AntType.Soldier]);
+        Add("Dig a brood chamber",
+            "Press V. Four workers go below and dig a new brood chamber; the progress shows over the entrance (and inside, with N).",
+            "Brood chambers set how many ants you can keep (the BROOD count in the top bar). Stores (L) set how much food you can hold. Workers dig every room; the queen only lays.",
+            () => Sim.ChamberCount(Local.Me, ChamberKind.Brood, false) > _startCount,
+            begin: () => _startCount = Sim.ChamberCount(Local.Me, ChamberKind.Brood, false));
         Add("Raise your queen",
-            "Press Q to feed the queen royal jelly. She becomes a Matriarch.",
-            "Queen levels unlock new castes (majors, gunners, flyers) and heroes. Every finished upgrade digs a chamber beside the nest: those holes with a name over them.",
+            "Press Q to feed the queen royal jelly. Workers enlarge the royal chamber and she becomes a Matriarch.",
+            "Queen levels unlock new castes (majors, gunners, flyers) and heroes. Every upgrade is a room the workers dig or enlarge: look for it with N.",
             () => Me.Researching || Me.T(Upgrade.Queen) >= 2, () => nest);
         Add("Clear a wild lair",
             "Press F2 to select your whole army, then press A and click the marked lair. Your ants attack everything on the way.",

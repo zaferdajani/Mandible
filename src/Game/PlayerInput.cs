@@ -185,7 +185,9 @@ public partial class PlayerInput : Node
             case Godot.Key.Z: Game.TryEnqueue(ProdKind.Worker); return;
             case Godot.Key.X: Game.TryEnqueue(ProdKind.Soldier); return;
             case Godot.Key.C: Game.TryEnqueue(ProdKind.Major); return;
-            case Godot.Key.V: Game.TryEnqueue(ProdKind.Chamber); return;
+            case Godot.Key.V: Game.TryDig(ChamberKind.Brood); return;
+            case Godot.Key.L: Game.TryDig(ChamberKind.Storage); return;
+            case Godot.Key.N: Game.ToggleNestView(); return;
             case Godot.Key.F: Game.TryEnqueue(ProdKind.Flyer); return;
             case Godot.Key.B: Reinforce(); return;
             case Godot.Key.D: Game.TryEnqueue(ProdKind.Gunner); return;
@@ -510,6 +512,14 @@ public partial class PlayerInput : Node
         }
         var mc = Cmd.Units(attack ? CmdKind.AttackMove : CmdKind.Move, Local.Me, Selection, Sim);
         mc.P = world;
+        // right-clicking your own nest with warriors sends them below to garrison the royal chamber
+        var nest = Game.World.Nests[Local.Me];
+        if (!attack && Sim.Col[Local.Me].Founded && world.DistanceTo(nest.Pos) < nest.Radius && Selection.Exists(i => Config.IsWarrior(Sim.Ants[i].Type)))
+        {
+            mc.Layer = (byte)Sim.NestLayer(Local.Me);
+            mc.P = Sim.ChamberPos(Local.Me, Sim.Royal(Local.Me));
+            Game.Hud.Alert("Garrison: the warriors go below to guard the queen (press N to watch)", UiTheme.Dim);
+        }
         Game.Issue(mc);
         Game.Effects.Marker(Game.World.HF.Point(world), attack ? new Color(1, 0.35f, 0.2f) : new Color(0.5f, 1, 0.45f));
         Game.Audio.Ui("ui_click");
