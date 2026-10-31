@@ -1,21 +1,19 @@
-name: Build iOS App (Godot)
+name: Build iOS App (Godot, unsigned for sideloading)
 
-# Run from the Actions tab ("Run workflow"), the same way as the TeamManager iOS build.
+# Builds an UNSIGNED Mandible.ipa on a cloud Mac. A free Apple ID cannot sign in CI, so the
+# IPA is signed and installed from Windows with Sideloadly or AltStore (re-sign every 7 days).
 on:
   workflow_dispatch:
-    inputs:
-      export_method:
-        description: "1 = development (your own devices), 0 = App Store / TestFlight, 2 = ad hoc"
-        default: "1"
 
 env:
   GODOT_VERSION: 4.7.2
   BUNDLE_ID: com.mandible.warbeneaththegrass
+  TEAM_ID: KVX7JSZ5VY   # Apple team id (public identifier, not a secret)
 
 jobs:
   build-ios:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -25,6 +23,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+
+      - name: Install .NET iOS workload
+        run: sudo dotnet workload install ios
 
       - name: Cache Godot and export templates
         id: cache-godot
@@ -40,7 +41,7 @@ jobs:
           base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
           curl -fsSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_macos.universal.zip"
           curl -fsSL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
-          unzip -q godot.zip && unzip -q templates.tpz
+          unzip -q godot.zip && unzip -q templates.tpz && rm godot.zip templates.tpz
 
       - name: Install export templates
         run: |
@@ -49,80 +50,66 @@ jobs:
           cp -R ~/godot/templates/* "$dest/"
           echo "GODOT=$(ls -d ~/godot/Godot_mono.app)/Contents/MacOS/Godot" >> $GITHUB_ENV
 
-      # Signing: the same Apple certificate as TeamManager, plus a profile made for this game's bundle ID.
-      - name: Install signing certificate and provisioning profile
-        env:
-          P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
-          PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
-        run: |
-          kc=$RUNNER_TEMP/build.keychain-db
-          kcpass=$(uuidgen)
-          echo "$P12_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
-          echo "$PROFILE_BASE64" | base64 --decode > $RUNNER_TEMP/profile.mobileprovision
-          security create-keychain -p "$kcpass" "$kc"
-          security set-keychain-settings -lut 21600 "$kc"
-          security unlock-keychain -p "$kcpass" "$kc"
-          security import $RUNNER_TEMP/cert.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
-          security set-key-partition-list -S apple-tool:,apple: -k "$kcpass" "$kc"
-          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
-          security cms -D -i $RUNNER_TEMP/profile.mobileprovision > $RUNNER_TEMP/profile.plist
-          uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" $RUNNER_TEMP/profile.plist)
-          team=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" $RUNNER_TEMP/profile.plist)
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp $RUNNER_TEMP/profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
-          echo "PROFILE_UUID=$uuid" >> $GITHUB_ENV
-          echo "TEAM_ID=$team" >> $GITHUB_ENV
-
-      - name: Write signing details into the iOS export preset
+      - name: Configure the iOS export (Xcode project only, local-network permission text)
         run: |
           python3 - <<'EOF'
           import os, re
           p = "export_presets.cfg"
           t = open(p, encoding="utf-8").read()
-          head, sep, rest = t.partition('[preset.2.options]')
-          method = os.environ.get("EXPORT_METHOD", "1")
+          head, sep, body = t.partition('[preset.2.options]')
+          plist = ('<key>NSLocalNetworkUsageDescription</key>'
+                   '<string>Mandible finds and connects to friends playing on the same Wi-Fi.</string>')
           opts = {
             "application/app_store_team_id": f'"{os.environ["TEAM_ID"]}"',
             "application/bundle_identifier": f'"{os.environ["BUNDLE_ID"]}"',
-            "application/export_method_debug": method,
-            "application/export_method_release": method,
-            "application/provisioning_profile_uuid_debug": f'"{os.environ["PROFILE_UUID"]}"',
-            "application/provisioning_profile_uuid_release": f'"{os.environ["PROFILE_UUID"]}"',
-            "application/export_project_only": "false",
+            "application/export_project_only": "true",
+            "application/additional_plist_content": '"' + plist.replace('"', '\\"') + '"',
           }
-          body = rest
           for k, v in opts.items():
               line = f"{k}={v}"
               if re.search(rf"^{re.escape(k)}=", body, re.M):
-                  body = re.sub(rf"^{re.escape(k)}=.*$", line, body, flags=re.M)
+                  body = re.sub(rf"^{re.escape(k)}=.*$", lambda m: line, body, flags=re.M)
               else:
                   body = body.replace("\n", "\n" + line + "\n", 1)
           open(p, "w", encoding="utf-8").write(head + sep + body)
           EOF
-        env:
-          EXPORT_METHOD: ${{ github.event.inputs.export_method }}
 
       - name: Build C# and import assets
         run: |
           dotnet build -c ExportRelease
           "$GODOT" --headless --path . --import || true
 
-      - name: Export IPA
+      - name: Export the Xcode project
         run: |
           mkdir -p build/ios
-          "$GODOT" --headless --path . --export-release "iOS" build/ios/Mandible.ipa
+          "$GODOT" --headless --path . --export-release "iOS" build/ios/Mandible.xcodeproj
           ls -la build/ios
+
+      - name: Compile without signing
+        run: |
+          cd build/ios
+          xcodebuild -project Mandible.xcodeproj -scheme Mandible -configuration Release -sdk iphoneos \
+            -derivedDataPath dd CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Package unsigned IPA
+        run: |
+          cd build/ios
+          app=$(find dd/Build/Products -name "*.app" -maxdepth 3 | head -1)
+          mkdir -p Payload && cp -R "$app" Payload/
+          zip -qr Mandible-unsigned.ipa Payload
+          ls -la Mandible-unsigned.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Mandible-ios
-          path: build/ios/*.ipa
+          name: Mandible-ios-unsigned
+          path: build/ios/Mandible-unsigned.ipa
 
       - name: Upload the Xcode project on failure (for debugging)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: Mandible-ios-xcode
-          path: build/ios
+          path: |
+            build/ios
+            !build/ios/dd
