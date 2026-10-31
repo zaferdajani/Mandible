@@ -28,13 +28,18 @@ public sealed class AIController : IColonyAI
     ResearchResult R(Upgrade u)
     {
         var r = _sim.CanResearch(_team, u);
-        if (r == ResearchResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)_team, Arg = (byte)u });
+        if (r == ResearchResult.Ok)
+        {
+            var kind = Sim.KindOf(u);
+            var spot = _sim.ChamberOf(_team, kind) == null ? _sim.DefaultSpot(_team, kind) : Vector2.Zero; // a new room goes to its default spot
+            Orders.Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)_team, Arg = (byte)u, P = spot });
+        }
         return r;
     }
 
     void Dig(ChamberKind k)
     {
-        if (_sim.CanDig(_team, k) == Sim.DigResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)_team, Arg = (byte)k });
+        if (_sim.CanDig(_team, k) == Sim.DigResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)_team, Arg = (byte)k, P = _sim.DefaultSpot(_team, k) });
     }
 
     void Move(List<int> ids, Vector2 p, bool attack)

@@ -301,6 +301,9 @@ public static class Capture
         s.Camera.JumpTo(home, 30);
         await Wait(2.5f);
         await Shot($"{n++:00}_chambers");
+        // steady-state cost of the opened earth (the first frames above include shader compilation)
+        await Wait(3f);
+        GD.Print($"[perf] glass earth open, nest in view: fps={Engine.GetFramesPerSecond()} {(Engine.GetFramesPerSecond() >= 30 ? "PASS" : "FAIL")}");
         s.ToggleNestView();
         // heroes and a squad take on the spider lair: webs, war cry, acid
         var spiderCamp = Find(AntType.Spider);
@@ -528,7 +531,7 @@ public static class Capture
         await Expect(9, "trails toggled");
         foreach (var f in s.World.Food) if (f.Alive && f.Kind == FoodKind.Seed) { s.Input.ClearSelection(); s.Input.InspectFood = f; break; }
         await Expect(10, "food inspected");
-        s.TryDig(ChamberKind.Brood);
+        s.TryDigAt(ChamberKind.Brood, s.Sim.DefaultSpot(0, ChamberKind.Brood)); // placed where the player would click
         await Expect(11, "brood chamber ordered");
         s.TryResearch(Upgrade.Queen);
         await Expect(12, "queen research");
@@ -708,6 +711,16 @@ public static class Capture
                         if (sim.Ants[i].Root > 0) rooted++;
                     }
                 GD.Print($"[simtest]    black warrior states: {string.Join(" ", states)} rooted {rooted} queue [{string.Join(",", c0.Queue.ConvertAll(q => q.Kind.ToString()))}] researching {(c0.Researching ? c0.ResearchKind.ToString() : "-")}");
+                // who is below ground, and what the workers are doing (a stuck layer transit shows up here first)
+                var below = new System.Collections.Generic.Dictionary<string, int>();
+                var wstates = new System.Collections.Generic.Dictionary<string, int>();
+                for (int i = 0; i < sim.High; i++)
+                    if (sim.Ants[i].Alive && sim.Ants[i].Team == 0)
+                    {
+                        if (sim.Ants[i].Layer > 0) { var k = $"{sim.Ants[i].Type}/{sim.Ants[i].State}"; below[k] = below.GetValueOrDefault(k) + 1; }
+                        if (sim.Ants[i].Type == AntType.Worker) { var k = sim.Ants[i].State.ToString(); wstates[k] = wstates.GetValueOrDefault(k) + 1; }
+                    }
+                GD.Print($"[simtest]    black below ground: {string.Join(" ", below)} | workers: {string.Join(" ", wstates)}");
                 string By(Colony c) => $"crumb {c.GatheredBy[0]:0} berry {c.GatheredBy[1]:0} sugar {c.GatheredBy[2]:0} seed {c.GatheredBy[3]:0} corpse {c.GatheredBy[4]:0}";
                 GD.Print($"[simtest]    food black: {By(c0)} | red: {By(c1)}");
                 string Digs(Colony c)
@@ -747,5 +760,7 @@ public static class Capture
         string path = $"{_dir}/{name}.png";
         img.SavePng(path);
         GD.Print($"[capture] {path} fps={Engine.GetFramesPerSecond()}");
+        // MANDIBLE_LAST_SHOT=<name> ends the tour after that shot (quick visual checks while tuning)
+        if (System.Environment.GetEnvironmentVariable("MANDIBLE_LAST_SHOT") == name) _app.GetTree().Quit();
     }
 }

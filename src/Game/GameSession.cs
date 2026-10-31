@@ -42,6 +42,8 @@ public partial class GameSession : Node3D
     float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd;
     float _demoT;
     DirectionalLight3D _sun;
+    /// The one light in the world: a mid-morning sun. Everything, above and below ground, is lit and shadowed by it.
+    public static readonly Vector3 SunAngles = new(-48, 140, 0);
 
     public override void _Ready()
     {
@@ -158,7 +160,7 @@ public partial class GameSession : Node3D
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits, DirectionalShadowMaxDistance = 240,
             LightAngularDistance = 1.0f, ShadowBias = 0.05f, ShadowNormalBias = 2.2f, ShadowBlur = 1.2f,
         };
-        _sun.RotationDegrees = new Vector3(-40, 140, 0);
+        _sun.RotationDegrees = SunAngles;
         if (Settings.Gfx != Settings.Quality.High) { _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 150; }
         AddChild(_sun);
     }
@@ -190,12 +192,19 @@ public partial class GameSession : Node3D
         _ => "Flying ants need the Wing Chamber (W)",
     };
 
-    public void TryResearch(Upgrade u)
+    public void TryResearch(Upgrade u, Vector2? at = null)
     {
         var r = Sim.CanResearch(Local.Me, u);
-        if (r == ResearchResult.Ok) Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)Local.Me, Arg = (byte)u });
         var c = Sim.Col[Local.Me];
         var bad = new Color(1, 0.5f, 0.35f);
+        // a room that does not exist yet is placed by the player, Settlers-style, within reach of the tunnels
+        if (r == ResearchResult.Ok && Sim.ChamberOf(Local.Me, Sim.KindOf(u)) == null && !at.HasValue) { Input.BeginDig(Sim.KindOf(u), u); return; }
+        if (r == ResearchResult.Ok && at.HasValue)
+        {
+            var place = Sim.PlaceCheck(Local.Me, at.Value);
+            if (place != Sim.DigResult.Ok) { Hud.Alert(Sim.DigMessage(place, Sim.KindOf(u)), bad); Audio.Ui("ui_error"); return; }
+        }
+        if (r == ResearchResult.Ok) Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)Local.Me, Arg = (byte)u, P = at ?? Vector2.Zero });
         switch (r)
         {
             case ResearchResult.Ok: Audio.Ui("ui_queue"); Hud.Alert($"Research begun: {Config.ResearchName(u, c.T(u) + 1)}", UiTheme.Dim); break;
@@ -300,27 +309,32 @@ public partial class GameSession : Node3D
         Audio.Ui("ui_click", -4);
     }
 
-    /// Orders workers to dig a brood chamber or a store.
+    /// V / L: choose where the new brood chamber or store goes (it must connect to the tunnels).
     public void TryDig(ChamberKind k)
     {
+        var r = Sim.CanDig(Local.Me, k);
+        if (r != Sim.DigResult.Ok) { Hud.Alert(Sim.DigMessage(r, k), new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
+        Input.BeginDig(k, null);
+    }
+
+    /// The player clicked a spot for a room: dig it there if the tunnels can reach it.
+    public bool TryDigAt(ChamberKind k, Vector2 at)
+    {
         var bad = new Color(1, 0.5f, 0.35f);
-        switch (Sim.CanDig(Local.Me, k))
-        {
-            case Sim.DigResult.Ok:
-                Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)Local.Me, Arg = (byte)k });
-                Hud.Alert($"Workers are digging a new {Sim.ChamberName(k).ToLower()}", UiTheme.Dim);
-                Audio.Ui("ui_queue");
-                break;
-            case Sim.DigResult.NoFood: Hud.Alert("Not enough food", bad); Audio.Ui("ui_error"); break;
-            case Sim.DigResult.NotFounded: Hud.Alert("The nest is still being dug", bad); Audio.Ui("ui_error"); break;
-            case Sim.DigResult.TooMany: Hud.Alert(k == ChamberKind.Brood ? "The nest cannot hold more brood chambers" : $"At most {Sim.MaxStorages} stores", bad); Audio.Ui("ui_error"); break;
-            default: Audio.Ui("ui_error"); break;
-        }
+        var r = Sim.CanDig(Local.Me, k);
+        if (r == Sim.DigResult.Ok) r = Sim.PlaceCheck(Local.Me, at);
+        if (r != Sim.DigResult.Ok) { Hud.Alert(Sim.DigMessage(r, k), bad); Audio.Ui("ui_error"); return false; }
+        Issue(new Cmd { Kind = CmdKind.Dig, Team = (byte)Local.Me, Arg = (byte)k, P = at });
+        Hud.Alert($"Workers are digging a new {Sim.ChamberName(k).ToLower()} and its gallery", UiTheme.Dim);
+        Audio.Ui("ui_queue");
+        Effects.Marker(World.HF.Point(at), new Color(1f, 0.85f, 0.4f));
+        return true;
     }
 
     /// Glass Earth: the ground over your nest turns translucent so the chambers show; the surface stays in view.
     public bool NestView { get; private set; }
     float _glass; // 0..1 animated
+    bool _glassWasOpen;
 
     public void ToggleNestView()
     {
@@ -337,9 +351,22 @@ public partial class GameSession : Node3D
     {
         _glass = Mathf.MoveToward(_glass, NestView ? 1 : 0, dt * 3);
         var nest = World.Nests[Local.Me].Pos;
-        World.TerrainMaterial.SetShaderParameter("xray_center", nest);
-        World.TerrainMaterial.SetShaderParameter("xray_radius", Sim.NestRadius + 9f);
-        World.TerrainMaterial.SetShaderParameter("xray_on", _glass);
+        // the earth opens only over the galleries and rooms, never over the plain ground around them; the
+        // ground dressing (pebbles, straw, thatch) shares the cut, so nothing hovers over an opened gallery
+        bool wasOpen = _glassWasOpen;
+        _glassWasOpen = _glass > 0;
+        if (_glass > 0 || wasOpen)
+        {
+            var (net, count) = Interior.Network(Local.Me);
+            if (OS.GetEnvironment("MANDIBLE_NONET") != "") count = 0; // perf A/B: the cut's shader loop never runs
+            foreach (var m in World.FowMaterials)
+            {
+                m.SetShaderParameter("xray_on", _glass);
+                if (_glass > 0) { m.SetShaderParameter("xray_center", nest); m.SetShaderParameter("net", net); m.SetShaderParameter("net_count", count); }
+            }
+            Interior.SetNetwork(net, count, nest);
+        }
+        Interior.SetGlass(_glass);
         Camera.NestView = NestView && Camera.Focus2D.DistanceTo(nest) < 40;
     }
 

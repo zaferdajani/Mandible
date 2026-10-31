@@ -37,8 +37,8 @@ public partial class AntPortrait : SubViewportContainer
                 FogEnabled = true, FogLightColor = new Color(0.16f, 0.125f, 0.095f), FogDensity = 0.04f, FogSkyAffect = 0,
             },
         });
-        _vp.AddChild(new DirectionalLight3D { LightEnergy = 1.7f, LightColor = new Color(1f, 0.93f, 0.82f), RotationDegrees = new Vector3(-55, 35, 0), ShadowEnabled = true, ShadowBlur = 2.5f });
-        _vp.AddChild(new DirectionalLight3D { LightEnergy = 0.9f, LightColor = new Color(0.7f, 0.8f, 1f), RotationDegrees = new Vector3(-20, 200, 0) }); // cool rim
+        // the same single sun as the battlefield, from the same angle
+        _vp.AddChild(new DirectionalLight3D { LightEnergy = 1.7f, LightColor = new Color(1f, 0.93f, 0.82f), RotationDegrees = GameSession.SunAngles, ShadowEnabled = true, ShadowBlur = 2.5f });
 
         _turn = new Node3D();
         _vp.AddChild(_turn);
@@ -632,7 +632,7 @@ public partial class FieldGuide : ColorRect
             "[color=#e8c27a]Depth has a purpose.[/color]  Brood is kept shallow where the sun warms the soil, stores sit at mid depth, and the queen lives deepest, farthest from danger. " +
             "[i]In game:[/i] rooms are laid out the same way. New ants hatch in the brood chambers and climb out of the shaft on their own.\n\n" +
             "[color=#e8c27a]Workers build everything.[/color]  There are no builders or buildings: the same workers that forage dig new rooms with their mandibles, carrying the soil out grain by grain. " +
-            "[i]In game:[/i] order a room (V brood chamber, L store, Q W E R T the upgrade rooms) and up to four workers go below to dig it; the time depends on how many are digging. Brood chambers raise how many ants you can keep; stores raise how much food you can hold; the other rooms carry the colony's upgrades.\n\n" +
+            "[i]In game:[/i] order a room (V brood chamber, L store, Q W E R T the upgrade rooms), then click where it should go. Every room must connect to the tunnel network, like roads in a Settlers town: it has to lie within reach of the entrance or a room already dug, and the workers dig the gallery first, then the room. Up to four workers dig at once; the time depends on how many are digging and how long the gallery is. Brood chambers raise how many ants you can keep; stores raise how much food you can hold; the other rooms carry the colony's upgrades.\n\n" +
             "[color=#e8c27a]The nest is a fortress.[/color]  Raiders have to come in through the entrance and down the galleries, where the defenders meet them. " +
             "[i]In game:[/i] enemies at your mound break in and head for the royal chamber. Right-click your own nest with warriors to garrison it; when the queen is attacked, nearby ants rush below.\n\n" +
             "[color=#e8c27a]Seeing inside.[/color]  Press [b]N[/b] for Glass Earth: the ground over your nest turns translucent and the galleries and rooms show at their real depths, with eggs, stored food and the queen inside. The surface and everything approaching stays visible around and over the glass, so you never lose sight of the yard while you look.");

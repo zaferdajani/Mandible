@@ -96,9 +96,9 @@ void fragment() {
     // part ids arrive interpolated (12.9999...), so snap them before comparing
     float part = floor(v_part + 0.5);
     vec3 c = body_color;
-    float rough = 0.34;
+    float rough = 0.52; // chitin: a soft sheen, not glass
     if (part == 12.0 || part == 9.0 || part == 10.0) c = head_color;
-    float cc = 0.7;
+    float cc = 0.3;
     float metal = 0.0;
     if (part == 13.0) {
         c = gaster_color;
@@ -136,7 +136,7 @@ void fragment() {
         c *= 1.0 - (1.0 - smoothstep(0.004, 0.01, abs(v_local.x))) * 0.5;
     }
     if (part >= 1.0 && part <= 8.0) {
-        c = leg_color; rough = 0.45; BACKLIGHT = leg_color * 0.6;
+        c = leg_color; rough = 0.6; BACKLIGHT = leg_color * 0.6;
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
         if (pattern == 1) c *= 0.8 + 0.2 * step(0.85, v_w);
     }
@@ -148,8 +148,8 @@ void fragment() {
         c *= 0.8 + 0.4 * hair;
         if (part != 11.0) { rough = 0.78; cc = 0.0; }
     }
-    if (pattern == 1 && part != 11.0) { rough = 0.22; cc = 0.85; metal = 0.35; }
-    if (pattern == 3 && part != 11.0) { rough = 0.3; cc = 0.5; }
+    if (pattern == 1 && part != 11.0) { rough = 0.42; cc = 0.4; metal = 0.15; }
+    if (pattern == 3 && part != 11.0) { rough = 0.48; cc = 0.25; }
     if (hero > 0.0 && part != 11.0) {
         // gold filigree: bands on the abdomen, a crest on the head, edged mandibles
         float gband = part == 13.0 ? step(0.8, fract(v_local.z * 11.0 + 0.1)) : 0.0;
@@ -158,18 +158,18 @@ void fragment() {
         float g = max(max(gband, crest), jaw) * hero;
         c = mix(c, vec3(0.95, 0.68, 0.2), g);
         metal = mix(metal, 0.9, g);
-        rough = mix(rough, 0.2, g);
+        rough = mix(rough, 0.38, g);
     }
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
-    c += rainbow * irid * (0.06 + 0.5 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
+    c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
     ALBEDO = c * (1.0 - dead * 0.35);
     ROUGHNESS = rough + dead * 0.3;
     METALLIC = metal;
-    SPECULAR = 0.6;
+    SPECULAR = 0.32;
     CLEARCOAT = cc;
-    CLEARCOAT_ROUGHNESS = 0.18;
+    CLEARCOAT_ROUGHNESS = 0.42;
     RIM = pattern == 2 ? 0.6 : 0.35;
     RIM_TINT = 0.6;
     // brief warm flicker when bitten; kept subtle so big targets under constant attack keep their colour
@@ -180,12 +180,76 @@ void fragment() {
         float bands = hero * step(0.8, fract(v_local.z * 11.0 + 0.1));
         ALBEDO = mix(acid * 0.6, vec3(0.95, 0.68, 0.2), bands);
         EMISSION += acid * 0.22 * pulse * (1.0 - bands);
-        CLEARCOAT = 1.0;
-        CLEARCOAT_ROUGHNESS = 0.15;
-        ROUGHNESS = 0.25;
+        CLEARCOAT = 0.5;
+        CLEARCOAT_ROUGHNESS = 0.35;
+        ROUGHNESS = 0.42;
         METALLIC = bands * 0.8;
         BACKLIGHT = vec3(0.0);
     }
+}
+";
+
+    /// The tunnel network, shared by the terrain cut, the glass pane and the ground litter: up to 32 galleries
+    /// packed seven floats each (from.xy, to.xy, room radius at 'to', depth at 'from', depth at 'to'). A gallery
+    /// is a capsule 1.5 wide sloping between its two depths; a room is a disc of its radius at its depth.
+    /// net_dist follows the line of sight from the camera through the ground point down to each gallery's depth,
+    /// so the window in the soil sits exactly over what is seen through it from any camera angle, instead of
+    /// over the rooms' map positions (which drift out from under a ground-level cut as the camera tilts).
+    public const string NetworkFn = @"
+uniform float xray_on = 0.0;
+uniform vec2 xray_center = vec2(-1000.0);
+uniform float net[224];
+uniform int net_count = 0;
+float net_dist(vec3 p, vec3 cam) {
+    vec3 dir = p - cam;
+    // how far the line of sight drifts across the ground per unit of depth (clamped for a near-horizontal view)
+    vec2 sh = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
+    float shl = length(sh);
+    if (shl > 6.0) sh *= 6.0 / shl;
+    // nothing of the network can be seen through ground this far from the mound: skip the loop
+    if (distance(p.xz, xray_center) > 48.0 + 11.0 * min(shl, 6.0)) return 1e9;
+    float best = 1e9;
+    for (int i = 0; i < net_count; i++) {
+        int k = i * 7;
+        vec2 a = vec2(net[k], net[k + 1]);
+        vec2 b = vec2(net[k + 2], net[k + 3]);
+        float r = net[k + 4];
+        float da = net[k + 5], db = net[k + 6];
+        vec2 ab = b - a;
+        float len2 = max(dot(ab, ab), 0.0001);
+        for (int s = 0; s < 3; s++) {
+            float f = float(s) * 0.5;
+            vec2 q = p.xz + sh * mix(da, db, f);
+            float t = clamp(dot(q - a, ab) / len2, 0.0, 1.0);
+            best = min(best, length(q - (a + ab * t)) - 1.5);
+            if (s == 2) best = min(best, length(q - b) - r);
+        }
+    }
+    return best;
+}
+// how open the ground is at p (0 soil .. 1 glass); surface dressing over an opening is dropped with it
+float glass_at(vec3 p, vec3 cam) { return xray_on > 0.001 ? xray_on * (1.0 - smoothstep(0.0, 1.0, net_dist(p, cam))) : 0.0; }
+";
+
+    /// The glass pane over an opened nest: a faint cool tint with a brighter rim, drawn after the opaque world.
+    /// It only shows where the terrain has been cut away, so the ground around the tunnels stays ordinary soil.
+    public static readonly string Glass = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, unshaded;
+uniform float strength = 1.0;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+" + NetworkFn + @"
+void fragment() {
+    if (strength < 0.001) discard;
+    float nd = net_dist(wpos, CAMERA_POSITION_WORLD);
+    float inside = 1.0 - smoothstep(0.4, 0.8, nd);        // the terrain shader discards soil up to about here
+    float edge = smoothstep(-0.5, 0.35, nd) * inside;     // a thin brighter lip at the cut (galleries are only 3 wide)
+    float fres = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 2.5);
+    vec3 tint = mix(vec3(0.45, 0.62, 0.72), vec3(0.8, 0.9, 1.0), fres);
+    ALBEDO = tint;
+    // the hole below is nearly black, so even a few percent of pale glass reads as a veil after gamma: keep it to a breath
+    ALPHA = strength * (0.006 + 0.014 * fres + 0.10 * edge) * inside;
 }
 ";
 
@@ -198,34 +262,27 @@ uniform sampler2D normal_a : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_b : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
-// Glass Earth: within xray_radius of xray_center the soil turns to glass (screen-door dither keeps it cheap and sort-free)
-uniform vec2 xray_center = vec2(-1000.0);
-uniform float xray_radius = 20.0;
-uniform float xray_on = 0.0;
+// Glass Earth: while xray_on, the soil directly over the colony's galleries and rooms is cut away
 varying vec3 wpos;
 varying vec3 vcol;
 void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     vcol = COLOR.rgb;
 }
-float bayer(vec2 px) {
-    ivec2 p = ivec2(mod(px, 4.0));
-    int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-    return (float(m[p.y * 4 + p.x]) + 0.5) / 16.0;
-}
+" + NetworkFn + @"
 void fragment() {
     vec2 uv = wpos.xz;
-    float glass_d = distance(uv, xray_center);
-    float glass = xray_on * (1.0 - smoothstep(xray_radius - 6.0, xray_radius, glass_d));
-    if (glass > 0.001) {
-        float keep = mix(1.0, 0.09, glass);
-        if (bayer(FRAGCOORD.xy) > keep) discard;
-    }
+    float glass = glass_at(wpos, CAMERA_POSITION_WORLD);
+    // the soil over the tunnels is simply gone while the glass is up (a translucent pane is drawn in its place)
+    if (glass > 0.55) discard;
     float n1 = texture(noise_a, uv * 0.0035).r;
     float n2 = texture(noise_a, uv * 0.017 + 0.3).r;
     float g = texture(noise_b, uv * 0.09).r;
     float g2 = texture(noise_b, uv * 0.41 + 0.7).r;
     float grain = texture(noise_b, uv * 1.7).r;
+    float grain2 = texture(noise_b, uv * 4.3 + 0.23).r;
+    float grain3 = texture(noise_b, uv * 9.1 + 0.61).r;
+    float ripple = sin((uv.x * 0.9 + uv.y * 0.35 + n1 * 6.0) * 3.1) * 0.5 + 0.5;
     float grit = texture(noise_b, uv * 0.83 + 0.37).r;
     vec3 dry = vec3(0.36, 0.27, 0.19);
     vec3 damp = vec3(0.17, 0.12, 0.085);
@@ -235,7 +292,10 @@ void fragment() {
     col *= 0.72 + 0.45 * g;
     col *= 0.8 + 0.3 * g2;
     // individual sand grains: bright quartz flecks and dark pores
-    col *= 0.78 + 0.32 * grain;
+    col *= 0.74 + 0.32 * grain;
+    col *= 0.86 + 0.28 * grain2;
+    col *= 0.92 + 0.16 * grain3;
+    col *= 0.96 + 0.08 * ripple;
     float quartz = smoothstep(0.80, 0.88, grit) * smoothstep(0.35, 0.7, g);
     col = mix(col, vec3(0.62, 0.57, 0.50), quartz * 0.6);
     float pore = smoothstep(0.72, 0.8, texture(noise_b, uv * 0.6 + 0.11).r);
@@ -243,21 +303,24 @@ void fragment() {
     float dark = smoothstep(0.7, 0.8, texture(noise_b, uv * 0.23).r);
     col = mix(col, vec3(0.1, 0.075, 0.05), dark * 0.35);
     // excavated sand around the black colony's nest
-    vec3 sand = vec3(0.50, 0.40, 0.28) * (0.7 + 0.5 * g2) * (0.8 + 0.3 * grain);
+    vec3 sand = vec3(0.50, 0.40, 0.28) * (0.7 + 0.5 * g2) * (0.8 + 0.3 * grain) * (0.82 + 0.36 * grain2) * (0.9 + 0.2 * grain3);
+    sand = mix(sand, vec3(0.30, 0.22, 0.14), step(0.86, grain3) * 0.6);          // scattered dark grains
+    sand = mix(sand, vec3(0.72, 0.66, 0.58), step(0.9, grain2) * smoothstep(0.5, 0.8, grain3)); // bright quartz specks
     col = mix(col, sand, vcol.g);
     // pine thatch mound of the red colony
     vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g) * (0.7 + 0.4 * g2);
     col = mix(col, thatch, vcol.b);
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1);
-    // the glass itself: a cool sheen with a bright rim where it meets the soil
-    float rim = glass * smoothstep(xray_radius - 6.0, xray_radius - 1.5, glass_d);
-    col = mix(col, col * 0.6 + vec3(0.22, 0.30, 0.34), glass * 0.55) + vec3(0.35, 0.45, 0.5) * rim * 0.6;
+    // a pale, slightly glassy rim of soil around the opening
+    col = mix(col, col * 0.75 + vec3(0.12, 0.16, 0.19), glass * 0.6);
     ALBEDO = col;
-    ROUGHNESS = mix(0.95, 0.72, wet);
+    ROUGHNESS = mix(0.95, 0.72, wet) - quartz * 0.3;
     vec3 na = texture(normal_a, uv * 0.11).rgb;
     vec3 nb = texture(normal_b, uv * 0.47).rgb;
-    NORMAL_MAP = normalize(vec3((na.xy + nb.xy) - 1.0, 1.0)) * 0.5 + 0.5;
+    vec3 nc = texture(normal_b, uv * 2.1 + 0.37).rgb;
+    NORMAL_MAP = normalize(vec3((na.xy + nb.xy + nc.xy * 0.9) - 1.45, 1.0)) * 0.5 + 0.5;
+    NORMAL_MAP_DEPTH = 1.35;
     NORMAL_MAP_DEPTH = 1.4;
     float ph = texture(pher_tex, uv / map_size).r;
     float f = fow(wpos);
@@ -430,7 +493,9 @@ varying vec3 wpos;
 varying vec4 v_c;
 varying vec3 v_n;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_c = INSTANCE_CUSTOM; v_n = NORMAL; }
+" + NetworkFn + @"
 void fragment() {
+    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // pebbles do not hover over an opened gallery
     vec3 a = mix(vec3(0.22, 0.20, 0.18), vec3(0.38, 0.31, 0.23), v_c.x);
     a = mix(a, vec3(0.52, 0.49, 0.44), v_c.y * 0.5);
     a = mix(a, vec3(0.26, 0.15, 0.08), v_c.z);
@@ -448,7 +513,9 @@ shader_type spatial;
 varying vec3 wpos;
 varying float v_tint;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_tint = INSTANCE_CUSTOM.x; }
+" + NetworkFn + @"
 void fragment() {
+    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // straw and thatch do not hover over an opened gallery
     vec3 col = mix(vec3(0.32, 0.17, 0.07), vec3(0.62, 0.38, 0.16), v_tint);
     col *= 0.85 + 0.15 * sin(UV.y * 30.0);
     ALBEDO = col * fow(wpos);

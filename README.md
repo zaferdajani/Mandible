@@ -26,9 +26,9 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | A, then click | Attack-move |
 | S / H / G | Stop / hold position / gather |
 | Z X C F D | Raise worker / soldier / major / flying ant / acid gunner (the queen lays them in a brood chamber) |
-| V / L | Workers dig a brood chamber (+brood capacity) / a store (+food capacity) |
-| Q W E R T | Workers dig or enlarge the upgrade rooms: royal chamber (queen level) / wings / mandible forge / chitin armory / silk cutters |
-| N | Glass Earth: see the chambers under your mound without losing the surface |
+| V / L, then click | Plan a brood chamber (+brood capacity) / a store (+food capacity) where you click; it must lie within reach of the entrance or another room, and workers dig a gallery to it |
+| Q W E R T | Workers dig or enlarge the upgrade rooms: royal chamber (queen level) / wings / mandible forge / chitin armory / silk cutters (a new room is placed with a click, like V) |
+| N | Glass Earth: the soil over your galleries and rooms turns to glass, the ground around them stays as it is |
 | Right-click your nest | With warriors selected: garrison the royal chamber |
 | Y U I | Hatch a hero: Warlord / Acid Matron / Sky Marshal |
 | B | Send the selected squads home to heal and re-hatch fallen members |

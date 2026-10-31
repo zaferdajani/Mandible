@@ -20,6 +20,7 @@ public sealed class NestInterior
     sealed class Room
     {
         public NestChamber Ch;
+        public int Team;
         public Node3D Node, Contents;
         public MeshInstance3D Shell, Floor, Tunnel;
         public Label3D Label;
@@ -32,9 +33,10 @@ public sealed class NestInterior
         _g = g;
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
-        _wall = new StandardMaterial3D { AlbedoColor = new Color(0.30f, 0.21f, 0.14f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Front };
-        _floor = new StandardMaterial3D { AlbedoColor = new Color(0.42f, 0.32f, 0.22f), Roughness = 1 };
-        _earth = new StandardMaterial3D { AlbedoColor = new Color(0.07f, 0.05f, 0.035f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Front, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        // warm, readable earth tones: the rooms sit in a near-black bowl and must stay legible through the glass
+        _wall = new StandardMaterial3D { AlbedoColor = new Color(0.40f, 0.29f, 0.19f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
+        _floor = new StandardMaterial3D { AlbedoColor = new Color(0.52f, 0.40f, 0.27f), Roughness = 1 };
+        _earth = new StandardMaterial3D { AlbedoColor = new Color(0.07f, 0.05f, 0.035f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
         for (int team = 0; team < 2; team++) BuildNest(team);
     }
 
@@ -48,7 +50,7 @@ public sealed class NestInterior
         _root.AddChild(n);
         _nest[team] = n;
         // the dark earth that fills the view through the glass: a bowl of soil below everything
-        float r = Sim.NestRadius + 12f;
+        float r = Sim.NestReachMax + 12f;
         n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 17f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         // the ragged mouth of the shaft under the entrance (its inside faces show; the lip is uneven)
         n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = _wall, Position = new Vector3(0, 0, 0) });
@@ -63,11 +65,87 @@ public sealed class NestInterior
         // status over the entrance
         _status[team] = new Label3D
         {
-            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 30, OutlineSize = 10, PixelSize = 0.014f,
+            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 36, OutlineSize = 10, PixelSize = 0.011f,
             Modulate = new Color(1f, 0.9f, 0.6f), OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
-            Position = new Vector3(0, 5.2f, 0), Visible = false, FixedSize = true,
+            Position = new Vector3(0, 4.2f, 0), Visible = false,
         };
         n.AddChild(_status[team]);
+        // the glass pane itself: a disc that follows the ground, drawn only while the earth is opened
+        if (team == Local.Me)
+        {
+            float gr = Sim.NestReachMax + 6f; // the pane covers wherever the network may grow; its shader cuts it to the tunnels
+            var k = new MeshKit();
+            const int sides = 48, rings = 6;
+            int c0 = k.Add(new Vector3(0, 0.06f, 0), Vector3.Up, Colors.White, Vector2.Zero, Vector2.Zero);
+            for (int ri = 1; ri <= rings; ri++)
+            {
+                float rr = gr * ri / rings;
+                for (int s = 0; s <= sides; s++)
+                {
+                    float t = (float)s / sides * Mathf.Tau;
+                    var p = nest + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * rr;
+                    k.Add(new Vector3(Mathf.Cos(t) * rr, _g.World.HF.Sample(p.X, p.Y) - gy + 0.06f, Mathf.Sin(t) * rr), Vector3.Up, Colors.White, Vector2.Zero, Vector2.Zero);
+                }
+            }
+            int row = sides + 1;
+            for (int s = 0; s < sides; s++) k.Tri(c0, 1 + s + 1, 1 + s);
+            for (int ri = 1; ri < rings; ri++)
+                for (int s = 0; s < sides; s++)
+                {
+                    int a = 1 + (ri - 1) * row + s, b = a + row;
+                    k.Quad(a, a + 1, b + 1, b);
+                }
+            _glassMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Glass) };
+            _glassMat.SetShaderParameter("radius", gr);
+            _glassMat.SetShaderParameter("strength", 0f);
+            n.AddChild(new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = _glassMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, SortingOffset = 50 });
+        }
+    }
+
+    ShaderMaterial _glassMat;
+
+    /// How open the earth is (0..1), driven by the session's Glass Earth fade.
+    public void SetGlass(float strength) => _glassMat?.SetShaderParameter("strength", OS.GetEnvironment("MANDIBLE_NOPANE") != "" ? 0f : strength);
+
+    /// The tunnel network as the shaders see it: one capsule per gallery (parent node to room) and the room's own disc.
+    /// The same packed array feeds the terrain cut and the pane, so both open exactly over the galleries.
+    public void SetNetwork(float[] net, int count, Vector2 centre)
+    {
+        if (_glassMat == null) return;
+        _glassMat.SetShaderParameter("net", net);
+        _glassMat.SetShaderParameter("net_count", count);
+        _glassMat.SetShaderParameter("xray_center", centre);
+    }
+
+    readonly float[] _net = new float[224];
+
+    /// Packs a colony's tunnel network for the shaders: the mouth, then one gallery per room from the node it
+    /// was dug from (at that node's depth) down to the room (at its own depth), with the room's dug radius at
+    /// its end. Rooms grow and sink in the cut as the diggers progress, matching LayoutRoom.
+    public (float[] net, int count) Network(int team)
+    {
+        var sim = _g.Sim;
+        var chambers = sim.Col[team].Chambers;
+        var nest = _g.World.Nests[team].Pos;
+        int n = 0;
+        void Seg(Vector2 a, Vector2 b, float r, float depthA, float depthB)
+        {
+            if (n >= 32) return;
+            int k = n * 7;
+            _net[k] = a.X; _net[k + 1] = a.Y; _net[k + 2] = b.X; _net[k + 3] = b.Y; _net[k + 4] = r; _net[k + 5] = depthA; _net[k + 6] = depthB;
+            n++;
+        }
+        static float DepthNow(NestChamber ch) => ch.Depth * Mathf.Max(0.18f, ch.Progress);
+        Seg(nest, nest, 2.2f, 0, 0);
+        if (sim.Col[team].Founded || sim.Royal(team) != null)
+            foreach (var ch in chambers)
+            {
+                float p = Mathf.Max(0.18f, ch.Progress);
+                var (w, _, d) = RoomSize(ch);
+                var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent] : null;
+                Seg(sim.NodePos(team, ch.Parent), sim.ChamberPos(team, ch), Mathf.Max(w, d) * p + 0.7f, parent == null ? 0 : DepthNow(parent), DepthNow(ch));
+            }
+        return (_net, n);
     }
 
     // Ants do not dig with lathes: every opening is lumpy. Rough meshes are built once and shared.
@@ -186,7 +264,7 @@ public sealed class NestInterior
 
     Room MakeRoom(int team, NestChamber ch)
     {
-        var room = new Room { Ch = ch, Node = new Node3D { Name = $"Room_{ch.Kind}_{ch.Id}" } };
+        var room = new Room { Ch = ch, Team = team, Node = new Node3D { Name = $"Room_{ch.Kind}_{ch.Id}" } };
         _nest[team].AddChild(room.Node);
         room.Shell = new MeshInstance3D { Mesh = RoughRoom(), MaterialOverride = _wall, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         room.Floor = new MeshInstance3D { Mesh = RoughFloor(), MaterialOverride = _floor, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
@@ -202,12 +280,7 @@ public sealed class NestInterior
         room.Node.AddChild(room.Contents);
         room.Node.AddChild(room.Label);
         _nest[team].AddChild(room.Tunnel);
-        if (team == Local.Me)
-        {
-            var light = new OmniLight3D { LightColor = new Color(1f, 0.78f, 0.5f), LightEnergy = 1.6f, OmniRange = 7f, OmniAttenuation = 1.4f, ShadowEnabled = false };
-            room.Node.AddChild(light);
-            light.Position = new Vector3(0, 0.9f, 0);
-        }
+        // no lamps below ground: the one sun lights the rooms through the glass, so every shadow agrees
         return room;
     }
 
@@ -223,9 +296,13 @@ public sealed class NestInterior
         room.Shell.Position = new Vector3(0, h * p * 0.45f, 0);
         room.Floor.Scale = new Vector3(w * p * 0.92f, 1, d * p * 0.92f);
         room.Floor.Position = new Vector3(0, 0.02f, 0);
-        // the gallery from just under the entrance down to the room's mouth
-        var from = new Vector3(0, -0.9f, 0);
-        var to = centre + new Vector3(0, 0.6f, 0) - new Vector3(ch.Offset.X, 0, ch.Offset.Y).Normalized() * (w * p * 0.3f); // ends inside the room's wall
+        // the gallery from the node it was dug from (the entrance shaft or a parent room) to this room's mouth
+        var chambers = _g.Sim.Col[room.Team].Chambers;
+        var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent] : null;
+        var from = parent == null ? new Vector3(0, -0.9f, 0) : new Vector3(parent.Offset.X, -parent.Depth * Mathf.Max(0.18f, parent.Progress) + 0.6f, parent.Offset.Y);
+        var dir = new Vector3(ch.Offset.X - from.X, 0, ch.Offset.Y - from.Z);
+        dir = dir.LengthSquared() < 0.01f ? Vector3.Forward : dir.Normalized();
+        var to = centre + new Vector3(0, 0.6f, 0) - dir * (w * p * 0.3f); // ends inside the room's wall
         var mid = (from + to) * 0.5f;
         float len = from.DistanceTo(to);
         room.Tunnel.Position = mid;

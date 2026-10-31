@@ -58,7 +58,7 @@ public sealed class Cmd
         {
             case CmdKind.Move: if (ids.Count > 0) sim.CmdMove(ids, P, false, Layer); break;
             case CmdKind.AttackMove: if (ids.Count > 0) sim.CmdMove(ids, P, true, Layer); break;
-            case CmdKind.Dig: sim.Dig(Team, (ChamberKind)Arg); break;
+            case CmdKind.Dig: sim.Dig(Team, (ChamberKind)Arg, P); break;
             case CmdKind.Attack:
                 if (ids.Count > 0 && sim.Valid(Target, TargetSerial) && sim.Ants[Target].Team != Team) sim.CmdAttack(ids, Target);
                 break;
@@ -72,7 +72,7 @@ public sealed class Cmd
             case CmdKind.Hold: if (ids.Count > 0) sim.CmdStop(ids, true); break;
             case CmdKind.Enqueue: sim.Enqueue(Team, (ProdKind)Arg); break;
             case CmdKind.CancelLast: sim.CancelLast(Team); break;
-            case CmdKind.Research: sim.StartResearch(Team, (Upgrade)Arg); break;
+            case CmdKind.Research: sim.StartResearch(Team, (Upgrade)Arg, P == Vector2.Zero ? null : P); break;
             case CmdKind.CancelResearch: sim.CancelResearch(Team); break;
             case CmdKind.Reinforce: if (ids.Count > 0) sim.CmdReinforce(ids); break;
             case CmdKind.Ability: sim.CmdAbility(Team); break;

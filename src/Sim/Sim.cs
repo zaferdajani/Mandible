@@ -233,11 +233,13 @@ public sealed partial class Sim
         return ResearchResult.Ok;
     }
 
-    public ResearchResult StartResearch(int team, Upgrade u)
+    public ResearchResult StartResearch(int team, Upgrade u, Vector2? at = null)
     {
         var r = CanResearch(team, u);
         if (r != ResearchResult.Ok) return r;
         var c = Col[team];
+        // a new upgrade room must be placed within reach of the tunnels; an existing one is enlarged in place
+        if (ChamberOf(team, KindOf(u)) == null && at.HasValue && PlaceCheck(team, at.Value) != DigResult.Ok) return ResearchResult.Locked;
         int next = c.T(u) + 1;
         float cost = Config.ResearchCost(u, next);
         c.Food -= cost;
@@ -248,9 +250,10 @@ public sealed partial class Sim
         c.ResearchTime = Config.ResearchTime(u, next);
         // the upgrade is a room: workers dig it (or enlarge it) and the research runs at the pace of their digging
         var k = KindOf(u);
-        var ch = ChamberOf(team, k) ?? AddChamber(team, k, 0, false);
+        var ch = ChamberOf(team, k) ?? AddChamber(team, k, 0, false, at);
+        float tunnel = ch.Built ? 0 : ChamberPos(team, ch).DistanceTo(NodePos(team, ch.Parent)) * TunnelWorkPerUnit;
         ch.Done = 0;
-        ch.Work = c.ResearchTime * 2.5f; // four diggers beat the old research time a little; two match it
+        ch.Work = c.ResearchTime * 2.5f + tunnel; // four diggers beat the old research time a little; two match it
         return ResearchResult.Ok;
     }
 
@@ -1307,7 +1310,7 @@ public sealed partial class Sim
         if (think && Col[a.Team].QueenAlarm > 0 && a.Pos.DistanceTo(nest) < 26)
         {
             int e = FindEnemy(a.Pos, a.Team, 12, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
-            if (e < 0 && a.Layer == 0 && Col[a.Team].Founded) e = FindEnemy(nest, a.Team, NestRadius, true, NestLayer(a.Team));
+            if (e < 0 && a.Layer == 0 && Col[a.Team].Founded) e = FindEnemy(nest, a.Team, NestReach(a.Team), true, NestLayer(a.Team));
             if (e >= 0) { a.Prev = AntState.Forage; a.State = AntState.Engage; a.Target = e; a.TargetSerial = Ants[e].Serial; a.Forced = false; return Vector2.Zero; }
         }
         if (a.State == AntState.Return)
@@ -1476,13 +1479,7 @@ public sealed partial class Sim
         }
         pos += push * 0.6f;
 
-        if (a.Layer > 0)
-        {
-            // underground: no rocks, but the tunnels only reach so far from the shaft
-            var centre = W.Nests[a.Layer - 1].Pos;
-            var d = pos - centre;
-            if (d.Length() > NestRadius) pos = centre + d.Normalized() * NestRadius;
-        }
+        if (a.Layer > 0) pos = ClampToNetwork(a.Layer - 1, pos); // underground: galleries and floors only
         else foreach (var o in W.ObstaclesNear(pos)) // hard obstacle resolution
         {
             if (fly || o.R <= 0) continue;

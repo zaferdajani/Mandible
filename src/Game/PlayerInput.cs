@@ -10,7 +10,35 @@ public partial class PlayerInput : Node
     public bool NestSelected;
     public int Inspect = -1, InspectSerial;
     public FoodSource InspectFood;
-    enum Mode { None, AttackMove, Gather }
+    enum Mode { None, AttackMove, Gather, Dig }
+    ChamberKind _digKind;
+    Upgrade? _digUpgrade;
+
+    /// Placement, Settlers-style: the next click on the ground chooses where the room is dug. Glass Earth
+    /// opens so the tunnels show; the room must lie within reach of one of them.
+    public void BeginDig(ChamberKind k, Upgrade? upgrade)
+    {
+        _mode = Mode.Dig;
+        _digKind = k;
+        _digUpgrade = upgrade;
+        if (!Game.NestView) Game.ToggleNestView();
+        Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+        Game.Hud.Alert($"Click where to dig the {Sim.ChamberName(k).ToLower()}: within {Sim.MaxTunnel:0} of the entrance or another room (Esc cancels)", UiTheme.Gold);
+    }
+
+    /// Places the room being planned at a ground point.
+    public void PlaceAt(Vector2 world)
+    {
+        bool ok = _digUpgrade.HasValue ? PlaceUpgrade(_digUpgrade.Value, world) : Game.TryDigAt(_digKind, world);
+        if (ok) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); }
+    }
+
+    bool PlaceUpgrade(Upgrade u, Vector2 world)
+    {
+        if (Sim.PlaceCheck(Local.Me, world) != Sim.DigResult.Ok) { Game.Hud.Alert(Sim.DigMessage(Sim.PlaceCheck(Local.Me, world), Sim.KindOf(u)), new Color(1, 0.5f, 0.35f)); Game.Audio.Ui("ui_error"); return false; }
+        Game.TryResearch(u, world);
+        return true;
+    }
     Mode _mode;
     bool _leftDown;
     Vector2 _dragStart;
@@ -90,6 +118,7 @@ public partial class PlayerInput : Node
                 {
                     if (Cam.ScreenToGround(mb.Position, out var g))
                     {
+                        if (_mode == Mode.Dig) { PlaceAt(new Vector2(g.X, g.Z)); return; }
                         if (_mode == Mode.AttackMove) Issue(new Vector2(g.X, g.Z), mb.Position, true);
                         else Issue(new Vector2(g.X, g.Z), mb.Position, false);
                     }
