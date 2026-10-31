@@ -25,7 +25,7 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Install .NET iOS workload
-        run: sudo dotnet workload install ios
+        run: dotnet workload install ios # setup-dotnet installs to the user's home, so no sudo
 
       - name: Cache Godot and export templates
         id: cache-godot
