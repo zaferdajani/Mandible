@@ -55,10 +55,10 @@ public sealed class FogOfWar
             for (int i = 0; i < sim.High; i++)
             {
                 ref var a = ref sim.Ants[i];
-                if (!a.Alive || a.Team != Config.Player) continue;
+                if (!a.Alive || a.Team != Local.Me) continue;
                 Stamp(a.Pos, Config.Of(a.Type).Sight);
             }
-            Stamp(sim.W.Nests[Config.Player].Pos, 34);
+            Stamp(sim.W.Nests[Local.Me].Pos, 34);
         }
         float k = Mathf.Min(1, dt * 5);
         for (int i = 0; i < _vis.Length; i++)

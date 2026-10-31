@@ -14,7 +14,7 @@ public partial class RtsCamera : Node3D
     public float Distance = 70, TargetDistance = 70;
     public const float MinDist = 14, MaxDist = 175;
     public bool UserControl = true;
-    public bool EdgeScroll = true;
+    public bool EdgeScroll = !Settings.Touch;
     Vector3 _focusTarget;
     float _yawTarget;
     bool _rotating;
@@ -40,6 +40,16 @@ public partial class RtsCamera : Node3D
     }
 
     public void PanTo(Vector2 p) { _focusTarget = new Vector3(p.X, _focusTarget.Y, p.Y); }
+
+    /// Drag the world with two fingers: screen pixels map to ground units at the current zoom.
+    public void TouchPan(Vector2 screenDelta)
+    {
+        float h = GetViewport().GetVisibleRect().Size.Y;
+        float k = Distance * 0.95f / Mathf.Max(200, h);
+        var fwd = new Vector3(-Mathf.Sin(Yaw), 0, -Mathf.Cos(Yaw));
+        var right = new Vector3(Mathf.Cos(Yaw), 0, -Mathf.Sin(Yaw));
+        _focusTarget -= (right * screenDelta.X - fwd * screenDelta.Y) * k;
+    }
 
     public void SetYaw(float y, bool snap) { _yawTarget = y; if (snap) Yaw = y; }
 
@@ -117,6 +127,7 @@ public partial class RtsCamera : Node3D
         Attr.DofBlurNearDistance = d * 0.62f;
         Attr.DofBlurNearTransition = d * 0.35f;
         Attr.DofBlurAmount = Mathf.Lerp(0.09f, 0.035f, t);
+        Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low;
     }
 
     public bool ScreenToGround(Vector2 screen, out Vector3 hit)

@@ -20,6 +20,13 @@ public partial class GameSession : Node3D
     public PlayerInput Input;
     public AudioDirector Audio => App.Audio;
     public NestChambers Chambers;
+    public Lockstep Net;          // null in single player
+    public uint Seed = 20261031;
+    public IOrders Orders;
+    public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
+    const float TickDt = 1f / 30f;
+    float _acc, _alpha, _stall;
+    bool _netEnded;
     readonly List<AIController> _ai = new();
     Image _pherImg;
     ImageTexture _pherTex;
@@ -32,18 +39,21 @@ public partial class GameSession : Node3D
 
     public override void _Ready()
     {
-        World = WorldBuilder.Build(this, 20261031);
+        World = WorldBuilder.Build(this, Seed);
         Sim = new Sim(World);
+        Orders = Net != null ? Net : new DirectOrders(Sim);
         Ants = new AntRenderer(this);
         Effects = new Effects(this, World.HF);
         Chambers = new NestChambers(World, this);
         BuildLighting();
 
-        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo };
+        Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Touch };
         AddChild(Camera);
-        var home = World.Nests[Config.Player].Pos;
-        Camera.JumpTo(home + new Vector2(10, -12), 62);
-        Camera.SetYaw(Mathf.Pi * 0.25f + Mathf.Pi, true);
+        var home = World.Nests[Local.Me].Pos;
+        // start behind our own nest, looking out toward the middle of the yard
+        var outward = (home - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
+        Camera.JumpTo(home - outward * 14, 62);
+        Camera.SetYaw(Mathf.Atan2(outward.X, outward.Y), true);
 
         _pherPx = new byte[Sim.Ph.N * Sim.Ph.N];
         _pherImg = Image.CreateFromData(Sim.Ph.N, Sim.Ph.N, false, Image.Format.R8, _pherPx);
@@ -52,8 +62,8 @@ public partial class GameSession : Node3D
 
         if (Demo)
         {
-            _ai.Add(new AIController(Sim, Config.Player, Difficulty.Normal));
-            _ai.Add(new AIController(Sim, Config.Enemy, Difficulty.Normal));
+            _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal));
+            _ai.Add(new AIController(Sim, Local.Foe, Difficulty.Normal));
             Ants.VisibleToPlayer = _ => true;
             _trailTarget = _trailView = 0.12f;
         }
@@ -61,12 +71,17 @@ public partial class GameSession : Node3D
         {
             Fog = new FogOfWar(World);
             Ants.VisibleToPlayer = Fog.Visible;
-            _ai.Add(new AIController(Sim, Config.Enemy, Diff));
+            if (Net == null) _ai.Add(new AIController(Sim, Local.Foe, Diff));
+            if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
+            if (Net != null)
+            {
+                Net.OnDisconnected += () => { if (!_ended) { _netEnded = true; } };
+            }
             Input = new PlayerInput { Game = this };
             AddChild(Input);
             Hud = new Hud { Game = this };
             AddChild(Hud);
-            Hud.Alert("Defend the queen. Destroy the red colony.");
+            Hud.Alert(Net == null ? "Defend the queen. Destroy the red colony." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
         }
     }
 
@@ -97,6 +112,13 @@ public partial class GameSession : Node3D
             FogEnabled = true, FogLightColor = new Color(0.74f, 0.76f, 0.72f), FogDensity = 0.0012f, FogAerialPerspective = 0.25f, FogSkyAffect = 0.3f,
             AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.06f, AdjustmentBrightness = 1.0f,
         };
+        // quality presets: phones and tablets drop the screen-space effects and use cheaper shadows
+        var q = Settings.Gfx;
+        env.SsaoEnabled &= q == Settings.Quality.High;
+        env.SsilEnabled &= q == Settings.Quality.High;
+        env.GlowEnabled = q != Settings.Quality.Low;
+        GetViewport().Msaa3D = q == Settings.Quality.High ? Viewport.Msaa.Msaa2X : Viewport.Msaa.Disabled;
+        GetViewport().ScreenSpaceAA = q == Settings.Quality.Low ? Viewport.ScreenSpaceAAEnum.Disabled : Viewport.ScreenSpaceAAEnum.Fxaa;
         AddChild(new WorldEnvironment { Environment = env });
         _sun = new DirectionalLight3D
         {
@@ -105,13 +127,15 @@ public partial class GameSession : Node3D
             LightAngularDistance = 1.0f, ShadowBias = 0.05f, ShadowNormalBias = 2.2f, ShadowBlur = 1.2f,
         };
         _sun.RotationDegrees = new Vector3(-40, 140, 0);
+        if (Settings.Gfx != Settings.Quality.High) { _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 150; }
         AddChild(_sun);
     }
 
     // ------------------------------------------------------------- api for UI/input
     public void TryEnqueue(ProdKind k)
     {
-        var r = Sim.Enqueue(Config.Player, k);
+        var r = Sim.CanEnqueue(Local.Me, k);
+        if (r == QueueResult.Ok) Issue(new Cmd { Kind = CmdKind.Enqueue, Team = (byte)Local.Me, Arg = (byte)k });
         switch (r)
         {
             case QueueResult.Ok: Audio.Ui("ui_queue"); break;
@@ -136,8 +160,9 @@ public partial class GameSession : Node3D
 
     public void TryResearch(Upgrade u)
     {
-        var r = Sim.StartResearch(Config.Player, u);
-        var c = Sim.Col[Config.Player];
+        var r = Sim.CanResearch(Local.Me, u);
+        if (r == ResearchResult.Ok) Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)Local.Me, Arg = (byte)u });
+        var c = Sim.Col[Local.Me];
         var bad = new Color(1, 0.5f, 0.35f);
         switch (r)
         {
@@ -154,33 +179,25 @@ public partial class GameSession : Node3D
 
     public void Autopilot(bool on)
     {
-        _ai.RemoveAll(a => a.Team == Config.Player);
-        if (on) _ai.Add(new AIController(Sim, Config.Player, Difficulty.Normal) { Passive = true });
+        _ai.RemoveAll(a => a.Team == Local.Me);
+        if (on) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Passive = true });
     }
 
     public void ToggleTrails() { _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
-    public void SetPaused(bool p) { _paused = p; }
-    public void Restart() => App.StartBattle(Diff);
-    public void QuitToMenu() => App.ShowMenu();
+    public void SetPaused(bool p) { _paused = p && Net == null; }
+    public void Restart() { if (Net != null) QuitToMenu(); else App.StartBattle(Diff); }
+    public void QuitToMenu() { Net?.Leave(); App.ShowMenu(); }
 
     // ------------------------------------------------------------- frame
     public override void _Process(double delta)
     {
         float dt = Mathf.Min((float)delta, 0.05f);
-        if (!_paused)
-        {
-            for (int k = 0; k <= FastForward; k++)
-            {
-                Sim.Tick(dt);
-                foreach (var ai in _ai) ai.Tick(dt);
-                if (k == FastForward) HandleEvents();
-            }
-        }
+        StepSimulation((float)delta);
         Input?.Prune();
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Chambers.UpdateVisibility(Fog);
-        Ants.Update(Sim, Camera.Cam);
+        Ants.Update(Sim, Camera.Cam, _alpha);
         Effects.Update(_paused ? 0 : dt);
         UpdateFood();
         UpdatePheromoneTexture(dt);
@@ -188,6 +205,39 @@ public partial class GameSession : Node3D
         if (Demo) DemoCamera(dt);
         CheckEnd();
     }
+
+    /// Fixed 30 Hz simulation: identical on every machine, with rendering interpolated between ticks.
+    /// In multiplayer each 3-tick turn waits until both colonies' orders have arrived.
+    void StepSimulation(float delta)
+    {
+        bool frozen = _paused && Net == null;
+        if (frozen || _ended) { _alpha = 1; return; }
+        _acc = Mathf.Min(_acc + Mathf.Min(delta, 0.25f) * (FastForward + 1), 0.5f * (FastForward + 1));
+        int steps = 0, maxSteps = 6 * (FastForward + 1);
+        bool waiting = false;
+        while (_acc >= TickDt && steps < maxSteps)
+        {
+            if (Net != null && Sim.Ticks % Lockstep.TicksPerTurn == 0)
+            {
+                int turn = Sim.Ticks / Lockstep.TicksPerTurn;
+                if (Net.State != Lockstep.Phase.InGame || !Net.Ready(turn)) { waiting = true; break; }
+                Net.Execute(turn, Sim);
+            }
+            Sim.Tick(TickDt);
+            foreach (var ai in _ai) ai.Tick(TickDt);
+            HandleEvents();
+            _acc -= TickDt;
+            steps++;
+        }
+        if (waiting) { _stall += delta; _acc = Mathf.Min(_acc, TickDt); }
+        else _stall = 0;
+        _alpha = Mathf.Clamp(_acc / TickDt, 0, 1);
+    }
+
+    /// Seconds the game has been waiting on the network (0 when flowing).
+    public float NetStall => _stall;
+
+    public void Issue(Cmd c) => Orders.Issue(c);
 
     void UpdateFood()
     {
@@ -197,12 +247,9 @@ public partial class GameSession : Node3D
             if (!f.Alive)
             {
                 if (f.Node.Visible) { f.Node.Visible = false; Effects.Burst(World.HF.Point(f.Pos, 0.5f), 10, 2, 3, 0.5f, 0.8f); }
-                if (f.Block != null) f.Block.R = 0;
                 continue;
             }
-            float s = Mathf.Lerp(0.35f, 1f, Mathf.Pow(f.Amount / f.Max, 0.5f));
-            f.Node.Scale = f.BaseScale * s;
-            if (f.Block != null) f.Block.R = f.Block.BaseR * s;
+            f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
         }
     }
 
@@ -213,7 +260,7 @@ public partial class GameSession : Node3D
         _pherAcc += dt;
         if (_pherAcc < 0.25f) return;
         _pherAcc = 0;
-        var g = Sim.Ph.Grid[Config.Player];
+        var g = Sim.Ph.Grid[Local.Me];
         for (int i = 0; i < g.Length; i++) _pherPx[i] = (byte)Mathf.Min(255, g[i] * 40);
         _pherImg.SetData(Sim.Ph.N, Sim.Ph.N, false, Image.Format.R8, _pherPx);
         _pherTex.Update(_pherImg);
@@ -226,7 +273,7 @@ public partial class GameSession : Node3D
         foreach (var e in Sim.Events)
         {
             var wp = World.HF.Point(e.Pos, 0.3f);
-            bool seen = Demo || e.Team == Config.Player || Fog == null || Fog.Visible(e.Pos);
+            bool seen = Demo || e.Team == Local.Me || Fog == null || Fog.Visible(e.Pos);
             switch (e.Kind)
             {
                 case EvKind.Bite:
@@ -274,7 +321,7 @@ public partial class GameSession : Node3D
                 case EvKind.ResearchDone:
                 {
                     var at = Chambers.Build(e.Team, e.Upgrade, e.Tier);
-                    if (!Demo && e.Team == Config.Player)
+                    if (!Demo && e.Team == Local.Me)
                     {
                         string what = e.Upgrade == Upgrade.Queen ? $"Our queen has become {Config.QueenTitles[e.Tier]}!" : $"{Config.ResearchName(e.Upgrade, e.Tier)} complete";
                         Hud.Alert(what, new Color(1f, 0.85f, 0.4f));
@@ -300,7 +347,7 @@ public partial class GameSession : Node3D
                         Effects.Marker(wp, new Color(1f, 0.75f, 0.25f), e.Radius * 0.55f);
                         Effects.Burst(wp + Vector3.Up, 30, 2, 6f, 0.3f, 1.2f);
                         if (Audible(e.Pos)) Audio.At("alert", wp, 0, 0.5f, 0.02f, 1.35f);
-                        if (!Demo && e.Team == Config.Player) Hud.Alert("WAR CRY! Our warriors fight with fury.", new Color(1f, 0.8f, 0.35f));
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("WAR CRY! Our warriors fight with fury.", new Color(1f, 0.8f, 0.35f));
                     }
                     break;
                 case EvKind.AcidBurst:
@@ -332,7 +379,7 @@ public partial class GameSession : Node3D
                     if (seen) { Effects.Burst(wp, 8, 0, 2f, 0.8f, 1f); if (Audible(e.Pos)) Audio.At("spawn", wp, -8, 0.2f); }
                     break;
                 case EvKind.ProdDone:
-                    if (!Demo && e.Team == Config.Player && e.Prod != ProdKind.Worker)
+                    if (!Demo && e.Team == Local.Me && e.Prod != ProdKind.Worker)
                     {
                         Audio.Ui("ui_ready", -4);
                         if (e.Prod == ProdKind.Chamber) Hud.Alert("A new chamber is dug: brood capacity increased");
@@ -342,9 +389,9 @@ public partial class GameSession : Node3D
                     if (seen)
                     {
                         Effects.Burst(wp + Vector3.Up * 0.8f, 16, 2, 4.5f, 0.28f, 1.1f);
-                        if (Audible(e.Pos)) Audio.At("levelup", wp, e.Team == Config.Player ? 0 : -6, 0.15f, 0.04f);
+                        if (Audible(e.Pos)) Audio.At("levelup", wp, e.Team == Local.Me ? 0 : -6, 0.15f, 0.04f);
                     }
-                    if (!Demo && e.Team == Config.Player && _levelAlertCd <= 0)
+                    if (!Demo && e.Team == Local.Me && _levelAlertCd <= 0)
                     {
                         Hud.Alert($"A {Config.Of(e.Type).Name.ToLower()} has been promoted!", new Color(1f, 0.85f, 0.4f));
                         _levelAlertCd = 6;
@@ -352,7 +399,7 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.Shower:
                     Effects.Burst(wp + Vector3.Up * 6, 18, 2, 5, 0.4f, 1.6f);
-                    if (!Demo && e.Pos.DistanceTo(World.Nests[Config.Player].Pos) < e.Pos.DistanceTo(World.Nests[Config.Enemy].Pos))
+                    if (!Demo && e.Pos.DistanceTo(World.Nests[Local.Me].Pos) < e.Pos.DistanceTo(World.Nests[Local.Foe].Pos))
                     {
                         Hud.Alert("Crumbs are falling from the picnic table!  (Space to look)", new Color(0.8f, 1f, 0.45f));
                         Audio.Ui("ui_ready", -6);
@@ -360,7 +407,7 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.PopBlocked:
-                    if (!Demo && e.Team == Config.Player && _popAlertCd <= 0)
+                    if (!Demo && e.Team == Local.Me && _popAlertCd <= 0)
                     {
                         Hud.Alert("Brood capacity reached: excavate a chamber (V)", new Color(1, 0.55f, 0.35f));
                         Audio.Ui("ui_error");
@@ -368,7 +415,7 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.QueenHit:
-                    if (!Demo && e.Team == Config.Player && _queenAlertCd <= 0)
+                    if (!Demo && e.Team == Local.Me && _queenAlertCd <= 0)
                     {
                         Hud.Alert("Our queen is under attack!", new Color(1, 0.35f, 0.25f));
                         Audio.Ui("alert", -2);
@@ -377,7 +424,7 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.UnderAttack:
-                    if (!Demo && e.Team == Config.Player && _attackAlertCd <= 0 && !Audible(e.Pos))
+                    if (!Demo && e.Team == Local.Me && _attackAlertCd <= 0 && !Audible(e.Pos))
                     {
                         Hud.Alert("Our ants are under attack  (Space to look)", new Color(1, 0.55f, 0.35f));
                         Audio.Ui("alert", -9);
@@ -418,12 +465,20 @@ public partial class GameSession : Node3D
 
     void CheckEnd()
     {
+        if (_netEnded && !_ended && !Demo)
+        {
+            _ended = true;
+            Audio.FadeMusic(0.15f);
+            Hud.Alert($"{Net.PeerName} left the game.", new Color(1f, 0.85f, 0.4f));
+            Hud.ShowEnd(true, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
+            return;
+        }
         if (_ended || Demo || Sim.Winner < 0) return;
         _ended = true;
-        bool win = Sim.Winner == Config.Player;
+        bool win = Sim.Winner == Local.Me;
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");
-        Camera.PanTo(World.Nests[win ? Config.Enemy : Config.Player].Pos);
-        Hud.ShowEnd(win, Sim.Col[Config.Player], Sim.Col[Config.Enemy], Sim.Time);
+        Camera.PanTo(World.Nests[win ? Local.Foe : Local.Me].Pos);
+        Hud.ShowEnd(win, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
     }
 }

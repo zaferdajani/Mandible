@@ -17,6 +17,8 @@ public partial class Hud : CanvasLayer
     readonly Button[] _res = new Button[5];
     readonly Label[] _resTier = new Label[5], _resCost = new Label[5];
     ProgressBar _resBar;
+    Label _netLabel, _waiting;
+    bool _desyncWarned;
     Label _resName, _queenTitle;
     HBoxContainer _queueRow;
     readonly List<Button> _cmd = new();
@@ -57,6 +59,19 @@ public partial class Hud : CanvasLayer
         _root.AddChild(_hint);
 
         BuildHelp();
+
+        if (Game.Net != null)
+        {
+            _netLabel = UiTheme.Text("", 14, UiTheme.Bold, UiTheme.Dim);
+            UiTheme.Place(_netLabel, 0, 0, 0, 0, 22, 50, 420, 72);
+            _netLabel.MouseFilter = Control.MouseFilterEnum.Ignore;
+            _root.AddChild(_netLabel);
+            _waiting = UiTheme.Text("", 26, UiTheme.Title, UiTheme.Gold);
+            _waiting.HorizontalAlignment = HorizontalAlignment.Center;
+            UiTheme.Place(_waiting, 0.5f, 0.5f, 0.5f, 0.5f, -400, -60, 400, -20);
+            _waiting.MouseFilter = Control.MouseFilterEnum.Ignore;
+            _root.AddChild(_waiting);
+        }
     }
 
     // ----------------------------------------------------------- layout
@@ -240,7 +255,7 @@ public partial class Hud : CanvasLayer
             b.Pressed += () => Game.TryResearch(u);
             b.GuiInput += e =>
             {
-                if (e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right) { Game.Sim.CancelResearch(Config.Player); Game.Audio.Ui("ui_click"); }
+                if (e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right) { Game.Issue(new Cmd { Kind = CmdKind.CancelResearch, Team = (byte)Local.Me }); Game.Audio.Ui("ui_click"); }
             };
             b.MouseEntered += () => Game.Audio.Ui("ui_hover");
             _res[i] = b; _resTier[i] = tier; _resCost[i] = cost;
@@ -359,7 +374,7 @@ public partial class Hud : CanvasLayer
     {
         if (_end != null && _end.Visible) return;
         if (_pause == null)
-            _pause = Overlay("PAUSED", new[] { "The colony waits." },
+            _pause = Overlay(Game.Net == null ? "PAUSED" : "MENU", new[] { Game.Net == null ? "The colony waits." : "The battle goes on: multiplayer games cannot pause." },
                 ("Resume", () => TogglePause()), ("Restart", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
         _pause.Visible = !_pause.Visible;
         Game.SetPaused(_pause.Visible);
@@ -371,7 +386,7 @@ public partial class Hud : CanvasLayer
     {
         var lines = new[]
         {
-            victory ? "The red queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
+            victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
             "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
@@ -399,7 +414,15 @@ public partial class Hud : CanvasLayer
         if (_refresh > 0) return;
         _refresh = 0.1f;
         var sim = Game.Sim;
-        var c = sim.Col[Config.Player];
+        if (Game.Net is { } net)
+        {
+            string ping = net.PingMs < 0 ? "..." : $"{net.PingMs:0} ms";
+            _netLabel.Text = $"vs {net.PeerName}  \u00b7  ping {ping}";
+            _netLabel.AddThemeColorOverride("font_color", net.PingMs > 250 ? new Color(1, 0.55f, 0.35f) : UiTheme.Dim);
+            _waiting.Text = Game.NetStall > 0.4f && net.State == Lockstep.Phase.InGame ? $"Waiting for {net.PeerName}..." : "";
+            if (net.Desyncs > 0 && !_desyncWarned) { _desyncWarned = true; Alert("Warning: the two games have drifted out of sync", new Color(1, 0.4f, 0.3f)); }
+        }
+        var c = sim.Col[Local.Me];
         _food.Text = ((int)c.Food).ToString();
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";
         _pop.AddThemeColorOverride("font_color", c.PopUsed >= c.PopCap ? new Color(1, 0.45f, 0.3f) : UiTheme.Ink);
@@ -418,7 +441,7 @@ public partial class Hud : CanvasLayer
                 string st = "";
                 if (alive)
                     for (int j = 0; j < sim.High; j++)
-                        if (sim.Ants[j].Alive && sim.Ants[j].Team == Config.Player && sim.Ants[j].Type == ht) { st = $"Lv {sim.Ants[j].Level}"; break; }
+                        if (sim.Ants[j].Alive && sim.Ants[j].Team == Local.Me && sim.Ants[j].Type == ht) { st = $"Lv {sim.Ants[j].Level}"; break; }
                 _heroStatus[i].Text = alive ? st : queued ? "hatching" : unlocked ? $"x{Config.HeroTierMul(ht, c.T(Upgrade.Queen)):0.00}" : "";
                 _heroStatus[i].AddThemeColorOverride("font_color", alive ? new Color(0.6f, 1f, 0.5f) : UiTheme.Ink);
             }
@@ -430,7 +453,7 @@ public partial class Hud : CanvasLayer
             var u = (Upgrade)i;
             int next = c.T(u) + 1;
             bool maxed = next > Config.MaxTier(u);
-            var r = Game.Sim.CanResearch(Config.Player, u);
+            var r = Game.Sim.CanResearch(Local.Me, u);
             bool active = c.Researching && c.ResearchKind == u;
             _res[i].Modulate = active ? new Color(1.2f, 1.1f, 0.8f) : r == ResearchResult.Ok ? Colors.White : new Color(1, 1, 1, maxed ? 0.55f : 0.35f);
             _res[i].TooltipText = ResearchTooltip(c, u);
@@ -455,7 +478,7 @@ public partial class Hud : CanvasLayer
             var slot = new QueueSlot { CustomMinimumSize = new Vector2(26, 26), MouseFilter = Control.MouseFilterEnum.Stop, TooltipText = "Right-click to cancel the last order" };
             slot.GuiInput += e =>
             {
-                if (e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right) { Game.Sim.CancelLast(Config.Player); Game.Audio.Ui("ui_click"); }
+                if (e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Right) { Game.Issue(new Cmd { Kind = CmdKind.CancelLast, Team = (byte)Local.Me }); Game.Audio.Ui("ui_click"); }
             };
             _queueRow.AddChild(slot);
         }
@@ -493,7 +516,7 @@ public partial class Hud : CanvasLayer
         foreach (var ch in _selIcons.GetChildren()) ch.QueueFree();
         if (Game.Input.NestSelected)
         {
-            var c = sim.Col[Config.Player];
+            var c = sim.Col[Local.Me];
             ref var q = ref sim.Ants[c.QueenId];
             _selTitle.Text = "The Nest";
             _selHp.Value = q.Alive ? q.Hp / Config.Stats[3].Hp : 0;
@@ -518,8 +541,8 @@ public partial class Hud : CanvasLayer
         _selTitle.AddThemeColorOverride("font_color", UiTheme.Gold);
         if (alive == 0)
         {
-            var c = sim.Col[Config.Player];
-            _selTitle.Text = $"Black Colony  ·  {Config.QueenTitles[c.T(Upgrade.Queen)]}";
+            var c = sim.Col[Local.Me];
+            _selTitle.Text = $"{Local.ColonyName(Local.Me)}  ·  {Config.QueenTitles[c.T(Upgrade.Queen)]}";
             ref var q = ref sim.Ants[c.QueenId];
             _selHp.Value = q.Alive ? q.Hp / Config.Stats[3].Hp : 0;
             _selDetail.Text = "Nothing selected.  Drag across your ants to command them.";

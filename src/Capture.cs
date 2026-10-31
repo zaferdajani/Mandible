@@ -17,6 +17,9 @@ public static class Capture
         DirAccess.MakeDirRecursiveAbsolute(dir);
         await Wait(6);
         await Shot("01_menu");
+        app.Menu.OpenLobby();
+        await Wait(3f);
+        await Shot("01b_lobby");
 
         app.StartBattle(Difficulty.Normal);
         await Wait(3);
@@ -234,6 +237,69 @@ public static class Capture
     }
 
     static int _abilities;
+
+    /// Network self-test: --nettest=host[,seconds] or --nettest=join[:address][,seconds].
+    /// Two processes play a full AI-vs-AI match over a real ENet connection and compare checksums.
+    public static async Task NetTest(Main app, string spec)
+    {
+        _app = app;
+        var parts = spec.Split(',');
+        float seconds = parts.Length > 1 ? float.Parse(parts[1]) : 600;
+        string shotDir = parts.Length > 2 ? parts[2] : null;
+        bool shotTaken = false;
+        var net = new Lockstep();
+        app.AddChild(net);
+        net.OnStart += () => app.StartMultiplayer(net, autoPlay: true, fastForward: shotDir != null ? 0 : 7);
+        bool host = parts[0].StartsWith("host");
+        if (host)
+        {
+            net.OnConnected += () => net.StartMatch();
+            if (net.Host("HostBot", false) != Error.Ok) { GD.Print($"[nettest] host failed: {net.Status}"); app.GetTree().Quit(1); return; }
+        }
+        else
+        {
+            string addr = parts[0].Contains(':') ? parts[0][(parts[0].IndexOf(':') + 1)..] : "127.0.0.1";
+            await Wait(1.5f);
+            net.Join(addr, "JoinBot");
+        }
+        GD.Print($"[nettest] {(host ? "host" : "join")} started: {net.Status}");
+        double t0 = Time.GetTicksMsec() / 1000.0;
+        float lastReport = 0;
+        while (true)
+        {
+            await Wait(1f);
+            double wall = Time.GetTicksMsec() / 1000.0 - t0;
+            var s = app.Session;
+            if (net.State == Lockstep.Phase.Closed) { GD.Print($"[nettest] connection closed: {net.Status}"); break; }
+            if (s == null || s.Demo || s.Net == null)
+            {
+                if (wall > 30) { GD.Print($"[nettest] timed out waiting for match ({net.Status})"); break; }
+                continue;
+            }
+            if (shotDir != null && !shotTaken && s.Sim.Time > 45)
+            {
+                shotTaken = true;
+                _dir = shotDir;
+                DirAccess.MakeDirRecursiveAbsolute(shotDir);
+                s.Camera.JumpTo(s.World.Nests[Local.Me].Pos, 70);
+                await Wait(1.5f);
+                await Shot(host ? "mp_host" : "mp_join");
+            }
+            if (s.Sim.Time - lastReport >= 60)
+            {
+                lastReport = s.Sim.Time;
+                GD.Print($"[nettest] t={s.Sim.Time / 60:0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desync={net.Desyncs} ping={net.PingMs:0}ms delay={net.Delay} stall={s.NetStall:0.0}s ants={s.Sim.Col[0].PopUsed}/{s.Sim.Col[1].PopUsed} wall={wall:0}s");
+            }
+            if (s.Sim.Time >= seconds || s.Sim.Winner >= 0)
+            {
+                GD.Print($"[nettest] DONE t={s.Sim.Time / 60:0.0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desyncs={net.Desyncs} winner={s.Sim.Winner} checksum={s.Sim.Checksum():X8}");
+                break;
+            }
+        }
+        net.Leave();
+        await Wait(0.5f);
+        app.GetTree().Quit();
+    }
 
     /// Headless AI-vs-AI match:  --headless -- --simtest=<seconds>
     public static void SimTest(Main app, float seconds, Difficulty a, Difficulty b)

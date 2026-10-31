@@ -209,6 +209,14 @@ public static class Config
     public static Color TeamUi(int team) => team == Player ? PlayerUi : team == Enemy ? EnemyUi : WildUi;
 }
 
+/// Which colony this machine plays and views. 0 (black) in single player; in multiplayer the host is 0, the guest 1.
+public static class Local
+{
+    public static int Me = Config.Player;
+    public static int Foe => 1 - Me;
+    public static string ColonyName(int team) => team == 0 ? "Black Colony" : "Red Colony";
+}
+
 /// Small fast deterministic RNG (xorshift).
 public sealed class Rng
 {
@@ -218,7 +226,7 @@ public sealed class Rng
     public float F() => (NextU() & 0xFFFFFF) / 16777216f;
     public float R(float a, float b) => a + (b - a) * F();
     public int I(int a, int b) => a + (int)(NextU() % (uint)(b - a));
-    public Vector2 InDisk(float r) { float a = R(0, Mathf.Tau); float d = Mathf.Sqrt(F()) * r; return new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * d; }
+    public Vector2 InDisk(float r) { float a = R(0, DMath.Tau); float d = Mathf.Sqrt(F()) * r; return DMath.Dir(a) * d; }
 }
 
 public static class MathX
@@ -231,5 +239,5 @@ public static class MathX
         return d;
     }
 
-    public static Vector2 Dir(float a) => new(Mathf.Cos(a), Mathf.Sin(a));
+    public static Vector2 Dir(float a) => DMath.Dir(a);
 }

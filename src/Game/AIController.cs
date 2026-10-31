@@ -15,10 +15,34 @@ public sealed class AIController
     int _waveSize;
     readonly List<int> _tmp = new();
     public bool Passive; // used for menu attract mode pacing
+    public IOrders Orders;
+
+    // orders go through IOrders so the same AI can play locally or across the network
+    QueueResult Q(ProdKind k)
+    {
+        var r = _sim.CanEnqueue(_team, k);
+        if (r == QueueResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Enqueue, Team = (byte)_team, Arg = (byte)k });
+        return r;
+    }
+
+    ResearchResult R(Upgrade u)
+    {
+        var r = _sim.CanResearch(_team, u);
+        if (r == ResearchResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Research, Team = (byte)_team, Arg = (byte)u });
+        return r;
+    }
+
+    void Move(List<int> ids, Vector2 p, bool attack)
+    {
+        var c = Cmd.Units(attack ? CmdKind.AttackMove : CmdKind.Move, _team, ids, _sim);
+        c.P = p;
+        Orders.Issue(c);
+    }
 
     public AIController(Sim sim, int team, Difficulty diff)
     {
         _sim = sim; _team = team; _diff = diff;
+        Orders = new DirectOrders(sim);
         var c = sim.Col[team];
         c.FoodMult = diff switch { Difficulty.Easy => 0.75f, Difficulty.Hard => 1.3f, _ => 1f };
         _firstWave = diff switch { Difficulty.Easy => 330, Difficulty.Hard => 180, _ => 250 };
@@ -75,7 +99,7 @@ public sealed class AIController
             if (camp.Pos.DistanceTo(_sim.W.Nests[1 - _team].Pos) < camp.Pos.DistanceTo(nest) * 0.8f) continue; // not on the enemy's doorstep
             if (score < bestScore) { bestScore = score; best = camp; }
         }
-        if (best != null) _sim.CmdMove(_tmp, best.Pos, true);
+        if (best != null) Move(_tmp, best.Pos, true);
         else Regroup(nest);
     }
 
@@ -90,7 +114,7 @@ public sealed class AIController
             if (a.Alive && a.Team == _team && Config.IsWarrior(a.Type) && a.State == AntState.Idle && a.Pos.DistanceTo(nest) > 60) _stray.Add(i);
         }
         var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
-        if (_stray.Count > 0) _sim.CmdMove(_stray, nest + toCenter * 14, false);
+        if (_stray.Count > 0) Move(_stray, nest + toCenter * 14, false);
     }
 
     void Produce(Colony c)
@@ -102,7 +126,7 @@ public sealed class AIController
         // dig ahead of need, saving up for it rather than spending on brood
         if (c.PopUsed + 14 >= capAhead && capAhead < Config.MaxPopCap && c.PendingChambers() == 0)
         {
-            if (c.Food >= Config.ChamberCost) _sim.Enqueue(_team, ProdKind.Chamber);
+            if (c.Food >= Config.ChamberCost) Q(ProdKind.Chamber);
             return;
         }
         // tech timing: when research is due, bank food for it, but never below a working economy and a home guard
@@ -112,7 +136,7 @@ public sealed class AIController
         foreach (var hk in new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
             if (Config.Unlocked(hk, c.Tier) && c.Count[(int)Config.UnitOf(hk)] == 0 && !c.Queue.Exists(q => q.Kind == hk))
             {
-                if (_sim.Enqueue(_team, hk) == QueueResult.Ok) return;
+                if (Q(hk) == QueueResult.Ok) return;
                 if (c.Food < Config.ProdCost(hk) && workers > 25) return; // save up for the hero
             }
         int gunners = c.Count[(int)AntType.Gunner], flyers = c.Count[(int)AntType.Flyer];
@@ -122,7 +146,7 @@ public sealed class AIController
         else if (Config.Unlocked(ProdKind.Gunner, c.Tier) && gunners * 3 < soldiers) pick = ProdKind.Gunner;
         else if (Config.Unlocked(ProdKind.Flyer, c.Tier) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
         else pick = ProdKind.Soldier;
-        _sim.Enqueue(_team, pick); // a major simply waits until the food is there
+        Q(pick); // a major simply waits until the food is there
     }
 
     // the colony's tech path: queen first, then forges, wings and silk cutters as she unlocks them
@@ -142,7 +166,7 @@ public sealed class AIController
         {
             if (c.T(u) >= tier) continue;
             if (_sim.Time < after * pace) return false;
-            var r = _sim.StartResearch(_team, u);
+            var r = R(u);
             if (r == ResearchResult.Ok) return false;
             return r == ResearchResult.NoFood;
         }
@@ -168,7 +192,7 @@ public sealed class AIController
             if (a.State == AntState.Engage) continue;
             if (a.Pos.DistanceTo(nest) < 90) _tmp.Add(i);
         }
-        if (_tmp.Count > 0) _sim.CmdMove(_tmp, _sim.Ants[threat].Pos, true);
+        if (_tmp.Count > 0) Move(_tmp, _sim.Ants[threat].Pos, true);
     }
 
     void Raid(Colony c)
@@ -189,7 +213,7 @@ public sealed class AIController
         // keep a small home guard
         int guard = _tmp.Count / 6;
         _tmp.RemoveRange(0, guard);
-        _sim.CmdMove(_tmp, target, true);
+        Move(_tmp, target, true);
         _waveSize = Mathf.Min(90, _waveSize + (_diff == Difficulty.Hard ? 10 : 7));
         _nextWave = _sim.Time + (_diff == Difficulty.Easy ? 110 : 75);
     }

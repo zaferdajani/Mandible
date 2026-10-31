@@ -51,6 +51,13 @@ public sealed class World
     public readonly List<FoodSource> Food = new();
     public readonly Nest[] Nests = new Nest[2];
     public readonly List<Camp> Camps = new();
+    public int NextFoodId;
+
+    public FoodSource FoodById(int id)
+    {
+        foreach (var f in Food) if (f.Id == id) return f;
+        return null;
+    }
     public readonly List<ShaderMaterial> FowMaterials = new();
     public Node3D Root;
     public Image MinimapBase;

@@ -8,7 +8,7 @@ public sealed class Pheromones
     public const float Cell = 2f;
     public readonly int N;
     public readonly float[][] Grid = new float[2][];
-    float _decayAcc;
+    int _ticks;
 
     public Pheromones()
     {
@@ -34,10 +34,9 @@ public sealed class Pheromones
 
     public void Update(float dt)
     {
-        _decayAcc += dt;
-        if (_decayAcc < 0.25f) return;
-        float k = Mathf.Exp(-_decayAcc / 55f);
-        _decayAcc = 0;
+        // fixed 30 Hz ticks: decay every 8 ticks by exp(-(8/30)/55), written as a literal so every platform agrees
+        if (++_ticks % 8 != 0) return;
+        const float k = 0.99516326f;
         for (int t = 0; t < 2; t++)
         {
             var g = Grid[t];

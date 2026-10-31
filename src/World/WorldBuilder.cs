@@ -15,7 +15,8 @@ public static class WorldBuilder
     {
         var w = new World { Root = new Node3D { Name = "World" } };
         parent.AddChild(w.Root);
-        var rng = new Rng(seed);
+        var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
+        var deco = new Rng(seed ^ 0x5EEDu);      // decoration only: leaves, twigs, grass, litter
         var hf = w.HF = new Heightfield(S, 1f);
 
         BuildTextures(w);
@@ -29,20 +30,20 @@ public static class WorldBuilder
 
         var rocks = PlaceRocks(w, rng);
         w.IndexObstacles();
-        var leaves = PlaceLeaves(w, rng, rocks);
-        var twigs = PlaceTwigs(w, rng);
+        var leaves = PlaceLeaves(w, deco, rocks);
+        var twigs = PlaceTwigs(w, deco);
         var ao = ComputeAO(hf, rocks);
 
         BuildTerrainMesh(w, ao);
         foreach (var l in leaves) BuildLeaf(w, l);
         foreach (var t in twigs) BuildTwig(w, t);
         foreach (var r in rocks) BuildRock(w, r);
-        BuildGrass(w, rng);
-        BuildNestDressing(w, rng);
+        BuildGrass(w, deco);
+        BuildNestDressing(w, deco);
         PlaceFood(w, rng);
         PlaceCamps(w);
         w.IndexObstacles();
-        BuildLitter(w, rng);
+        BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);
         return w;
     }
@@ -468,7 +469,7 @@ public static class WorldBuilder
         }
         // in-field clumps (mirrored)
         int clumps = 0, tries = 0;
-        while (clumps < 34 && tries++ < 2000)
+        while (clumps < (int)(34 * Settings.Density) && tries++ < 2000)
         {
             var c = new Vector2(rng.R(20, S - 20), rng.R(20, S - 20));
             if (c.X + c.Y > S || !FarFromNests(c, 34) || !FarFromNests(Mirror(c), 34) || c.DistanceTo(Center) < 22) continue;
@@ -486,7 +487,7 @@ public static class WorldBuilder
             clumps++;
         }
         // dense border lawn
-        for (int i = 0; i < 4200; i++)
+        for (int i = 0; i < (int)(4200 * Settings.Density); i++)
         {
             float t = rng.F() * S, d = Mathf.Pow(rng.F(), 1.6f) * 22f;
             int side = rng.I(0, 4);
@@ -597,13 +598,13 @@ public static class WorldBuilder
             var away = (food - home).Normalized();
             var p = food + away * (radius + 4.5f);
             foreach (var c in w.Camps) if (c.Pos.DistanceTo(p) < 16) return;
-            w.Camps.Add(new Camp { Pos = p, Facing = away.Angle(), Bugs = bugs });
+            w.Camps.Add(new Camp { Pos = p, Facing = away.AngleD(), Bugs = bugs });
         }
         // the great raspberry in the middle: a stag beetle lord and his beetles, each equidistant from both nests
         var mid = Center;
         var bisector = new Vector2(1, 1).Normalized(); // points with x = y are equally far from both nests
-        w.Camps.Add(new Camp { Pos = mid + bisector * 11, Facing = bisector.Angle(), Bugs = new[] { (AntType.StagBeetle, 5) } });
-        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).Angle(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Wasp, 4) } });
+        w.Camps.Add(new Camp { Pos = mid + bisector * 11, Facing = bisector.AngleD(), Bugs = new[] { (AntType.StagBeetle, 5) } });
+        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).AngleD(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Wasp, 4) } });
         foreach (var f in w.Food.ToArray())
         {
             float d = Mathf.Min(f.Pos.DistanceTo(w.Nests[0].Pos), f.Pos.DistanceTo(w.Nests[1].Pos));
@@ -620,7 +621,7 @@ public static class WorldBuilder
 
     public static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size)
     {
-        var f = new FoodSource { Id = w.Food.Count, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
+        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
         // mid-game crumb showers reuse a few pre-built crumb shapes, scaled, to avoid hitches
         if (kind == FoodKind.Crumb && w.Food.Count > 40)
         {
@@ -653,7 +654,7 @@ public static class WorldBuilder
 
     static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size, bool templateOnly)
     {
-        var f = new FoodSource { Id = w.Food.Count, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
+        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
         var k = new MeshKit();
         var nz = new FastNoiseLite { Seed = rng.I(1, 9999), Frequency = 1.3f };
         Vector3 radii;
@@ -751,7 +752,7 @@ public static class WorldBuilder
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = PebbleMesh(17 + variant) };
             var xf = new List<Transform3D>();
             var cd = new List<Color>();
-            for (int i = 0; i < 4200; i++)
+            for (int i = 0; i < (int)(4200 * Settings.Density); i++)
             {
                 var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
                 if (!Clear(p, 0.3f)) continue;
@@ -785,7 +786,7 @@ public static class WorldBuilder
         var smm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = sk.Commit() };
         var sx = new List<Transform3D>();
         var sc = new List<float>();
-        for (int i = 0; i < 2600; i++)
+        for (int i = 0; i < (int)(2600 * Settings.Density); i++)
         {
             var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
             if (!Clear(p, 0.5f)) continue;

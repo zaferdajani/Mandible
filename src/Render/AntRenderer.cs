@@ -169,7 +169,7 @@ public sealed class AntRenderer
         return new Basis(x * scale, up * scale, f * scale);
     }
 
-    public void Update(Sim sim, Camera3D cam)
+    public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
         foreach (var b in _live) b?.Begin();
         foreach (var b in _dead) b?.Begin();
@@ -184,23 +184,27 @@ public sealed class AntRenderer
         {
             ref var a = ref sim.Ants[i];
             if (!a.Alive) continue;
-            if (a.Team != Config.Player && !VisibleToPlayer(a.Pos)) continue;
+            if (a.Team != Local.Me && !VisibleToPlayer(a.Pos)) continue;
             var st = Config.Of(a.Type);
             st.Size = a.Size;
             bool flies = Config.Flies(a.Type);
-            var n = hf.Normal(a.Pos.X, a.Pos.Y);
+            // blend between the last two simulation ticks so motion is smooth at any frame rate
+            var ip = a.PrevPos.DistanceSquaredTo(a.Pos) > 36 ? a.Pos : a.PrevPos.Lerp(a.Pos, alpha);
+            float ih = Mathf.LerpAngle(a.PrevHeading, a.Heading, alpha);
+            float ialt = Mathf.Lerp(a.PrevAlt, a.Alt, alpha);
+            var n = hf.Normal(ip.X, ip.Y);
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
-            var b = Orient(up, a.Heading, st.Size);
+            var b = Orient(up, ih, st.Size);
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
-            var o = new Vector3(a.Pos.X, a.Height + 0.02f + a.Alt + hover, a.Pos.Y);
+            var o = new Vector3(ip.X, hf.Sample(ip.X, ip.Y) + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
             _live[a.Team, (int)a.Type].Add(b, o, new Color(a.Gait, amp, Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f), a.HitFlash));
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
-                _cocoons.Add(Orient(up, a.Heading, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
+                _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (a.Carrying)
             {
                 var fwd = b.Z.Normalized();
@@ -226,7 +230,7 @@ public sealed class AntRenderer
                 for (int p = 0; p < a.Level - 1; p++)
                 {
                     var at = top + camRight * (p - (a.Level - 2) * 0.5f) * pip * 1.1f;
-                    _pips.Add(Basis.FromScale(Vector3.One * pip), at, new Color(a.Team == Config.Player ? 1 : 0, 0, 0, 1));
+                    _pips.Add(Basis.FromScale(Vector3.One * pip), at, new Color(a.Team == Local.Me ? 1 : 0, 0, 0, 1));
                 }
             }
             // wild bugs announce their level
@@ -246,7 +250,7 @@ public sealed class AntRenderer
                 var label = _labels[labelsUsed++];
                 label.Visible = true;
                 label.Text = hero ? (camPos.DistanceTo(o) < 70 ? $"{st.Name}  {a.Level}" : $"{a.Level}") : $"Lv {a.Level}";
-                label.Modulate = hero ? (a.Team == Config.Player ? new Color(1f, 0.85f, 0.4f) : new Color(1f, 0.4f, 0.3f))
+                label.Modulate = hero ? (a.Team == Local.Me ? new Color(1f, 0.85f, 0.4f) : new Color(1f, 0.4f, 0.3f))
                     : a.Level >= 4 ? new Color(1f, 0.45f, 0.35f) : a.Level >= 2 ? new Color(1f, 0.8f, 0.45f) : new Color(0.85f, 0.9f, 0.7f);
                 float dist = camPos.DistanceTo(o);
                 label.PixelSize = (hero ? 0.0045f : 0.008f) + dist * (hero ? 0.00005f : 0.0001f);
@@ -257,7 +261,7 @@ public sealed class AntRenderer
         foreach (var f in sim.W.Food)
         {
             if (f.Kind != FoodKind.Corpse || !f.Alive) continue;
-            if (!VisibleToPlayer(f.Pos) && f.Team != Config.Player) continue;
+            if (!VisibleToPlayer(f.Pos) && f.Team != Local.Me) continue;
             var st = Config.Of(f.AntType);
             var n = hf.Normal(f.Pos.X, f.Pos.Y);
             float s = st.Size * Mathf.Lerp(0.55f, 1f, f.Amount / f.Max);
@@ -269,9 +273,9 @@ public sealed class AntRenderer
         foreach (var z in sim.Webs)
         {
             if (!VisibleToPlayer(z.Pos)) continue;
-            float alpha = Mathf.Clamp(z.Life / 1.2f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 5f + 0.2f, 0, 1);
+            float fade = Mathf.Clamp(z.Life / 1.2f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 5f + 0.2f, 0, 1);
             var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
-            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(alpha, 0, 0, 0));
+            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(fade, 0, 0, 0));
         }
         foreach (var (from, to, t) in sim.WebShots())
         {

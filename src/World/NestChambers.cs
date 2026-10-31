@@ -130,6 +130,6 @@ public sealed class NestChambers
     {
         if (fog == null) return;
         foreach (var (team, node, pos) in All)
-            node.Visible = team == Config.Player || fog.Explored(pos);
+            node.Visible = team == Local.Me || fog.Explored(pos);
     }
 }

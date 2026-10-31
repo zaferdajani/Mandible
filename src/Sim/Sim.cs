@@ -29,6 +29,8 @@ public struct Ant
     public float AbilityCd;  // special attack cooldown
     public int Forge;        // mandible-forge tier this warrior hatched with
     public float SpeedMul;
+    public Vector2 PrevPos;           // state at the previous tick, for smooth rendering between ticks
+    public float PrevHeading, PrevAlt;
     public int HeroTier;              // queen tier a hero hatched under
     public float BuffT, BuffMul;      // war cry
     public float PoisonT, PoisonDps;  // acid
@@ -111,6 +113,7 @@ public sealed class Sim
     public readonly List<SimEvent> Events = new();
     public readonly Rng Rng = new(1234);
     public float Time;
+    public int Ticks;
     int _serial;
     public int Winner = -1;
 
@@ -122,11 +125,11 @@ public sealed class Sim
             c.Food = Config.StartFood;
             var nest = W.Nests[c.Team].Pos;
             var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
-            c.QueenId = Spawn(c.Team, AntType.Queen, nest + toCenter * 3.4f, toCenter.Angle());
-            for (int i = 0; i < 18; i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, Mathf.Tau));
+            c.QueenId = Spawn(c.Team, AntType.Queen, nest + toCenter * 3.4f, toCenter.AngleD());
+            for (int i = 0; i < 18; i++) Spawn(c.Team, AntType.Worker, nest + Rng.InDisk(6), Rng.R(0, DMath.Tau));
             for (int i = 0; i < 6; i++)
             {
-                int id = Spawn(c.Team, AntType.Soldier, nest + toCenter * 8 + Rng.InDisk(4), toCenter.Angle());
+                int id = Spawn(c.Team, AntType.Soldier, nest + toCenter * 8 + Rng.InDisk(4), toCenter.AngleD());
                 Ants[id].State = AntState.Idle;
             }
         }
@@ -134,8 +137,8 @@ public sealed class Sim
             for (int i = 0; i < camp.Bugs.Length; i++)
             {
                 var (type, level) = camp.Bugs[i];
-                var off = camp.Bugs.Length == 1 ? Vector2.Zero : MathX.Dir(camp.Facing + i * Mathf.Tau / camp.Bugs.Length) * 3.5f;
-                int id = Spawn(Config.Wild, type, camp.Pos + off, camp.Facing + Mathf.Pi, level);
+                var off = camp.Bugs.Length == 1 ? Vector2.Zero : MathX.Dir(camp.Facing + i * DMath.Tau / camp.Bugs.Length) * 3.5f;
+                int id = Spawn(Config.Wild, type, camp.Pos + off, camp.Facing + DMath.Pi, level);
                 Ants[id].State = AntState.Idle;
             }
     }
@@ -268,6 +271,7 @@ public sealed class Sim
         };
         ApplyLevel(ref Ants[id]);
         Ants[id].Hp = Ants[id].MaxHp;
+        Ants[id].PrevPos = p; Ants[id].PrevHeading = heading; Ants[id].PrevAlt = Ants[id].Alt;
         if (team < 2) Col[team].Count[(int)type]++;
         else WildCount++;
         return id;
@@ -340,18 +344,54 @@ public sealed class Sim
 
     public QueueResult Enqueue(int team, ProdKind kind)
     {
+        var r = CanEnqueue(team, kind);
+        if (r != QueueResult.Ok) return r;
+        var c = Col[team];
+        float cost = Config.ProdCost(kind);
+        c.Food -= cost;
+        c.Spent += cost;
+        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind) });
+        return QueueResult.Ok;
+    }
+
+    /// The same checks as Enqueue without changing anything (multiplayer predicts results before sending).
+    public QueueResult CanEnqueue(int team, ProdKind kind)
+    {
         var c = Col[team];
         if (!c.Alive) return QueueResult.Dead;
         if (!Config.Unlocked(kind, c.Tier)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
         if (kind == ProdKind.Chamber && c.PopCap + (c.PendingChambers() + 1) * Config.ChamberPop > Config.MaxPopCap) return QueueResult.MaxChambers;
-        float cost = Config.ProdCost(kind);
-        if (c.Food < cost) return QueueResult.NoFood;
-        c.Food -= cost;
-        c.Spent += cost;
-        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind) });
+        if (c.Food < Config.ProdCost(kind)) return QueueResult.NoFood;
         return QueueResult.Ok;
+    }
+
+    /// Food piles shrink as they are eaten; their collision shrinks with them, on the tick (never per frame).
+    public static float FoodScale(FoodSource f) => Mathf.Lerp(0.35f, 1f, Mathf.Sqrt(Mathf.Max(0, f.Amount) / f.Max));
+
+    static void ShrinkBlock(FoodSource f)
+    {
+        if (f.Block == null) return;
+        f.Block.R = f.Alive ? f.Block.BaseR * FoodScale(f) : 0;
+    }
+
+    /// Hash of the whole simulation state; peers compare it to detect a desync.
+    public uint Checksum()
+    {
+        uint h = 2166136261u;
+        void Mix(uint v) { h = (h ^ v) * 16777619u; }
+        uint F(float v) => System.BitConverter.SingleToUInt32Bits(v);
+        Mix((uint)Ticks);
+        for (int i = 0; i < High; i++)
+        {
+            ref var a = ref Ants[i];
+            if (!a.Alive) continue;
+            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level);
+        }
+        foreach (var c in Col) { Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); }
+        Mix((uint)W.Food.Count);
+        return h;
     }
 
     public void CancelLast(int team)
@@ -374,6 +414,12 @@ public sealed class Sim
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) Hash.Insert(i, Ants[i].Pos);
 
+        for (int i = 0; i < High; i++)
+        {
+            ref var p = ref Ants[i];
+            p.PrevPos = p.Pos; p.PrevHeading = p.Heading; p.PrevAlt = p.Alt;
+        }
+        Ticks++;
         foreach (var c in Col) { TickColony(c, dt); TickResearch(c, dt); }
         TickShowers();
         TickWebs(dt);
@@ -408,7 +454,7 @@ public sealed class Sim
         else
         {
             var type = Config.UnitOf(item.Kind);
-            int id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f), Rng.R(0, Mathf.Tau));
+            int id = Spawn(c.Team, type, nest + Rng.InDisk(1.2f), Rng.R(0, DMath.Tau));
             if (id >= 0)
             {
                 c.Produced++;
@@ -669,7 +715,7 @@ public sealed class Sim
         float reach = st.Reach + t.Size * 0.38f + a.Size * 0.3f;
         var to = t.Pos - a.Pos;
         if (to.Length() > reach) return to;
-        a.Heading += MathX.AngleDiff(a.Heading, to.Angle()) * 0.3f;
+        a.Heading += MathX.AngleDiff(a.Heading, to.AngleD()) * 0.3f;
         TryBite(i, a.Target, st);
         return Vector2.Zero;
     }
@@ -954,7 +1000,7 @@ public sealed class Sim
         }
         W.Food.Add(new FoodSource
         {
-            Id = -1, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = st.CorpseFood, Max = st.CorpseFood, Radius = t.Size * 0.45f,
+            Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = st.CorpseFood, Max = st.CorpseFood, Radius = t.Size * 0.45f,
             Team = t.Team, AntType = t.Type, Heading = t.Heading,
         });
         Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type });
@@ -996,13 +1042,13 @@ public sealed class Sim
                 c.Food += gain;
                 c.Gathered += gain;
                 Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = nest, Team = a.Team });
-                a.Heading += Mathf.Pi;
+                a.Heading += DMath.Pi;
                 if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
                 else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
                 return Vector2.Zero;
             }
             // path integration home with a little meander
-            return to.Normalized() + MathX.Dir(a.Heading + Mathf.Sin(Time * 3 + i) * 0.4f) * 0.25f;
+            return to.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
         }
 
         if (a.State == AntState.Gather && (a.FoodTarget == null || !a.FoodTarget.Alive))
@@ -1032,6 +1078,7 @@ public sealed class Sim
             if (to.Length() < f.Radius + 0.7f)
             {
                 f.Amount -= 1;
+                ShrinkBlock(f);
                 a.Carrying = true;
                 a.CarryKind = f.Kind;
                 a.State = AntState.Return;
@@ -1059,7 +1106,7 @@ public sealed class Sim
             h += SensorAngles[bi] * Mathf.Min(1, dt * 10);
             // trails point both ways: prefer the direction that leads away from home
             var away = (a.Pos - nest).Normalized();
-            if (MathX.Dir(h).Dot(away) < -0.3f && a.Pos.DistanceTo(nest) > 12) h += MathX.AngleDiff(h, away.Angle()) * dt * 1.5f;
+            if (MathX.Dir(h).Dot(away) < -0.3f && a.Pos.DistanceTo(nest) > 12) h += MathX.AngleDiff(h, away.AngleD()) * dt * 1.5f;
         }
         var dir = MathX.Dir(h);
         float far = a.Pos.DistanceTo(nest);
@@ -1076,7 +1123,7 @@ public sealed class Sim
         bool fly = Config.Flies(a.Type);
         if (desired.LengthSquared() > 1e-6f)
         {
-            float want = desired.Angle();
+            float want = desired.AngleD();
             var dest = a.Pos + desired; // when desired is a full vector this is the destination
             // look-ahead obstacle steering: slide along the rim of rocks (flyers pass over)
             var ahead = a.Pos + MathX.Dir(want) * (2.2f + radius);
@@ -1089,7 +1136,7 @@ public sealed class Sim
                     var n = (a.Pos - o.P).Normalized();
                     var tangent = new Vector2(-n.Y, n.X);
                     if (tangent.Dot(MathX.Dir(want)) < 0) tangent = -tangent;
-                    want = (tangent * 1.0f + n * 0.25f).Angle();
+                    want = (tangent * 1.0f + n * 0.25f).AngleD();
                     break;
                 }
             }

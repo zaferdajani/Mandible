@@ -19,8 +19,47 @@ public partial class PlayerInput : Node
     Sim Sim => Game.Sim;
     RtsCamera Cam => Game.Camera;
 
+    // touch: finger index -> screen position
+    readonly System.Collections.Generic.Dictionary<int, Vector2> _touches = new();
+    ulong _pressMs;
+
+    /// Two fingers pan, pinch to zoom and twist to rotate. Returns true when the event was a multi-touch gesture.
+    bool Touch(InputEvent e)
+    {
+        if (e is InputEventScreenTouch st)
+        {
+            if (st.Pressed) _touches[st.Index] = st.Position;
+            else _touches.Remove(st.Index);
+            if (_touches.Count >= 2)
+            {
+                // a second finger turns the gesture into camera control: cancel any box in progress
+                _leftDown = false;
+                Game.Hud.Box.Active = false;
+                Game.Hud.Box.QueueRedraw();
+            }
+            return _touches.Count >= 2;
+        }
+        if (e is InputEventScreenDrag sd && _touches.ContainsKey(sd.Index))
+        {
+            if (_touches.Count < 2) { _touches[sd.Index] = sd.Position; return false; }
+            var keys = new System.Collections.Generic.List<int>(_touches.Keys);
+            keys.Sort();
+            var a0 = _touches[keys[0]]; var b0 = _touches[keys[1]];
+            _touches[sd.Index] = sd.Position;
+            var a1 = _touches[keys[0]]; var b1 = _touches[keys[1]];
+            Cam.TouchPan(((a1 + b1) - (a0 + b0)) * 0.5f);
+            float d0 = a0.DistanceTo(b0), d1 = a1.DistanceTo(b1);
+            if (d0 > 10 && d1 > 10) Cam.TargetDistance = Mathf.Clamp(Cam.TargetDistance * d0 / d1, RtsCamera.MinDist, RtsCamera.MaxDist);
+            Cam.SetYaw(Cam.Yaw - Mathf.AngleDifference((b0 - a0).Angle(), (b1 - a1).Angle()), true);
+            return true;
+        }
+        return false;
+    }
+
     public override void _UnhandledInput(InputEvent e)
     {
+        if (Game.Hud != null && !Game.Hud.Blocking && Touch(e)) return;
+        if (_touches.Count >= 2 && e is InputEventMouse) return; // ignore the emulated mouse while gesturing
         if (Game.Hud == null || Game.Hud.Blocking)
         {
             if (e is InputEventKey k0 && k0.Pressed && !k0.Echo && k0.Keycode == Key.Escape) Game.Hud?.TogglePause();
@@ -59,7 +98,13 @@ public partial class PlayerInput : Node
                 }
                 _leftDown = true;
                 _dragStart = mb.Position;
-                if (mb.DoubleClick) SelectSameType(mb.Position);
+                _pressMs = Time.GetTicksMsec();
+                if (mb.DoubleClick)
+                {
+                    // on touch, double-tapping empty ground clears the selection
+                    if (mb.Device == InputEvent.DeviceIdEmulation && Pick(mb.Position, true) < 0) { SetSelection(new List<int>()); _leftDown = false; }
+                    else SelectSameType(mb.Position);
+                }
             }
             else if (_leftDown)
             {
@@ -71,7 +116,18 @@ public partial class PlayerInput : Node
                     box.QueueRedraw();
                     BoxSelect(box.Rect.Abs(), mb.ShiftPressed);
                 }
-                else if (!mb.DoubleClick) ClickSelect(mb.Position, mb.ShiftPressed, mb.CtrlPressed);
+                else if (!mb.DoubleClick)
+                {
+                    bool touch = mb.Device == InputEvent.DeviceIdEmulation;
+                    bool hasOrders = Selection.Count > 0 || NestSelected;
+                    if (touch && hasOrders && Pick(mb.Position, true) < 0 && Cam.ScreenToGround(mb.Position, out var tg))
+                    {
+                        // a finger has no right button: tap = smart order, long press = attack-move
+                        bool longPress = Time.GetTicksMsec() - _pressMs > 450;
+                        Issue(new Vector2(tg.X, tg.Z), mb.Position, longPress, true);
+                    }
+                    else ClickSelect(mb.Position, mb.ShiftPressed, mb.CtrlPressed);
+                }
             }
         }
         else if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
@@ -161,7 +217,7 @@ public partial class PlayerInput : Node
     public void Prune()
     {
         for (int i = Selection.Count - 1; i >= 0; i--)
-            if (!Sim.Ants[Selection[i]].Alive || Sim.Ants[Selection[i]].Team != Config.Player) { Sim.Ants[Selection[i]].Selected = false; Selection.RemoveAt(i); }
+            if (!Sim.Ants[Selection[i]].Alive || Sim.Ants[Selection[i]].Team != Local.Me) { Sim.Ants[Selection[i]].Selected = false; Selection.RemoveAt(i); }
     }
 
     bool OnScreen(int id, out Vector2 sp)
@@ -181,7 +237,7 @@ public partial class PlayerInput : Node
         for (int i = 0; i < Sim.High; i++)
         {
             ref var a = ref Sim.Ants[i];
-            if (!a.Alive || (a.Team == Config.Player) != own) continue;
+            if (!a.Alive || (a.Team == Local.Me) != own) continue;
             if (!own && Game.Fog != null && !Game.Fog.Visible(a.Pos)) continue;
             if (!OnScreen(i, out var sp)) continue;
             float scale = Mathf.Clamp(60f / Cam.Distance, 0.6f, 3f) * Config.Of(a.Type).Size;
@@ -203,7 +259,7 @@ public partial class PlayerInput : Node
             return;
         }
         // nest click?
-        if (Cam.ScreenToGround(screen, out var g) && new Vector2(g.X, g.Z).DistanceTo(Game.World.Nests[Config.Player].Pos) < 7)
+        if (Cam.ScreenToGround(screen, out var g) && new Vector2(g.X, g.Z).DistanceTo(Game.World.Nests[Local.Me].Pos) < 7)
         {
             SelectNest(false);
             return;
@@ -221,7 +277,7 @@ public partial class PlayerInput : Node
         for (int i = 0; i < Sim.High; i++)
         {
             ref var a = ref Sim.Ants[i];
-            if (!a.Alive || a.Team != Config.Player || a.Type == AntType.Queen) continue;
+            if (!a.Alive || a.Team != Local.Me || a.Type == AntType.Queen) continue;
             if (!OnScreen(i, out var sp) || !r.HasPoint(sp)) continue;
             (a.Type == AntType.Worker ? workers : fighters).Add(i);
         }
@@ -239,7 +295,7 @@ public partial class PlayerInput : Node
         for (int i = 0; i < Sim.High; i++)
         {
             ref var a = ref Sim.Ants[i];
-            if (!a.Alive || a.Team != Config.Player || a.Type != type) continue;
+            if (!a.Alive || a.Team != Local.Me || a.Type != type) continue;
             if (OnScreen(i, out var sp) && vp.HasPoint(sp)) ids.Add(i);
         }
         SetSelection(ids);
@@ -249,7 +305,7 @@ public partial class PlayerInput : Node
     {
         var ids = new List<int>();
         for (int i = 0; i < Sim.High; i++)
-            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Config.Player && Config.IsWarrior(Sim.Ants[i].Type)) ids.Add(i);
+            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Local.Me && Config.IsWarrior(Sim.Ants[i].Type)) ids.Add(i);
         SetSelection(ids);
     }
 
@@ -257,7 +313,7 @@ public partial class PlayerInput : Node
     {
         var ids = new List<int>();
         for (int i = 0; i < Sim.High; i++)
-            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Config.Player && Sim.Ants[i].Type == AntType.Worker) ids.Add(i);
+            if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Local.Me && Sim.Ants[i].Type == AntType.Worker) ids.Add(i);
         SetSelection(ids);
     }
 
@@ -266,7 +322,7 @@ public partial class PlayerInput : Node
         SetSelection(new List<int>());
         NestSelected = true;
         Game.Audio.Ui("ui_click", -4);
-        if (jump) Cam.PanTo(Game.World.Nests[Config.Player].Pos);
+        if (jump) Cam.PanTo(Game.World.Nests[Local.Me].Pos);
     }
 
     // ------------------------------------------------------------- commands
@@ -290,7 +346,7 @@ public partial class PlayerInput : Node
     {
         Prune();
         if (Selection.Count == 0) return;
-        Sim.CmdStop(Selection, hold);
+        Game.Issue(Cmd.Units(hold ? CmdKind.Hold : CmdKind.Stop, Local.Me, Selection, Sim));
     }
 
     public void CommandAt(Vector2 world, bool attack) => Issue(world, null, attack);
@@ -300,9 +356,8 @@ public partial class PlayerInput : Node
         Prune();
         if (NestSelected && Selection.Count == 0)
         {
-            var c = Sim.Col[Config.Player];
-            c.Rally = world;
-            c.HasRally = true;
+            var c = Sim.Col[Local.Me];
+            Game.Issue(new Cmd { Kind = CmdKind.Rally, Team = (byte)Local.Me, P = world });
             Game.Effects.Marker(Game.World.HF.Point(world), new Color(1, 0.8f, 0.3f));
             Game.Hud.Alert("Rally point set", UiTheme.Dim);
             Game.Audio.Ui("ui_click");
@@ -313,7 +368,9 @@ public partial class PlayerInput : Node
         int enemy = screen.HasValue ? Pick(screen.Value, false, 26) : -1;
         if (enemy >= 0)
         {
-            Sim.CmdAttack(Selection, enemy);
+            var ac = Cmd.Units(CmdKind.Attack, Local.Me, Selection, Sim);
+            ac.Target = enemy; ac.TargetSerial = Sim.Ants[enemy].Serial;
+            Game.Issue(ac);
             Game.Effects.Marker(Game.World.HF.Point(Sim.Ants[enemy].Pos), new Color(1, 0.3f, 0.2f));
             Game.Audio.Ui("ui_click");
             return;
@@ -330,13 +387,17 @@ public partial class PlayerInput : Node
             }
             if (food != null && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
             {
-                Sim.CmdGather(Selection, food);
+                var gc = Cmd.Units(CmdKind.Gather, Local.Me, Selection, Sim);
+                gc.FoodId = food.Id;
+                Game.Issue(gc);
                 Game.Effects.Marker(Game.World.HF.Point(food.Pos), new Color(0.75f, 1f, 0.35f));
                 Game.Audio.Ui("ui_click");
                 return;
             }
         }
-        Sim.CmdMove(Selection, world, attack);
+        var mc = Cmd.Units(attack ? CmdKind.AttackMove : CmdKind.Move, Local.Me, Selection, Sim);
+        mc.P = world;
+        Game.Issue(mc);
         Game.Effects.Marker(Game.World.HF.Point(world), attack ? new Color(1, 0.35f, 0.2f) : new Color(0.5f, 1, 0.45f));
         Game.Audio.Ui("ui_click");
     }

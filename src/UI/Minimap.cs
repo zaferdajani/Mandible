@@ -63,7 +63,7 @@ public partial class Minimap : Control
         {
             ref var a = ref sim.Ants[i];
             if (!a.Alive) continue;
-            if (a.Team != Config.Player && fog != null && !fog.Visible(a.Pos)) continue;
+            if (a.Team != Local.Me && fog != null && !fog.Visible(a.Pos)) continue;
             int r = a.Type == AntType.Queen || a.Type == AntType.StagBeetle ? 3 : (a.Type == AntType.Major || Config.IsBug(a.Type) ? 2 : 1);
             Dot(a.Pos, r, Config.TeamUi(a.Team));
         }
@@ -106,7 +106,7 @@ public partial class Minimap : Control
         // nest markers
         foreach (var n in Game.World.Nests)
         {
-            if (n.Team != Config.Player && Game.Fog != null && !Game.Fog.Explored(n.Pos)) continue;
+            if (n.Team != Local.Me && Game.Fog != null && !Game.Fog.Explored(n.Pos)) continue;
             var p = n.Pos / Config.MapSize * Size;
             DrawArc(p, 7, 0, Mathf.Tau, 20, Config.TeamUi(n.Team), 2, true);
         }

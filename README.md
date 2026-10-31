@@ -29,6 +29,20 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | Space | Jump to the last alert |
 | Esc / F1 / F11 | Pause / field manual / fullscreen |
 
+## Multiplayer (LAN and internet, PC / Android / iOS)
+
+Main menu, then **Multiplayer**. One player hosts, the other joins. The host plays the black colony, the guest the red.
+
+- **Same Wi-Fi or LAN:** choose *Host on this network*. The game appears automatically in the other player's *Games on your network* list.
+- **Over the internet:** choose *Host over the internet*. Mandible asks the router to open UDP port 47010 (UPnP) and shows your internet address to send to your friend, who types it into *Join*. If the router refuses, forward UDP 47010 to the host PC manually.
+- Phones on mobile data usually cannot *host* (carrier NAT) but can join a PC host.
+
+The game uses deterministic lockstep: both machines run the identical simulation and only orders cross the network (a few hundred bytes a second), so it stays light on mobile data. Input delay adapts to the measured ping. Checksums are compared every second; a mismatch is reported in the HUD.
+
+Touch: tap to select, drag to box-select, tap the ground to order the selection, long-press for attack-move, double-tap empty ground to deselect, two fingers to pan / pinch-zoom / twist-rotate.
+
+Graphics: Main menu, then *Graphics* cycles High / Medium / Low. Phones and tablets start on Low.
+
 ## Layout
 
 | Path | What |
@@ -54,3 +68,10 @@ The command above runs a scripted screenshot tour plus an input self-test (box s
 ```
 
 The command above plays a full AI-vs-AI match without graphics and prints economy, army and frame-time stats every minute.
+
+```bash
+godot --headless --path . -- --nettest=host,600
+godot --headless --path . -- --nettest=join:127.0.0.1,600
+```
+
+The two commands above run a full networked AI-vs-AI match between two processes and report checksum matches and desyncs.

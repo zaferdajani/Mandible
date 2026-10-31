@@ -66,6 +66,16 @@ public static class UiTheme
         t.SetFontSize("font_size", "TooltipLabel", 15);
         t.SetStylebox("background", "ProgressBar", Box(new Color(0.05f, 0.04f, 0.03f, 0.9f), new Color(0.3f, 0.22f, 0.12f), 1, 3, 0));
         t.SetStylebox("fill", "ProgressBar", Box(Gold, Gold, 0, 3, 0));
+        var field = Box(new Color(0.03f, 0.025f, 0.02f, 0.95f), new Color(Bronze, 0.9f), 1, 4, 8);
+        var fieldFocus = Box(new Color(0.05f, 0.04f, 0.03f, 1f), Gold, 1, 4, 8);
+        t.SetStylebox("normal", "LineEdit", field);
+        t.SetStylebox("focus", "LineEdit", fieldFocus);
+        t.SetColor("font_color", "LineEdit", Ink);
+        t.SetColor("font_placeholder_color", "LineEdit", new Color(Dim, 0.6f));
+        t.SetColor("caret_color", "LineEdit", Gold);
+        t.SetStylebox("panel", "ItemList", field);
+        t.SetColor("font_color", "ItemList", Ink);
+        t.SetColor("font_selected_color", "ItemList", Gold);
         t.SetConstant("separation", "HBoxContainer", 8);
         t.SetConstant("separation", "VBoxContainer", 8);
         t.SetConstant("h_separation", "GridContainer", 6);
