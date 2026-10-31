@@ -14,7 +14,16 @@ public partial class Main : Node
 
     public override void _Ready()
     {
-        foreach (var a in OS.GetCmdlineUserArgs())
+        var args = new System.Collections.Generic.List<string>(OS.GetCmdlineUserArgs());
+        // phones cannot easily be given command-line arguments: a test harness can drop them in a file instead
+        if (FileAccess.FileExists("user://test_args.txt"))
+        {
+            using (var f = FileAccess.Open("user://test_args.txt", FileAccess.ModeFlags.Read))
+                foreach (var part in f.GetAsText().Split(new[] { ' ', '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)) args.Add(part);
+            DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://test_args.txt"));
+        }
+        if (args.Count > 0) GD.Print($"[args] {string.Join(" ", args)}");
+        foreach (var a in args)
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
             if (a.StartsWith("--layout=")) _layout = a.Substring(9);

@@ -182,9 +182,27 @@ public partial class Lockstep : Node, IOrders
         return ms.ToArray();
     }
 
+    // Test-only network weather: MANDIBLE_NETLAG=ms delays every outgoing packet by ms ± ms/2 of jitter
+    // (order is kept, as on a real reliable channel). Used to prove the lockstep copes with mobile links.
+    static readonly int LagMs = int.TryParse(System.Environment.GetEnvironmentVariable("MANDIBLE_NETLAG"), out var lag) ? lag : 0;
+    readonly Queue<(double at, byte[] data)> _outbox = new();
+    readonly Random _jitter = new(7);
+    double _lastOut;
+
     void Send(byte[] data)
     {
         if (_peer == null || _remote == 0 || State == Phase.Closed) return;
+        if (LagMs > 0)
+        {
+            _lastOut = Math.Max(_lastOut, _clock + (LagMs + (_jitter.NextDouble() - 0.5) * LagMs) / 1000.0);
+            _outbox.Enqueue((_lastOut, data));
+            return;
+        }
+        SendNow(data);
+    }
+
+    void SendNow(byte[] data)
+    {
         _peer.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
         _peer.SetTargetPeer((int)_remote);
         _peer.PutPacket(data);
@@ -194,6 +212,7 @@ public partial class Lockstep : Node, IOrders
     {
         _clock += delta;
         if (_peer == null || State is Phase.Idle or Phase.Closed) return;
+        while (_outbox.Count > 0 && _outbox.Peek().at <= _clock) SendNow(_outbox.Dequeue().data);
         _peer.Poll();
         while (_peer.GetAvailablePacketCount() > 0)
         {

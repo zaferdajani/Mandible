@@ -361,14 +361,16 @@ public static class Capture
         net.OnStart += () =>
         {
             GD.Print($"[nettest] start: this side leads team {net.Me} ({Local.ColonyName(net.Me)})");
-            app.StartMultiplayer(net, autoPlay: true, fastForward: shotDir != null ? 0 : 7);
+            bool lagged = System.Environment.GetEnvironmentVariable("MANDIBLE_NETLAG") != null; // real time, like real players
+            app.StartMultiplayer(net, autoPlay: true, fastForward: shotDir != null || lagged ? 0 : 7);
         };
         bool host = parts[0].StartsWith("host");
         if (host)
         {
             if (parts[0] == "host-red") net.HostTeam = 1; // the host leads the red fire ants
             if (parts[0] == "host-lanes") { net.Mode = GameMode.Lanes; net.MyHero = AntType.Matron; }
-            net.OnConnected += () => net.StartMatch();
+            // like a person in the lobby: a few seconds pass before Start, so the ping is known
+            net.OnConnected += () => app.GetTree().CreateTimer(3.0).Timeout += net.StartMatch;
             if (net.Host("HostBot", false) != Error.Ok) { GD.Print($"[nettest] host failed: {net.Status}"); app.GetTree().Quit(1); return; }
         }
         else
