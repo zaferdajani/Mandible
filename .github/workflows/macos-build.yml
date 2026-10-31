@@ -56,22 +56,40 @@ jobs:
           "$GODOT" --headless --path . --export-release "macOS" build/macos/Mandible-macOS.zip
           ls -la build/macos
 
-      - name: Smoke test - run the exported app on this Mac
+      - name: Ad-hoc sign every binary with Apple's own codesign
+        # Godot's built-in signer leaves the .NET runtime libraries in a state Apple Silicon kills on
+        # launch ("Killed: 9"); re-signing inside-out with the real codesign tool fixes it.
         run: |
           cd build/macos
           unzip -q Mandible-macOS.zip -d run
           app=$(find run -name "*.app" -maxdepth 2 | head -1)
-          codesign --verify --deep --verbose=2 "$app" || true
-          exe="$app/Contents/MacOS/$(ls "$app/Contents/MacOS/" | head -1)"
-          lipo -info "$exe" || true
-          ls -la "$app/Contents/MacOS" "$app/Contents/Resources" | head -40
-          find "$app" -name "*.dll" | head -5
+          cat > ent.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>com.apple.security.cs.allow-jit</key><true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+            <key>com.apple.security.cs.disable-library-validation</key><true/>
+          </dict></plist>
+          EOF
+          find "$app/Contents" \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force --sign - {} \;
+          codesign --force --sign - --entitlements ent.plist "$app/Contents/MacOS/"*
+          codesign --force --sign - --entitlements ent.plist "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          rm Mandible-macOS.zip
+          ditto -c -k --keepParent "$app" Mandible-macOS.zip
+          echo "APP=$PWD/$app" >> $GITHUB_ENV
+
+      - name: Smoke test - run the exported app on this Mac
+        run: |
+          exe="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS/" | head -1)"
+          lipo -info "$exe"
           set +e
-          "$exe" --headless --verbose -- --simtest=90,Normal,Normal > smoke.log 2>&1
+          "$exe" --headless -- --simtest=90,Normal,Normal > smoke.log 2>&1
           code=$?
           set -e
           echo "exit code $code"
-          tail -n 60 smoke.log
+          tail -n 12 smoke.log
           grep -q "\[simtest\] finished" smoke.log
 
       - name: Upload macOS app
