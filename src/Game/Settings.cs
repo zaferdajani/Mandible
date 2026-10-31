@@ -8,6 +8,7 @@ public static class Settings
     public enum Quality { Low, Medium, High }
     public static Quality Gfx = Default();
     public static bool Mobile => OS.HasFeature("mobile");
+    public static bool Portrait; // the screen is taller than wide (a phone held upright)
     public static bool Touch => Mobile || DisplayServer.IsTouchscreenAvailable();
     const string Path = "user://settings.cfg";
 

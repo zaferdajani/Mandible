@@ -17,12 +17,18 @@ public partial class Main : Node
         foreach (var a in OS.GetCmdlineUserArgs())
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
+            if (a.StartsWith("--layout=")) _layout = a.Substring(9);
             if (a.StartsWith("--simtest="))
             {
                 var parts = a.Substring(10).Split(',');
                 var da = parts.Length > 1 ? System.Enum.Parse<Difficulty>(parts[1]) : Difficulty.Normal;
                 var db = parts.Length > 2 ? System.Enum.Parse<Difficulty>(parts[2]) : Difficulty.Normal;
                 Capture.SimTest(this, float.Parse(parts[0]), da, db, parts.Length > 3 ? uint.Parse(parts[3]) : 20261031);
+                return;
+            }
+            if (a.StartsWith("--synctest="))
+            {
+                Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
                 return;
             }
             if (a.StartsWith("--lanetest="))
@@ -44,10 +50,25 @@ public partial class Main : Node
         }
         Settings.Load();
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
+        GetTree().Root.SizeChanged += ApplyOrientation;
+        ApplyOrientation();
         Audio = new AudioDirector();
         AddChild(Audio);
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
+        if (_layout != null) _ = Capture.Layout(this, _layout);
+    }
+
+    string _layout;
+
+    /// The device was rotated (or the window resized): in portrait the UI is laid out on a narrower
+    /// canvas so it stays a usable size, and the HUD moves the selection panel to the top.
+    void ApplyOrientation()
+    {
+        var size = GetTree().Root.Size;
+        bool portrait = size.Y > size.X;
+        Settings.Portrait = portrait;
+        GetTree().Root.ContentScaleSize = portrait ? new Vector2I(1440, 810) : new Vector2I(1920, 1080);
     }
 
     void Swap(GameSession s)

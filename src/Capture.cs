@@ -417,6 +417,55 @@ public static class Capture
     }
 
     /// Headless AI-vs-AI match:  --headless -- --simtest=<seconds>
+    /// Cross-platform determinism probe: plays a fixed Colony War and a fixed Lane War match with AIs on
+    /// both sides and prints the full simulation checksum every 30 s. Run on two platforms and compare:
+    /// identical trails mean the two machines would stay in lockstep together.
+    public static void SyncTest(Main app, float seconds)
+    {
+        foreach (var mode in new[] { GameMode.Colony, GameMode.Lanes })
+        {
+            var root = new Node3D();
+            app.AddChild(root);
+            var world = WorldBuilder.Build(root, 20261031);
+            var sim = new Sim(world, mode, AntType.Warlord, AntType.Marshal);
+            var ais = mode == GameMode.Colony
+                ? new IColonyAI[] { new AIController(sim, 0, Difficulty.Hard), new AIController(sim, 1, Difficulty.Normal) }
+                : new IColonyAI[] { new LaneAI(sim, 0, Difficulty.Hard), new LaneAI(sim, 1, Difficulty.Normal) };
+            const float dt = 1f / 30f;
+            int nextReport = 30 * 30;
+            while (sim.Ticks < seconds * 30)
+            {
+                sim.Tick(dt);
+                foreach (var ai in ais) ai.Tick(dt);
+                if (sim.Ticks >= nextReport) { nextReport += 30 * 30; GD.Print($"[synctest] {mode} t={sim.Ticks / 30} sum={sim.Checksum():X8} ants={sim.High}"); }
+            }
+            GD.Print($"[synctest] {mode} final sum={sim.Checksum():X8} winner={sim.Winner}");
+            root.QueueFree();
+        }
+        GD.Print($"[synctest] done on {OS.GetName()} {Engine.GetArchitectureName()} (.NET {System.Environment.Version})");
+        app.GetTree().Quit();
+    }
+
+    /// Quick layout check at whatever window size the game was launched with: menu, colony battle, lane battle.
+    public static async Task Layout(Main app, string dir)
+    {
+        _app = app;
+        _dir = dir;
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        await Wait(5);
+        await Shot("layout_menu");
+        app.StartBattle(Difficulty.Normal);
+        await Wait(3);
+        app.Session.Input.SelectArmy();
+        await Wait(1);
+        await Shot("layout_colony");
+        app.StartLanes(Difficulty.Normal, 1, AntType.Matron);
+        await Wait(4);
+        await Shot("layout_lanes");
+        GD.Print($"[layout] window {DisplayServer.WindowGetSize()} portrait={Settings.Portrait} canvas {app.GetViewport().GetVisibleRect().Size}");
+        app.GetTree().Quit();
+    }
+
     /// Headless Lane War: two lane AIs with different heroes play out a match; prints the state each minute.
     public static void LaneTest(Main app, float seconds, Difficulty a, Difficulty b, uint seed, AntType h0, AntType h1)
     {

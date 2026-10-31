@@ -158,9 +158,23 @@ public partial class Hud : CanvasLayer
         _root.AddChild(frame);
     }
 
+    PanelContainer _selPanel;
+    bool _portraitLayout;
+
+    /// Upright phones: the selection panel moves to the top so it never collides with the command panels.
+    void ApplyLayout()
+    {
+        if (_selPanel == null || _portraitLayout == Settings.Portrait) return;
+        _portraitLayout = Settings.Portrait;
+        if (_portraitLayout) UiTheme.Place(_selPanel, 0.5f, 0, 0.5f, 0, -330, 140, 300, 286);
+        else UiTheme.Place(_selPanel, 0.5f, 1, 0.5f, 1, -330, -176, 300, -30);
+        _hint.Visible = !_portraitLayout; // no room for the key hints on an upright phone
+    }
+
     void BuildSelection()
     {
         var p = new PanelContainer();
+        _selPanel = p;
         UiTheme.Place(p, 0.5f, 1, 0.5f, 1, -330, -176, 300, -30);
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 6);
@@ -468,6 +482,7 @@ public partial class Hud : CanvasLayer
             _waiting.Text = Game.NetStall > 0.4f && net.State == Lockstep.Phase.InGame ? $"Waiting for {net.PeerName}..." : "";
             if (net.Desyncs > 0 && !_desyncWarned) { _desyncWarned = true; Alert("Warning: the two games have drifted out of sync", new Color(1, 0.4f, 0.3f)); }
         }
+        ApplyLayout();
         var c = sim.Col[Local.Me];
         _food.Text = ((int)c.Food).ToString();
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";

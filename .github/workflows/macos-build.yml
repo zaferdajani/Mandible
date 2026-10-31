@@ -92,6 +92,17 @@ jobs:
           tail -n 12 smoke.log
           grep -q "\[simtest\] finished" smoke.log
 
+      - name: Cross-platform sync test (compare with the Windows trail)
+        run: |
+          exe="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS/" | head -1)"
+          "$exe" --headless -- --synctest=600 2>&1 | grep "\[synctest\]" | tee synctest-macos.txt
+
+      - name: Upload sync trail
+        uses: actions/upload-artifact@v4
+        with:
+          name: synctest-macos
+          path: synctest-macos.txt
+
       - name: Upload macOS app
         uses: actions/upload-artifact@v4
         with:
