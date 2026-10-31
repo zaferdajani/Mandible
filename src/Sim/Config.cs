@@ -95,10 +95,10 @@ public static class Config
         new() { Name = "Soldier", Hp = 72, Damage = 6.5f, Cooldown = 0.6f, Speed = 7.6f, Reach = 1.25f, Aggro = 13, Sight = 13, Size = 1.45f, Cost = 35, BuildTime = 3f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Major", Hp = 270, Damage = 19f, Cooldown = 0.9f, Speed = 5.2f, Reach = 1.8f, Aggro = 13, Sight = 14, Size = 2.15f, Cost = 100, BuildTime = 6.5f, CorpseFood = 18, Pop = 3 },
         new() { Name = "Queen", Hp = 3200, Damage = 30f, Cooldown = 0.7f, Speed = 0f, Reach = 3.2f, Aggro = 7, Sight = 30, Size = 3.4f, Cost = 0, BuildTime = 0, CorpseFood = 80, Pop = 0 },
-        new() { Name = "Ground Beetle", Hp = 200, Damage = 10f, Cooldown = 1.0f, Speed = 4.2f, Reach = 1.5f, Aggro = 9, Sight = 10, Size = 2.4f, Cost = 0, BuildTime = 0, CorpseFood = 40, Pop = 0 },
-        new() { Name = "Wolf Spider", Hp = 150, Damage = 15f, Cooldown = 0.75f, Speed = 9f, Reach = 1.8f, Aggro = 12, Sight = 12, Size = 3.1f, Cost = 0, BuildTime = 0, CorpseFood = 35, Pop = 0 },
-        new() { Name = "Stag Beetle", Hp = 650, Damage = 26f, Cooldown = 1.1f, Speed = 3.6f, Reach = 2.6f, Aggro = 11, Sight = 12, Size = 4.0f, Cost = 0, BuildTime = 0, CorpseFood = 160, Pop = 0 },
-        new() { Name = "Hunting Wasp", Hp = 170, Damage = 20f, Cooldown = 1.3f, Speed = 10f, Reach = 1.7f, Aggro = 14, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
+        new() { Name = "Ground Beetle", Hp = 330, Damage = 15f, Cooldown = 0.9f, Speed = 6.6f, Reach = 1.5f, Aggro = 12, Sight = 10, Size = 2.4f, Cost = 0, BuildTime = 0, CorpseFood = 40, Pop = 0 },
+        new() { Name = "Wolf Spider", Hp = 240, Damage = 21f, Cooldown = 0.7f, Speed = 11.5f, Reach = 1.8f, Aggro = 15, Sight = 12, Size = 3.1f, Cost = 0, BuildTime = 0, CorpseFood = 35, Pop = 0 },
+        new() { Name = "Stag Beetle", Hp = 1100, Damage = 36f, Cooldown = 1.0f, Speed = 5.6f, Reach = 2.6f, Aggro = 14, Sight = 12, Size = 4.0f, Cost = 0, BuildTime = 0, CorpseFood = 160, Pop = 0 },
+        new() { Name = "Hunting Wasp", Hp = 250, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
         new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Warlord", Hp = 900, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
@@ -224,7 +224,7 @@ public static class Config
 
     public const float BlackTrailMul = 1.35f;     // longer-lasting, stronger recruitment trails
     public const float BlackWorkerBrood = 1.4f;   // huge colonies: workers hatch 40% faster
-    public const float BlackWarriorHp = 0.93f;    // small-bodied, stingless
+    public const float BlackWarriorHp = 1.0f;    // small-bodied, stingless
     public const float BlackAcidMul = 1.3f;       // formic acid: gunners hit 30% harder
     public const float RedTrailMul = 0.85f;
     public const float RedVenomDps = 0.25f;       // venom: share of a bite dealt again per second for 3 s
@@ -244,7 +244,7 @@ public static class Config
         ? new[] { "Workers hatch 40% faster: the largest colonies in the yard", "Trail masters: 35% stronger pheromone trails recruit foragers faster", "Honeydew farmers: sugar, fruit and crumbs worth 20% more", "Formic acid: gunners spit 30% harder" }
         : new[] { "Venom sting: soldiers, majors and heroes poison what they bite", "Mound fury: warriors deal 15% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
     public static string[] RaceWeaknesses(Race r) => r == Race.BlackGarden
-        ? new[] { "Small and stingless: warriors have 7% less health", "Protein (corpses, seeds) gives no bonus" }
+        ? new[] { "Stingless: warriors have no venom, only their bite", "Protein (corpses, seeds) gives no bonus" }
         : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
 
     // ------------------------------------------------------------------ food

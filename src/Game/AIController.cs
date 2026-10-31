@@ -226,13 +226,15 @@ public sealed class AIController
         }
         int army = 0;
         foreach (int i in _tmp) army += Config.Of(_sim.Ants[i].Type).Pop;
-        if (army < _waveSize) return;
+        // the yard is dangerous now: if the full wave never comes together, go with what there is
+        bool overdue = _sim.Time > _nextWave + 150;
+        if (army < _waveSize && !(overdue && army >= _waveSize * 0.6f)) return;
         var target = _sim.W.Nests[1 - _team].Pos;
         // keep a small home guard
         int guard = _tmp.Count / 6;
         _tmp.RemoveRange(0, guard);
         Move(_tmp, target, true);
-        _waveSize = Mathf.Min(90, _waveSize + (_diff == Difficulty.Hard ? 10 : 7));
+        _waveSize = Mathf.Min(60, _waveSize + (_diff == Difficulty.Hard ? 6 : 4));
         _nextWave = _sim.Time + (_diff == Difficulty.Easy ? 110 : 75);
     }
 }

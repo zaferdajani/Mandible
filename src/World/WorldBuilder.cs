@@ -41,7 +41,7 @@ public static class WorldBuilder
         BuildGrass(w, deco);
         BuildNestDressing(w, deco);
         PlaceFood(w, rng);
-        PlaceCamps(w);
+        PlaceCamps(w, rng);
         w.IndexObstacles();
         BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);
@@ -589,7 +589,7 @@ public static class WorldBuilder
 
     /// Wild bug lairs beside the richest food. Rules depend only on distance to the nearest nest,
     /// and food comes in mirrored pairs, so both colonies face identical camps.
-    static void PlaceCamps(World w)
+    static void PlaceCamps(World w, Rng rng)
     {
         void Add(Vector2 food, float radius, params (AntType, int)[] bugs)
         {
@@ -614,7 +614,37 @@ public static class WorldBuilder
             else if (f.Kind == FoodKind.Crumb && d > 110) Add(f.Pos, f.Radius, (AntType.Spider, 2));
             else if (f.Kind == FoodKind.Crumb && d > 80) Add(f.Pos, f.Radius, (AntType.Beetle, 1));
         }
+        ScatterCamps(w, rng);
         foreach (var c in w.Camps) if (w.Blocked(c.Pos, 1)) c.Pos += MathX.Dir(c.Facing) * 4;
+    }
+
+    /// Hunting grounds all over the yard, not just beside food: the farther from both nests, the
+    /// bigger and higher-level the pack. Placed in mirrored pairs so both colonies face the same threat.
+    static void ScatterCamps(World w, Rng rng)
+    {
+        const float step = 54f;
+        var lone = new[] { AntType.Beetle, AntType.Spider, AntType.Wasp };
+        for (float gx = 18; gx < S - 10; gx += step)
+            for (float gy = 18; gy < S - 10; gy += step)
+            {
+                var p = new Vector2(gx + rng.R(-11, 11), gy + rng.R(-11, 11));
+                if (p.X + p.Y > S - 12) continue; // one half only; the other half is its mirror
+                p = new Vector2(Mathf.Clamp(p.X, 12, S - 12), Mathf.Clamp(p.Y, 12, S - 12));
+                float d = Mathf.Min(p.DistanceTo(w.Nests[0].Pos), p.DistanceTo(w.Nests[1].Pos));
+                if (d < 60 || p.DistanceTo(Center) < 30 || w.Blocked(p, 2)) continue;
+                bool crowded = false;
+                foreach (var c in w.Camps) if (c.Pos.DistanceTo(p) < 22 || c.Pos.DistanceTo(Mirror(p)) < 22) { crowded = true; break; }
+                if (crowded) continue;
+                (AntType, int)[] bugs;
+                var a = lone[(int)rng.R(0, 2.999f)];
+                var b = lone[(int)rng.R(0, 2.999f)];
+                if (d < 95) bugs = new[] { (a, rng.F() < 0.5f ? 1 : 2) };
+                else if (d < 140) bugs = new[] { (a, 2), (b, 3) };
+                else bugs = new[] { (a, 3), (b, 3), (AntType.Beetle, 4) };
+                float face = rng.R(0, DMath.Tau);
+                w.Camps.Add(new Camp { Pos = p, Facing = face, Bugs = bugs });
+                w.Camps.Add(new Camp { Pos = Mirror(p), Facing = face + DMath.Pi, Bugs = bugs });
+            }
     }
 
     static readonly Dictionary<World, List<ArrayMesh>> _crumbCache = new();

@@ -13,7 +13,7 @@ public struct Ant
     public Vector2 Pos;
     public float Heading, Speed, Hp;
     public AntState State, Prev;
-    public Vector2 Goal, Anchor;
+    public Vector2 Goal, Anchor, Home; // Home: a wild bug's lair, the centre of its patrol
     public int Target, TargetSerial;
     public bool Forced;
     public FoodSource FoodTarget, Assigned;
@@ -159,6 +159,7 @@ public sealed class Sim
                 var off = camp.Bugs.Length == 1 ? Vector2.Zero : MathX.Dir(camp.Facing + i * DMath.Tau / camp.Bugs.Length) * 3.5f;
                 int id = Spawn(Config.Wild, type, camp.Pos + off, camp.Facing + DMath.Pi, level);
                 Ants[id].State = AntState.Idle;
+                Ants[id].Home = camp.Pos;
             }
     }
 
@@ -397,7 +398,7 @@ public sealed class Sim
         Ants[id] = new Ant
         {
             Alive = true, Serial = ++_serial, Team = team, Type = type, Pos = p, Heading = heading,
-            State = type == AntType.Worker ? AntState.Forage : AntState.Idle, Target = -1, Anchor = p, Think = Rng.F() * 0.3f,
+            State = type == AntType.Worker ? AntState.Forage : AntState.Idle, Target = -1, Anchor = p, Home = p, Think = Rng.F() * 0.3f,
             Gait = Rng.F(), Level = level, Xp = Config.XpFor(type, level), BuffMul = 1,
             HeroTier = team < 2 && Config.IsHero(type) ? Col[team].T(Upgrade.Queen) : 0,
             Forge = team < 2 && Config.IsWarrior(type) ? Col[team].T(Upgrade.Mandibles) : 0,
@@ -570,6 +571,8 @@ public sealed class Sim
         c.PopUsed = 0;
         for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop;
         c.QueenAlarm -= dt;
+        // the queen's own body reserves: a trickle that lets even a starved colony raise new workers
+        if (c.Alive && c.Count[(int)AntType.Worker] < 8) { c.Food += 0.6f * dt; }
         c.SugarT = Mathf.Max(0, c.SugarT - dt);
         c.JuiceT = Mathf.Max(0, c.JuiceT - dt);
         c.ProteinT = Mathf.Max(0, c.ProteinT - dt);
@@ -690,7 +693,12 @@ public sealed class Sim
                     if (!air && b.Alt > 2.2f) continue;
                     float d = p.DistanceSquaredTo(b.Pos);
                     // prefer fighters over workers, workers over the queen when at equal range
-                    if (b.Type == AntType.Worker) d *= 1.3f;
+                    if (b.Type == AntType.Worker)
+                    {
+                        // wild predators only snap at foragers that blunder close; they hunt soldiers on sight
+                        if (team == Config.Wild && d > 36f) continue;
+                        d *= 1.3f;
+                    }
                     if (d < bestD) { bestD = d; best = j; }
                 }
             }
@@ -815,8 +823,16 @@ public sealed class Sim
                 if (a.State == AntState.Hold && Valid(a.Target, a.TargetSerial)) TryBite(i, a.Target, st);
                 // drift back to anchor if shoved
                 if (a.State == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > 2.5f) { desired = a.Anchor - a.Pos; speedMul = 0.6f; }
-                // wild bugs lick their wounds at their lair
-                if (a.Team == Config.Wild && a.State == AntState.Idle) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.04f * dt);
+                // wild bugs lick their wounds at their lair, and prowl around it looking for prey
+                if (a.Team == Config.Wild && a.State == AntState.Idle)
+                {
+                    a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.04f * dt);
+                    if (think && a.Hp > a.MaxHp * 0.8f && Rng.F() < 0.035f)
+                    {
+                        a.Goal = a.Home + Rng.InDisk(9f);
+                        if (!W.Blocked(a.Goal, 0.5f)) a.State = AntState.AttackMove; // pounces on anything it meets
+                    }
+                }
                 break;
             case AntState.Engage:
                 desired = EngageLogic(i, ref a, st, think);
@@ -852,9 +868,9 @@ public sealed class Sim
         ref var t = ref Ants[a.Target];
         if (!Config.Flies(a.Type) && !Config.Ranged(a.Type) && t.Alt > 2.2f) { a.Target = -1; return Vector2.Zero; } // it flew out of reach
         // leash for idle defenders and wild bugs guarding their lair
-        if (!a.Forced && a.Prev == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > (a.Team == Config.Wild ? 20f : st.Aggro * 2.2f))
+        if (a.Team == Config.Wild ? a.Pos.DistanceTo(a.Home) > 30f : !a.Forced && a.Prev == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > st.Aggro * 2.2f)
         {
-            a.Goal = a.Anchor; a.State = AntState.Move;
+            a.Goal = a.Team == Config.Wild ? a.Home : a.Anchor; a.State = AntState.Move;
             return Vector2.Zero;
         }
         // switch to a closer threat now and then
