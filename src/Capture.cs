@@ -448,6 +448,66 @@ public static class Capture
         app.GetTree().Quit();
     }
 
+    /// Plays through the tutorial with real game actions, checking each step completes; also shoots the
+    /// map edge from the furthest zoom and the labelled chambers.
+    public static async Task TutorialTest(Main app, string dir)
+    {
+        _app = app;
+        _dir = dir;
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        await Wait(4);
+        app.StartTutorial();
+        await Wait(3);
+        var s = app.Session;
+        var tut = s.Tutor;
+        await Shot("tut_01_start");
+        var nest = s.World.Nests[0].Pos;
+        async Task Expect(int step, string what)
+        {
+            await Wait(2.4f); // a finished step shows its tick for a moment before moving on
+            GD.Print($"[selftest] tutorial {what}: now on step {tut.StepIndex + 1} '{tut.StepTitle}'  {(tut.StepIndex >= step ? "PASS" : "FAIL")}");
+        }
+        s.Camera.JumpTo(nest + new Vector2(40, -40), 90);
+        await Expect(1, "camera moved");
+        s.Input.SelectArmy();
+        await Expect(2, "soldiers selected");
+        s.Input.CommandAt(nest + new Vector2(20, -20), false);
+        await Expect(3, "move ordered");
+        s.Input.SaveGroup(1);
+        s.Input.ClearSelection();
+        s.Input.RecallGroup(1);
+        await Wait(0.5f);
+        await Shot("tut_02_groups");
+        await Expect(4, "group saved and recalled");
+        s.ToggleTrails(); s.ToggleTrails();
+        await Expect(5, "trails toggled");
+        foreach (var f in s.World.Food) if (f.Alive && f.Kind == FoodKind.Seed) { s.Input.ClearSelection(); s.Input.InspectFood = f; break; }
+        await Expect(6, "food inspected");
+        s.TryEnqueue(ProdKind.Worker);
+        await Expect(7, "worker queued");
+        s.TryEnqueue(ProdKind.Soldier);
+        await Expect(8, "squad queued");
+        s.TryResearch(Upgrade.Queen);
+        await Expect(9, "queen research");
+        await Shot("tut_03_lair_step");
+        // let research finish and look at the labelled chambers by the nest
+        s.FastForward = 7;
+        await Wait(8);
+        s.FastForward = 0;
+        s.Camera.JumpTo(nest + new Vector2(4, -4), 40);
+        await Wait(2);
+        await Shot("tut_04_chambers");
+        // the yard's edge from the furthest zoom
+        s.Fog.RevealAll = true;
+        s.Camera.JumpTo(new Vector2(20, 300), RtsCamera.MaxDist);
+        await Wait(2.5f);
+        await Shot("tut_05_edge_zoomed_out");
+        s.Camera.JumpTo(new Vector2(160, 10), 120);
+        await Wait(2);
+        await Shot("tut_06_edge_side");
+        app.GetTree().Quit();
+    }
+
     /// Quick layout check at whatever window size the game was launched with: menu, colony battle, lane battle.
     public static async Task Layout(Main app, string dir)
     {

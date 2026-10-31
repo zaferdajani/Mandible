@@ -109,6 +109,14 @@ public sealed class NestChambers
             var mi = new MeshInstance3D { Mesh = item, MaterialOverride = mat, Transform = new Transform3D(b, new Vector3(q.X, gy(q) + 0.12f, q.Y)) };
             node.AddChild(mi);
         }
+        // a name over each chamber, so the holes around the mound explain themselves
+        node.AddChild(new Label3D
+        {
+            Text = u == Upgrade.Queen ? $"Royal Chamber · {Config.QueenTitles[System.Math.Min(5, tier)]}" : Config.ResearchName(u, tier), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            FontSize = 44, OutlineSize = 12, PixelSize = 0.022f, Modulate = new Color(1f, 0.86f, 0.55f, 0.92f),
+            OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
+            Position = new Vector3(p.X, gy(p) + 3.2f, p.Y),
+        });
         _built[(team, u, tier)] = node;
         All.Add((team, node, p));
         return p;

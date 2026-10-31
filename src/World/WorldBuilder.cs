@@ -35,6 +35,7 @@ public static class WorldBuilder
         var ao = ComputeAO(hf, rocks);
 
         BuildTerrainMesh(w, ao);
+        BuildSkirt(w);
         foreach (var l in leaves) BuildLeaf(w, l);
         foreach (var t in twigs) BuildTwig(w, t);
         foreach (var r in rocks) BuildRock(w, r);
@@ -450,6 +451,39 @@ public static class WorldBuilder
         return k.Commit();
     }
 
+    /// Ground height anywhere, including outside the yard: beyond the edge the bank keeps rising gently.
+    static float SkirtY(Heightfield hf, float x, float z)
+    {
+        float cx = Mathf.Clamp(x, 0, S), cz = Mathf.Clamp(z, 0, S);
+        float beyond = new Vector2(x - cx, z - cz).Length();
+        return hf.Sample(cx, cz) + Mathf.Min(7f, beyond * 0.05f);
+    }
+
+    /// The land around the yard: the same soil, rising gently, so zooming out never shows the world's edge.
+    /// (Its fog of war is the yard's edge stretched outward, so explored edges stay lit and unexplored ones dark.)
+    static void BuildSkirt(World w)
+    {
+        const float step = 8f, reach = 480f;
+        var hf = w.HF;
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        Vector3 V(float x, float z) => new(x, SkirtY(hf, x, z), z);
+        for (float x = -reach; x < S + reach; x += step)
+            for (float z = -reach; z < S + reach; z += step)
+            {
+                if (x >= 0 && z >= 0 && x + step <= S && z + step <= S) continue; // the yard itself has real terrain
+                var a = V(x, z); var b = V(x + step, z); var c = V(x + step, z + step); var d = V(x, z + step);
+                foreach (var v in new[] { a, b, c, a, c, d })
+                {
+                    float far = Mathf.Clamp((new Vector2(v.X, v.Z) - Center).Length() / 520f, 0, 1);
+                    st.SetColor(new Color(1f - 0.25f * far, 0, 0)); // r: shade, g/b: no sand or thatch
+                    st.AddVertex(v);
+                }
+            }
+        st.GenerateNormals();
+        w.Root.AddChild(new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = Mat(w, Shaders.Terrain), Name = "Skirt" }); // fog of war carries on seamlessly past the edge
+    }
+
     static void BuildGrass(World w, Rng rng)
     {
         var xf = new List<Transform3D>();
@@ -459,7 +493,7 @@ public static class WorldBuilder
         {
             if (w.Blocked(p, 0.5f)) return;
             var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.3f, 0.3f)) * Basis.FromScale(new Vector3(rng.R(0.9f, 1.6f), h, 1));
-            xf.Add(new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) - 0.2f, p.Y)));
+            xf.Add(new Transform3D(basis, new Vector3(p.X, SkirtY(hf, p.X, p.Y) - 0.2f, p.Y)));
             dry.Add(rng.F());
         }
         bool FarFromNests(Vector2 p, float d)
@@ -493,6 +527,14 @@ public static class WorldBuilder
             int side = rng.I(0, 4);
             var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
             Blade(p, rng.R(14, 34) * (1.2f - d / 22f * 0.5f));
+        }
+        // and a tall wild meadow beyond the yard's edge, so the world never just stops
+        for (int i = 0; i < (int)(3600 * Settings.Density); i++)
+        {
+            float t = rng.R(-40, S + 40), d = -Mathf.Pow(rng.F(), 0.8f) * 34f;
+            int side = rng.I(0, 4);
+            var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
+            Blade(p, rng.R(22, 44));
         }
         var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = BladeMesh() };
         mm.InstanceCount = xf.Count;

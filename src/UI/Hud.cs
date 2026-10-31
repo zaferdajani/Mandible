@@ -158,8 +158,37 @@ public partial class Hud : CanvasLayer
         _root.AddChild(frame);
     }
 
+    /// Extra screen furniture such as the tutorial card.
+    public void AddPanel(Control c) => _root.AddChild(c);
+
     PanelContainer _selPanel;
     bool _portraitLayout;
+    HBoxContainer _groupRow;
+    string _groupKey = "";
+
+    /// Buttons for saved control groups, just above the selection panel.
+    void RefreshGroups()
+    {
+        var parts = new List<string>();
+        foreach (var (d, n) in Game.Input.Groups()) parts.Add($"{d}:{n}");
+        string key = string.Join(",", parts);
+        if (key == _groupKey) return;
+        _groupKey = key;
+        foreach (var ch in _groupRow.GetChildren()) ch.QueueFree();
+        if (parts.Count == 0)
+        {
+            _groupRow.AddChild(UiTheme.Text("Tip: select ants and press Ctrl + 1-9 to save a group", 13, null, new Color(UiTheme.Dim, 0.85f)));
+            return;
+        }
+        foreach (var (d, n) in Game.Input.Groups())
+        {
+            int digit = d;
+            var b = new Button { Text = $"{d}  ·  {n}", TooltipText = $"Group {d}: {n} ants.  Press {d} (or click) to select; again to jump to them.  Ctrl + {d} to overwrite.", CustomMinimumSize = new Vector2(64, 30) };
+            b.AddThemeFontSizeOverride("font_size", 13);
+            b.Pressed += () => Game.Input.RecallGroup(digit);
+            _groupRow.AddChild(b);
+        }
+    }
 
     /// Upright phones: the selection panel moves to the top so it never collides with the command panels.
     void ApplyLayout()
@@ -169,10 +198,16 @@ public partial class Hud : CanvasLayer
         if (_portraitLayout) UiTheme.Place(_selPanel, 0.5f, 0, 0.5f, 0, -330, 140, 300, 286);
         else UiTheme.Place(_selPanel, 0.5f, 1, 0.5f, 1, -330, -176, 300, -30);
         _hint.Visible = !_portraitLayout; // no room for the key hints on an upright phone
+        if (_portraitLayout) UiTheme.Place(_groupRow, 0.5f, 0, 0.5f, 0, -330, 292, 300, 324);
+        else UiTheme.Place(_groupRow, 0.5f, 1, 0.5f, 1, -330, -212, 300, -180);
     }
 
     void BuildSelection()
     {
+        _groupRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
+        _groupRow.AddThemeConstantOverride("separation", 4);
+        UiTheme.Place(_groupRow, 0.5f, 1, 0.5f, 1, -330, -212, 300, -180);
+        if (!Game.Lanes) _root.AddChild(_groupRow);
         var p = new PanelContainer();
         _selPanel = p;
         UiTheme.Place(p, 0.5f, 1, 0.5f, 1, -330, -176, 300, -30);
@@ -483,6 +518,7 @@ public partial class Hud : CanvasLayer
             if (net.Desyncs > 0 && !_desyncWarned) { _desyncWarned = true; Alert("Warning: the two games have drifted out of sync", new Color(1, 0.4f, 0.3f)); }
         }
         ApplyLayout();
+        if (!Game.Lanes) RefreshGroups();
         var c = sim.Col[Local.Me];
         _food.Text = ((int)c.Food).ToString();
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";

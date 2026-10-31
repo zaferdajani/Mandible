@@ -138,12 +138,16 @@ public partial class PlayerInput : Node
         }
     }
 
+    /// Hotkeys go by the key's position on the keyboard, not the letter it types, so they work on any
+    /// layout (Arabic, French AZERTY, ...). Synthetic events without a physical key fall back to the letter.
+    static Godot.Key HotKey(InputEventKey k) => k.PhysicalKeycode != Godot.Key.None ? k.PhysicalKeycode : k.Keycode;
+
     /// Lane War keys: Q ability, 1-4 shop, Space/F2 back to the hero; colony controls do nothing.
     bool LaneKey(InputEventKey k)
     {
-        int item = k.Keycode switch { Godot.Key.Key1 => 0, Godot.Key.Key2 => 1, Godot.Key.Key3 => 2, Godot.Key.Key4 => 3, _ => -1 };
+        int item = HotKey(k) switch { Godot.Key.Key1 => 0, Godot.Key.Key2 => 1, Godot.Key.Key3 => 2, Godot.Key.Key4 => 3, _ => -1 };
         if (item >= 0) { Game.TryBuy(item); return true; }
-        switch (k.Keycode)
+        switch (HotKey(k))
         {
             case Godot.Key.Q: Game.TryAbility(); return true;
             case Godot.Key.Space: case Godot.Key.F2: FocusHero(); return true;
@@ -167,7 +171,7 @@ public partial class PlayerInput : Node
     void OnKey(InputEventKey k)
     {
         if (Game.Lanes && LaneKey(k)) return;
-        switch (k.Keycode)
+        switch (HotKey(k))
         {
             case Godot.Key.Escape:
                 if (_mode != Mode.None) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); }
@@ -202,25 +206,51 @@ public partial class PlayerInput : Node
                 DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);
                 return;
         }
-        int digit = (int)k.Keycode - (int)Godot.Key.Key0;
+        // control groups: the number row or the numpad; Ctrl (or Cmd on a Mac) saves, the number alone recalls
+        int digit = (int)HotKey(k) - (int)Godot.Key.Key0;
+        if (digit < 0 || digit > 9) digit = (int)HotKey(k) - (int)Godot.Key.Kp0;
         if (digit >= 0 && digit <= 9)
         {
-            if (k.CtrlPressed)
-            {
-                var list = new List<(int, int)>();
-                foreach (int id in Selection) list.Add((id, Sim.Ants[id].Serial));
-                _groups[digit] = list;
-                Game.Hud.Alert($"Group {digit} set", UiTheme.Dim);
-            }
-            else if (_groups.TryGetValue(digit, out var g))
-            {
-                var ids = new List<int>();
-                foreach (var (id, serial) in g) if (Sim.Valid(id, serial)) ids.Add(id);
-                if (ids.Count == 0) return;
-                bool again = ids.Count == Selection.Count && ids.TrueForAll(Selection.Contains);
-                SetSelection(ids);
-                if (again) Cam.PanTo(Sim.Ants[ids[0]].Pos);
-            }
+            if (k.CtrlPressed || k.MetaPressed) SaveGroup(digit);
+            else RecallGroup(digit);
+        }
+    }
+
+    public void SaveGroup(int digit)
+    {
+        if (Selection.Count == 0) { Game.Hud.Alert("Select some ants first, then press Ctrl + a number", UiTheme.Dim); return; }
+        var list = new List<(int, int)>();
+        foreach (int id in Selection) list.Add((id, Sim.Ants[id].Serial));
+        _groups[digit] = list;
+        Game.Hud.Alert($"Group {digit} saved: {list.Count} ants.  Press {digit} to select them again", UiTheme.Dim);
+        Game.Audio.Ui("ui_queue", -6);
+    }
+
+    /// Selects a saved group; pressing it again centres the camera on it.
+    public void RecallGroup(int digit)
+    {
+        if (!_groups.TryGetValue(digit, out var g)) return;
+        var ids = new List<int>();
+        foreach (var (id, serial) in g) if (Sim.Valid(id, serial)) ids.Add(id);
+        if (ids.Count == 0) return;
+        bool again = ids.Count == Selection.Count && ids.TrueForAll(Selection.Contains);
+        SetSelection(ids);
+        Recalls++;
+        if (again) Cam.PanTo(Sim.Ants[ids[0]].Pos);
+    }
+
+    public int Recalls, AttackMoves, Moves; // the tutorial watches these
+
+    /// Saved groups and how many of their ants are still alive, for the HUD.
+    public IEnumerable<(int digit, int alive)> Groups()
+    {
+        for (int d = 1; d <= 10; d++)
+        {
+            int digit = d % 10;
+            if (!_groups.TryGetValue(digit, out var g)) continue;
+            int n = 0;
+            foreach (var (id, serial) in g) if (Sim.Valid(id, serial)) n++;
+            if (n > 0) yield return (digit, n);
         }
     }
 
@@ -445,6 +475,7 @@ public partial class PlayerInput : Node
             return;
         }
         if (Selection.Count == 0) return;
+        if (attack) AttackMoves++; else Moves++;
         // enemy under the cursor?
         int enemy = screen.HasValue ? Pick(screen.Value, false, 26) : -1;
         if (enemy >= 0)

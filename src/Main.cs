@@ -66,6 +66,7 @@ public partial class Main : Node
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
+        foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
     }
 
     string _layout;
@@ -107,6 +108,15 @@ public partial class Main : Node
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         Swap(new GameSession { Demo = false, Diff = d, App = this });
+    }
+
+    /// The guided first battle: black garden ants against a peaceful red colony, one lesson at a time.
+    public void StartTutorial()
+    {
+        Local.Me = Config.Player;
+        Audio.FadeMusic(1);
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
+        Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, TutorialMode = true });
     }
 
     /// Starts a Lane War match against the AI: you steer one hero; creeps and guardians fight the lanes.
@@ -172,6 +182,7 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(sub);
 
         _main = Column(
+            ("Tutorial  ·  start here", () => App.StartTutorial()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
             ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),

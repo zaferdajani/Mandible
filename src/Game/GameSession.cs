@@ -25,6 +25,9 @@ public partial class GameSession : Node3D
     public IOrders Orders;
     public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
     public GameMode Mode = GameMode.Colony;
+    public bool TutorialMode;     // a guided first battle
+    AIController _tutorialFoe;
+    public Tutorial Tutor;
     public AntType[] Heroes = { AntType.Warlord, AntType.Warlord }; // Lane War hero of each team
     public bool Lanes => Mode == GameMode.Lanes;
     const float TickDt = 1f / 30f;
@@ -87,8 +90,11 @@ public partial class GameSession : Node3D
             }
             else
             {
-                if (Net == null) _ai.Add(new AIController(Sim, Local.Foe, Diff));
+                // the tutorial's opponent stays peaceful until the lessons are done
+                var foe = new AIController(Sim, Local.Foe, Diff) { Passive = TutorialMode };
+                if (Net == null) _ai.Add(foe);
                 if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
+                _tutorialFoe = foe;
             }
             if (Net != null)
             {
@@ -98,7 +104,15 @@ public partial class GameSession : Node3D
             AddChild(Input);
             Hud = new Hud { Game = this };
             AddChild(Hud);
-            if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
+            if (TutorialMode)
+            {
+                Sim.Col[Local.Me].Food = 600; // enough to try every step
+                var foe = _tutorialFoe;
+                Tutor = new Tutorial { Game = this, OnFinished = () => foe.Passive = false };
+                Hud.AddPanel(Tutor);
+                Hud.Alert("Tutorial: follow the card on the left", UiTheme.Gold);
+            }
+            else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
             else Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
         }
     }
@@ -292,7 +306,8 @@ public partial class GameSession : Node3D
         if (on) _ai.Add(Lanes ? new LaneAI(Sim, Local.Me, Difficulty.Normal) : new AIController(Sim, Local.Me, Difficulty.Normal) { Passive = true });
     }
 
-    public void ToggleTrails() { _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
+    public int TrailToggles; // the tutorial watches these
+    public void ToggleTrails() { TrailToggles++; _trailTarget = _trailTarget > 0.5f ? 0.18f : 1.4f; Audio.Ui("ui_click", -6); }
     public void SetPaused(bool p) { _paused = p && Net == null; }
     public void Restart()
     {
