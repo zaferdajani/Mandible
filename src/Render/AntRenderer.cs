@@ -237,6 +237,8 @@ public sealed class AntRenderer
             if (Config.IsHero(type)) m.SetShaderParameter("hero", 1f);
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
+        m.SetShaderParameter("eye_color", AntMesh.EyeColor(team, type));
+        if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;
     }
@@ -254,14 +256,21 @@ public sealed class AntRenderer
         foreach (var b in _live) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         _crumbs.Begin(); _rings.Begin(); _bars.Begin(); _pips.Begin();
-        m.SetShaderParameter("eye_color", AntMesh.EyeColor(team, type));
-        if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camPos = cam.GlobalPosition;
+        var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
+        _now = Time.GetTicksMsec() * 0.001f;
+        float rdt = _lastNow < 0 ? 0.016f : Mathf.Clamp(_now - _lastNow, 0, 0.1f);
+        _lastNow = _now;
+        float ease = 1 - Mathf.Exp(-rdt * 9f);
+        // the heroes of each colony, so workers can greet them
+        var heroes = new List<(int team, Vector2 pos)>(4);
+        for (int i = 0; i < sim.High; i++)
+            if (sim.Ants[i].Alive && sim.Ants[i].Team < 2 && Config.IsHero(sim.Ants[i].Type)) heroes.Add((sim.Ants[i].Team, sim.Ants[i].Pos));
         for (int i = 0; i < sim.High; i++)
         {
             ref var a = ref sim.Ants[i];
@@ -278,16 +287,7 @@ public sealed class AntRenderer
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
             var b = Orient(up, ih, st.Size);
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
-        var cam2 = new Vector2(camPos.X, camPos.Z);
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
-        _now = Time.GetTicksMsec() * 0.001f;
-        float rdt = _lastNow < 0 ? 0.016f : Mathf.Clamp(_now - _lastNow, 0, 0.1f);
-        _lastNow = _now;
-        float ease = 1 - Mathf.Exp(-rdt * 9f);
-        // the heroes of each colony, so workers can greet them
-        var heroes = new List<(int team, Vector2 pos)>(4);
-        for (int i = 0; i < sim.High; i++)
-            if (sim.Ants[i].Alive && sim.Ants[i].Team < 2 && Config.IsHero(sim.Ants[i].Type)) heroes.Add((sim.Ants[i].Team, sim.Ants[i].Pos));
             // underground ants stand on the gallery floor at their depth below the mound
             float gy = a.Layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[a.Layer - 1].Pos.X, sim.W.Nests[a.Layer - 1].Pos.Y) - sim.UndergroundDepth(a.Layer - 1, ip);
             if (a.Layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
@@ -421,7 +421,6 @@ public sealed class AntRenderer
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
-}
 
     /// Decides where this ant looks and what it is doing with its face this frame, from read-only sim state,
     /// and packs it with the gait into the four per-instance floats the Ant shader decodes (see its vertex()).
@@ -491,3 +490,4 @@ public sealed class AntRenderer
         if (r.Kind != 0 && _now >= r.KindStart) w = r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }
+}

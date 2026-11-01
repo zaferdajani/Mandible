@@ -47,6 +47,7 @@ varying vec2 v_uv;
 varying float v_seed;
 varying float v_sel;
 varying float v_hov;
+varying float v_ao;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
@@ -190,6 +191,7 @@ void vertex() {
     v_seed = seed;
     v_sel = sel;
     v_hov = hov;
+    v_ao = COLOR.a; // occlusion baked by MeshKit.BakeAO: legs under the body, the neck, the waist
     VERTEX = p;
     NORMAL = n;
 }
@@ -318,7 +320,9 @@ void fragment() {
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
-    ALBEDO = c * (1.0 - dead * 0.35);
+    ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
+    AO = v_ao;
+    AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
     SPECULAR = 0.32;

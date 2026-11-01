@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace Mandible;
@@ -54,10 +55,20 @@ public static class AntMesh
         Color Part(int id, float w = 0, float region = 0) => new(id / 255f, w, region, 1);
 
         float bodyY = 0.13f;
-        // Gaster (abdomen)
+        // Gaster (abdomen): four tergites that telescope, each rear rim riding over the segment behind it,
+        // smooth-shaded so the lips read as plates rather than facets
         float gz = -0.30f - (s.Gaster - 1) * 0.12f;
+        int gv = k.V.Count, gi = k.I.Count;
         k.Ellipsoid(new Vector3(0, bodyY + 0.01f * s.Gaster, gz), Scaled(0.13f * s.Gaster, 0.11f * s.Gaster, 0.18f * s.Gaster, -0.18f),
-            seg, seg - 3, Part(Gaster, 0, 1), Vector2.Zero);
+            seg + 6, seg + 2, Part(Gaster, 0, 1), Vector2.Zero, u =>
+            {
+                float along = (u.Z + 1f) * 2f;                 // 0 at the tip, 4 at the waist
+                float f = along - Mathf.Floor(along);
+                float top = Mathf.SmoothStep(-0.6f, 0.1f, u.Y); // the plates are on the back; the belly stays smooth
+                float lip = (1 - f) * (1 - f) * top * (u.Z < 0.85f && u.Z > -0.9f ? 1 : 0);
+                return 1 + 0.045f * lip;
+            });
+        k.SmoothNormals(gv, gi);
         // Petiole node
         k.Ellipsoid(new Vector3(0, bodyY + 0.01f, -0.105f), Scaled(0.035f, 0.05f, 0.035f, 0), 8, 6, Part(Body, 0, 0.5f), Vector2.Zero);
         // Mesosoma (thorax), slightly humped
@@ -70,6 +81,7 @@ public static class AntMesh
         Neck[type] = headC + new Vector3(0, -0.02f, -0.075f * h);
         // the head is a face: a brow that hoods the eyes, sockets the eyes sit in, a flattened clypeus below
         var eyeDir = new Vector3(0.74f, 0.3f, 0.6f).Normalized();
+        int hv = k.V.Count, hi = k.I.Count;
         k.Ellipsoid(headC, Scaled(0.085f * h, 0.072f * h, 0.085f * h, -0.15f), seg + 4, seg, Part(Head, 0, 0), Vector2.Zero, u =>
         {
             float d = Mathf.Max(u.Dot(eyeDir), u.Dot(new Vector3(-eyeDir.X, eyeDir.Y, eyeDir.Z)));
@@ -78,6 +90,7 @@ public static class AntMesh
             float clypeus = -0.045f * Mathf.SmoothStep(0.45f, 0.85f, u.Z) * Mathf.SmoothStep(-0.1f, -0.5f, u.Y);
             return 1 + brow - socket + clypeus;
         });
+        k.SmoothNormals(hv, hi);
         // Eyes: big enough to read at RTS zoom, converged forward so both catch the camera from the three-quarter view
         for (int side = -1; side <= 1; side += 2)
             k.Ellipsoid(headC + new Vector3(side * 0.066f * h, 0.026f * h, 0.05f * h), new Basis(Vector3.Up, -side * 0.35f) * Scaled(0.027f * h, 0.029f * h, 0.025f * h, -0.1f), 12, 8, Part(Eye), Vector2.Zero);
@@ -91,8 +104,7 @@ public static class AntMesh
             var mid = hinge + new Vector3(side * 0.02f * m, -0.005f, 0.06f * m);
             var tip = mid + new Vector3(-side * 0.045f * m, -0.004f, 0.035f * m);
             var piv = new Vector2(hinge.X, hinge.Z);
-            k.Tube(hinge, mid, 0.017f * m, 0.012f * m, 5, Part(id, 0.3f), Part(id, 0.7f), piv, false);
-            k.Tube(mid, tip, 0.012f * m, 0.003f, 5, Part(id, 0.7f), Part(id, 1f), piv);
+            k.Loft(new[] { hinge, mid, tip }, new[] { 0.018f * m, 0.012f * m, 0.0025f }, new[] { 0.3f, 0.7f, 1f }, id, 0, 6, piv, 3);
         }
 
         // Antennae: elbowed scape + funiculus with a club
@@ -103,8 +115,21 @@ public static class AntMesh
             var elbow = root + new Vector3(side * 0.09f, 0.1f, 0.02f);
             var tip = elbow + new Vector3(side * 0.05f, -0.02f, 0.2f);
             var piv = new Vector2(root.X, root.Z);
-            k.Tube(root, elbow, 0.011f, 0.009f, 5, Part(id, 0.1f), Part(id, 0.5f), piv, false);
-            k.Tube(elbow, tip, 0.008f, 0.014f, 5, Part(id, 0.5f), Part(id, 1f), piv);
+            // scape to the elbow, then a funiculus of beads that bends gently toward the tip and ends in a club
+            var knots = new List<Vector3> { root, root.Lerp(elbow, 0.5f) + new Vector3(0, 0.005f, 0), elbow };
+            var radii = new List<float> { 0.011f, 0.009f, 0.012f };
+            var wts = new List<float> { 0.1f, 0.3f, 0.5f };
+            for (int b = 1; b <= 5; b++)
+            {
+                float bt = b / 5f;
+                knots.Add(elbow.Lerp(tip, bt) + new Vector3(side * 0.012f, 0.03f, 0) * Mathf.Sin(bt * Mathf.Pi));
+                radii.Add(b == 5 ? 0.013f : b % 2 == 0 ? 0.0105f : 0.0075f);
+                wts.Add(0.5f + 0.5f * bt);
+            }
+            knots.Add(tip + new Vector3(side * 0.01f, -0.01f, 0.035f));
+            radii.Add(0.003f);
+            wts.Add(1f);
+            k.Loft(knots.ToArray(), radii.ToArray(), wts.ToArray(), id, 0, 5, piv, 2);
         }
 
         // Legs: coxa -> femur (up/out) -> tibia/tarsus (down to ground)
@@ -120,11 +145,38 @@ public static class AntMesh
                 var ankle = new Vector3(side * (0.27f + 0.03f * i) * L, 0.03f, hipZ[i] + reach[i] * L);
                 var foot = ankle + new Vector3(side * 0.035f, -0.03f, reach[i] * 0.15f);
                 var piv = new Vector2(hip.X, hip.Z);
-                k.Tube(hip, knee, 0.02f * t, 0.016f, 6, Part(id, 0f), Part(id, 0.45f), piv, false);
-                k.Tube(knee, ankle, 0.014f, 0.009f, 6, Part(id, 0.45f), Part(id, 0.9f), piv, false);
-                k.Tube(ankle, foot, 0.008f, 0.004f, 4, Part(id, 0.9f), Part(id, 1f), piv);
+                // coxa swells at the hip, the femur bows up, a knee bulb, the tibia tapers to an ankle bulb, a whip of tarsus
+                var femur = hip.Lerp(knee, 0.5f) + new Vector3(side * 0.01f, 0.012f, 0);
+                var tibia = knee.Lerp(ankle, 0.5f) + new Vector3(side * 0.012f, -0.004f, 0);
+                var tarsus = ankle.Lerp(foot, 0.5f) + new Vector3(0, -0.006f, 0);
+                k.Loft(new[] { hip, femur, knee, tibia, ankle, tarsus, foot },
+                    new[] { 0.021f * t, 0.016f, 0.019f, 0.011f, 0.012f, 0.0065f, 0.0025f },
+                    new[] { 0f, 0.25f, 0.45f, 0.7f, 0.9f, 0.95f, 1f }, id, 0, 6, piv, 2);
             }
-        if (Config.IsHero(type)) HeroRegalia(k, type, s, headC, bodyY, gz);
+        if (Config.IsHero(type))
+        {
+            HeroRegalia(k, type, s, headC, bodyY, gz);
+            // a brush of setae over the gaster and thorax: close-up texture a hero earns
+            var hair = new Rng((uint)type * 31 + 5);
+            for (int i = 0; i < 28; i++)
+            {
+                bool onGaster = i < 20;
+                float ux = hair.R(-0.8f, 0.8f), uz = hair.R(-0.75f, 0.75f);
+                float uy = Mathf.Sqrt(Mathf.Max(0.05f, 1 - ux * ux - uz * uz));
+                var at = onGaster
+                    ? new Vector3(ux * 0.125f * s.Gaster, bodyY + 0.01f + uy * 0.105f * s.Gaster, gz + uz * 0.17f * s.Gaster)
+                    : new Vector3(ux * 0.05f * s.Thorax, bodyY + 0.01f + uy * 0.058f * s.Thorax, 0.02f + uz * 0.1f * s.Thorax);
+                var dir = new Vector3(ux * 0.6f, 1f, -0.5f).Normalized() * (onGaster ? 0.045f : 0.03f);
+                k.Tube(at, at + dir, 0.0032f, 0.0006f, 3, Part(onGaster ? Gaster : Body, 0, onGaster ? 1 : 0.5f), Part(onGaster ? Gaster : Body, 0, onGaster ? 1 : 0.5f), Vector2.Zero);
+            }
+        }
+        // baked occlusion under the three masses of the body
+        k.BakeAO(new (Vector3, float)[]
+        {
+            (new Vector3(0, bodyY + 0.01f * s.Gaster, gz), 0.14f * s.Gaster),
+            (new Vector3(0, bodyY + 0.01f, 0.02f), 0.085f * s.Thorax),
+            (headC, 0.08f * s.Head),
+        });
         return k.Commit();
     }
 
@@ -313,10 +365,10 @@ public static class AntMesh
                 var ankle = new Vector3(side * 0.42f, 0.03f, hz[i] + reach[i] * 0.85f);
                 var foot = ankle + new Vector3(side * 0.06f, -0.03f, reach[i] * 0.25f + 0.02f);
                 var piv = new Vector2(hip.X, hip.Z);
-                // stout femur, flattened spiny tibia, segmented tarsus
-                k.Tube(hip, (hip + knee) * 0.5f + Vector3.Up * 0.015f, 0.034f * lm, 0.042f * lm, 8, Tag(id, 0f), Tag(id, 0.25f), piv, false);
-                k.Tube((hip + knee) * 0.5f + Vector3.Up * 0.015f, knee, 0.042f * lm, 0.03f * lm, 8, Tag(id, 0.25f), Tag(id, 0.5f), piv, false);
-                k.Tube(knee, ankle, 0.028f * lm, 0.018f * lm, 7, Tag(id, 0.5f), Tag(id, 0.85f), piv, false);
+                // stout femur, flattened spiny tibia, segmented tarsus: one bowed limb with a bulb at every joint
+                k.Loft(new[] { hip, (hip + knee) * 0.5f + Vector3.Up * 0.02f, knee, knee.Lerp(ankle, 0.5f) + new Vector3(side * 0.01f, 0, 0), ankle },
+                    new[] { 0.034f * lm, 0.043f * lm, 0.032f * lm, 0.024f * lm, 0.019f * lm },
+                    new[] { 0f, 0.25f, 0.5f, 0.7f, 0.85f }, id, 0, 8, piv, 2, false);
                 for (int sp = 1; sp <= 3; sp++)
                 {
                     var at = knee.Lerp(ankle, sp / 4f);
@@ -326,6 +378,7 @@ public static class AntMesh
                 k.Tube(ankle, mid, 0.014f, 0.012f, 5, Tag(id, 0.85f), Tag(id, 0.93f), piv, false);
                 k.Tube(mid, foot, 0.012f, 0.005f, 5, Tag(id, 0.93f), Tag(id, 1f), piv);
             }
+        k.BakeAO(new (Vector3, float)[] { (new Vector3(0, y + 0.03f, -0.15f), 0.2f), (new Vector3(0, y + 0.03f, 0.19f), 0.12f), (headC, stag ? 0.12f : 0.085f) });
         return k.Commit();
     }
 
@@ -399,6 +452,7 @@ public static class AntMesh
                     k.Tube(at, at + outDir * 0.02f + new Vector3(0, 0.035f, 0), 0.005f, 0.001f, 3, Tag(id, 0.6f), Tag(id, 0.65f), piv);
                 }
             }
+        k.BakeAO(new (Vector3, float)[] { (new Vector3(0, y + 0.04f, -0.24f), 0.18f), (ceph, 0.12f) });
         return k.Commit();
     }
 
@@ -445,10 +499,11 @@ public static class AntMesh
                 var knee = hip + new Vector3(side * 0.1f, -0.06f, (i - 1) * 0.06f);
                 var foot = knee + new Vector3(side * 0.02f, -0.14f, (i - 1) * 0.1f - 0.05f * i);
                 var piv = new Vector2(hip.X, hip.Z);
-                k.Tube(hip, knee, 0.018f, 0.016f, 6, Tag(id, 0f), Tag(id, 0.5f), piv, false);
-                k.Tube(knee, foot, 0.014f, 0.006f, 6, Tag(id, 0.5f), Tag(id, 1f), piv);
+                k.Loft(new[] { hip, hip.Lerp(knee, 0.5f) + new Vector3(side * 0.008f, 0.01f, 0), knee, knee.Lerp(foot, 0.5f) + new Vector3(side * 0.006f, 0, 0), foot },
+                    new[] { 0.019f, 0.016f, 0.018f, 0.011f, 0.005f }, new[] { 0f, 0.25f, 0.5f, 0.8f, 1f }, id, 0, 6, piv, 2);
                 k.Tube(foot, foot + new Vector3(side * 0.012f, -0.02f, 0.015f), 0.005f, 0.001f, 4, Tag(id, 1f), Tag(id, 1f), piv); // tarsal claw
             }
+        k.BakeAO(new (Vector3, float)[] { (new Vector3(0, y - 0.02f, -0.27f), 0.14f), (new Vector3(0, y + 0.03f, 0.05f), 0.095f), (headC, 0.075f) });
         return k.Commit();
     }
 
