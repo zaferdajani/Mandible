@@ -57,9 +57,58 @@ public sealed class Batch
     }
 }
 
+/// What the renderer remembers about an ant between frames so it can look, listen and answer: none of it
+/// touches the simulation. Keyed by the ant's Serial so a reused slot starts fresh.
+struct RenderAnt
+{
+    public int Serial;
+    public float Yaw, Pitch;          // where the head is turned now (radians, smoothed)
+    public float SacT, SacYaw, SacPitch; // idle glances: the next one, and when
+    public int Kind;                  // one-shot under way: 1 order acknowledged, 2 flinch, 3 greeting
+    public float KindStart, KindLen;
+    public Vector2 LookAt;            // the acknowledged point
+    public bool HasLookAt;
+    public float LookUntil;
+    public float LastHit, GreetCd;
+}
+
 public sealed class AntRenderer
 {
     readonly Batch[,] _live = new Batch[3, 13];
+    readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
+    readonly Rng _rng = new(4242);
+    float _now, _lastNow = -1;
+    /// Set by PlayerInput every frame: the ant under the cursor and where the cursor meets the ground.
+    public int Hovered = -1;
+    public Vector3 Cursor;
+    public bool HasCursor;
+    public const float NeutralLook = 128 * 256 + 128; // y channel: head straight ahead
+
+    /// The player gave these ants an order: they answer at once (antennae flick, head snaps to the point),
+    /// in the moment before the lockstep turn actually moves them. `point` null: a nod to the camera.
+    public void Ack(List<int> ids, Vector2? point)
+    {
+        for (int k = 0; k < ids.Count; k++)
+        {
+            int id = ids[k];
+            if (id < 0 || id >= _ra.Length) continue;
+            ref var r = ref _ra[id];
+            r.Kind = 1;
+            r.KindStart = _now + _rng.R(0, 0.12f); // the group ripples rather than snapping as one
+            r.KindLen = 0.45f;
+            r.HasLookAt = point.HasValue;
+            if (point.HasValue) r.LookAt = point.Value;
+            r.LookUntil = _now + 0.7f;
+        }
+    }
+
+    void OneShot(ref RenderAnt r, int kind, float len, Vector2? at)
+    {
+        if (r.Kind != 0 && _now < r.KindStart + r.KindLen) return;
+        r.Kind = kind; r.KindStart = _now; r.KindLen = len;
+        r.HasLookAt = at.HasValue;
+        if (at.HasValue) { r.LookAt = at.Value; r.LookUntil = _now + len; }
+    }
     readonly Batch[,] _dead = new Batch[3, 13];
     readonly Batch _crumbs, _rings, _bars;
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
@@ -188,6 +237,8 @@ public sealed class AntRenderer
         foreach (var b in _live) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         _crumbs.Begin(); _rings.Begin(); _bars.Begin(); _pips.Begin();
+        m.SetShaderParameter("eye_color", AntMesh.EyeColor(team, type));
+        if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
@@ -210,16 +261,23 @@ public sealed class AntRenderer
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
             var b = Orient(up, ih, st.Size);
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
+        var cam2 = new Vector2(camPos.X, camPos.Z);
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
+        _now = Time.GetTicksMsec() * 0.001f;
+        float rdt = _lastNow < 0 ? 0.016f : Mathf.Clamp(_now - _lastNow, 0, 0.1f);
+        _lastNow = _now;
+        float ease = 1 - Mathf.Exp(-rdt * 9f);
+        // the heroes of each colony, so workers can greet them
+        var heroes = new List<(int team, Vector2 pos)>(4);
+        for (int i = 0; i < sim.High; i++)
+            if (sim.Ants[i].Alive && sim.Ants[i].Team < 2 && Config.IsHero(sim.Ants[i].Type)) heroes.Add((sim.Ants[i].Team, sim.Ants[i].Pos));
             // underground ants stand on the gallery floor at their depth below the mound
             float gy = a.Layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[a.Layer - 1].Pos.X, sim.W.Nests[a.Layer - 1].Pos.Y) - sim.UndergroundDepth(a.Layer - 1, ip);
             if (a.Layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
-            // z packs the bite with two more beats the shader reads: +2 a raised shell wall, +4 a charge or lunge
-            float beat = Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f) + (a.BlockT > 0 ? 2f : 0f) + (a.ChargeT > 0 ? 4f : 0f);
-            _live[a.Team, (int)a.Type].Add(b, o, new Color(a.Gait, amp, beat, a.HitFlash));
+            _live[a.Team, (int)a.Type].Add(b, o, Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease));
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
@@ -318,7 +376,7 @@ public sealed class AntRenderer
             var b = Orient(n, f.Heading, s);
             b = new Basis(-b.X, -b.Y, b.Z);
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
-            _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, 0, 0, 0));
+            _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
         foreach (var z in sim.Webs)
         {
@@ -347,3 +405,72 @@ public sealed class AntRenderer
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
 }
+
+    /// Decides where this ant looks and what it is doing with its face this frame, from read-only sim state,
+    /// and packs it with the gait into the four per-instance floats the Ant shader decodes (see its vertex()).
+    Color Mind(Sim sim, int i, ref Ant a, Vector2 ip, float ih, float amp, Vector2 cam2, List<(int team, Vector2 pos)> heroes, float ease)
+    {
+        ref var r = ref _ra[i];
+        if (r.Serial != a.Serial)
+        {
+            r = default;
+            r.Serial = a.Serial;
+            r.SacT = _rng.R(0, 2);
+            r.LastHit = a.HitFlash;
+        }
+        // one-shots from what just happened to it
+        if (a.HitFlash > r.LastHit + 0.5f) OneShot(ref r, 2, 0.25f, null);
+        r.LastHit = a.HitFlash;
+        r.GreetCd -= 0.016f;
+        if (a.Type == AntType.Worker && a.Team < 2 && r.GreetCd <= 0 && (a.State == AntState.Idle || a.State == AntState.Forage))
+            foreach (var h in heroes)
+                if (h.team == a.Team && h.pos.DistanceSquaredTo(ip) < 9f) { OneShot(ref r, 3, 0.6f, h.pos); r.GreetCd = 8f; break; }
+        if (r.Kind != 0 && _now > r.KindStart + r.KindLen) r.Kind = 0;
+
+        // where it looks, by what matters most: an order, the cursor, its prey, its load, its food, its road, its post, you
+        bool hovered = i == Hovered;
+        int pose = a.State == AntState.Hold ? 1 : hovered ? 2 : 0;
+        Vector2? at = null;
+        float wantYaw = 0, wantPitch = 0;
+        bool direct = false;
+        if (r.HasLookAt && _now < r.LookUntil) { at = r.LookAt; wantPitch = -0.1f; }
+        else if (hovered && HasCursor) { at = new Vector2(Cursor.X, Cursor.Z); wantPitch = -0.05f; }
+        else if (a.State == AntState.Engage && sim.Valid(a.Target, a.TargetSerial))
+        {
+            ref var t = ref sim.Ants[a.Target];
+            at = t.Pos;
+            wantPitch = Mathf.Clamp((t.Alt - a.Alt) * 0.3f, -0.3f, 0.5f) - 0.1f;
+        }
+        else if (a.Carrying && a.Team < 2) at = sim.W.Nests[a.Team].Pos;
+        else if ((a.State == AntState.Forage || a.State == AntState.Gather) && a.FoodTarget != null) { at = a.FoodTarget.Pos; wantPitch = -0.15f; }
+        else if (a.State == AntState.Move || a.State == AntState.AttackMove) at = a.Goal;
+        else if (a.State == AntState.Hold) { direct = true; wantYaw = Mathf.Sin(_now * 0.8f + r.Serial) * 0.7f; wantPitch = 0.25f; }
+        else if (a.Selected && a.State == AntState.Idle) { at = cam2; wantPitch = 0.4f; }
+        else
+        {
+            // idle: glances about, holding each for a second or three
+            r.SacT -= 0.016f;
+            if (r.SacT <= 0) { r.SacT = _rng.R(1f, 3f); r.SacYaw = _rng.R(-0.6f, 0.6f); r.SacPitch = _rng.R(-0.15f, 0.15f); }
+            direct = true; wantYaw = r.SacYaw; wantPitch = r.SacPitch;
+        }
+        if (!direct && at.HasValue)
+        {
+            var d = at.Value - ip;
+            wantYaw = d.LengthSquared() < 0.04f ? 0 : Mathf.Clamp(MathX.AngleDiff(ih, d.Angle()), -1.2f, 1.2f);
+        }
+        float k = r.Kind == 1 ? Mathf.Min(1, ease * 2.5f) : ease; // an order snaps the head round
+        r.Yaw += (wantYaw - r.Yaw) * k;
+        r.Pitch += (Mathf.Clamp(wantPitch, -0.6f, 0.6f) - r.Pitch) * k;
+
+        int seed = a.Serial & 15;
+        float x = seed + 16 * pose + Mathf.Clamp(a.Gait, 0, 0.999f);
+        int yaw8 = (int)Mathf.Clamp((r.Yaw / 1.2f * 0.5f + 0.5f) * 255f, 0, 255);
+        int pitch8 = (int)Mathf.Clamp((r.Pitch / 0.6f * 0.5f + 0.5f) * 255f, 0, 255);
+        float y = yaw8 * 256 + pitch8 + Mathf.Min(amp, 0.996f);
+        int flags = (a.BlockT > 0 ? 2 : 0) | (a.ChargeT > 0 ? 4 : 0) | (a.Carrying ? 8 : 0) | (a.Selected ? 16 : 0) | (hovered ? 32 : 0);
+        flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
+        float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f), 0.996f);
+        float w = 0;
+        if (r.Kind != 0 && _now >= r.KindStart) w = r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
+        return new Color(x, y, z, w);
+    }

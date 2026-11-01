@@ -13,6 +13,18 @@ public static class AntMesh
     // Vertex colour B is the body region a part belongs to (0 head, 0.5 thorax, 1 gaster) so the shader moves it with that region.
     public const int Crest = 14, Plate = 15;
 
+    /// Where each creature's head turns: the shader rotates the head group about this model-space point.
+    public static readonly System.Collections.Generic.Dictionary<AntType, Vector3> Neck = new();
+    /// Iris colour the shader paints under the catchlight: amber for garden ants, ember for fire ants, each bug its own.
+    public static Color EyeColor(int team, AntType type) => type switch
+    {
+        AntType.Beetle => new Color(0.22f, 0.3f, 0.22f),
+        AntType.Spider => new Color(0.5f, 0.42f, 0.26f),
+        AntType.StagBeetle => new Color(0.36f, 0.12f, 0.05f),
+        AntType.Wasp => new Color(0.45f, 0.3f, 0.08f),
+        _ => team == 0 ? new Color(0.62f, 0.34f, 0.08f) : new Color(0.8f, 0.22f, 0.06f),
+    };
+
     struct Shape
     {
         public float Head, Mandible, Gaster, Thorax, Leg, Seg;
@@ -55,10 +67,20 @@ public static class AntMesh
         // Head
         float h = s.Head;
         var headC = new Vector3(0, bodyY + 0.025f, 0.2f + 0.07f * (h - 1));
-        k.Ellipsoid(headC, Scaled(0.085f * h, 0.07f * h, 0.085f * h, -0.15f), seg, seg - 3, Part(Head, 0, 0), Vector2.Zero);
-        // Eyes
+        Neck[type] = headC + new Vector3(0, -0.02f, -0.075f * h);
+        // the head is a face: a brow that hoods the eyes, sockets the eyes sit in, a flattened clypeus below
+        var eyeDir = new Vector3(0.74f, 0.3f, 0.6f).Normalized();
+        k.Ellipsoid(headC, Scaled(0.085f * h, 0.072f * h, 0.085f * h, -0.15f), seg + 4, seg, Part(Head, 0, 0), Vector2.Zero, u =>
+        {
+            float d = Mathf.Max(u.Dot(eyeDir), u.Dot(new Vector3(-eyeDir.X, eyeDir.Y, eyeDir.Z)));
+            float socket = 0.11f * Mathf.Exp(-Mathf.Pow((1 - d) * 11f, 2));
+            float brow = 0.05f * Mathf.SmoothStep(0.2f, 0.5f, u.Y) * Mathf.SmoothStep(0.0f, 0.45f, u.Z) * (1 - Mathf.SmoothStep(0.75f, 0.95f, u.Y));
+            float clypeus = -0.045f * Mathf.SmoothStep(0.45f, 0.85f, u.Z) * Mathf.SmoothStep(-0.1f, -0.5f, u.Y);
+            return 1 + brow - socket + clypeus;
+        });
+        // Eyes: big enough to read at RTS zoom, converged forward so both catch the camera from the three-quarter view
         for (int side = -1; side <= 1; side += 2)
-            k.Ellipsoid(headC + new Vector3(side * 0.075f * h, 0.012f * h, 0.02f * h), Scaled(0.018f * h, 0.022f * h, 0.025f * h, 0), 8, 5, Part(Eye), Vector2.Zero);
+            k.Ellipsoid(headC + new Vector3(side * 0.066f * h, 0.026f * h, 0.05f * h), new Basis(Vector3.Up, -side * 0.35f) * Scaled(0.027f * h, 0.029f * h, 0.025f * h, -0.1f), 12, 8, Part(Eye), Vector2.Zero);
 
         // Mandibles: two curved segments, pivot at the jaw hinge
         for (int side = -1; side <= 1; side += 2)
@@ -216,9 +238,10 @@ public static class AntMesh
             u => 1f + 0.08f * Mathf.Abs(u.X) * Mathf.Max(0, u.Y)); // squared-off shoulders
         k.Ellipsoid(new Vector3(0, y - 0.01f, 0.1f), Scaled(0.09f, 0.06f, 0.05f, 0), 12, 8, Tag(Body, 0, 0.5f), Vector2.Zero);
         var headC = new Vector3(0, y + 0.0f, 0.3f);
+        Neck[stag ? AntType.StagBeetle : AntType.Beetle] = headC + new Vector3(0, 0, -0.07f);
         k.Ellipsoid(headC, Scaled(stag ? 0.17f : 0.095f, stag ? 0.08f : 0.062f, stag ? 0.1f : 0.075f, 0), 16, 10, Tag(Head), Vector2.Zero);
         for (int side = -1; side <= 1; side += 2)
-            k.Ellipsoid(headC + new Vector3(side * (stag ? 0.125f : 0.085f), 0.02f, 0.02f), Scaled(0.022f, 0.022f, 0.022f, 0), 6, 4, Tag(Eye), Vector2.Zero);
+            k.Ellipsoid(headC + new Vector3(side * (stag ? 0.125f : 0.082f), 0.024f, 0.03f), Scaled(0.03f, 0.03f, 0.028f, 0), 10, 7, Tag(Eye), Vector2.Zero);
         if (stag)
         {
             // a raised head shield and a pronotal crest: the lord of the yard wears its armour on top
@@ -328,6 +351,7 @@ public static class AntMesh
             k.Tube(at, at + new Vector3(u * 0.03f, 0.04f, -0.01f), 0.004f, 0.001f, 3, Tag(Gaster, 0, 1), Tag(Gaster, 0, 1), Vector2.Zero);
         }
         var ceph = new Vector3(0, y + 0.02f, 0.06f);
+        Neck[AntType.Spider] = ceph + new Vector3(0, 0, 0.06f);
         k.Ellipsoid(ceph, Scaled(0.12f, 0.085f, 0.14f, 0.05f), 18, 10, Tag(Head), Vector2.Zero);
         // eyes: two big forward eyes, a row of four small ones below, and the two large rear eyes on top
         k.Ellipsoid(ceph + new Vector3(0.035f, 0.06f, 0.11f), Scaled(0.03f, 0.03f, 0.03f, 0), 8, 6, Tag(Eye), Vector2.Zero);
@@ -395,6 +419,7 @@ public static class AntMesh
         k.Ellipsoid(new Vector3(0, y + 0.1f, 0.0f), Scaled(0.05f, 0.015f, 0.04f, 0.2f), 10, 4, Tag(Crest, 0, 0.5f), Vector2.Zero, u => u.Y < -0.2f ? 0.3f : 1f);
         // head with huge kidney-shaped compound eyes and three ocelli on the crown
         var headC = new Vector3(0, y + 0.03f, 0.2f);
+        Neck[AntType.Wasp] = headC + new Vector3(0, -0.01f, -0.05f);
         k.Ellipsoid(headC, Scaled(0.085f, 0.08f, 0.058f, 0.2f), 16, 10, Tag(Head), Vector2.Zero);
         for (int o = -1; o <= 1; o++)
             k.Ellipsoid(headC + new Vector3(o * 0.02f, 0.072f - Mathf.Abs(o) * 0.008f, -0.01f + Mathf.Abs(o) * 0.012f), Scaled(0.009f, 0.009f, 0.009f, 0), 6, 4, Tag(Eye), Vector2.Zero);

@@ -411,6 +411,7 @@ public partial class GameSession : Node3D
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
         if (!Demo) UpdateGlass(dt);
+        if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);
         Effects.Update(_paused ? 0 : dt);
         UpdateFood();

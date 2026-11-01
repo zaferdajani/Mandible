@@ -304,6 +304,7 @@ public partial class PlayerInput : Node
         Prune();
         if (Selection.Count == 0) return;
         Game.Issue(Cmd.Units(CmdKind.Reinforce, Local.Me, Selection, Sim));
+        Game.Ants.Ack(Selection, Game.World.Nests[Local.Me].Pos);
         Game.Hud.Alert("Squads returning to the nest to heal and reinforce", UiTheme.Dim);
         Game.Audio.Ui("ui_click");
     }
@@ -350,6 +351,17 @@ public partial class PlayerInput : Node
         if (Cam.Cam.IsPositionBehind(wp)) return false;
         sp = Cam.Cam.UnprojectPosition(wp);
         return true;
+    }
+
+    /// Every frame: which of your ants is under the cursor, and where the cursor meets the ground, so the
+    /// renderer can make that ant listen. Render-side only.
+    public void UpdateHover()
+    {
+        if (Settings.Mobile) { Game.Ants.Hovered = -1; Game.Ants.HasCursor = false; return; }
+        var mp = GetViewport().GetMousePosition();
+        Game.Ants.Hovered = Pick(mp, true, 18);
+        Game.Ants.HasCursor = Cam.ScreenToGround(mp, out var g);
+        Game.Ants.Cursor = g;
     }
 
     int Pick(Vector2 screen, bool own, float px = 22)
@@ -490,6 +502,7 @@ public partial class PlayerInput : Node
         Prune();
         if (Selection.Count == 0) return;
         Game.Issue(Cmd.Units(hold ? CmdKind.Hold : CmdKind.Stop, Local.Me, Selection, Sim));
+        Game.Ants.Ack(Selection, null);
     }
 
     public void CommandAt(Vector2 world, bool attack) => Issue(world, null, attack);
@@ -515,6 +528,7 @@ public partial class PlayerInput : Node
             var ac = Cmd.Units(CmdKind.Attack, Local.Me, Selection, Sim);
             ac.Target = enemy; ac.TargetSerial = Sim.Ants[enemy].Serial;
             Game.Issue(ac);
+            Game.Ants.Ack(Selection, Sim.Ants[enemy].Pos);
             Game.Effects.Marker(Game.World.HF.Point(Sim.Ants[enemy].Pos), new Color(1, 0.3f, 0.2f));
             Game.Audio.Ui("ui_click");
             return;
@@ -534,6 +548,7 @@ public partial class PlayerInput : Node
                 var gc = Cmd.Units(CmdKind.Gather, Local.Me, Selection, Sim);
                 gc.FoodId = food.Id;
                 Game.Issue(gc);
+                Game.Ants.Ack(Selection, food.Pos);
                 Game.Effects.Marker(Game.World.HF.Point(food.Pos), new Color(0.75f, 1f, 0.35f));
                 Game.Audio.Ui("ui_click");
                 return;
@@ -550,6 +565,7 @@ public partial class PlayerInput : Node
             Game.Hud.Alert("Garrison: the warriors go below to guard the queen (press N to watch)", UiTheme.Dim);
         }
         Game.Issue(mc);
+        Game.Ants.Ack(Selection, world);
         Game.Effects.Marker(Game.World.HF.Point(world), attack ? new Color(1, 0.35f, 0.2f) : new Color(0.5f, 1, 0.45f));
         Game.Audio.Ui("ui_click");
     }

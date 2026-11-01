@@ -34,6 +34,9 @@ uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
+uniform vec3 eye_color : source_color = vec3(0.6, 0.32, 0.08); // the iris under the catchlight
+uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
+uniform float detail = 0.0;   // 1 in portraits and close-ups: compound-eye facets
 varying float v_part;
 varying float v_flash;
 varying vec3 v_local;
@@ -41,56 +44,103 @@ varying float v_w;
 varying float v_region;
 varying float v_block;
 varying vec2 v_uv;
+varying float v_seed;
+varying float v_sel;
+varying float v_hov;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
 
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_x(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
+vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
 
 void vertex() {
     float part = floor(COLOR.r * 255.0 + 0.5);
     float w = COLOR.g;
-    float phase = INSTANCE_CUSTOM.x * TAU;
-    float amp = INSTANCE_CUSTOM.y;
-    // z packs three beats: the bite (0..1), +2 while a beetle holds its shell wall, +4 while a stag or spider charges
-    float cz = INSTANCE_CUSTOM.z;
-    float charge = step(3.5, cz); cz -= charge * 4.0;
-    float block = step(1.5, cz); cz -= block * 2.0;
-    float bite = cz;
     float region = COLOR.b;
-    float id = float(INSTANCE_ID);
+    // Per-instance data, packed by AntRenderer:
+    //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening) + gait fraction (distance-locked in the sim)
+    //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
+    //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15) + bite fraction
+    //   w = one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    float xi = floor(INSTANCE_CUSTOM.x);
+    float phase = fract(INSTANCE_CUSTOM.x) * TAU;
+    float seed = mod(xi, 16.0);
+    float pose = floor(xi / 16.0);
+    float yi = floor(INSTANCE_CUSTOM.y);
+    float amp = fract(INSTANCE_CUSTOM.y);
+    float yaw = -((floor(yi / 256.0) / 255.0 - 0.5) * 2.4);  // + in the renderer = toward mesh -X
+    float pitch = (mod(yi, 256.0) / 255.0 - 0.5) * 1.2;      // + = looking up
+    float cz = INSTANCE_CUSTOM.z;
+    float zi = floor(cz);
+    float bite = fract(cz);
+    float hitq = floor(zi / 64.0); zi -= hitq * 64.0;
+    float hov = step(32.0, zi); zi -= hov * 32.0;
+    float sel = step(16.0, zi); zi -= sel * 16.0;
+    float carry = step(8.0, zi); zi -= carry * 8.0;
+    float charge = step(4.0, zi); zi -= charge * 4.0;
+    float block = step(2.0, zi);
+    float kind = floor(INSTANCE_CUSTOM.w);
+    float ot = fract(INSTANCE_CUSTOM.w);
+    float ack = kind == 1.0 ? sin(ot * PI) : 0.0;
+    float flinch = kind == 2.0 ? sin(ot * PI) : 0.0;
+    float greet = kind == 3.0 ? sin(ot * PI) : 0.0;
+    float id = seed * 1.7 + seed * seed * 0.31;      // a stable phase per ant (INSTANCE_ID pops when slots are reused)
+    float idle = 1.0 - smoothstep(0.02, 0.15, amp);
+    float moving = smoothstep(0.0, 0.08, amp);
+    float alive = 1.0 - dead;
+    bool leg = part >= 1.0 && part <= 6.0;
+    // the head group turns as one about the neck; a spider's cephalothorax carries its legs, so only its face turns
+    bool headGroup = (part == 12.0 && pattern != 2) || part == 9.0 || part == 10.0 || part == 7.0 || part == 8.0
+                  || ((part == 11.0 || part == 14.0 || part == 15.0) && region < 0.25);
     vec2 piv = UV2;
     vec3 p = VERTEX;
     vec3 n = NORMAL;
-    bool headGroup = part == 12.0 || part == 9.0 || part == 10.0 || ((part == 11.0 || part == 14.0 || part == 15.0) && region < 0.25);
-    if (part >= 1.0 && part <= 6.0) {
+    // weight: the body rolls with the stride and sways when standing
+    float roll = (sin(phase) * 0.035 * moving + idle * sin(TIME * 0.9 + id) * 0.02) * alive;
+    if (leg) {
         float side = part <= 3.0 ? 1.0 : -1.0;
         float idx = mod(part - 1.0, 3.0);
         float grp = mod(idx + (side > 0.0 ? 0.0 : 1.0), 2.0);
-        float ph = phase + grp * PI;
-        float swing = sin(ph) * 0.42 * amp;
-        float lift = max(0.0, cos(ph)) * 0.09 * amp * w;
+        float s = fract((phase + grp * PI) / TAU);
+        // planted tripod: 55% of the cycle the foot stands on the ground and sweeps back under the body,
+        // 45% it swings forward with a lift. The gait phase is distance-locked, so feet do not slide.
+        float A = 0.45;
+        float swing, lift;
+        if (s < 0.55) { swing = A * (1.0 - 2.0 * s / 0.55); lift = 0.0; }
+        else { float t = (s - 0.55) / 0.45; float e = t * t * (3.0 - 2.0 * t); swing = A * (2.0 * e - 1.0); lift = sin(t * PI) * 0.09 * w; }
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, swing * side);
         n = rot_y(n, swing * side);
         p = q + vec3(piv.x, 0.0, piv.y);
-        p.y += lift;
-        // a spider rears its front legs as it lunges; a beetle behind its shell draws its legs in
+        p.y += lift * moving;
+        // a sentinel lifts its front legs; a spider rears to lunge; a beetle behind its shell draws its legs in
+        if (pose == 1.0 && idx < 0.5) p.y += 0.03 * w;
         if (pattern == 2 && idx < 0.5) p.y += charge * 0.14 * w;
         if (pattern == 1) p.xz = mix(p.xz, piv + (p.xz - piv) * 0.75, block * w * 0.6);
+        // flinch: legs splay
+        p.xz = mix(p.xz, piv + (p.xz - piv) * 1.12, flinch * w * 0.6);
         // dead: legs fold in toward the body
         p.xz = mix(p.xz, piv + (p.xz - piv) * 0.45, dead * w);
         p.y = mix(p.y, p.y + 0.12 * w, dead);
+        // the roll reaches the hips, not the planted feet
+        p = rot_z(p, roll * (1.0 - w));
     } else if (part == 7.0 || part == 8.0) {
         float side = part == 7.0 ? 1.0 : -1.0;
-        float a = sin(TIME * 5.0 + id * 1.7 + side) * 0.22 + sin(TIME * 2.3 + id) * 0.12;
+        // antennae: an idle sweep; still and forward when listening; a flick on an order; swept back on a strike or a flinch
+        float a = (sin(TIME * 5.0 + id * 1.7 + side) * 0.22 + sin(TIME * 2.3 + id) * 0.12) * (1.0 - ack) * (pose == 2.0 ? 0.3 : 1.0);
+        float sweep = (bite * 0.5 + flinch * 0.8) * side;
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q = rot_y(q, (a * w + bite * 0.5 * side) * (1.0 - dead)); // antennae sweep back on the strike
+        q = rot_y(q, (a * w + sweep) * alive);
         p = q + vec3(piv.x, 0.0, piv.y);
+        // the flick: up, then pointing at the order; a greeting raises and quivers them; listening holds them high
+        p.y += w * alive * (ack * 0.06 + greet * (0.05 + 0.012 * sin(TIME * 40.0)) + (pose == 2.0 ? 0.035 : 0.0));
     } else if (part == 9.0 || part == 10.0) {
         float side = part == 9.0 ? 1.0 : -1.0;
-        // jaws gape on the bite; a hero's gnash slowly at rest; a charging stag or spider holds them wide
-        float open = bite * 0.55 + sin(TIME * 3.0 + id) * (0.04 + 0.06 * hero) + charge * 0.45;
+        // jaws gape on the bite; held open on sentry; a slow gnash at rest; wide on a charge
+        float open = bite * 0.55 + sin(TIME * 3.0 + id) * (0.04 + 0.06 * hero) + charge * 0.45
+                   + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
@@ -103,25 +153,43 @@ void vertex() {
         p = q + vec3(0.0, 0.2, -0.06);
         p.y += sin(TIME * 2.0 + id) * 0.004;
     } else {
-        // body bob and a slight gaster pump
+        // body bob, a slight gaster pump, and the gaster nodding at the petiole with the stride
         p.y += sin(phase * 2.0) * 0.006 * amp;
-        if (part == 13.0) p.y += sin(TIME * 2.0 + id) * 0.004;
-        // a beetle hunkers down behind its shell wall
-        p.y -= block * 0.035 * (1.0 - dead);
+        if (part == 13.0) {
+            p.y += sin(TIME * 2.0 + id) * 0.004;
+            if (pattern == 0) {
+                vec3 q = p - vec3(0.0, 0.14, -0.105);
+                float g = sin(2.0 * phase - 0.6) * 0.05 * amp;
+                q = rot_x(q, g); n = rot_x(n, g);
+                p = q + vec3(0.0, 0.14, -0.105);
+            }
+        }
+        // a beetle hunkers behind its shell wall; an ant dips to acknowledge, crouches on a flinch, rises to listen
+        p.y += (-block * 0.035 - ack * 0.02 - flinch * 0.03 + (pose == 2.0 ? 0.02 : 0.0)) * alive;
     }
     if (headGroup) {
-        // the strike: the whole head lunges forward; a hero's head also rides with a slow proud nod
-        float lunge = bite * (0.03 + 0.03 * hero) + charge * 0.05;
-        p.z += lunge * (1.0 - dead);
-        p.y += (sin(TIME * 1.4 + id) * 0.006 * hero - charge * 0.03 - bite * 0.015) * (1.0 - dead);
+        // the head turns about the neck toward whatever the ant minds; a hero nods; a strike lunges it forward
+        vec3 q = p - neck;
+        float lunge = (bite * (0.03 + 0.03 * hero) + charge * 0.05) * alive;
+        q.z += lunge;
+        float pt = (-pitch + sin(TIME * 1.4 + id) * 0.04 * hero - flinch * 0.3 + charge * 0.2 + bite * 0.1) * alive;
+        q = rot_x(q, pt); n = rot_x(n, pt);
+        q = rot_y(q, yaw * alive); n = rot_y(n, yaw * alive);
+        p = q + neck;
     }
+    if (!leg) { p = rot_z(p, roll); n = rot_z(n, roll); }
+    // every ant its own size (feet stay on the ground: the scale is about the origin at foot level)
+    p *= 0.93 + 0.14 * hash1(seed + 0.37);
     v_part = part;
-    v_flash = INSTANCE_CUSTOM.w;
+    v_flash = hitq / 15.0;
     v_local = VERTEX;
     v_w = w;
     v_region = region;
     v_block = block;
     v_uv = UV;
+    v_seed = seed;
+    v_sel = sel;
+    v_hov = hov;
     VERTEX = p;
     NORMAL = n;
 }
@@ -129,11 +197,13 @@ void vertex() {
 void fragment() {
     // part ids arrive interpolated (12.9999...), so snap them before comparing
     float part = floor(v_part + 0.5);
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
     vec3 c = body_color;
-    float rough = 0.52; // chitin: a soft sheen, not glass
+    float rough = 0.6; // chitin: velvet with a soft sheen, not glass
     if (part == 12.0 || part == 9.0 || part == 10.0) c = head_color;
-    float cc = 0.3;
+    float cc = 0.18;
     float metal = 0.0;
+    vec3 eyeEm = vec3(0.0);
     if (part == 13.0) {
         c = gaster_color;
         if (pattern == 1) {
@@ -148,9 +218,17 @@ void fragment() {
             float chev = smoothstep(0.4, 0.5, fract((v_local.z + abs(v_local.x) * 1.4) * 14.0)) * step(v_local.z, -0.25);
             c = mix(c, c * 0.35, max(heart * step(-0.3, v_local.z), chev * 0.7));
         } else {
-            // tergite bands
-            float band = smoothstep(0.42, 0.5, fract(v_local.z * 18.0 + 0.3));
+            // tergite bands: darker toward each seam, and the seam itself tilts the normal so it catches the sun
+            float f = fract(v_local.z * 18.0 + 0.3);
+            float band = smoothstep(0.42, 0.5, f);
             c *= 1.0 - band * 0.35;
+            if (pattern == 0) {
+                float seam = smoothstep(0.36, 0.46, f) - smoothstep(0.46, 0.56, f);
+                vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+                NORMAL = normalize(NORMAL - fwd * seam * 0.35);
+                // honey through the abdomen when the sun is behind it
+                BACKLIGHT = gaster_color * 1.5 + vec3(0.26, 0.13, 0.03);
+            }
         }
     }
     if (pattern == 3) {
@@ -178,12 +256,26 @@ void fragment() {
     }
     if (pattern == 4 && part == 12.0) c = head_color * (0.85 + 0.3 * smoothstep(0.0, 0.05, v_local.y - 0.16)); // polished crown
     if (part >= 1.0 && part <= 8.0) {
-        c = leg_color; rough = 0.6; BACKLIGHT = leg_color * 0.6;
+        c = leg_color; rough = 0.62; BACKLIGHT = leg_color * 0.6;
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
         if (pattern == 1 || pattern == 4) c *= 0.8 + 0.2 * step(0.85, v_w);
+        if (part >= 7.0) BACKLIGHT += vec3(0.2, 0.1, 0.02) * v_w; // light through the antenna tips
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
-    if (part == 11.0) { c = vec3(0.01); rough = 0.08; }
+    if (part == 11.0) {
+        // the eye: a two-tone iris with a camera-facing pseudopupil (compound-eye optics) and a catchlight that is
+        // painted, not lit, so it stays in shadow; it brightens when the ant is selected or under the cursor
+        vec3 nv = NORMAL;
+        float pupil = smoothstep(0.76, 0.95, clamp(nv.z, 0.0, 1.0));
+        float catch = pow(clamp(dot(nv, normalize(vec3(-0.45, 0.6, 1.0))), 0.0, 1.0), 48.0);
+        float pulse = 0.85 + 0.15 * sin(TIME * 0.7 + v_seed);
+        vec3 iris = eye_color * (1.0 + 0.7 * fres);
+        float facet = detail * step(0.5, fract(v_local.x * 190.0 + v_local.z * 60.0)) * step(0.5, fract(v_local.y * 110.0 + v_local.x * 95.0));
+        iris = mix(iris, iris * 0.7, facet);
+        c = mix(iris, vec3(0.012), pupil);
+        rough = 0.12; cc = 0.0;
+        eyeEm = iris * 0.12 * pulse + vec3(1.0, 0.97, 0.9) * catch * (0.9 + 0.7 * v_sel + 0.9 * v_hov) + iris * 0.5 * v_sel * pulse;
+    }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
         c = accent * (0.75 + 0.35 * v_w);
@@ -200,6 +292,16 @@ void fragment() {
         float hair = hash3(floor(v_local * 320.0));
         c *= 0.8 + 0.4 * hair;
         if (part != 11.0) { rough = 0.78; cc = 0.0; }
+    } else if (part != 11.0 && part != 14.0 && part != 15.0) {
+        // micro-hair on every other creature: a fine fuzz that catches light at grazing angles and breaks the plastic dome
+        float hair = hash3(floor(v_local * 300.0));
+        c += (c * 1.2 + vec3(0.02)) * pow(fres, 3.0) * (0.5 + 0.5 * hair);
+        rough += (hair - 0.5) * 0.08;
+    }
+    if (part != 11.0) {
+        // no two ants quite alike
+        c *= 0.94 + 0.12 * hash1(v_seed + 1.3);
+        rough += (hash1(v_seed + 2.9) - 0.5) * 0.12;
     }
     if ((pattern == 1 || pattern == 4) && part != 11.0 && part != 14.0 && part != 15.0) { rough = pattern == 4 ? 0.36 : 0.42; cc = 0.4; metal = 0.15; }
     if (pattern == 3 && part != 11.0 && part != 14.0) { rough = 0.48; cc = 0.25; }
@@ -214,11 +316,10 @@ void fragment() {
         rough = mix(rough, 0.38, g);
     }
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
-    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
     ALBEDO = c * (1.0 - dead * 0.35);
-    ROUGHNESS = rough + dead * 0.3;
+    ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
     SPECULAR = 0.32;
     CLEARCOAT = cc;
@@ -226,7 +327,7 @@ void fragment() {
     RIM = pattern == 2 ? 0.6 : 0.35;
     RIM_TINT = 0.6;
     // brief warm flicker when bitten; kept subtle so big targets under constant attack keep their colour
-    EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08);
+    EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08) + eyeEm;
     // a beetle behind its shell wall: the wing cases gleam hard along their edges
     if (v_block > 0.5 && part != 11.0) { EMISSION += accent * (0.08 + 0.35 * fres) * (0.7 + 0.3 * sin(TIME * 6.0)); ROUGHNESS = 0.25; }
     if (part == 13.0 && length(acid) > 0.0) {

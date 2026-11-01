@@ -48,7 +48,9 @@ public partial class AntPortrait : SubViewportContainer
         var holder = new Node3D { Position = -aabb.GetCenter() };
         _turn.AddChild(holder);
         _body = OneInstance(mesh);
-        holder.AddChild(new MultiMeshInstance3D { Multimesh = _body, MaterialOverride = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, Type, false) });
+        var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, Type, false);
+        mat.SetShaderParameter("detail", 1f); // close enough to see the facets of the eyes
+        holder.AddChild(new MultiMeshInstance3D { Multimesh = _body, MaterialOverride = mat });
         if (Config.Flies(Type))
         {
             var wm = new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) };
@@ -87,8 +89,9 @@ public partial class AntPortrait : SubViewportContainer
         if (!IsVisibleInTree()) return;
         _t += (float)delta;
         if (Spin) _turn.Rotation = new Vector3(0, 0.7f + _t * 0.45f, 0);
-        // a slow idle shuffle so the legs and antennae are alive
-        _body.SetInstanceCustomData(0, new Color(_t * 0.35f % 1f, 0.18f, Mathf.Max(0, Mathf.Sin(_t * 0.9f)) * 0.5f, 0));
+        // a slow idle shuffle so the legs and antennae are alive; the head glances about as it turns
+        int yaw8 = (int)((Mathf.Sin(_t * 0.6f) * 0.25f + 0.5f) * 255), pitch8 = (int)((Mathf.Sin(_t * 0.45f + 1) * 0.12f + 0.5f) * 255);
+        _body.SetInstanceCustomData(0, new Color(5 + _t * 0.35f % 1f, yaw8 * 256 + pitch8 + 0.18f, Mathf.Max(0, Mathf.Sin(_t * 0.9f)) * 0.5f, 0));
     }
 }
 
