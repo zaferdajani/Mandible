@@ -29,14 +29,18 @@ uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
 uniform vec3 leg_color : source_color = vec3(0.06, 0.045, 0.035);
 uniform float dead = 0.0;
-uniform int pattern = 0;      // 0 ant, 1 beetle (grooved metallic shell), 2 wolf spider (striped, hairy)
+uniform int pattern = 0;      // 0 ant, 1 ground beetle (grooved metallic shell), 2 wolf spider (striped, hairy), 3 wasp, 4 stag beetle
 uniform float irid = 0.0;     // structural-colour sheen strength
-uniform float hero = 0.0;     // gold-inlaid armour of hero ants
+uniform float hero = 0.0;     // metal-inlaid armour of hero ants
+uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
 varying float v_part;
 varying float v_flash;
 varying vec3 v_local;
 varying float v_w;
+varying float v_region;
+varying float v_block;
+varying vec2 v_uv;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 
@@ -48,10 +52,17 @@ void vertex() {
     float w = COLOR.g;
     float phase = INSTANCE_CUSTOM.x * TAU;
     float amp = INSTANCE_CUSTOM.y;
-    float bite = INSTANCE_CUSTOM.z;
+    // z packs three beats: the bite (0..1), +2 while a beetle holds its shell wall, +4 while a stag or spider charges
+    float cz = INSTANCE_CUSTOM.z;
+    float charge = step(3.5, cz); cz -= charge * 4.0;
+    float block = step(1.5, cz); cz -= block * 2.0;
+    float bite = cz;
+    float region = COLOR.b;
+    float id = float(INSTANCE_ID);
     vec2 piv = UV2;
     vec3 p = VERTEX;
     vec3 n = NORMAL;
+    bool headGroup = part == 12.0 || part == 9.0 || part == 10.0 || ((part == 11.0 || part == 14.0 || part == 15.0) && region < 0.25);
     if (part >= 1.0 && part <= 6.0) {
         float side = part <= 3.0 ? 1.0 : -1.0;
         float idx = mod(part - 1.0, 3.0);
@@ -64,30 +75,53 @@ void vertex() {
         n = rot_y(n, swing * side);
         p = q + vec3(piv.x, 0.0, piv.y);
         p.y += lift;
+        // a spider rears its front legs as it lunges; a beetle behind its shell draws its legs in
+        if (pattern == 2 && idx < 0.5) p.y += charge * 0.14 * w;
+        if (pattern == 1) p.xz = mix(p.xz, piv + (p.xz - piv) * 0.75, block * w * 0.6);
         // dead: legs fold in toward the body
         p.xz = mix(p.xz, piv + (p.xz - piv) * 0.45, dead * w);
         p.y = mix(p.y, p.y + 0.12 * w, dead);
     } else if (part == 7.0 || part == 8.0) {
         float side = part == 7.0 ? 1.0 : -1.0;
-        float a = sin(TIME * 5.0 + float(INSTANCE_ID) * 1.7 + side) * 0.22 + sin(TIME * 2.3 + float(INSTANCE_ID)) * 0.12;
+        float a = sin(TIME * 5.0 + id * 1.7 + side) * 0.22 + sin(TIME * 2.3 + id) * 0.12;
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q = rot_y(q, a * w * (1.0 - dead));
+        q = rot_y(q, (a * w + bite * 0.5 * side) * (1.0 - dead)); // antennae sweep back on the strike
         p = q + vec3(piv.x, 0.0, piv.y);
     } else if (part == 9.0 || part == 10.0) {
         float side = part == 9.0 ? 1.0 : -1.0;
-        float open = bite * 0.55 + sin(TIME * 3.0 + float(INSTANCE_ID)) * 0.04;
+        // jaws gape on the bite; a hero's gnash slowly at rest; a charging stag or spider holds them wide
+        float open = bite * 0.55 + sin(TIME * 3.0 + id) * (0.04 + 0.06 * hero) + charge * 0.45;
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, open * side);
+        n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
+    } else if (pattern == 3 && region > 0.75) {
+        // the wasp's gaster curls down and forward to drive the sting home
+        vec3 q = p - vec3(0.0, 0.2, -0.06);
+        q = rot_x(q, bite * 0.9);
+        n = rot_x(n, bite * 0.9);
+        p = q + vec3(0.0, 0.2, -0.06);
+        p.y += sin(TIME * 2.0 + id) * 0.004;
     } else {
         // body bob and a slight gaster pump
         p.y += sin(phase * 2.0) * 0.006 * amp;
-        if (part == 13.0) p.y += sin(TIME * 2.0 + float(INSTANCE_ID)) * 0.004;
+        if (part == 13.0) p.y += sin(TIME * 2.0 + id) * 0.004;
+        // a beetle hunkers down behind its shell wall
+        p.y -= block * 0.035 * (1.0 - dead);
+    }
+    if (headGroup) {
+        // the strike: the whole head lunges forward; a hero's head also rides with a slow proud nod
+        float lunge = bite * (0.03 + 0.03 * hero) + charge * 0.05;
+        p.z += lunge * (1.0 - dead);
+        p.y += (sin(TIME * 1.4 + id) * 0.006 * hero - charge * 0.03 - bite * 0.015) * (1.0 - dead);
     }
     v_part = part;
     v_flash = INSTANCE_CUSTOM.w;
     v_local = VERTEX;
     v_w = w;
+    v_region = region;
+    v_block = block;
+    v_uv = UV;
     VERTEX = p;
     NORMAL = n;
 }
@@ -135,28 +169,47 @@ void fragment() {
         // pronotum: punctured, with a dark midline
         c *= 1.0 - (1.0 - smoothstep(0.004, 0.01, abs(v_local.x))) * 0.5;
     }
+    if (pattern == 4 && part == 13.0) {
+        // stag elytra: broad shallow grooves, a pale polished margin and a dark suture
+        float groove = smoothstep(0.25, 0.5, abs(fract(v_local.x * 22.0) - 0.5));
+        c = gaster_color * (0.6 + 0.4 * groove);
+        c = mix(c, gaster_color * 1.7, smoothstep(0.15, 0.185, abs(v_local.x)));
+        c *= 1.0 - (1.0 - smoothstep(0.006, 0.014, abs(v_local.x))) * 0.6;
+    }
+    if (pattern == 4 && part == 12.0) c = head_color * (0.85 + 0.3 * smoothstep(0.0, 0.05, v_local.y - 0.16)); // polished crown
     if (part >= 1.0 && part <= 8.0) {
         c = leg_color; rough = 0.6; BACKLIGHT = leg_color * 0.6;
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
-        if (pattern == 1) c *= 0.8 + 0.2 * step(0.85, v_w);
+        if (pattern == 1 || pattern == 4) c *= 0.8 + 0.2 * step(0.85, v_w);
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
     if (part == 11.0) { c = vec3(0.01); rough = 0.08; }
+    if (part == 14.0) {
+        // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
+        c = accent * (0.75 + 0.35 * v_w);
+        metal = 0.85; rough = 0.33; cc = 0.5;
+    }
+    if (part == 15.0) {
+        // armour plates: dark lacquered chitin with a rim of the accent metal along the edge
+        float rim = smoothstep(0.3, 0.46, v_uv.y);
+        c = mix(body_color * 0.9 + vec3(0.02), accent, rim);
+        metal = mix(0.45, 0.9, rim); rough = mix(0.38, 0.3, rim); cc = 0.6;
+    }
     if (pattern == 2) {
         // velvet hair: matte, speckled, soft sheen
         float hair = hash3(floor(v_local * 320.0));
         c *= 0.8 + 0.4 * hair;
         if (part != 11.0) { rough = 0.78; cc = 0.0; }
     }
-    if (pattern == 1 && part != 11.0) { rough = 0.42; cc = 0.4; metal = 0.15; }
-    if (pattern == 3 && part != 11.0) { rough = 0.48; cc = 0.25; }
-    if (hero > 0.0 && part != 11.0) {
-        // gold filigree: bands on the abdomen, a crest on the head, edged mandibles
+    if ((pattern == 1 || pattern == 4) && part != 11.0 && part != 14.0 && part != 15.0) { rough = pattern == 4 ? 0.36 : 0.42; cc = 0.4; metal = 0.15; }
+    if (pattern == 3 && part != 11.0 && part != 14.0) { rough = 0.48; cc = 0.25; }
+    if (hero > 0.0 && part != 11.0 && part != 14.0 && part != 15.0) {
+        // metal filigree in the colony's colour: bands on the abdomen, a crest line on the head, edged mandibles
         float gband = part == 13.0 ? step(0.8, fract(v_local.z * 11.0 + 0.1)) : 0.0;
         float crest = part == 12.0 ? smoothstep(0.02, 0.0, abs(v_local.x)) * step(0.17, v_local.y) : 0.0;
         float jaw = (part == 9.0 || part == 10.0) ? step(0.75, v_w) : 0.0;
         float g = max(max(gband, crest), jaw) * hero;
-        c = mix(c, vec3(0.95, 0.68, 0.2), g);
+        c = mix(c, accent, g);
         metal = mix(metal, 0.9, g);
         rough = mix(rough, 0.38, g);
     }
@@ -174,11 +227,13 @@ void fragment() {
     RIM_TINT = 0.6;
     // brief warm flicker when bitten; kept subtle so big targets under constant attack keep their colour
     EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08);
+    // a beetle behind its shell wall: the wing cases gleam hard along their edges
+    if (v_block > 0.5 && part != 11.0) { EMISSION += accent * (0.08 + 0.35 * fres) * (0.7 + 0.3 * sin(TIME * 6.0)); ROUGHNESS = 0.25; }
     if (part == 13.0 && length(acid) > 0.0) {
         // translucent acid sac: smooth glossy green with a slow inner glow, gold bands still on top
         float pulse = 0.75 + 0.25 * sin(TIME * 2.2);
         float bands = hero * step(0.8, fract(v_local.z * 11.0 + 0.1));
-        ALBEDO = mix(acid * 0.6, vec3(0.95, 0.68, 0.2), bands);
+        ALBEDO = mix(acid * 0.6, accent, bands);
         EMISSION += acid * 0.22 * pulse * (1.0 - bands);
         CLEARCOAT = 0.5;
         CLEARCOAT_ROUGHNESS = 0.35;
@@ -675,9 +730,41 @@ void vertex() {
 void fragment() {
     float r = length(UV - 0.5) * 2.0;
     float a = (1.0 - smoothstep(0.2, 1.0, r));
-    vec3 col = v_c.z < 0.5 ? vec3(0.62, 0.52, 0.40) : (v_c.z < 1.5 ? vec3(0.78, 0.82, 0.30) : (v_c.z < 2.5 ? vec3(1.0, 0.85, 0.5) : vec3(0.95, 0.95, 0.92)));
+    // kinds: 0 dust, 1 hemolymph, 2 gold sparks, 3 silk, 4 acid, 5 venom, 6 shell gleam, 7 scarlet sparks
+    float k = v_c.z;
+    vec3 col = k < 0.5 ? vec3(0.62, 0.52, 0.40) : k < 1.5 ? vec3(0.78, 0.82, 0.30) : k < 2.5 ? vec3(1.0, 0.85, 0.5) : k < 3.5 ? vec3(0.95, 0.95, 0.92)
+             : k < 4.5 ? vec3(0.55, 0.98, 0.18) : k < 5.5 ? vec3(0.72, 0.38, 0.95) : k < 6.5 ? vec3(0.45, 0.95, 0.8) : vec3(1.0, 0.42, 0.22);
     ALBEDO = col;
     ALPHA = a * v_c.x;
+}
+";
+
+    /// A venom pool left by an Acid Burst: a seething green slick that eats at the ground, fading with its life.
+    public const string Pool = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+varying float v_a;
+varying float v_seed;
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void vertex() { v_a = INSTANCE_CUSTOM.x; v_seed = INSTANCE_CUSTOM.y; }
+void fragment() {
+    vec2 p = UV - 0.5;
+    float ang = atan(p.y, p.x);
+    float r = length(p) * 2.0 + 0.12 * sin(ang * 5.0 + v_seed * 7.0) + 0.06 * sin(ang * 11.0 - v_seed * 3.0);
+    float body = 1.0 - smoothstep(0.78, 1.0, r);
+    // bubbles rise and burst across the slick
+    vec2 cell = floor((p + v_seed) * 16.0);
+    float h = hash2(cell);
+    vec2 cp = fract((p + v_seed) * 16.0) - 0.5;
+    float bt = fract(TIME * (0.6 + h) + h * 3.0);
+    float bub = (1.0 - smoothstep(0.0, 0.22 + 0.2 * bt, length(cp))) * (1.0 - bt) * step(0.35, h);
+    float rim = smoothstep(0.55, 0.85, r) * body;
+    vec3 col = mix(vec3(0.28, 0.62, 0.08), vec3(0.62, 0.98, 0.22), rim + bub);
+    ALBEDO = col;
+    EMISSION = col * (0.25 + 0.5 * bub + 0.2 * rim);
+    ROUGHNESS = 0.15;
+    SPECULAR = 0.7;
+    ALPHA = body * v_a * (0.62 + 0.3 * bub);
 }
 ";
 

@@ -33,9 +33,11 @@ public struct Ant
     public float PrevHeading, PrevAlt;
     public int HeroTier;              // queen tier a hero hatched under
     public int SquadP1;               // squad id + 1 (0 = not in a squad)
-    public float BuffT, BuffMul;      // war cry
-    public float PoisonT, PoisonDps;  // acid
+    public float BuffT, BuffMul;      // war cry / rally
+    public float PoisonT, PoisonDps;  // acid, venom
     public int PoisonSrc;
+    // signature specials: a charge or lunge under way, a raised shell, a wasp climbing away, and their shared cooldown
+    public float ChargeT, BlockT, RetreatT, SpecialCd;
     // lane war
     public bool Guardian;             // an immobile mound guardian (lane tower)
     public byte Lane, LaneStep;       // lane creep: lane index + 1 and the waypoint it is heading for
@@ -47,7 +49,7 @@ public struct Ant
     public int DigP1;                 // chamber id + 1 this worker is digging (0 = none)
 }
 
-public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull }
+public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally }
 
 public struct SimEvent
 {
@@ -66,6 +68,14 @@ public sealed class WebZone
 {
     public Vector2 Pos;
     public float R, Life, Max, Root;
+}
+
+/// Venom left on the ground by an Acid Burst: poisons every enemy of its colony standing in it.
+public sealed class AcidPool
+{
+    public Vector2 Pos;
+    public float R, Life, Max, Dps;
+    public int Team, Src;
 }
 
 sealed class WebShotFx
@@ -561,7 +571,7 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer);
+            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT));
         }
         foreach (var c in Col)
         {
@@ -604,6 +614,7 @@ public sealed partial class Sim
         foreach (var c in Col) { TickColony(c, dt); TickResearch(c, dt); }
         TickShowers();
         TickWebs(dt);
+        TickPools(dt);
         TickSquads(dt);
         TickNest(dt);
         if (Mode == GameMode.Lanes) TickLanes(dt);
@@ -826,11 +837,16 @@ public sealed partial class Sim
             return;
         }
 
+        a.ChargeT -= dt;
+        a.BlockT -= dt;
+        a.RetreatT -= dt;
+        a.SpecialCd -= dt;
         if (Config.Flies(a.Type))
         {
             // flyers cruise high; wasps dive onto their prey, flying ants swoop to bite ground targets
             float want = Config.CruiseAlt(a.Type);
-            if (a.State == AntState.Engage && Valid(a.Target, a.TargetSerial))
+            if (a.RetreatT > 0) want += 1.8f; // a wasp that has just stung climbs out of reach
+            else if (a.State == AntState.Engage && Valid(a.Target, a.TargetSerial))
             {
                 ref var tt = ref Ants[a.Target];
                 if (a.Pos.DistanceTo(tt.Pos) < 5f) want = a.Type == AntType.Wasp ? tt.Alt + 0.9f : Mathf.Max(tt.Alt, 1.4f);
@@ -932,6 +948,7 @@ public sealed partial class Sim
                 break;
             case AntState.Engage:
                 desired = EngageLogic(i, ref a, st, think);
+                if (a.ChargeT > 0) speedMul = Config.ChargeSpeed; // a stag's charge, a spider's lunge
                 break;
             case AntState.Dig:
                 desired = DigLogic(ref a);
@@ -981,10 +998,49 @@ public sealed partial class Sim
         }
         float reach = st.Reach + t.Size * 0.38f + a.Size * 0.3f;
         var to = t.Pos - a.Pos;
+        // hit and run: a wasp that has just stung flies off a few lengths before it turns back
+        if (a.RetreatT > 0) return to.LengthSquared() < 64f ? -to : Vector2.Zero;
         if (to.Length() > reach) return to;
+        if (a.ChargeT > 0) { ChargeImpact(i, ref a, st, a.Target); return Vector2.Zero; }
         a.Heading += MathX.AngleDiff(a.Heading, to.AngleD()) * 0.3f;
         TryBite(i, a.Target, st);
         return Vector2.Zero;
+    }
+
+    /// A charging stag reaches its prey: the antler toss. A lunging spider lands on its webbed prey: a heavy bite.
+    void ChargeImpact(int i, ref Ant a, UnitStats st, int target)
+    {
+        a.ChargeT = 0;
+        a.AttackAnim = 1;
+        a.Cooldown = st.Cooldown;
+        float lv = a.Level - 1;
+        if (a.Type == AntType.StagBeetle)
+        {
+            var fwd = MathX.Dir(a.Heading);
+            var jaws = a.Pos + fwd * (a.Size * 0.5f);
+            float r = a.Size * 0.6f + 1.4f + 0.2f * lv;
+            float dmg = st.Damage * a.DmgMul * Config.TossDamage;
+            var victims = AntsNear(jaws, r).ToArray();
+            Events.Add(new SimEvent { Kind = EvKind.Toss, Pos = jaws, To = jaws + fwd * Config.TossThrow, Team = a.Team, Type = a.Type, Radius = r });
+            foreach (int j in victims)
+            {
+                ref var b = ref Ants[j];
+                if (b.Type == AntType.Queen) { Damage(j, dmg, i); continue; }
+                var dir = (fwd * 0.7f + (b.Pos - a.Pos).Normalized() * 0.3f).Normalized();
+                b.Pos = ClampMap(b.Pos + dir * (Config.TossThrow + 0.3f * lv));
+                b.Root = Mathf.Max(b.Root, Config.TossStun); // on its back, legs kicking
+                Damage(j, dmg, i);
+            }
+            a.SpecialCd = 9f - 0.5f * lv;
+        }
+        else
+        {
+            // the lunge: a wolf spider lands on its prey jaws first
+            float dmg = st.Damage * a.DmgMul * Config.LungeDamage;
+            Events.Add(new SimEvent { Kind = EvKind.Lunge, Pos = Ants[target].Pos, Team = a.Team, Type = a.Type });
+            Damage(target, dmg, i);
+            a.SpecialCd = 7f - 0.4f * lv;
+        }
     }
 
     void TryBite(int i, int target, UnitStats st)
@@ -998,13 +1054,17 @@ public sealed partial class Sim
         a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f);
         a.AttackAnim = 1;
         float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * Rng.R(0.85f, 1.15f);
+        bool sting = false;
         if (a.Type == AntType.Wasp && a.AbilityCd <= 0)
         {
-            // venomous sting: a heavy blow on a cooldown that shortens with level
-            dmg *= 2.5f + 0.3f * (a.Level - 1);
+            // venomous sting: a heavy blow that keeps burning, then the wasp climbs away before the swarm can answer
+            dmg *= Config.StingDamage + 0.3f * (a.Level - 1);
             a.AbilityCd = 5f - 0.4f * (a.Level - 1);
+            a.RetreatT = Config.WaspRetreat;
+            sting = true;
             Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
         }
+        if (a.Type == AntType.Spider && t.Root > 0) dmg *= Config.LungeDamage * 0.6f; // prey wrapped in silk cannot dodge the fangs
         if (a.Guardian && Config.IsHero(t.Type)) dmg *= 1.6f; // guardians punish heroes who dive under them
         bool fire = a.Team < 2 && Col[a.Team].Race == Race.RedFire && Config.IsWarrior(a.Type) && !Config.Ranged(a.Type);
         if (fire && a.Pos.DistanceTo(NestEntrance(a.Team)) < 40) dmg *= Config.RedHomeDamage;
@@ -1017,11 +1077,23 @@ public sealed partial class Sim
         }
         if (Config.Ranged(a.Type)) Events.Add(new SimEvent { Kind = EvKind.Spit, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
         else Events.Add(new SimEvent { Kind = EvKind.Bite, Pos = t.Pos, Team = a.Team, Type = a.Type });
+        var tp = t.Pos;
         if (a.Type == AntType.Warlord)
         {
             // cleave: every bite also catches the enemies crowding the warlord
-            var tp = t.Pos;
-            foreach (int j in EnemiesNear(tp, 2.6f, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * 0.5f, i);
+            foreach (int j in EnemiesNear(tp, 2.6f, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * Config.WarlordCleave, i);
+        }
+        else if (a.Type == AntType.Matron)
+        {
+            // the acid jet splashes over whoever stands beside the target
+            foreach (int j in EnemiesNear(tp, Config.MatronSplashR, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * Config.MatronSplash, i);
+        }
+        if (sting && t.Alive && t.Type != AntType.Queen)
+        {
+            float venom = dmg * Config.StingVenom;
+            t.PoisonDps = t.PoisonT > 0 ? Mathf.Max(t.PoisonDps, venom) : venom;
+            t.PoisonT = Config.StingVenomTime;
+            t.PoisonSrc = i;
         }
         Damage(target, dmg, i);
     }
@@ -1057,19 +1129,25 @@ public sealed partial class Sim
 
     void WildAbility(int i, ref Ant a, UnitStats st)
     {
-        if (a.AbilityCd > 0) return;
         float lv = a.Level - 1;
-        if (a.Type == AntType.Beetle || a.Type == AntType.StagBeetle)
+        if (a.Type == AntType.Beetle)
         {
+            // shell wall: swarmed or hurt, it locks its wing cases down and weathers the storm
+            if (a.SpecialCd <= 0 && a.BlockT <= 0 && (a.Hp < a.MaxHp * 0.6f || AntsNear(a.Pos, a.Size * 0.6f + 1.6f).Count >= 3))
+            {
+                a.BlockT = Config.ShellWallTime + 0.3f * lv;
+                a.SpecialCd = 13f - 0.6f * lv;
+                Events.Add(new SimEvent { Kind = EvKind.ShellWall, Pos = a.Pos, Team = a.Team, Type = a.Type, Radius = a.Size * 0.6f });
+            }
+            if (a.AbilityCd > 0) return;
             // mandible sweep: crush every ant around the jaws and hurl them back
-            bool stag = a.Type == AntType.StagBeetle;
             float r = a.Size * 0.75f + 1.2f + 0.25f * lv;
             var hits = AntsNear(a.Pos, r);
-            if (hits.Count < (stag ? 1 : 2)) return;
-            float dmg = st.Damage * a.DmgMul * (stag ? 2f : 1.5f);
+            if (hits.Count < 2) return;
+            float dmg = st.Damage * a.DmgMul * 1.5f;
             var victims = hits.ToArray();
             a.AttackAnim = 1;
-            a.AbilityCd = (stag ? 5f : 7f) - 0.4f * lv;
+            a.AbilityCd = 7f - 0.4f * lv;
             Events.Add(new SimEvent { Kind = EvKind.Sweep, Pos = a.Pos, Team = a.Team, Type = a.Type, Radius = r });
             foreach (int j in victims)
             {
@@ -1079,11 +1157,30 @@ public sealed partial class Sim
                 Damage(j, dmg, i);
             }
         }
+        else if (a.Type == AntType.StagBeetle)
+        {
+            // antler toss: it lowers its head and charges; whatever its jaws meet goes flying (ChargeImpact)
+            if (a.SpecialCd > 0 || a.ChargeT > 0 || !Valid(a.Target, a.TargetSerial)) return;
+            ref var t = ref Ants[a.Target];
+            float d = a.Pos.DistanceTo(t.Pos);
+            if (t.Alt > 1.5f || d < 3.5f || d > 12f + lv) return;
+            a.ChargeT = 1.6f;
+            Events.Add(new SimEvent { Kind = EvKind.Charge, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
+        }
         else if (a.Type == AntType.Spider && Valid(a.Target, a.TargetSerial))
         {
-            // web shot: a sticky blob that roots every ant it lands on
-            var to = Ants[a.Target].Pos;
-            float d = a.Pos.DistanceTo(to);
+            ref var t = ref Ants[a.Target];
+            float d = a.Pos.DistanceTo(t.Pos);
+            // the lunge: prey wrapped in silk a few lengths away is pounced on
+            if (a.SpecialCd <= 0 && a.ChargeT <= 0 && t.Root > 0.3f && d > 2.5f && d < 10f)
+            {
+                a.ChargeT = 0.9f;
+                Events.Add(new SimEvent { Kind = EvKind.Charge, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
+                return;
+            }
+            if (a.AbilityCd > 0) return;
+            // web snare: a sticky blob that roots every ant it lands on
+            var to = t.Pos;
             if (d > 16) return;
             _shots.Add(new WebShotFx
             {
@@ -1129,7 +1226,15 @@ public sealed partial class Sim
             case AntType.Warlord:
             {
                 if (EnemiesNear(a.Pos, 10, a.Team, false, a.Layer).Count < 3) return;
-                float mul = (1.3f + 0.03f * lv) * (1 + 0.1f * (tierMul - 1));
+                float mul = (Config.WarCryBite + 0.03f * lv) * (1 + 0.1f * (tierMul - 1));
+                // the roar itself: everyone within a few lengths is staggered back and bitten by the shock
+                float shock = st.Damage * a.DmgMul * Config.WarCryShock;
+                foreach (int j in EnemiesNear(a.Pos, Config.WarCryShockR, a.Team, false, a.Layer).ToArray())
+                {
+                    ref var b = ref Ants[j];
+                    if (b.Type != AntType.Queen) { b.Pos = ClampMap(b.Pos + (b.Pos - a.Pos).Normalized() * 1.5f); b.Root = Mathf.Max(b.Root, 0.5f); }
+                    Damage(j, shock, i);
+                }
                 int cr = 4;
                 int cx = (int)(a.Pos.X / SpatialHash.Cell), cz = (int)(a.Pos.Y / SpatialHash.Cell);
                 for (int z = cz - cr; z <= cz + cr; z++)
@@ -1165,6 +1270,8 @@ public sealed partial class Sim
                     b.PoisonSrc = i;
                     Damage(j, dmg, i);
                 }
+                // the acid pools where it lands and keeps burning whoever wades through it
+                Pools.Add(new AcidPool { Pos = to, R = r, Life = Config.AcidPoolLife, Max = Config.AcidPoolLife, Dps = (4 + 1.2f * lv) * tierMul, Team = a.Team, Src = i });
                 a.AbilityCd = 9 - 0.3f * lv;
                 a.AttackAnim = 1;
                 Events.Add(new SimEvent { Kind = EvKind.AcidBurst, Pos = a.Pos, To = to, Team = a.Team, Type = a.Type, Radius = r });
@@ -1184,9 +1291,29 @@ public sealed partial class Sim
                     Ants[j].Root = Mathf.Max(Ants[j].Root, 1.2f + 0.1f * lv);
                     Damage(j, dmg, i);
                 }
+                // the rally: warriors who see the marshal strike press the attack
+                int rallied = 0;
+                int rc = 3;
+                int rx = (int)(to.X / SpatialHash.Cell), rz = (int)(to.Y / SpatialHash.Cell);
+                for (int z = rz - rc; z <= rz + rc; z++)
+                {
+                    if (z < 0 || z >= Hash.N) continue;
+                    for (int x = rx - rc; x <= rx + rc; x++)
+                    {
+                        if (x < 0 || x >= Hash.N) continue;
+                        for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
+                        {
+                            ref var b = ref Ants[j];
+                            if (!b.Alive || b.Team != a.Team || j == i || !Config.IsWarrior(b.Type) || b.Pos.DistanceTo(to) > 12) continue;
+                            if (b.BuffT <= 0 || b.BuffMul <= Config.RallyBite) { b.BuffT = Mathf.Max(b.BuffT, Config.RallyTime); b.BuffMul = Mathf.Max(b.BuffMul, Config.RallyBite); }
+                            rallied++;
+                        }
+                    }
+                }
                 a.AbilityCd = 11 - 0.4f * lv;
                 a.AttackAnim = 1;
                 Events.Add(new SimEvent { Kind = EvKind.DiveBomb, Pos = to, Team = a.Team, Type = a.Type, Radius = r });
+                if (rallied > 0) Events.Add(new SimEvent { Kind = EvKind.Rally, Pos = to, Team = a.Team, Type = a.Type, Radius = 12 });
                 break;
             }
         }
@@ -1214,6 +1341,27 @@ public sealed partial class Sim
         }
     }
 
+    public readonly List<AcidPool> Pools = new();
+
+    void TickPools(float dt)
+    {
+        for (int k = Pools.Count - 1; k >= 0; k--)
+        {
+            var z = Pools[k];
+            z.Life -= dt;
+            if (z.Life <= 0) { Pools.RemoveAt(k); continue; }
+            // standing in the acid keeps the burn topped up for a moment after stepping out
+            foreach (int j in EnemiesNear(z.Pos, z.R, z.Team, true).ToArray())
+            {
+                ref var b = ref Ants[j];
+                if (b.Type == AntType.Queen) continue;
+                b.PoisonDps = b.PoisonT > 0 ? Mathf.Max(b.PoisonDps, z.Dps) : z.Dps;
+                b.PoisonT = Mathf.Max(b.PoisonT, 1.0f);
+                if (z.Src >= 0 && Ants[z.Src].Alive) b.PoisonSrc = z.Src;
+            }
+        }
+    }
+
     /// Web shots in flight, for rendering: (from, to, progress 0..1).
     public IEnumerable<(Vector2 from, Vector2 to, float t)> WebShots()
     {
@@ -1225,6 +1373,9 @@ public sealed partial class Sim
         ref var t = ref Ants[target];
         if (!t.Alive) return;
         if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
+        // chitin: heroes and wild bugs shrug off a share of every blow; a beetle behind its shell wall most of it
+        float armor = Config.Of(t.Type).Armor + (t.BlockT > 0 ? Config.ShellWallArmor : 0f);
+        if (armor > 0) dmg *= 1f - armor;
         t.Hp -= dmg;
         t.HitFlash = 1;
         t.DamagedT = 3f;

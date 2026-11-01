@@ -34,10 +34,13 @@ public static class Lane
 
     public static string HeroBlurb(AntType t) => t switch
     {
-        AntType.Warlord => "A towering brawler. Every bite cleaves all enemies around it. War Cry (Q): nearby warriors bite harder and run faster.",
-        AntType.Matron => "A ranged acid spitter. Acid Burst (Q): melts a whole cluster of enemies around her target.",
-        _ => "A winged hunter that flies over rocks. Dive Bomb (Q): crashes down on a crowd, crushing and stunning it.",
+        AntType.Warlord => "The plated brawler. Cleaving bites, the heaviest armour of the three, and a War Cry (Q) that staggers the enemy and drives your waves on.",
+        AntType.Matron => "The ranged acid spitter. Her spray splashes over crowds; Acid Burst (Q) melts a cluster and leaves a venom pool nobody should stand in.",
+        _ => "The winged commander. Flies over rocks and out of reach; Dive Bomb (Q) crushes and stuns a crowd and rallies every warrior who sees it.",
     };
+
+    /// The full card: attack, defence and the special, each with its numbers.
+    public static string HeroCard(AntType t) => $"ATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL (Q)  {Config.SpecialDesc(t)}";
 }
 
 public sealed partial class Sim

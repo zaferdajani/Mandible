@@ -54,7 +54,7 @@ public partial class AntPortrait : SubViewportContainer
             var wm = new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) };
             if (Type == AntType.Wasp) { wm.SetShaderParameter("tint", new Color(0.82f, 0.62f, 0.3f)); wm.SetShaderParameter("vein", new Color(0.35f, 0.2f, 0.05f)); }
             if (Type == AntType.Marshal) { wm.SetShaderParameter("tint", new Color(0.95f, 0.85f, 0.6f)); wm.SetShaderParameter("vein", new Color(0.6f, 0.42f, 0.1f)); }
-            _wings = OneInstance(AntMesh.Wings(Type == AntType.Marshal ? AntType.Flyer : Type));
+            _wings = OneInstance(AntMesh.Wings(Type));
             _wings.SetInstanceCustomData(0, new Color(Type == AntType.Wasp ? 46f : 36f, 1f, 0, 0));
             holder.AddChild(new MultiMeshInstance3D { Multimesh = _wings, MaterialOverride = wm, SortingOffset = 5 });
         }
@@ -395,13 +395,20 @@ public partial class HeroPicker : ColorRect
             name.HorizontalAlignment = HorizontalAlignment.Center;
             col.AddChild(name);
             var st = Config.Of(type);
-            var stats = UiTheme.Text($"HP {st.Hp}  ·  Bite {st.Damage}  ·  Speed {st.Speed}{(Config.Ranged(type) ? "  ·  ranged" : "")}{(Config.Flies(type) ? "  ·  flies" : "")}", 14, UiTheme.Bold, UiTheme.Dim);
+            var stats = UiTheme.Text(Config.StatLine(type), 14, UiTheme.Bold, UiTheme.Dim);
             stats.HorizontalAlignment = HorizontalAlignment.Center;
             col.AddChild(stats);
             var blurb = UiTheme.Text(Lane.HeroBlurb(type), 15, null, UiTheme.Ink);
             blurb.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             blurb.CustomMinimumSize = new Vector2(240, 0);
             col.AddChild(blurb);
+            foreach (var (head, body) in new[] { ("ATTACK", Config.AttackDesc(type)), ("DEFENCE", Config.DefenceDesc(type)), ("SPECIAL  Q", Config.SpecialDesc(type)) })
+            {
+                var line = FieldGuide.Rich($"[color=#e8c27a][b]{head}[/b][/color]  {body}");
+                line.AddThemeFontSizeOverride("normal_font_size", 13);
+                line.CustomMinimumSize = new Vector2(240, 0);
+                col.AddChild(line);
+            }
             var b = new Button { Text = $"Play the {st.Name}", CustomMinimumSize = new Vector2(0, 50) };
             b.AddThemeFontOverride("font", UiTheme.Title);
             b.AddThemeFontSizeOverride("font_size", 17);
@@ -538,6 +545,8 @@ public partial class FieldGuide : ColorRect
         var r = Config.RaceOf(team);
         if (t == AntType.Gunner) race = r == Race.BlackGarden ? "  Black garden ants: +30% (formic acid)." : "  Red fire ants: −25% (no acid gland).";
         if (t is AntType.Soldier or AntType.Major or AntType.Warlord && r == Race.RedFire) race = "  Red fire ants: venomous sting.";
+        if (Config.IsHero(t))
+            return $"{Config.StatLine(t)}  ·  Cost {Config.ProdCost(k):0}.  {Config.Role(k).Replace("\n", " ")}{race}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}";
         return $"HP {st.Hp}  ·  Bite {st.Damage}  ·  Speed {st.Speed}  ·  Cost {Config.ProdCost(k):0}.  {squad}{Config.Role(k).Replace("\n", " ")}{race}";
     }
 
@@ -565,17 +574,17 @@ public partial class FieldGuide : ColorRect
 
     static Control Wildlife()
     {
-        var grid = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var grid = new GridContainer { Columns = 1, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 12);
         foreach (var (t, game, real) in new[]
         {
-            (AntType.Beetle, "Guards food lairs. Mandible Sweep: a wide area attack that hits every ant around it.", "Predatory ground beetles hunt insects at night; their hard wing-cases shrug off ant bites."),
-            (AntType.Spider, "Web Shot: spits sticky silk that freezes ants in place for a few seconds.", "Wolf spiders hunt by sight and pounce rather than spin webs; our spider cheats a little."),
-            (AntType.StagBeetle, "The lord of the yard. Huge HP and a crushing sweep. Kill it for a feast.", "Male stag beetles wrestle rivals with antler-like mandibles."),
-            (AntType.Wasp, "Flies. Venom Sting: a heavy strike on a cooldown. Only flyers and spitters can reach it easily.", "Hunting wasps snatch ants and other insects to feed their own larvae."),
+            (AntType.Beetle, "Guards food lairs in pairs. Swarm it and it raises its shell; thin its attackers out before the Sweep lands.", "Predatory ground beetles hunt insects at night; their hard wing-cases shrug off ant bites."),
+            (AntType.Spider, "Fast and fragile. Keep moving: an ant stuck in its silk is the one it pounces on.", "Wolf spiders hunt by sight and pounce rather than spin webs; our spider cheats a little."),
+            (AntType.StagBeetle, "The lord of the yard. Spread out when it lowers its head: the toss hits everything in front of its jaws. Kill it for a feast.", "Male stag beetles wrestle rivals with antler-like mandibles."),
+            (AntType.Wasp, "Flies. It stings, climbs away and comes back. Only flyers and spitters can reach it in the air.", "Hunting wasps snatch ants and other insects to feed their own larvae."),
         })
-            grid.AddChild(Card(t, Config.Wild, $"HP {Config.Of(t).Hp}+  ·  levels 1-5.  {game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
+            grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
         return grid;
     }
 
@@ -656,7 +665,7 @@ public partial class FieldGuide : ColorRect
             "[i]In game:[/i] squads that come home (B) heal and replace their fallen.");
     }
 
-    static RichTextLabel Rich(string bb)
+    internal static RichTextLabel Rich(string bb)
     {
         var r = new RichTextLabel { BbcodeEnabled = true, FitContent = true, Text = bb, SizeFlagsHorizontal = SizeFlags.ExpandFill, ScrollActive = false };
         r.AddThemeFontOverride("normal_font", UiTheme.Body);

@@ -532,7 +532,36 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.Sting:
-                    if (seen && Audible(e.Pos)) { Audio.At("sting", wp, 2, 0.15f); Effects.Burst(wp, 6, 1, 3f, 0.2f, 0.6f); }
+                    if (seen && Audible(e.Pos)) { Audio.At("sting", wp, 2, 0.15f); Effects.Burst(wp, 6, 1, 3f, 0.2f, 0.6f); Effects.Burst(wp + Vector3.Up * 0.3f, 10, 5, 2.2f, 0.22f, 0.9f); }
+                    break;
+                case EvKind.Charge:
+                    // a stag lowering its antlers, or a spider springing: dust kicked up behind it
+                    if (seen) { Effects.Burst(wp, e.Type == AntType.StagBeetle ? 18 : 8, 0, 4f, e.Type == AntType.StagBeetle ? 0.9f : 0.5f, 0.9f); if (Audible(e.Pos)) Audio.At("sweep", wp, -4, 0.15f, 0.05f, e.Type == AntType.StagBeetle ? 0.7f : 1.3f); }
+                    break;
+                case EvKind.Toss:
+                    _combat += 0.2f;
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.6f, 0.25f), e.Radius * 0.7f);
+                        Effects.Burst(wp, 30, 0, 7f, 1.0f, 1.1f);
+                        Effects.Burst(World.HF.Point(e.To, 0.6f), 14, 1, 4f, 0.25f, 0.8f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 5, 0.2f, 0.05f, 0.75f);
+                    }
+                    break;
+                case EvKind.Lunge:
+                    if (seen) { Effects.Burst(wp, 12, 3, 3.5f, 0.28f, 0.8f); Effects.Burst(wp, 8, 1, 3f, 0.2f, 0.6f); if (Audible(e.Pos)) Audio.At("bite", wp, 5, 0.05f, 0.08f, 0.7f); }
+                    break;
+                case EvKind.ShellWall:
+                    if (seen) { Effects.Marker(wp, new Color(0.35f, 0.95f, 0.8f), e.Radius * 1.6f); Effects.Burst(wp + Vector3.Up * 0.5f, 16, 6, 2.5f, 0.22f, 1.0f); if (Audible(e.Pos)) Audio.At("web_land", wp, 2, 0.1f, 0.05f, 0.6f); }
+                    break;
+                case EvKind.Rally:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, e.Team == 0 ? new Color(1f, 0.8f, 0.3f) : new Color(1f, 0.4f, 0.2f), e.Radius * 0.5f);
+                        Effects.Burst(wp + Vector3.Up * 1.2f, 24, e.Team == 0 ? 2 : 7, 5f, 0.28f, 1.3f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -3, 0.5f, 0.02f, 1.6f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("RALLY! The marshal's dive drives the army forward.", new Color(1f, 0.8f, 0.35f));
+                    }
                     break;
                 case EvKind.ResearchDone:
                 {
@@ -564,7 +593,8 @@ public partial class GameSession : Node3D
                     var to = World.HF.Point(e.To, 0.5f);
                     if (seen)
                     {
-                        for (int s = 0; s < 4; s++) Effects.Burst(from.Lerp(to, 0.25f * s + 0.2f), 2, 1, 0.8f, e.Type == AntType.Matron ? 0.3f : 0.18f, 0.35f);
+                        for (int s = 0; s < 4; s++) Effects.Burst(from.Lerp(to, 0.25f * s + 0.2f), 2, e.Type == AntType.Matron ? 4 : 1, 0.8f, e.Type == AntType.Matron ? 0.3f : 0.18f, 0.35f);
+                        if (e.Type == AntType.Matron) Effects.Burst(to, 5, 4, 2.5f, 0.2f, 0.5f); // the splash
                         if (Audible(e.Pos)) Audio.At("web", from, -6, 0.06f, 0.1f, 1.7f);
                     }
                     break;
@@ -572,8 +602,10 @@ public partial class GameSession : Node3D
                 case EvKind.WarCry:
                     if (seen)
                     {
-                        Effects.Marker(wp, new Color(1f, 0.75f, 0.25f), e.Radius * 0.55f);
-                        Effects.Burst(wp + Vector3.Up, 30, 2, 6f, 0.3f, 1.2f);
+                        Effects.Marker(wp, e.Team == 0 ? new Color(1f, 0.75f, 0.25f) : new Color(1f, 0.4f, 0.2f), e.Radius * 0.55f);
+                        Effects.Marker(wp, new Color(1f, 0.9f, 0.7f), Config.WarCryShockR * 0.6f); // the shock itself
+                        Effects.Burst(wp + Vector3.Up, 30, e.Team == 0 ? 2 : 7, 6f, 0.3f, 1.2f);
+                        Effects.Burst(wp, 22, 0, 6f, 0.9f, 1.0f);
                         if (Audible(e.Pos)) Audio.At("alert", wp, 0, 0.5f, 0.02f, 1.35f);
                         if (!Demo && e.Team == Local.Me) Hud.Alert("WAR CRY! Our warriors fight with fury.", new Color(1f, 0.8f, 0.35f));
                     }
@@ -584,7 +616,8 @@ public partial class GameSession : Node3D
                     if (Demo || Fog == null || Fog.Visible(e.To))
                     {
                         Effects.Marker(to, new Color(0.5f, 1f, 0.2f), e.Radius * 0.6f);
-                        Effects.Burst(to, 40, 1, 5f, 0.35f, 1.3f);
+                        Effects.Burst(to, 40, 4, 5f, 0.35f, 1.3f);
+                        Effects.Burst(to + Vector3.Up * 0.5f, 16, 5, 3f, 0.3f, 1.6f);
                         if (Audible(e.To)) Audio.At("web_land", to, 4, 0.15f, 0.05f, 0.7f);
                     }
                     break;
@@ -594,6 +627,7 @@ public partial class GameSession : Node3D
                     {
                         Effects.Marker(wp, new Color(1f, 0.9f, 0.6f), e.Radius * 0.65f);
                         Effects.Burst(wp, 36, 0, 7f, 1.0f, 1.2f);
+                        Effects.Burst(wp + Vector3.Up * 0.5f, 14, e.Team == 0 ? 2 : 7, 4f, 0.25f, 0.9f);
                         if (Audible(e.Pos)) Audio.At("sweep", wp, 5, 0.2f, 0.05f, 1.15f);
                     }
                     break;

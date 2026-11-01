@@ -9,6 +9,9 @@ public static class AntMesh
 {
     public const int Body = 0, Head = 12, Gaster = 13, Eye = 11;
     // legs 1..3 left (+x) front->rear, 4..6 right (-x); antennae 7,8; mandibles 9,10
+    // 14 crest: spines, plumes, nozzles and studs in the accent colour (metal); 15 plate: armour with an accent rim.
+    // Vertex colour B is the body region a part belongs to (0 head, 0.5 thorax, 1 gaster) so the shader moves it with that region.
+    public const int Crest = 14, Plate = 15;
 
     struct Shape
     {
@@ -99,7 +102,101 @@ public static class AntMesh
                 k.Tube(knee, ankle, 0.014f, 0.009f, 6, Part(id, 0.45f), Part(id, 0.9f), piv, false);
                 k.Tube(ankle, foot, 0.008f, 0.004f, 4, Part(id, 0.9f), Part(id, 1f), piv);
             }
+        if (Config.IsHero(type)) HeroRegalia(k, type, s, headC, bodyY, gz);
         return k.Commit();
+    }
+
+    /// What makes a hero read as a hero at RTS zoom: a silhouette no ordinary caste has, in metal.
+    static void HeroRegalia(MeshKit k, AntType type, Shape s, Vector3 headC, float bodyY, float gz)
+    {
+        float h = s.Head, t = s.Thorax, g = s.Gaster;
+        switch (type)
+        {
+            case AntType.Warlord:
+            {
+                // a crest of five spikes down the crown, swept back
+                for (int i = 0; i < 5; i++)
+                {
+                    float f = i / 4f;
+                    var root = headC + new Vector3(0, 0.055f * h + 0.01f * (1 - f), (0.05f - 0.1f * f) * h);
+                    var tip = root + new Vector3(0, 0.055f + 0.02f * (1 - Mathf.Abs(f - 0.5f) * 2), -0.04f);
+                    k.Tube(root, tip, 0.012f, 0.002f, 5, Tag(Crest, 0.2f, 0), Tag(Crest, 1f, 0), Vector2.Zero);
+                }
+                // pronotal shoulder spines
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    var root = new Vector3(side * 0.04f * t, bodyY + 0.055f * t, 0.065f);
+                    var tip = root + new Vector3(side * 0.07f, 0.075f, -0.07f);
+                    k.Tube(root, tip, 0.016f, 0.003f, 6, Tag(Crest, 0.2f, 0.5f), Tag(Crest, 1f, 0.5f), Vector2.Zero);
+                }
+                // three overlapping armour plates ride the gaster, each with a metal rim
+                for (int i = 0; i < 3; i++)
+                {
+                    float z = gz + (0.11f - 0.1f * i) * g;
+                    k.Ellipsoid(new Vector3(0, bodyY + 0.05f * g + 0.01f * (1 - i * 0.3f), z), Scaled(0.135f * g, 0.045f * g, 0.075f * g, -0.25f), 16, 6, Tag(Plate, 0, 1), Vector2.Zero,
+                        u => u.Y < 0 ? 0.35f : 1f); // only the upper half shows
+                }
+                // serrated mandibles: teeth along the inner edge
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    int id = side > 0 ? 9 : 10;
+                    float m = s.Mandible;
+                    var hinge = headC + new Vector3(side * 0.045f * h, -0.035f * h, 0.07f * h);
+                    var mid = hinge + new Vector3(side * 0.02f * m, -0.005f, 0.06f * m);
+                    var piv = new Vector2(hinge.X, hinge.Z);
+                    for (int tooth = 1; tooth <= 3; tooth++)
+                    {
+                        var at = hinge.Lerp(mid, tooth / 3.5f);
+                        k.Tube(at, at + new Vector3(-side * 0.022f, -0.004f, 0.012f), 0.007f, 0.001f, 4, Tag(id, 0.8f), Tag(id, 1f), piv);
+                    }
+                }
+                break;
+            }
+            case AntType.Matron:
+            {
+                // acidopore: the spray nozzle at the tip of the gaster, ringed in metal
+                var tipC = new Vector3(0, bodyY - 0.005f, gz - 0.175f * g);
+                k.Tube(tipC + new Vector3(0, 0, 0.03f), tipC + new Vector3(0, -0.02f, -0.075f), 0.03f, 0.012f, 8, Tag(Crest, 0.1f, 1), Tag(Crest, 0.9f, 1), Vector2.Zero, false);
+                k.Tube(tipC + new Vector3(0, -0.02f, -0.075f), tipC + new Vector3(0, -0.03f, -0.105f), 0.012f, 0.007f, 6, Tag(Eye, 0, 1), Tag(Eye, 0, 1), Vector2.Zero);
+                // studded gland line along each flank of the sac
+                for (int side = -1; side <= 1; side += 2)
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float z = gz + (0.1f - 0.065f * i) * g;
+                        k.Ellipsoid(new Vector3(side * 0.12f * g, bodyY + 0.025f * g, z), Scaled(0.016f, 0.016f, 0.016f, 0), 6, 4, Tag(Crest, 0, 1), Vector2.Zero);
+                    }
+                // a collar frill behind the head, like a ruff of plate
+                k.Ellipsoid(new Vector3(0, bodyY + 0.035f, 0.125f), Scaled(0.115f, 0.02f, 0.045f, 0.35f), 16, 6, Tag(Plate, 0, 0.5f), Vector2.Zero,
+                    u => u.Y < -0.2f ? 0.3f : 1f);
+                // a single tall crown spike
+                k.Tube(headC + new Vector3(0, 0.06f * h, -0.01f), headC + new Vector3(0, 0.14f * h, -0.06f), 0.012f, 0.002f, 5, Tag(Crest, 0.2f, 0), Tag(Crest, 1f, 0), Vector2.Zero);
+                break;
+            }
+            case AntType.Marshal:
+            {
+                // a plume of three backswept quills on the flight thorax
+                for (int i = -1; i <= 1; i++)
+                {
+                    var root = new Vector3(i * 0.018f, bodyY + 0.085f * t, 0.075f - Mathf.Abs(i) * 0.015f);
+                    var tip = root + new Vector3(i * 0.03f, 0.1f - Mathf.Abs(i) * 0.02f, -0.13f);
+                    k.Tube(root, tip, 0.011f, 0.002f, 5, Tag(Crest, 0.2f, 0.5f), Tag(Crest, 1f, 0.5f), Vector2.Zero);
+                }
+                // epaulettes over the wing roots
+                for (int side = -1; side <= 1; side += 2)
+                    k.Ellipsoid(new Vector3(side * 0.055f, bodyY + 0.07f, 0.075f), Scaled(0.035f, 0.02f, 0.045f, 0), 10, 5, Tag(Plate, 0, 0.5f), Vector2.Zero,
+                        u => u.Y < -0.1f ? 0.4f : 1f);
+                // twin streamers trailing from the gaster tip, like a marshal's pennants
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    var root = new Vector3(side * 0.012f, bodyY + 0.005f, gz - 0.17f * g);
+                    var tip = root + new Vector3(side * 0.035f, 0.025f, -0.2f);
+                    k.Tube(root, tip, 0.008f, 0.002f, 4, Tag(Crest, 0.2f, 1), Tag(Crest, 1f, 1), Vector2.Zero);
+                }
+                // a brow ridge over the eyes
+                k.Ellipsoid(headC + new Vector3(0, 0.05f * h, 0.03f * h), Scaled(0.075f * h, 0.012f * h, 0.03f * h, 0.3f), 12, 4, Tag(Plate, 0, 0), Vector2.Zero);
+                break;
+            }
+        }
     }
 
     static Color Tag(int id, float w = 0, float region = 0) => new(id / 255f, w, region, 1);
@@ -119,9 +216,23 @@ public static class AntMesh
             u => 1f + 0.08f * Mathf.Abs(u.X) * Mathf.Max(0, u.Y)); // squared-off shoulders
         k.Ellipsoid(new Vector3(0, y - 0.01f, 0.1f), Scaled(0.09f, 0.06f, 0.05f, 0), 12, 8, Tag(Body, 0, 0.5f), Vector2.Zero);
         var headC = new Vector3(0, y + 0.0f, 0.3f);
-        k.Ellipsoid(headC, Scaled(stag ? 0.15f : 0.09f, stag ? 0.07f : 0.06f, stag ? 0.09f : 0.07f, 0), 16, 10, Tag(Head), Vector2.Zero);
+        k.Ellipsoid(headC, Scaled(stag ? 0.17f : 0.095f, stag ? 0.08f : 0.062f, stag ? 0.1f : 0.075f, 0), 16, 10, Tag(Head), Vector2.Zero);
         for (int side = -1; side <= 1; side += 2)
-            k.Ellipsoid(headC + new Vector3(side * (stag ? 0.11f : 0.08f), 0.02f, 0.02f), Scaled(0.02f, 0.02f, 0.02f, 0), 6, 4, Tag(Eye), Vector2.Zero);
+            k.Ellipsoid(headC + new Vector3(side * (stag ? 0.125f : 0.085f), 0.02f, 0.02f), Scaled(0.022f, 0.022f, 0.022f, 0), 6, 4, Tag(Eye), Vector2.Zero);
+        if (stag)
+        {
+            // a raised head shield and a pronotal crest: the lord of the yard wears its armour on top
+            k.Ellipsoid(headC + new Vector3(0, 0.055f, -0.01f), Scaled(0.15f, 0.022f, 0.085f, 0.1f), 16, 5, Tag(Plate, 0, 0), Vector2.Zero, u => u.Y < -0.2f ? 0.3f : 1f);
+            k.Ellipsoid(new Vector3(0, y + 0.1f, 0.19f), Scaled(0.145f, 0.025f, 0.085f, 0.12f), 16, 5, Tag(Plate, 0, 0.5f), Vector2.Zero, u => u.Y < -0.2f ? 0.3f : 1f);
+            for (int side = -1; side <= 1; side += 2) // horn-like corners on the pronotum
+                k.Tube(new Vector3(side * 0.12f, y + 0.09f, 0.22f), new Vector3(side * 0.17f, y + 0.14f, 0.26f), 0.018f, 0.003f, 5, Tag(Crest, 0.2f, 0.5f), Tag(Crest, 1f, 0.5f), Vector2.Zero);
+        }
+        else
+        {
+            // flared pronotum margins, the ground beetle's shield
+            for (int side = -1; side <= 1; side += 2)
+                k.Ellipsoid(new Vector3(side * 0.15f, y + 0.035f, 0.19f), Scaled(0.03f, 0.015f, 0.095f, 0.12f), 10, 5, Tag(Plate, 0, 0.5f), Vector2.Zero);
+        }
         // mandibles
         for (int side = -1; side <= 1; side += 2)
         {
@@ -130,27 +241,32 @@ public static class AntMesh
             var piv = new Vector2(hinge.X, hinge.Z);
             if (stag)
             {
-                // great curved antler-jaws with a forked tip and inner teeth
-                var a = hinge + new Vector3(side * 0.13f, 0.07f, 0.17f);
-                var b = a + new Vector3(-side * 0.01f, 0.05f, 0.2f);
-                var tip = b + new Vector3(-side * 0.12f, 0.01f, 0.08f);
-                k.Ellipsoid(hinge, Scaled(0.05f, 0.045f, 0.05f, 0), 10, 8, Tag(id, 0.3f), piv);
-                k.Tube(hinge, a, 0.048f, 0.042f, 10, Tag(id, 0.3f), Tag(id, 0.6f), piv, false);
-                k.Ellipsoid(a, Scaled(0.042f, 0.042f, 0.042f, 0), 10, 8, Tag(id, 0.6f), piv);
-                k.Tube(a, b, 0.042f, 0.032f, 10, Tag(id, 0.6f), Tag(id, 0.85f), piv, false);
-                k.Ellipsoid(b, Scaled(0.032f, 0.032f, 0.032f, 0), 10, 8, Tag(id, 0.85f), piv);
-                k.Tube(b, tip, 0.032f, 0.008f, 8, Tag(id, 0.85f), Tag(id, 1f), piv);
-                k.Tube(b, b + new Vector3(side * 0.02f, 0.06f, 0.05f), 0.018f, 0.004f, 6, Tag(id, 0.9f), Tag(id, 1f), piv); // fork
-                for (int tooth = 1; tooth <= 2; tooth++)
+                // great curved antler-jaws: a quarter of the body length, forked, with inner teeth
+                var a = hinge + new Vector3(side * 0.15f, 0.08f, 0.2f);
+                var b = a + new Vector3(-side * 0.02f, 0.06f, 0.24f);
+                var tip = b + new Vector3(-side * 0.15f, 0.01f, 0.09f);
+                k.Ellipsoid(hinge, Scaled(0.055f, 0.05f, 0.055f, 0), 10, 8, Tag(id, 0.3f), piv);
+                k.Tube(hinge, a, 0.054f, 0.046f, 10, Tag(id, 0.3f), Tag(id, 0.6f), piv, false);
+                k.Ellipsoid(a, Scaled(0.046f, 0.046f, 0.046f, 0), 10, 8, Tag(id, 0.6f), piv);
+                k.Tube(a, b, 0.046f, 0.034f, 10, Tag(id, 0.6f), Tag(id, 0.85f), piv, false);
+                k.Ellipsoid(b, Scaled(0.034f, 0.034f, 0.034f, 0), 10, 8, Tag(id, 0.85f), piv);
+                k.Tube(b, tip, 0.034f, 0.008f, 8, Tag(id, 0.85f), Tag(id, 1f), piv);
+                k.Tube(b, b + new Vector3(side * 0.025f, 0.075f, 0.06f), 0.02f, 0.004f, 6, Tag(id, 0.9f), Tag(id, 1f), piv); // fork
+                for (int tooth = 1; tooth <= 3; tooth++)
                 {
-                    var at = a.Lerp(b, tooth * 0.33f);
-                    k.Tube(at, at + new Vector3(-side * 0.07f, -0.01f, 0.01f), 0.016f, 0.003f, 6, Tag(id, 0.7f), Tag(id, 0.75f), piv);
+                    var at = a.Lerp(b, tooth * 0.25f);
+                    k.Tube(at, at + new Vector3(-side * 0.08f, -0.01f, 0.01f), 0.018f, 0.003f, 6, Tag(id, 0.7f), Tag(id, 0.75f), piv);
                 }
             }
             else
             {
-                var tip = hinge + new Vector3(-side * 0.01f, -0.01f, 0.08f);
-                k.Tube(hinge, tip, 0.02f, 0.005f, 5, Tag(id, 0.3f), Tag(id, 1f), piv);
+                // sickle jaws that cross at the tips
+                var mid = hinge + new Vector3(side * 0.015f, -0.005f, 0.06f);
+                var tip = mid + new Vector3(-side * 0.045f, -0.01f, 0.05f);
+                k.Tube(hinge, mid, 0.026f, 0.018f, 6, Tag(id, 0.3f), Tag(id, 0.7f), piv, false);
+                k.Tube(mid, tip, 0.018f, 0.004f, 6, Tag(id, 0.7f), Tag(id, 1f), piv);
+                var at = hinge.Lerp(mid, 0.5f);
+                k.Tube(at, at + new Vector3(-side * 0.03f, -0.005f, 0.01f), 0.009f, 0.002f, 4, Tag(id, 0.6f), Tag(id, 0.7f), piv);
             }
         }
         // antennae: short, beaded
@@ -161,7 +277,8 @@ public static class AntMesh
             var tip = root + new Vector3(side * 0.13f, 0.03f, 0.12f);
             k.Tube(root, tip, 0.01f, 0.016f, 5, Tag(id, 0.1f), Tag(id, 1f), new Vector2(root.X, root.Z));
         }
-        // legs: sturdy, spiny
+        // legs: sturdy, spiny; the stag's thicker still
+        float lm = stag ? 1.2f : 1f;
         float[] hz = { 0.2f, 0.08f, -0.05f };
         float[] reach = { 0.18f, 0.0f, -0.22f };
         for (int side = -1; side <= 1; side += 2)
@@ -174,9 +291,9 @@ public static class AntMesh
                 var foot = ankle + new Vector3(side * 0.06f, -0.03f, reach[i] * 0.25f + 0.02f);
                 var piv = new Vector2(hip.X, hip.Z);
                 // stout femur, flattened spiny tibia, segmented tarsus
-                k.Tube(hip, (hip + knee) * 0.5f + Vector3.Up * 0.015f, 0.034f, 0.042f, 8, Tag(id, 0f), Tag(id, 0.25f), piv, false);
-                k.Tube((hip + knee) * 0.5f + Vector3.Up * 0.015f, knee, 0.042f, 0.03f, 8, Tag(id, 0.25f), Tag(id, 0.5f), piv, false);
-                k.Tube(knee, ankle, 0.028f, 0.018f, 7, Tag(id, 0.5f), Tag(id, 0.85f), piv, false);
+                k.Tube(hip, (hip + knee) * 0.5f + Vector3.Up * 0.015f, 0.034f * lm, 0.042f * lm, 8, Tag(id, 0f), Tag(id, 0.25f), piv, false);
+                k.Tube((hip + knee) * 0.5f + Vector3.Up * 0.015f, knee, 0.042f * lm, 0.03f * lm, 8, Tag(id, 0.25f), Tag(id, 0.5f), piv, false);
+                k.Tube(knee, ankle, 0.028f * lm, 0.018f * lm, 7, Tag(id, 0.5f), Tag(id, 0.85f), piv, false);
                 for (int sp = 1; sp <= 3; sp++)
                 {
                     var at = knee.Lerp(ankle, sp / 4f);
@@ -196,20 +313,39 @@ public static class AntMesh
         float y = 0.2f;
         k.Ellipsoid(new Vector3(0, y + 0.04f, -0.24f), Scaled(0.17f, 0.14f, 0.22f, -0.1f), 24, 16, Tag(Gaster, 0, 1), Vector2.Zero);
         k.Ellipsoid(new Vector3(0, y + 0.0f, -0.07f), Scaled(0.04f, 0.04f, 0.04f, 0), 8, 6, Tag(Body), Vector2.Zero); // pedicel
-        for (int s = -1; s <= 1; s += 2) // spinnerets
-            k.Tube(new Vector3(s * 0.02f, y - 0.02f, -0.44f), new Vector3(s * 0.03f, y - 0.05f, -0.48f), 0.014f, 0.006f, 5, Tag(Gaster, 0, 1), Tag(Gaster, 0, 1), Vector2.Zero);
+        // spinnerets: two pairs of pale tubes at the tip of the abdomen
+        for (int s = -1; s <= 1; s += 2)
+        {
+            k.Tube(new Vector3(s * 0.025f, y - 0.01f, -0.44f), new Vector3(s * 0.045f, y - 0.05f, -0.51f), 0.018f, 0.007f, 6, Tag(Crest, 0.2f, 1), Tag(Crest, 1f, 1), Vector2.Zero);
+            k.Tube(new Vector3(s * 0.012f, y - 0.03f, -0.44f), new Vector3(s * 0.015f, y - 0.07f, -0.49f), 0.013f, 0.005f, 5, Tag(Crest, 0.2f, 1), Tag(Crest, 1f, 1), Vector2.Zero);
+        }
+        // a brush of bristles over the abdomen
+        var hairRng = new Rng(17);
+        for (int i = 0; i < 26; i++)
+        {
+            float u = hairRng.R(-1f, 1f), v = hairRng.R(0.1f, 1f);
+            var at = new Vector3(u * 0.15f, y + 0.04f + v * 0.12f, -0.24f + hairRng.R(-0.2f, 0.2f));
+            k.Tube(at, at + new Vector3(u * 0.03f, 0.04f, -0.01f), 0.004f, 0.001f, 3, Tag(Gaster, 0, 1), Tag(Gaster, 0, 1), Vector2.Zero);
+        }
         var ceph = new Vector3(0, y + 0.02f, 0.06f);
-        k.Ellipsoid(ceph, Scaled(0.12f, 0.08f, 0.14f, 0.05f), 18, 10, Tag(Head), Vector2.Zero);
-        // eyes: two big forward eyes, a row of small ones
-        k.Ellipsoid(ceph + new Vector3(0.035f, 0.06f, 0.11f), Scaled(0.025f, 0.025f, 0.025f, 0), 8, 6, Tag(Eye), Vector2.Zero);
-        k.Ellipsoid(ceph + new Vector3(-0.035f, 0.06f, 0.11f), Scaled(0.025f, 0.025f, 0.025f, 0), 8, 6, Tag(Eye), Vector2.Zero);
+        k.Ellipsoid(ceph, Scaled(0.12f, 0.085f, 0.14f, 0.05f), 18, 10, Tag(Head), Vector2.Zero);
+        // eyes: two big forward eyes, a row of four small ones below, and the two large rear eyes on top
+        k.Ellipsoid(ceph + new Vector3(0.035f, 0.06f, 0.11f), Scaled(0.03f, 0.03f, 0.03f, 0), 8, 6, Tag(Eye), Vector2.Zero);
+        k.Ellipsoid(ceph + new Vector3(-0.035f, 0.06f, 0.11f), Scaled(0.03f, 0.03f, 0.03f, 0), 8, 6, Tag(Eye), Vector2.Zero);
         for (int e = -2; e <= 1; e++)
             k.Ellipsoid(ceph + new Vector3((e + 0.5f) * 0.03f, 0.03f, 0.135f), Scaled(0.012f, 0.012f, 0.012f, 0), 6, 4, Tag(Eye), Vector2.Zero);
-        // chelicerae and pedipalps
+        for (int side = -1; side <= 1; side += 2)
+            k.Ellipsoid(ceph + new Vector3(side * 0.06f, 0.08f, 0.06f), Scaled(0.02f, 0.02f, 0.02f, 0), 6, 4, Tag(Eye), Vector2.Zero);
+        // chelicerae with the fangs folded under them, and the pedipalps
         for (int side = -1; side <= 1; side += 2)
         {
-            var root = ceph + new Vector3(side * 0.03f, -0.02f, 0.13f);
-            k.Tube(root, root + new Vector3(0, -0.07f, 0.03f), 0.025f, 0.012f, 6, Tag(side > 0 ? 9 : 10, 0.3f), Tag(side > 0 ? 9 : 10, 1f), new Vector2(root.X, root.Z));
+            int id = side > 0 ? 9 : 10;
+            var root = ceph + new Vector3(side * 0.032f, -0.02f, 0.13f);
+            var piv = new Vector2(root.X, root.Z);
+            var end = root + new Vector3(0, -0.085f, 0.035f);
+            k.Tube(root, end, 0.03f, 0.022f, 7, Tag(id, 0.3f), Tag(id, 0.8f), piv, false);
+            k.Ellipsoid(end, Scaled(0.022f, 0.02f, 0.022f, 0), 7, 5, Tag(id, 0.8f), piv);
+            k.Tube(end, end + new Vector3(-side * 0.03f, -0.035f, 0.015f), 0.011f, 0.002f, 5, Tag(Eye, 0, 0), Tag(Eye, 0, 0), piv); // fang
             var palp = ceph + new Vector3(side * 0.07f, -0.01f, 0.12f);
             k.Tube(palp, palp + new Vector3(side * 0.06f, 0.02f, 0.1f), 0.018f, 0.014f, 5, Tag(side > 0 ? 7 : 8, 0.2f), Tag(side > 0 ? 7 : 8, 1f), new Vector2(palp.X, palp.Z));
         }
@@ -250,20 +386,24 @@ public static class AntMesh
         // gaster: long tapering spindle, slightly drooped, ending in a stinger
         k.Ellipsoid(new Vector3(0, y - 0.02f, -0.27f), Scaled(0.1f, 0.095f, 0.22f, -0.22f), 22, 16, Tag(Gaster, 0, 1), Vector2.Zero,
             u => 1f - 0.35f * Mathf.Max(0, -u.Z) * Mathf.Max(0, -u.Z));
-        k.Tube(new Vector3(0, y - 0.1f, -0.47f), new Vector3(0, y - 0.15f, -0.56f), 0.012f, 0.002f, 5, Tag(Eye), Tag(Eye), Vector2.Zero);
+        // the sting: a long dark lance that curls under with the gaster when it strikes
+        k.Tube(new Vector3(0, y - 0.1f, -0.47f), new Vector3(0, y - 0.17f, -0.62f), 0.014f, 0.002f, 5, Tag(Eye, 0, 1), Tag(Eye, 0, 1), Vector2.Zero);
         // petiole: the famous wasp waist
-        k.Tube(new Vector3(0, y + 0.01f, -0.04f), new Vector3(0, y, -0.08f), 0.018f, 0.02f, 6, Tag(Body), Tag(Body), Vector2.Zero, false);
-        // thorax
+        k.Tube(new Vector3(0, y + 0.01f, -0.03f), new Vector3(0, y, -0.09f), 0.016f, 0.02f, 6, Tag(Body), Tag(Body), Vector2.Zero, false);
+        // thorax, with the scutellum ridge
         k.Ellipsoid(new Vector3(0, y + 0.03f, 0.05f), Scaled(0.085f, 0.085f, 0.11f, 0.05f), 18, 12, Tag(Body, 0, 0.5f), Vector2.Zero);
-        // head with huge kidney-shaped compound eyes
+        k.Ellipsoid(new Vector3(0, y + 0.1f, 0.0f), Scaled(0.05f, 0.015f, 0.04f, 0.2f), 10, 4, Tag(Crest, 0, 0.5f), Vector2.Zero, u => u.Y < -0.2f ? 0.3f : 1f);
+        // head with huge kidney-shaped compound eyes and three ocelli on the crown
         var headC = new Vector3(0, y + 0.03f, 0.2f);
-        k.Ellipsoid(headC, Scaled(0.08f, 0.075f, 0.055f, 0.2f), 16, 10, Tag(Head), Vector2.Zero);
+        k.Ellipsoid(headC, Scaled(0.085f, 0.08f, 0.058f, 0.2f), 16, 10, Tag(Head), Vector2.Zero);
+        for (int o = -1; o <= 1; o++)
+            k.Ellipsoid(headC + new Vector3(o * 0.02f, 0.072f - Mathf.Abs(o) * 0.008f, -0.01f + Mathf.Abs(o) * 0.012f), Scaled(0.009f, 0.009f, 0.009f, 0), 6, 4, Tag(Eye), Vector2.Zero);
         for (int side = -1; side <= 1; side += 2)
         {
-            k.Ellipsoid(headC + new Vector3(side * 0.058f, 0.012f, -0.005f), Scaled(0.03f, 0.055f, 0.04f, 0.2f), 10, 8, Tag(Eye), Vector2.Zero);
+            k.Ellipsoid(headC + new Vector3(side * 0.06f, 0.012f, -0.005f), Scaled(0.032f, 0.06f, 0.042f, 0.2f), 10, 8, Tag(Eye), Vector2.Zero);
             int ma = side > 0 ? 9 : 10;
-            var hinge = headC + new Vector3(side * 0.03f, -0.06f, 0.03f);
-            k.Tube(hinge, hinge + new Vector3(-side * 0.025f, -0.03f, 0.03f), 0.014f, 0.004f, 5, Tag(ma, 0.3f), Tag(ma, 1f), new Vector2(hinge.X, hinge.Z));
+            var hinge = headC + new Vector3(side * 0.032f, -0.06f, 0.03f);
+            k.Tube(hinge, hinge + new Vector3(-side * 0.03f, -0.035f, 0.04f), 0.018f, 0.004f, 5, Tag(ma, 0.3f), Tag(ma, 1f), new Vector2(hinge.X, hinge.Z));
             int an = side > 0 ? 7 : 8;
             var root = headC + new Vector3(side * 0.025f, 0.05f, 0.04f);
             var elbow = root + new Vector3(side * 0.03f, 0.08f, 0.06f);
@@ -282,6 +422,7 @@ public static class AntMesh
                 var piv = new Vector2(hip.X, hip.Z);
                 k.Tube(hip, knee, 0.018f, 0.016f, 6, Tag(id, 0f), Tag(id, 0.5f), piv, false);
                 k.Tube(knee, foot, 0.014f, 0.006f, 6, Tag(id, 0.5f), Tag(id, 1f), piv);
+                k.Tube(foot, foot + new Vector3(side * 0.012f, -0.02f, 0.015f), 0.005f, 0.001f, 4, Tag(id, 1f), Tag(id, 1f), piv); // tarsal claw
             }
         return k.Commit();
     }
@@ -292,11 +433,13 @@ public static class AntMesh
     {
         var k = new MeshKit();
         bool wasp = type == AntType.Wasp;
-        // (hinge z, length, width, sweep angle) for fore and hind wing
+        // (hinge z, length, width, sweep angle) for fore and hind wing; the marshal's reach a third further
         var pairs = wasp
              ? new[] { (0.09f, 0.48f, 0.12f, 0.35f), (0.03f, 0.34f, 0.09f, 0.55f) }
+            : type == AntType.Marshal
+             ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f) }
             : new[] { (0.09f, 0.62f, 0.14f, 0.25f), (0.04f, 0.46f, 0.11f, 0.4f) };
-        float hy = wasp ? 0.3f : 0.22f;
+        float hy = wasp ? 0.3f : type == AntType.Marshal ? 0.25f : 0.22f;
         foreach (var (hz, len, wid, sweep) in pairs)
             for (int side = -1; side <= 1; side += 2)
             {

@@ -329,6 +329,10 @@ public static class Capture
         s.Sim.CmdMove(squad, stag.Pos, true);
         s.Camera.JumpTo(stag.Pos + MathX.Dir(stag.Facing) * 4, 30);
         await Wait(3.5f);
+        // the stag charges whoever it tosses: frame the fight where it is now, not where its lair was
+        for (int i = 0; i < s.Sim.High; i++)
+            if (s.Sim.Ants[i].Alive && s.Sim.Ants[i].Type == AntType.StagBeetle && s.Sim.Ants[i].Home.DistanceTo(stag.Pos) < 8) { s.Camera.JumpTo(s.Sim.Ants[i].Pos, 30); break; }
+        await Wait(0.8f);
         await Shot($"{n++:00}_stag_fight");
         await Wait(9f);
         int vets = 0, best = -1;
@@ -674,7 +678,7 @@ public static class Capture
             sw.Restart();
             sim.Tick(dt);
             foreach (var ai in ais) ai.Tick(dt);
-            foreach (var e in sim.Events) if (e.Kind is EvKind.WebShot or EvKind.Sweep or EvKind.Sting or EvKind.WarCry or EvKind.AcidBurst or EvKind.DiveBomb) _abilities++;
+            foreach (var e in sim.Events) if (e.Kind is EvKind.WebShot or EvKind.Sweep or EvKind.Sting or EvKind.WarCry or EvKind.AcidBurst or EvKind.DiveBomb or EvKind.Toss or EvKind.Lunge or EvKind.ShellWall) _abilities++;
             sw.Stop();
             double ms = sw.Elapsed.TotalMilliseconds;
             total += ms; ticks++;

@@ -22,6 +22,8 @@ public struct UnitStats
     public string Name;
     public float Hp, Damage, Cooldown, Speed, Reach, Aggro, Sight, Size, Cost, BuildTime, CorpseFood;
     public int Pop;
+    /// Share of every blow the chitin shrugs off (0 = none). Heroes and wild bugs wear real armour.
+    public float Armor;
 }
 
 public static class Config
@@ -59,11 +61,88 @@ public static class Config
         AntType.Warlord => "War Cry",
         AntType.Matron => "Acid Burst",
         AntType.Marshal => "Dive Bomb",
-        AntType.Beetle or AntType.StagBeetle => "Mandible Sweep",
-        AntType.Spider => "Web Shot",
+        AntType.Beetle => "Shell Wall",
+        AntType.StagBeetle => "Antler Toss",
+        AntType.Spider => "Web Snare",
         AntType.Wasp => "Venom Sting",
         _ => "",
     };
+
+    // ------------------------------------------------------------ hero and bug identities
+    // Every hero and wild bug has three things a player can read at a glance: how it attacks,
+    // how it defends, and one signature special. The numbers here are the ones the sim uses.
+    public const float WarlordCleave = 0.5f;        // share of each bite dealt to everyone around the victim
+    public const float WarlordArmor = 0.3f;
+    public const float WarCryBite = 1.3f;           // allies' bite multiplier (+3% a level)
+    public const float WarCryShock = 1.0f;          // the roar itself hits everyone within WarCryShockR for one bite
+    public const float WarCryShockR = 4.5f;
+    public const float MatronSplash = 0.45f;        // share of her spit splashed onto enemies beside the target
+    public const float MatronSplashR = 1.8f;
+    public const float MatronArmor = 0.1f;
+    public const float AcidPoolLife = 6f;           // the burst leaves a venom pool that keeps burning
+    public const float MarshalArmor = 0.15f;
+    public const float RallyBite = 1.15f;           // Dive Bomb rallies nearby warriors: bite and speed up
+    public const float RallyTime = 6f;
+    public const float BeetleArmor = 0.25f;
+    public const float ShellWallArmor = 0.45f;      // added to the beetle's armour while its shell is raised
+    public const float ShellWallTime = 4f;
+    public const float StagArmor = 0.3f;
+    public const float ChargeSpeed = 2.6f;          // a charging stag or lunging spider runs this much faster
+    public const float TossDamage = 2.2f;           // the toss, as bites
+    public const float TossThrow = 3.5f;            // how far victims fly
+    public const float TossStun = 1.1f;             // seconds on their backs
+    public const float SpiderArmor = 0.05f;
+    public const float LungeDamage = 2.4f;          // a lunge onto webbed prey, as bites
+    public const float WaspArmor = 0.1f;
+    public const float StingDamage = 2.5f;          // the sting, as bites (+0.3 a level)
+    public const float StingVenom = 0.12f;          // share of the sting dealt again per second for StingVenomTime
+    public const float StingVenomTime = 4f;
+    public const float WaspRetreat = 2.4f;          // seconds the wasp climbs away after a sting (hit and run)
+
+    /// One line each: how it attacks, how it defends, its special. Shown in the Field Guide, hero picker and tooltips.
+    public static string AttackDesc(AntType t) => t switch
+    {
+        AntType.Warlord => $"Cleaving bite: every bite also deals {WarlordCleave * 100:0}% to all enemies around the victim.",
+        AntType.Matron => $"Acid spray from range {Of(t).Reach:0}: the jet splashes {MatronSplash * 100:0}% onto enemies beside the target.",
+        AntType.Marshal => "Swooping bite from the air: flies over rocks and strikes wasps and ground prey alike.",
+        AntType.Beetle => "Crushing jaws, and a Mandible Sweep that hits and hurls back every ant around it when two or more crowd in.",
+        AntType.StagBeetle => "Antler jaws with the longest reach of any bug; what they catch, they toss.",
+        AntType.Spider => $"Fast pounce bite; a bite on silk-wrapped prey deals {LungeDamage:0.#}x.",
+        AntType.Wasp => $"Flies. Every few seconds a venomous sting: {StingDamage:0.#}x bite plus venom for {StingVenomTime:0}s.",
+        _ => "",
+    };
+
+    public static string DefenceDesc(AntType t) => t switch
+    {
+        AntType.Warlord => $"Plated chitin: shrugs off {WarlordArmor * 100:0}% of every blow.",
+        AntType.Matron => $"Thin armour ({MatronArmor * 100:0}%); she fights from range behind her line.",
+        AntType.Marshal => $"Airborne: ground biters reach it only when it dives. Armour {MarshalArmor * 100:0}%.",
+        AntType.Beetle => $"Hard wing cases: armour {BeetleArmor * 100:0}%, {(BeetleArmor + ShellWallArmor) * 100:0}% behind the Shell Wall.",
+        AntType.StagBeetle => $"The heaviest chitin in the yard: armour {StagArmor * 100:0}%.",
+        AntType.Spider => "Almost no armour: it relies on speed and silk.",
+        AntType.Wasp => $"Hit and run: climbs out of reach for {WaspRetreat:0.#}s after every sting. Armour {WaspArmor * 100:0}%.",
+        _ => "",
+    };
+
+    public static string SpecialDesc(AntType t) => t switch
+    {
+        AntType.Warlord => $"WAR CRY: a roar that staggers every enemy within {WarCryShockR:0} for a bite and makes warriors within 13 bite {WarCryBite * 100 - 100:0}% harder and run 20% faster for 8s.",
+        AntType.Matron => $"ACID BURST: melts a cluster around her target and leaves a venom pool for {AcidPoolLife:0}s that poisons everything standing in it.",
+        AntType.Marshal => $"DIVE BOMB: crashes down on a crowd, crushing and stunning it, and rallies warriors within 12: +{RallyBite * 100 - 100:0}% bite and speed for {RallyTime:0}s.",
+        AntType.Beetle => $"SHELL WALL: when swarmed or hurt it locks its wing cases down: +{ShellWallArmor * 100:0}% armour for {ShellWallTime:0}s.",
+        AntType.StagBeetle => $"ANTLER TOSS: charges prey at {ChargeSpeed:0.#}x speed and tosses everything in front of it {TossThrow:0} lengths through the air for {TossDamage:0.#}x bite, leaving them stunned on their backs.",
+        AntType.Spider => "WEB SNARE + LUNGE: spits silk that roots a patch of ants, then lunges onto the wrapped prey at a run.",
+        AntType.Wasp => $"VENOM STING: a {StingDamage:0.#}x bite that keeps burning for {StingVenomTime:0}s, then it climbs away before the swarm can answer.",
+        _ => "",
+    };
+
+    /// Stat line for cards and tooltips: HP · Bite · Armour · Speed.
+    public static string StatLine(AntType t)
+    {
+        var st = Of(t);
+        string ar = st.Armor > 0 ? $"  ·  Armour {st.Armor * 100:0}%" : "";
+        return $"HP {st.Hp:0}  ·  Bite {st.Damage:0.#} / {st.Cooldown:0.##}s{ar}  ·  Speed {st.Speed:0.#}{(Ranged(t) ? "  ·  ranged" : "")}{(Flies(t) ? "  ·  flies" : "")}";
+    }
 
     /// XP granted for killing a unit of this type and level.
     public static float Bounty(AntType t, int level) => t switch
@@ -99,15 +178,15 @@ public static class Config
         new() { Name = "Soldier", Hp = 72, Damage = 6.5f, Cooldown = 0.6f, Speed = 7.6f, Reach = 1.25f, Aggro = 13, Sight = 13, Size = 1.45f, Cost = 35, BuildTime = 3f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Major", Hp = 270, Damage = 19f, Cooldown = 0.9f, Speed = 5.2f, Reach = 1.8f, Aggro = 13, Sight = 14, Size = 2.15f, Cost = 100, BuildTime = 6.5f, CorpseFood = 18, Pop = 3 },
         new() { Name = "Queen", Hp = 3200, Damage = 30f, Cooldown = 0.7f, Speed = 0f, Reach = 3.2f, Aggro = 7, Sight = 30, Size = 3.4f, Cost = 0, BuildTime = 0, CorpseFood = 80, Pop = 0 },
-        new() { Name = "Ground Beetle", Hp = 330, Damage = 15f, Cooldown = 0.9f, Speed = 6.6f, Reach = 1.5f, Aggro = 12, Sight = 10, Size = 2.4f, Cost = 0, BuildTime = 0, CorpseFood = 40, Pop = 0 },
-        new() { Name = "Wolf Spider", Hp = 240, Damage = 21f, Cooldown = 0.7f, Speed = 11.5f, Reach = 1.8f, Aggro = 15, Sight = 12, Size = 3.1f, Cost = 0, BuildTime = 0, CorpseFood = 35, Pop = 0 },
-        new() { Name = "Stag Beetle", Hp = 1100, Damage = 36f, Cooldown = 1.0f, Speed = 5.6f, Reach = 2.6f, Aggro = 14, Sight = 12, Size = 4.0f, Cost = 0, BuildTime = 0, CorpseFood = 160, Pop = 0 },
-        new() { Name = "Hunting Wasp", Hp = 250, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
+        new() { Name = "Ground Beetle", Hp = 290, Armor = BeetleArmor, Damage = 15f, Cooldown = 0.9f, Speed = 6.6f, Reach = 1.5f, Aggro = 12, Sight = 10, Size = 2.4f, Cost = 0, BuildTime = 0, CorpseFood = 40, Pop = 0 },
+        new() { Name = "Wolf Spider", Hp = 240, Armor = SpiderArmor, Damage = 21f, Cooldown = 0.7f, Speed = 11.5f, Reach = 1.8f, Aggro = 15, Sight = 12, Size = 3.1f, Cost = 0, BuildTime = 0, CorpseFood = 35, Pop = 0 },
+        new() { Name = "Stag Beetle", Hp = 800, Armor = StagArmor, Damage = 36f, Cooldown = 1.0f, Speed = 5.6f, Reach = 2.6f, Aggro = 14, Sight = 12, Size = 4.0f, Cost = 0, BuildTime = 0, CorpseFood = 160, Pop = 0 },
+        new() { Name = "Hunting Wasp", Hp = 240, Armor = WaspArmor, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
         new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
-        new() { Name = "Warlord", Hp = 900, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
-        new() { Name = "Acid Matron", Hp = 650, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
-        new() { Name = "Sky Marshal", Hp = 600, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Warlord", Hp = 760, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Sky Marshal", Hp = 560, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
     };
 
     public static UnitStats Of(AntType t) => Stats[(int)t];
@@ -133,9 +212,9 @@ public static class Config
         ProdKind.Major => "Huge-headed crusher. Slow, tough and devastating.\nRequires a Matriarch queen.",
         ProdKind.Flyer => "Winged alate. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires the Wing Chamber.",
         ProdKind.Gunner => "Sprays formic acid from range. Fragile; keep it behind the soldiers.\nRequires an Empress queen.",
-        ProdKind.Warlord => "HERO. Every bite cleaves all enemies around it.\nWar Cry: nearby warriors bite harder and run faster.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
-        ProdKind.Matron => "HERO. Spits acid from range.\nAcid Burst: melts a whole cluster of enemies.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
-        ProdKind.Marshal => "HERO. Flies.\nDive Bomb: crashes down on a crowd, crushing and stunning it.\nLevels up to 10. Requires an Ancient Empress and the Wing Chamber.",
+        ProdKind.Warlord => "HERO. The plated brawler: cleaving bites, 30% armour, War Cry.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
+        ProdKind.Matron => "HERO. The ranged acid spitter: splashing spray, Acid Burst and venom pools.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
+        ProdKind.Marshal => "HERO. The winged commander: swoops from the air, Dive Bomb rallies the army.\nLevels up to 10. Requires an Ancient Empress and the Wing Chamber.",
         _ => "",
     };
 

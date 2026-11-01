@@ -80,8 +80,17 @@ public sealed class AntRenderer
         [AntType.Wasp] = new[] { new Color(0.025f, 0.022f, 0.018f), new Color(0.85f, 0.58f, 0.04f), new Color(0.9f, 0.62f, 0.05f), new Color(0.72f, 0.43f, 0.06f) },
     };
 
+    /// The metal every hero wears: gold for the garden legion, scarlet lacquer for the fire swarm.
+    public static readonly Color[] Accent = { new(0.95f, 0.68f, 0.2f), new(1.0f, 0.3f, 0.12f) };
+    // each bug's own: beetle verdigris, spider silk, stag amber, wasp warning-yellow
+    static readonly Dictionary<AntType, Color> BugAccent = new()
+    {
+        [AntType.Beetle] = new Color(0.3f, 0.75f, 0.6f), [AntType.Spider] = new Color(0.88f, 0.82f, 0.68f),
+        [AntType.StagBeetle] = new Color(0.9f, 0.55f, 0.22f), [AntType.Wasp] = new Color(0.98f, 0.78f, 0.12f),
+    };
+
     readonly Dictionary<(int, AntType), Batch> _wings = new();
-    readonly Batch _cocoons, _webs, _blobs;
+    readonly Batch _cocoons, _webs, _blobs, _pools;
 
     readonly Batch _pips;
     readonly Node3D _labelRoot;
@@ -109,7 +118,7 @@ public sealed class AntRenderer
             var wm = new ShaderMaterial { Shader = wingShader };
             if (type == AntType.Wasp) { wm.SetShaderParameter("tint", new Color(0.82f, 0.62f, 0.3f)); wm.SetShaderParameter("vein", new Color(0.35f, 0.2f, 0.05f)); }
             if (type == AntType.Marshal) { wm.SetShaderParameter("tint", new Color(0.95f, 0.85f, 0.6f)); wm.SetShaderParameter("vein", new Color(0.6f, 0.42f, 0.1f)); }
-            _wings[(team, type)] = new Batch(root, AntMesh.Wings(type == AntType.Marshal ? AntType.Flyer : type), wm, false, $"Wings{team}_{type}");
+            _wings[(team, type)] = new Batch(root, AntMesh.Wings(type), wm, false, $"Wings{team}_{type}");
             _wings[(team, type)].Node.SortingOffset = 5;
         }
         var silk = AntMesh.Silk();
@@ -118,6 +127,9 @@ public sealed class AntRenderer
         _blobs = new Batch(root, silk, silkMat, true, "WebShots");
         var webMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Web) };
         _webs = new Batch(root, new PlaneMesh { Size = Vector2.One }, webMat, false, "Webs");
+        var poolMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pool) };
+        _pools = new Batch(root, new PlaneMesh { Size = Vector2.One }, poolMat, false, "AcidPools");
+        _pools.Node.SortingOffset = 2;
         var pipMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pip) };
         _pips = new Batch(root, new QuadMesh { Size = Vector2.One }, pipMat, false, "Pips");
         _pips.Node.SortingOffset = 101;
@@ -145,8 +157,9 @@ public sealed class AntRenderer
             m.SetShaderParameter("head_color", c[1]);
             m.SetShaderParameter("gaster_color", c[2]);
             m.SetShaderParameter("leg_color", c[3]);
-            m.SetShaderParameter("pattern", type == AntType.Spider ? 2 : type == AntType.Wasp ? 3 : 1);
-            m.SetShaderParameter("irid", type switch { AntType.Beetle => 0.9f, AntType.StagBeetle => 0.25f, _ => 0f });
+            m.SetShaderParameter("pattern", type switch { AntType.Spider => 2, AntType.Wasp => 3, AntType.StagBeetle => 4, _ => 1 });
+            m.SetShaderParameter("irid", type switch { AntType.Beetle => 0.9f, AntType.StagBeetle => 0.2f, _ => 0f });
+            m.SetShaderParameter("accent", BugAccent[type]);
         }
         else
         {
@@ -154,6 +167,7 @@ public sealed class AntRenderer
             m.SetShaderParameter("head_color", HeadC[team]);
             m.SetShaderParameter("gaster_color", GasterC[team]);
             m.SetShaderParameter("leg_color", LegC[team]);
+            m.SetShaderParameter("accent", Accent[team]);
             if (Config.IsHero(type)) m.SetShaderParameter("hero", 1f);
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
@@ -175,7 +189,7 @@ public sealed class AntRenderer
         foreach (var b in _dead) b?.Begin();
         _crumbs.Begin(); _rings.Begin(); _bars.Begin(); _pips.Begin();
         foreach (var w in _wings.Values) w.Begin();
-        _cocoons.Begin(); _webs.Begin(); _blobs.Begin();
+        _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camPos = cam.GlobalPosition;
@@ -203,7 +217,9 @@ public sealed class AntRenderer
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
-            _live[a.Team, (int)a.Type].Add(b, o, new Color(a.Gait, amp, Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f), a.HitFlash));
+            // z packs the bite with two more beats the shader reads: +2 a raised shell wall, +4 a charge or lunge
+            float beat = Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f) + (a.BlockT > 0 ? 2f : 0f) + (a.ChargeT > 0 ? 4f : 0f);
+            _live[a.Team, (int)a.Type].Add(b, o, new Color(a.Gait, amp, beat, a.HitFlash));
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
@@ -311,6 +327,13 @@ public sealed class AntRenderer
             var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
             _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(fade, 0, 0, 0));
         }
+        foreach (var z in sim.Pools)
+        {
+            if (!VisibleToPlayer(z.Pos) && z.Team != Local.Me) continue;
+            float fade = Mathf.Clamp(z.Life / 1.5f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 6f, 0, 1);
+            var po = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.1f, z.Pos.Y);
+            _pools.Add(new Basis(Vector3.Up, z.Pos.Y * 1.3f) * Basis.FromScale(new Vector3(z.R * 2.4f, 1, z.R * 2.4f)), po, new Color(fade, (z.Pos.X * 0.37f) % 1f, 0, 0));
+        }
         foreach (var (from, to, t) in sim.WebShots())
         {
             var p = from.Lerp(to, t);
@@ -321,6 +344,6 @@ public sealed class AntRenderer
         foreach (var b in _dead) b?.End();
         _crumbs.End(); _rings.End(); _bars.End(); _pips.End();
         foreach (var w in _wings.Values) w.End();
-        _cocoons.End(); _webs.End(); _blobs.End();
+        _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
 }

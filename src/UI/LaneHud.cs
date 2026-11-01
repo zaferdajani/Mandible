@@ -35,7 +35,7 @@ public partial class Hud
         v.AddChild(top);
 
         _ability = UiTheme.Text("", 15, UiTheme.Bold, UiTheme.Ink);
-        var cast = new Button { CustomMinimumSize = new Vector2(0, 40), TooltipText = Lane.HeroBlurb(Game.Heroes[Local.Me]) };
+        var cast = new Button { CustomMinimumSize = new Vector2(0, 40), TooltipText = Lane.HeroCard(Game.Heroes[Local.Me]) };
         cast.AddChild(_ability);
         UiTheme.Place(_ability, 0, 0, 1, 1, 12, 0, -8, 0);
         _ability.VerticalAlignment = VerticalAlignment.Center;
@@ -100,7 +100,8 @@ public partial class Hud
             _heroHp.Value = h.Hp / h.MaxHp;
             float next = Sim.NextXp(h);
             _heroXp.Value = next <= 0 ? 1 : h.Xp / next;
-            _heroStats.Text = $"HP {(int)h.Hp} / {(int)h.MaxHp}  ·  Bite {Config.Of(type).Damage * h.DmgMul:0}  ·  Speed {Config.Of(type).Speed * h.SpeedMul:0.#}";
+            _heroStats.Text = $"HP {(int)h.Hp} / {(int)h.MaxHp}  ·  Bite {Config.Of(type).Damage * h.DmgMul:0}  ·  Armour {Config.Of(type).Armor * 100:0}%  ·  Speed {Config.Of(type).Speed * h.SpeedMul:0.#}";
+            _heroPortrait.TooltipText = Lane.HeroCard(type);
             _ability.Text = h.AbilityCd > 0 ? $"Q   {Config.AbilityName(type)}   ·   {Mathf.Ceil(h.AbilityCd):0}s" : $"Q   {Config.AbilityName(type)}   ·   READY";
             _ability.AddThemeColorOverride("font_color", h.AbilityCd > 0 ? UiTheme.Dim : new Color(0.6f, 1f, 0.55f));
             _respawn.Text = "";

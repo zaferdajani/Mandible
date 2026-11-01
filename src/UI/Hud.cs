@@ -318,6 +318,9 @@ public partial class Hud : CanvasLayer
         int n = Config.SquadSize(k);
         string what = n > 1 ? $"{s.Name} squad (x{n})" : s.Name;
         string squad = n > 1 ? "\nHatches as a squad that ranks up together and refills at the nest (B)." : "";
+        var t = Config.UnitOf(k);
+        if (Config.IsHero(t))
+            return $"{what}  [{key}]\n{role}\n{Config.StatLine(t)}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
         return $"{what}  [{key}]\n{role}{squad}\nEach: HP {s.Hp} · Bite {s.Damage}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
     }
 

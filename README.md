@@ -48,6 +48,22 @@ A match begins the way a real colony does: a queen and eight workers on bare soi
 
 Main menu, then **Lane War**. Three lanes run between the nests. Every 30 seconds each mound sends free waves of soldiers down every lane (gunners join after 5 minutes, majors after 10, elite waves after 15; waves grow a level stronger every 5 minutes). Two **mound guardians** stand on each lane and two at each queen; the queen cannot be hurt until her two guardians fall. You steer one **hero** (Warlord, Acid Matron or Sky Marshal): right-click to move or attack, **Q** for its ability, **1-4** to buy Mandibles, Carapace, Swift Legs or Royal Jelly with food from kills and your foragers, **Space** to find it. It levels to 10, heals in the pool at your nest and respawns after a short timer. Wild bugs live in the jungle between the lanes. Kill the enemy queen to win.
 
+## Heroes and wild bugs
+
+Every hero and every wild bug has three things you can read at a glance in the Field Guide, the hero picker and the hatch tooltips: how it attacks, how it defends and one signature special. Armour is the share of every blow the chitin shrugs off. Heroes wear their colony's metal (gold for the garden legion, scarlet for the fire swarm) on crests, plates and mandibles; bugs grow 40% tougher a level.
+
+| | Attack | Defence | Special |
+|---|---|---|---|
+| **Warlord** | Cleaving bite: 50% of every bite to all enemies around the victim | 30% armour | **War Cry**: staggers everything within 4.5 for a bite; warriors within 13 bite 30% harder and run 20% faster for 8 s |
+| **Acid Matron** | Acid spray from range 6.5, splashing 45% onto enemies beside the target | 10% armour, fights from range | **Acid Burst**: melts a cluster and leaves a venom pool for 6 s |
+| **Sky Marshal** | Swooping bite from the air | Airborne: ground biters reach it only when it dives; 15% armour | **Dive Bomb**: crushes and stuns a crowd and rallies warriors within 12 (+15% bite and speed for 6 s) |
+| **Ground Beetle** | Crushing jaws; Mandible Sweep hurls back every ant around it | 25% armour, 70% behind the Shell Wall | **Shell Wall**: when swarmed or hurt, +45% armour for 4 s |
+| **Wolf Spider** | Pounce bite, 2.4x on silk-wrapped prey | Almost none: speed and silk | **Web Snare + Lunge**: roots a patch of ants, then lunges onto the wrapped prey |
+| **Stag Beetle** | Antler jaws with the longest reach of any bug | 30% armour | **Antler Toss**: charges at 2.6x speed and tosses everything in front of its jaws 3.5 lengths for 2.2x bite, stunned on their backs |
+| **Hunting Wasp** | Flies; venomous sting every few seconds (2.5x bite plus venom for 4 s) | Hit and run: climbs out of reach for 2.4 s after each sting; 10% armour | **Venom Sting** |
+
+In Lane War the hero's special fires on **Q**; in Colony War heroes cast it themselves when the fight calls for it. Wild bugs use theirs whenever they can.
+
 ## Phones and tablets
 
 The game follows the device's rotation: landscape either way, or portrait (the selection panel moves to the top).
