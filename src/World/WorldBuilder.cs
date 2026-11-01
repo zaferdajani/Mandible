@@ -11,7 +11,9 @@ public static class WorldBuilder
     static readonly Vector2 Center = new(S * 0.5f, S * 0.5f);
     static Vector2 Mirror(Vector2 p) => new(S - p.X, S - p.Y);
 
-    public static World Build(Node3D parent, uint seed)
+    /// `horizontal`: the colonies face each other across the yard (left and right) instead of corner to corner.
+    /// Lane War uses it so the lanes run along a phone held sideways.
+    public static World Build(Node3D parent, uint seed, bool horizontal = false)
     {
         var w = new World { Root = new Node3D { Name = "World" } };
         parent.AddChild(w.Root);
@@ -20,10 +22,11 @@ public static class WorldBuilder
         var hf = w.HF = new Heightfield(S, 1f);
 
         BuildTextures(w);
-        BaseHeights(hf, seed);
+        var home = horizontal ? new Vector2(46, S * 0.5f) : NestA;
+        BaseHeights(hf, seed, home);
 
-        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = NestA, Radius = 9 };
-        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(NestA), Radius = 13 };
+        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = home, Radius = 9 };
+        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(home), Radius = 13 };
         // rocks are placed before the soil settles so the ground can sag around them (the rock itself sits on the sagged soil)
         var rocks = PlaceRocks(w, rng);
         RockDips(hf, rocks);
@@ -100,14 +103,14 @@ public static class WorldBuilder
     /// one yard. Four layers: slow swells, dune ridges, shallow cellular hollows (where the pebbles collect) and
     /// small lumps; a worn hollow runs between the nests through the middle, and the ground is held nearly flat
     /// around each nest so the galleries, pane and crater still fit.
-    static void BaseHeights(Heightfield hf, uint seed)
+    static void BaseHeights(Heightfield hf, uint seed, Vector2 nestA)
     {
         var n1 = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 0.011f, Seed = (int)seed, FractalOctaves = 3 };
         var n2 = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex, Frequency = 0.06f, Seed = (int)seed + 5 };
         var dune = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 0.026f, Seed = (int)seed + 11, FractalType = FastNoiseLite.FractalTypeEnum.Ridged, FractalOctaves = 2, FractalGain = 0.45f };
         var dip = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Cellular, Frequency = 0.04f, Seed = (int)seed + 17, CellularReturnType = FastNoiseLite.CellularReturnTypeEnum.Distance, CellularJitter = 0.9f };
         var fine = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex, Frequency = 0.13f, Seed = (int)seed + 23 };
-        var nestB = Mirror(NestA);
+        var nestB = Mirror(nestA);
         float Relief(float wx, float wz)
         {
             float h = 2.2f * n1.GetNoise2D(wx, wz) + 0.35f * n2.GetNoise2D(wx, wz);
@@ -119,11 +122,11 @@ public static class WorldBuilder
             float lumps = 0.3f * fine.GetNoise2D(wx, wz);
             // the worn hollow of the main path: nest to nest through the middle of the yard
             var p = new Vector2(wx, wz);
-            float along = Mathf.Clamp((p - NestA).Dot(nestB - NestA) / (nestB - NestA).LengthSquared(), 0, 1);
-            float offPath = p.DistanceTo(NestA + (nestB - NestA) * along);
+            float along = Mathf.Clamp((p - nestA).Dot(nestB - nestA) / (nestB - nestA).LengthSquared(), 0, 1);
+            float offPath = p.DistanceTo(nestA + (nestB - nestA) * along);
             float path = -0.6f * (1f - Mathf.SmoothStep(2.5f, 9f, offPath));
             // flat ground around the nests
-            float nd = Mathf.Min(p.DistanceTo(NestA), p.DistanceTo(nestB));
+            float nd = Mathf.Min(p.DistanceTo(nestA), p.DistanceTo(nestB));
             float keep = Mathf.SmoothStep(13f, 26f, nd);
             return h + (r + bowl + lumps + path) * keep;
         }

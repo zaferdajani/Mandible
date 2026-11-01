@@ -81,7 +81,7 @@ public partial class Hud
 
         _score = UiTheme.Text("", 15, UiTheme.Bold, UiTheme.Ink);
         _score.MouseFilter = Control.MouseFilterEnum.Ignore;
-        UiTheme.Place(_score, 0, 0, 0, 0, 22, 50, 760, 72);
+        UiTheme.Place(_score, 0, 0, 0, 0, 22, 50, 1400, 72);
         _root.AddChild(_score);
     }
 
@@ -118,14 +118,20 @@ public partial class Hud
         {
             int tier = sim.Items[me, i];
             bool maxed = i < 3 && tier >= Lane.MaxItemTier;
-            string tierText = i == 3 ? "" : maxed ? " (max)" : $" {Roman(tier + 1)}";
+            string tierText = i == 3 ? sim.JellyCd[me] > 0 ? $"  ·  {Mathf.Ceil(sim.JellyCd[me]):0}s" : "" : maxed ? " (max)" : $" {Roman(tier + 1)}";
             _shop[i].Text = maxed ? $"{i + 1}  {Lane.ItemNames[i]}{tierText}" : $"{i + 1}  {Lane.ItemNames[i]}{tierText}  ·  {Lane.ItemCost(i, tier)}";
             _shop[i].Disabled = !sim.CanBuy(me, i);
         }
         float wave = Lane.WaveEvery - ((sim.Time - Lane.FirstWave) % Lane.WaveEvery + Lane.WaveEvery) % Lane.WaveEvery;
         if (sim.Time < Lane.FirstWave) wave = Lane.FirstWave - sim.Time;
         string shield = sim.QueenShielded(foe) ? "enemy queen shielded by her guardians" : "ENEMY QUEEN EXPOSED";
-        _score.Text = $"Guardians  {sim.GuardiansLeft(me)} : {sim.GuardiansLeft(foe)}    Hero kills  {sim.HeroKills[me]} : {sim.HeroKills[foe]}    Next wave {wave:0}s    {shield}";
+        string herd = sim.HerdHere
+            ? sim.HerdTeam < 0 ? "Aphid herd: unclaimed" : $"Aphid herd: {(sim.HerdTeam == me ? "you" : "enemy")} milking {sim.HerdBar * 100:0}%"
+            : sim.Time < Lane.StagWake ? $"Aphid herd in {Mathf.Ceil(sim.HerdNext - sim.Time):0}s" : "";
+        string stag = sim.StagAwake
+            ? sim.StagTeam < 0 ? "OLD STAG AWAKE" : $"Old Stag marches for {(sim.StagTeam == me ? "YOU" : "the enemy")}"
+            : $"Old Stag in {Mathf.Ceil(sim.StagNext - sim.Time):0}s";
+        _score.Text = $"Guardians  {sim.GuardiansLeft(me)} : {sim.GuardiansLeft(foe)}    Hero kills  {sim.HeroKills[me]} : {sim.HeroKills[foe]}    Next wave {wave:0}s    {shield}    {herd}    {stag}";
     }
 
     static string Roman(int n) => n switch { 1 => "I", 2 => "II", 3 => "III", _ => n.ToString() };

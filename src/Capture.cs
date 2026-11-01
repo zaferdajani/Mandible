@@ -145,7 +145,7 @@ public static class Capture
         await Wait(3);
         s = app.Session;
         int heroId = s.Sim.HeroId[0];
-        GD.Print($"[selftest] lane war: hero {(heroId >= 0 && s.Sim.Ants[heroId].Type == AntType.Warlord ? "spawned" : "MISSING")}, guardians {s.Sim.GuardiansLeft(0)}/{s.Sim.GuardiansLeft(1)}, queen shielded {s.Sim.QueenShielded(1)}  {(heroId >= 0 && s.Sim.GuardiansLeft(0) == 8 && s.Sim.QueenShielded(1) ? "PASS" : "FAIL")}");
+        GD.Print($"[selftest] lane war: hero {(heroId >= 0 && s.Sim.Ants[heroId].Type == AntType.Warlord ? "spawned" : "MISSING")}, guardians {s.Sim.GuardiansLeft(0)}/{s.Sim.GuardiansLeft(1)}, queen shielded {s.Sim.QueenShielded(1)}  {(heroId >= 0 && s.Sim.GuardiansLeft(0) == 16 && s.Sim.QueenShielded(1) ? "PASS" : "FAIL")}");
         s.Input.FocusHero();
         await Wait(1.5f);
         GD.Print($"[selftest] lane war: hero selected {(s.Input.Selection.Count == 1 && s.Input.Selection[0] == heroId ? "PASS" : "FAIL")}");
@@ -525,7 +525,7 @@ public static class Capture
         {
             var root = new Node3D();
             app.AddChild(root);
-            var world = WorldBuilder.Build(root, 20261031);
+            var world = WorldBuilder.Build(root, 20261031, mode == GameMode.Lanes);
             var sim = new Sim(world, mode, AntType.Warlord, AntType.Marshal);
             var ais = mode == GameMode.Colony
                 ? new IColonyAI[] { new AIController(sim, 0, Difficulty.Hard), new AIController(sim, 1, Difficulty.Normal) }
@@ -680,7 +680,7 @@ public static class Capture
     {
         var root = new Node3D();
         app.AddChild(root);
-        var world = WorldBuilder.Build(root, seed);
+        var world = WorldBuilder.Build(root, seed, true);
         var sim = new Sim(world, GameMode.Lanes, h0, h1);
         var ais = new IColonyAI[] { new LaneAI(sim, 0, a), new LaneAI(sim, 1, b) };
         const float dt = 1f / 30f;
@@ -689,11 +689,17 @@ public static class Capture
         string Side(int t)
         {
             int id = sim.HeroId[t];
-            string hero = id >= 0 ? $"{sim.HeroType[t]} Lv{sim.Ants[id].Level} hp {sim.Ants[id].Hp:0}/{sim.Ants[id].MaxHp:0}" : $"{sim.HeroType[t]} dead {sim.HeroRespawn[t]:0}s";
+            string hero = id >= 0 ? $"{sim.HeroType[t]} Lv{sim.Ants[id].Level} hp {sim.Ants[id].Hp:0}/{sim.Ants[id].MaxHp:0} {sim.Ants[id].State}@{sim.Ants[id].Pos.X:0},{sim.Ants[id].Pos.Y:0}" : $"{sim.HeroType[t]} dead {sim.HeroRespawn[t]:0}s";
             int creeps = 0;
             for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == t && sim.Ants[i].Lane > 0) creeps++;
             ref var q = ref sim.Ants[sim.Col[t].QueenId];
             return $"{hero} items {sim.Items[t, 0]}/{sim.Items[t, 1]}/{sim.Items[t, 2]} food {sim.Col[t].Food:0} guardians {sim.GuardiansLeft(t)} creeps {creeps} hero-kills {sim.HeroKills[t]} queen {q.Hp:0}";
+        }
+        string Objectives()
+        {
+            string herd = sim.HerdHere ? (sim.HerdTeam < 0 ? "herd unclaimed" : $"herd team{sim.HerdTeam} {sim.HerdBar * 100:0}%") : sim.Time >= Lane.StagWake ? "herd gone" : $"herd in {sim.HerdNext - sim.Time:0}s";
+            string stag = sim.StagAwake ? (sim.StagTeam < 0 ? $"stag wild hp {sim.Ants[sim.StagId].Hp:0}" : $"stag roused by team{sim.StagTeam} hp {sim.Ants[sim.StagId].Hp:0} {sim.Ants[sim.StagId].State}@{sim.Ants[sim.StagId].Pos.X:0},{sim.Ants[sim.StagId].Pos.Y:0} lane{sim.Ants[sim.StagId].Lane} step{sim.Ants[sim.StagId].LaneStep} goal {sim.Ants[sim.StagId].Goal.X:0},{sim.Ants[sim.StagId].Goal.Y:0}") : $"stag in {sim.StagNext - sim.Time:0}s";
+            return $"{herd} | {stag}";
         }
         GD.Print($"[lanetest] wild bugs in the jungle: {sim.WildCount}");
         while (sim.Time < seconds && sim.Winner < 0)
@@ -703,7 +709,7 @@ public static class Capture
             if (sim.Time >= next)
             {
                 next += 60;
-                GD.Print($"[lanetest] t={sim.Time / 60:0}m | black {Side(0)} | red {Side(1)}");
+                GD.Print($"[lanetest] t={sim.Time / 60:0}m | black {Side(0)} | red {Side(1)} | {Objectives()}");
                 for (int t = 0; t < 2; t++)
                 {
                     var groups = new Dictionary<string, int>();
