@@ -11,16 +11,24 @@ public static class Lane
     public const float FirstWave = 10f, WaveEvery = 30f;
     public const float FountainRadius = 14f;
     public const int MaxItemTier = 3;
+    public const float JellyCooldown = 45f;    // seconds between Royal Jelly doses: a duel cannot be out-healed forever
     public const float GuardianRepair = 0.02f; // share of max health a guardian regains per second once left alone
     public const float Backdoor = 0.35f;       // damage a hero deals to a guardian with no creep wave at its feet
     public const float SiegeRadius = 12f;      // how close a creep must be for the post to be "under siege"
+
+    // The aphid herd: a contested food objective in the upper undergrowth. A lone hero standing among the
+    // aphids milks honeydew; when the bar fills its colony is paid and the herd moves on for a while.
+    public const float HerdArrives = 240f, MilkTime = 90f, HerdReturn = 180f, PastureRadius = 9f, HerdFood = 300f, HerdXp = 150f;
+    // The Old Stag: a boss asleep under a log in the lower undergrowth. The team that fells it does not loot it
+    // but rouses it: it marches down the enemy's weakest lane until it is killed, then sleeps again for a while.
+    public const float StagWake = 720f, StagRespawn = 240f, BossHp = 4f, BossDmg = 1.2f, RousedDmg = 2f, StagShatter = 2.5f; // StagShatter: a roused stag's extra bite against guardians
     public static readonly string[] ItemNames = { "Mandibles", "Carapace", "Swift Legs", "Royal Jelly" };
     public static readonly string[] ItemDesc =
     {
         "+18% bite damage per tier",
         "+20% health per tier",
         "+10% speed per tier",
-        "Heals your hero 60% at once (any time, any number)",
+        "Heals your hero 60% at once (45 s between doses)",
     };
 
     /// Next tier's price; Royal Jelly is a consumable with a fixed price.
@@ -53,7 +61,17 @@ public sealed partial class Sim
     public readonly float[] HeroXp = new float[2], HeroRespawn = new float[2];
     public readonly int[,] Items = new int[2, 4];
     public readonly int[] HeroKills = new int[2];
+    public readonly float[] JellyCd = new float[2];
     float _nextLaneWave = Lane.FirstWave;
+
+    // objectives
+    public Vector2 Pasture, StagLair;
+    public bool HerdHere;
+    public float HerdBar, HerdNext = Lane.HerdArrives;
+    public int HerdTeam = -1;                       // the colony whose hero is milking, -1 while nobody is
+    public int StagId = -1, StagSerial, StagTeam = -1; // StagTeam: -1 asleep or wild, else the colony it marches for
+    public float StagNext = Lane.StagWake;
+    public bool StagAwake => Valid(StagId, StagSerial);
 
     /// Whether the colonies face each other across the yard (Lane War) rather than corner to corner.
     public bool Horizontal => Mathf.Abs(W.Nests[0].Pos.Y - W.Nests[1].Pos.Y) < 1f;
@@ -76,7 +94,13 @@ public sealed partial class Sim
         // a waypoint inside a rock or the great raspberry could never be reached: slide it onto open ground
         foreach (var lane in Lanes)
             for (int i = 1; i < lane.Length - 1; i++) lane[i] = OpenGround(lane[i]);
+        // the objectives sit in the undergrowth halfway between the middle lane and each flank lane
+        Pasture = OpenGround(mid + side * (bow * 0.5f));
+        StagLair = OpenGround(mid - side * (bow * 0.5f));
     }
+
+    /// Lane War keeps the lanes and the objective grounds clear of wild lairs.
+    bool LaneReserved(Vector2 p) => NearLane(p, 16) || p.DistanceTo(Pasture) < 14 || p.DistanceTo(StagLair) < 14;
 
     Vector2 OpenGround(Vector2 p)
     {
@@ -257,12 +281,107 @@ public sealed partial class Sim
         if (a.Stuck > 24f) NextLaneStep(ref a);
     }
 
+    bool HeroIn(int team, Vector2 p, float r) => HeroId[team] >= 0 && Ants[HeroId[team]].Alive && Ants[HeroId[team]].Pos.DistanceTo(p) < r;
+
+    void TickObjectives(float dt)
+    {
+        // the aphid herd
+        if (!HerdHere)
+        {
+            if (Time >= HerdNext && Time < Lane.StagWake)
+            {
+                HerdHere = true; HerdBar = 0; HerdTeam = -1;
+                Events.Add(new SimEvent { Kind = EvKind.HerdArrives, Pos = Pasture, Team = -1 });
+            }
+        }
+        else
+        {
+            bool h0 = HeroIn(0, Pasture, Lane.PastureRadius), h1 = HeroIn(1, Pasture, Lane.PastureRadius);
+            if (h0 != h1)
+            {
+                int team = h0 ? 0 : 1;
+                if (HerdTeam != team) { HerdTeam = team; HerdBar = 0; } // a rival hero resets the milking
+                HerdBar += dt / Lane.MilkTime;
+                if (HerdBar >= 1)
+                {
+                    Col[team].Food += Lane.HerdFood;
+                    if (HeroId[team] >= 0) GrantXp(HeroId[team], Lane.HerdXp);
+                    Events.Add(new SimEvent { Kind = EvKind.HerdMilked, Pos = Pasture, Team = team });
+                    HerdHere = false; HerdTeam = -1; HerdBar = 0;
+                    HerdNext = Time + Lane.HerdReturn;
+                }
+            }
+        }
+        // the Old Stag
+        if (StagAwake) return;
+        if (StagId >= 0) { StagId = -1; StagTeam = -1; StagNext = Time + Lane.StagRespawn; } // it fell; it will crawl back under its log
+        else if (Time >= StagNext) WakeStag();
+    }
+
+    void WakeStag()
+    {
+        var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - StagLair).Normalized();
+        int id = Spawn(Config.Wild, AntType.StagBeetle, StagLair, toCenter.AngleD());
+        if (id < 0) return;
+        ref var a = ref Ants[id];
+        a.Boss = true;
+        a.Home = StagLair;
+        a.State = AntState.Idle;
+        ApplyLevel(ref a);
+        a.Hp = a.MaxHp;
+        StagId = id;
+        StagSerial = a.Serial;
+        StagTeam = -1;
+        Events.Add(new SimEvent { Kind = EvKind.StagWakes, Pos = StagLair, Team = -1 });
+    }
+
+    /// The Old Stag is beaten: instead of dying it marches for the colony that felled it.
+    void Rouse(int id, int team, int killer)
+    {
+        ref var a = ref Ants[id];
+        GrantXp(killer, Config.Bounty(a.Type, a.Level) * 2); // felling it is worth two stags' experience
+        WildCount--;
+        Col[team].Count[(int)a.Type]++;
+        a.Team = team;
+        a.Hp = a.MaxHp;
+        a.DmgMul *= Lane.RousedDmg;
+        a.PoisonT = 0; a.Root = 0; a.Target = -1; a.Forced = false; a.Stuck = 0;
+        int lane = WeakestLane(1 - team);
+        a.Lane = (byte)(lane + 1);
+        a.LaneStep = 3;
+        a.Goal = Waypoint(team, lane, 3);
+        a.Anchor = a.Goal;
+        a.State = AntState.AttackMove;
+        StagTeam = team;
+        Events.Add(new SimEvent { Kind = EvKind.StagRoused, Pos = a.Pos, Team = team });
+    }
+
+    /// The lane where `team` has the fewest guardians left standing (the middle lane on a tie).
+    int WeakestLane(int team)
+    {
+        int best = 1, fewest = int.MaxValue;
+        foreach (int lane in new[] { 1, 0, 2 })
+        {
+            int n = 0;
+            for (int i = 0; i < High; i++)
+            {
+                ref var g = ref Ants[i];
+                if (!g.Alive || !g.Guardian || g.Team != team) continue;
+                if (g.Pos.DistanceTo(AlongLane(team, lane, 0.36f)) < 12 || g.Pos.DistanceTo(AlongLane(team, lane, 0.2f)) < 12) n++;
+            }
+            if (n < fewest) { fewest = n; best = lane; }
+        }
+        return best;
+    }
+
     void TickLanes(float dt)
     {
+        TickObjectives(dt);
         for (int team = 0; team < 2; team++)
         {
             var c = Col[team];
             if (!c.Alive) continue;
+            JellyCd[team] -= dt;
             if (HeroId[team] < 0)
             {
                 HeroRespawn[team] -= dt;
@@ -363,6 +482,7 @@ public sealed partial class Sim
         {
             ref var h = ref Ants[HeroId[team]];
             h.Hp = Mathf.Min(h.MaxHp, h.Hp + h.MaxHp * 0.6f);
+            JellyCd[team] = Lane.JellyCooldown;
             return true;
         }
         Items[team, item]++;
@@ -374,7 +494,7 @@ public sealed partial class Sim
     {
         if (Mode != GameMode.Lanes || item < 0 || item > 3 || !Col[team].Alive) return false;
         if (item < 3 && Items[team, item] >= Lane.MaxItemTier) return false;
-        if (item == 3 && (HeroId[team] < 0 || Ants[HeroId[team]].Hp >= Ants[HeroId[team]].MaxHp)) return false;
+        if (item == 3 && (HeroId[team] < 0 || Ants[HeroId[team]].Hp >= Ants[HeroId[team]].MaxHp || JellyCd[team] > 0)) return false;
         return Col[team].Food >= Lane.ItemCost(item, Items[team, item]);
     }
 

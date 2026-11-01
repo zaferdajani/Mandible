@@ -622,11 +622,17 @@ public static class Capture
         string Side(int t)
         {
             int id = sim.HeroId[t];
-            string hero = id >= 0 ? $"{sim.HeroType[t]} Lv{sim.Ants[id].Level} hp {sim.Ants[id].Hp:0}/{sim.Ants[id].MaxHp:0}" : $"{sim.HeroType[t]} dead {sim.HeroRespawn[t]:0}s";
+            string hero = id >= 0 ? $"{sim.HeroType[t]} Lv{sim.Ants[id].Level} hp {sim.Ants[id].Hp:0}/{sim.Ants[id].MaxHp:0} {sim.Ants[id].State}@{sim.Ants[id].Pos.X:0},{sim.Ants[id].Pos.Y:0}" : $"{sim.HeroType[t]} dead {sim.HeroRespawn[t]:0}s";
             int creeps = 0;
             for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == t && sim.Ants[i].Lane > 0) creeps++;
             ref var q = ref sim.Ants[sim.Col[t].QueenId];
             return $"{hero} items {sim.Items[t, 0]}/{sim.Items[t, 1]}/{sim.Items[t, 2]} food {sim.Col[t].Food:0} guardians {sim.GuardiansLeft(t)} creeps {creeps} hero-kills {sim.HeroKills[t]} queen {q.Hp:0}";
+        }
+        string Objectives()
+        {
+            string herd = sim.HerdHere ? (sim.HerdTeam < 0 ? "herd unclaimed" : $"herd team{sim.HerdTeam} {sim.HerdBar * 100:0}%") : sim.Time >= Lane.StagWake ? "herd gone" : $"herd in {sim.HerdNext - sim.Time:0}s";
+            string stag = sim.StagAwake ? (sim.StagTeam < 0 ? $"stag wild hp {sim.Ants[sim.StagId].Hp:0}" : $"stag roused by team{sim.StagTeam} hp {sim.Ants[sim.StagId].Hp:0} {sim.Ants[sim.StagId].State}@{sim.Ants[sim.StagId].Pos.X:0},{sim.Ants[sim.StagId].Pos.Y:0} lane{sim.Ants[sim.StagId].Lane} step{sim.Ants[sim.StagId].LaneStep} goal {sim.Ants[sim.StagId].Goal.X:0},{sim.Ants[sim.StagId].Goal.Y:0}") : $"stag in {sim.StagNext - sim.Time:0}s";
+            return $"{herd} | {stag}";
         }
         GD.Print($"[lanetest] wild bugs in the jungle: {sim.WildCount}");
         while (sim.Time < seconds && sim.Winner < 0)
@@ -636,7 +642,7 @@ public static class Capture
             if (sim.Time >= next)
             {
                 next += 60;
-                GD.Print($"[lanetest] t={sim.Time / 60:0}m | black {Side(0)} | red {Side(1)}");
+                GD.Print($"[lanetest] t={sim.Time / 60:0}m | black {Side(0)} | red {Side(1)} | {Objectives()}");
                 for (int t = 0; t < 2; t++)
                 {
                     var groups = new Dictionary<string, int>();

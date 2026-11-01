@@ -54,15 +54,35 @@ public sealed class LaneAI : IColonyAI
             return;
         }
 
-        // the ability: whenever enemies are bunched nearby
-        if (h.AbilityCd <= 0 && h.CastReq <= 0 && Enemies(h.Pos, 11) >= 2) Orders.Issue(new Cmd { Kind = CmdKind.Ability, Team = (byte)_team });
+        // the ability: whenever enemies are bunched nearby, or the Old Stag is in reach
+        bool stagClose = _sim.StagAwake && _sim.StagTeam != _team && _sim.Ants[_sim.StagId].Pos.DistanceTo(h.Pos) < 9;
+        if (h.AbilityCd <= 0 && h.CastReq <= 0 && (Enemies(h.Pos, 11) >= 2 || stagClose)) Orders.Issue(new Cmd { Kind = CmdKind.Ability, Team = (byte)_team });
 
         // Hard heroes switch to the lane where the enemy is pushing hardest
         _laneTimer -= 0.4f;
         if (_laneTimer <= 0) { _laneTimer = 45; if (_diff == Difficulty.Hard) _lane = MostThreatened(); }
 
-        // fight the enemy hero if it is close and weaker
         int foe = _sim.HeroId[1 - _team];
+        bool foeAlive = foe >= 0 && _sim.Ants[foe].Alive;
+
+        // objectives: fell the Old Stag once strong enough, milk the aphid herd when nobody contests it
+        if (_diff != Difficulty.Easy && _sim.StagAwake && _sim.StagTeam < 0 && h.Level >= 6 && h.Hp > h.MaxHp * 0.75f)
+        {
+            var stagPos = _sim.Ants[_sim.StagId].Pos;
+            bool foeStronger = foeAlive && _sim.Ants[foe].Pos.DistanceTo(stagPos) < 16 && _sim.Ants[foe].Hp > h.Hp;
+            if (!foeStronger) { Order(CmdKind.Attack, id, Vector2.Zero, _sim.StagId); return; }
+        }
+        if (_sim.HerdHere && h.Hp > h.MaxHp * 0.55f && _sim.HerdTeam != 1 - _team)
+        {
+            bool foeThere = foeAlive && _sim.Ants[foe].Pos.DistanceTo(_sim.Pasture) < Lane.PastureRadius + 5 && _sim.Ants[foe].Hp > h.Hp * 0.9f;
+            if (!foeThere)
+            {
+                if (h.Pos.DistanceTo(_sim.Pasture) > 3.5f) Order(CmdKind.AttackMove, id, _sim.Pasture);
+                return;
+            }
+        }
+
+        // fight the enemy hero if it is close and weaker
         if (foe >= 0 && _sim.Ants[foe].Alive && _sim.Ants[foe].Pos.DistanceTo(h.Pos) < 13
             && _sim.Ants[foe].Hp / _sim.Ants[foe].MaxHp < h.Hp / h.MaxHp + 0.1f && !UnderEnemyGuardian(_sim.Ants[foe].Pos))
         {

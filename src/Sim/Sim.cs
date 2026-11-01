@@ -38,6 +38,7 @@ public struct Ant
     public int PoisonSrc;
     // lane war
     public bool Guardian;             // an immobile mound guardian (lane tower)
+    public bool Boss;                 // the Old Stag: Lane War's neutral boss, roused rather than killed
     public byte Lane, LaneStep;       // lane creep: lane index + 1 and the waypoint it is heading for
     public bool Manual;               // a player-steered hero: its ability fires only on command
     public float CastReq;             // seconds left on a pending ability command
@@ -47,7 +48,7 @@ public struct Ant
     public int DigP1;                 // chamber id + 1 this worker is digging (0 = none)
 }
 
-public enum EvKind { Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull }
+public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull }
 
 public struct SimEvent
 {
@@ -175,7 +176,7 @@ public sealed partial class Sim
         }
         foreach (var camp in W.Camps)
         {
-            if (mode == GameMode.Lanes && NearLane(camp.Pos, 16)) continue; // the lanes are kept clear; bugs live in the jungle between them
+            if (mode == GameMode.Lanes && LaneReserved(camp.Pos)) continue; // the lanes and objective grounds are kept clear; bugs live in the jungle between them
             for (int i = 0; i < camp.Bugs.Length; i++)
             {
                 var (type, level) = camp.Bugs[i];
@@ -220,6 +221,7 @@ public sealed partial class Sim
             a.Size *= 1 + 0.12f * q;
         }
         if (a.Guardian) ApplyGuardianStats(ref a);
+        if (a.Boss) { a.MaxHp *= Lane.BossHp; a.DmgMul *= Lane.BossDmg; a.Size *= 1.35f; }
         if (Mode == GameMode.Lanes && a.Team < 2) ApplyLaneStats(ref a);
         a.Hp = a.MaxHp * frac;
     }
@@ -576,7 +578,12 @@ public sealed partial class Sim
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
         }
         Mix(Fortified ? 1u : 0u);
-        if (Mode == GameMode.Lanes) for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
+        if (Mode == GameMode.Lanes)
+        {
+            for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
+            for (int t = 0; t < 2; t++) Mix(F(JellyCd[t]));
+            Mix(HerdHere ? 1u : 0u); Mix(F(HerdBar)); Mix((uint)HerdTeam); Mix(F(HerdNext)); Mix((uint)StagId); Mix((uint)StagTeam); Mix(F(StagNext));
+        }
         Mix((uint)W.Food.Count);
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
@@ -856,7 +863,7 @@ public sealed partial class Sim
             return;
         }
 
-        if (a.Team == Config.Wild && a.State == AntState.Engage) WildAbility(i, ref a, st);
+        if ((a.Team == Config.Wild || a.Boss) && a.State == AntState.Engage) WildAbility(i, ref a, st);
         if (Config.IsHero(a.Type) && think && (!a.Manual || a.CastReq > 0))
         {
             HeroAbility(i, ref a, st);
@@ -930,7 +937,7 @@ public sealed partial class Sim
                 // wild bugs lick their wounds at their lair, and prowl around it looking for prey
                 if (a.Team == Config.Wild && a.State == AntState.Idle)
                 {
-                    a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.04f * dt);
+                    a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * (a.Boss ? 0.01f : 0.04f) * dt); // the Old Stag mends slowly, so a retreat does not reset the fight
                     if (think && a.Hp > a.MaxHp * 0.8f && Rng.F() < 0.035f)
                     {
                         a.Goal = a.Home + Rng.InDisk(9f);
@@ -1014,6 +1021,7 @@ public sealed partial class Sim
             Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
         }
         if (a.Guardian && Config.IsHero(t.Type)) dmg *= 1.6f; // guardians punish heroes who dive under them
+        if (a.Boss && a.Team < 2 && t.Guardian) dmg *= Lane.StagShatter; // a roused Old Stag shatters mounds
         bool fire = a.Team < 2 && Col[a.Team].Race == Race.RedFire && Config.IsWarrior(a.Type) && !Config.Ranged(a.Type);
         if (fire && a.Pos.DistanceTo(NestEntrance(a.Team)) < 40) dmg *= Config.RedHomeDamage;
         if (fire && t.Alive && t.Type != AntType.Queen)
@@ -1082,6 +1090,7 @@ public sealed partial class Sim
             foreach (int j in victims)
             {
                 ref var b = ref Ants[j];
+                if (j == i || b.Team == a.Team) continue; // a roused stag sweeps only the enemy
                 var push = (b.Pos - a.Pos).Normalized();
                 b.Pos = ClampMap(b.Pos + push * (1.2f + 0.2f * lv));
                 Damage(j, dmg, i);
@@ -1261,6 +1270,7 @@ public sealed partial class Sim
     void Kill(int id, int killer)
     {
         ref var t = ref Ants[id];
+        if (t.Boss && t.Team == Config.Wild && killer >= 0 && Ants[killer].Team < 2) { Rouse(id, Ants[killer].Team, killer); return; }
         t.Alive = false;
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);

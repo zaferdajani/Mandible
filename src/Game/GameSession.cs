@@ -59,7 +59,7 @@ public partial class GameSession : Node3D
         Effects = new Effects(this, World.HF);
         Interior = new NestInterior(this);
         BuildLighting();
-        if (Lanes) BuildLaneDressing();
+        if (Lanes) { BuildLaneDressing(); BuildObjectiveDressing(); }
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile && !App.TestRun }; // touch laptops still have a mouse; test runs leave the cursor wherever it is
@@ -271,8 +271,59 @@ public partial class GameSession : Node3D
         }
     }
 
+    Node3D _herd;
+
+    /// The objective grounds: an aphid-laden stem in the pasture and the Old Stag's fallen log.
+    void BuildObjectiveDressing()
+    {
+        var hf = World.HF;
+        var p = Sim.Pasture;
+        _herd = new Node3D { Name = "AphidHerd", Position = new Vector3(p.X, hf.Sample(p.X, p.Y), p.Y) };
+        var stemMat = new StandardMaterial3D { AlbedoColor = new Color(0.36f, 0.5f, 0.2f), Roughness = 0.9f };
+        var stem = new MeshInstance3D
+        {
+            Mesh = new CylinderMesh { TopRadius = 0.22f, BottomRadius = 0.42f, Height = 7f, RadialSegments = 10, Rings = 1 },
+            MaterialOverride = stemMat, Position = new Vector3(0, 3.5f, 0), Rotation = new Vector3(0.18f, 0, 0.12f),
+        };
+        _herd.AddChild(stem);
+        var leaf = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 1.6f, Height = 0.5f, RadialSegments = 12, Rings = 4 },
+            MaterialOverride = stemMat, Position = new Vector3(0.9f, 6.6f, 0.6f), Rotation = new Vector3(0.3f, 0.4f, 0),
+        };
+        _herd.AddChild(leaf);
+        var aphid = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = new SphereMesh { Radius = 0.3f, Height = 0.5f, RadialSegments = 8, Rings = 4 } };
+        var rng = new Rng(Seed ^ 0xA9A1Du);
+        aphid.InstanceCount = 18;
+        for (int i = 0; i < 18; i++)
+        {
+            float h = 2.2f + i * 0.26f;
+            float ang = i * 2.4f;
+            var pos = new Vector3(Mathf.Cos(ang) * 0.42f + h * 0.12f, h, Mathf.Sin(ang) * 0.42f + h * 0.08f);
+            aphid.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Vector3.One * rng.R(0.8f, 1.2f)), pos));
+        }
+        _herd.AddChild(new MultiMeshInstance3D { Multimesh = aphid, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.9f, 0.5f), Roughness = 0.6f } });
+        _herd.Visible = false;
+        AddChild(_herd);
+
+        var l = Sim.StagLair;
+        var away = (l - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
+        var along = new Vector2(-away.Y, away.X);
+        var lc = l + away * 5.5f;
+        var log = new MeshInstance3D
+        {
+            Mesh = new CylinderMesh { TopRadius = 2.1f, BottomRadius = 2.3f, Height = 13f, RadialSegments = 14, Rings = 2 },
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.3f, 0.21f, 0.13f), Roughness = 1 },
+            Position = new Vector3(lc.X, hf.Sample(lc.X, lc.Y) + 1.4f, lc.Y),
+            Rotation = new Vector3(Mathf.Pi / 2, -Mathf.Atan2(along.Y, along.X), 0.06f),
+            Name = "StagLog",
+        };
+        AddChild(log);
+    }
+
     void UpdateMounds()
     {
+        if (_herd != null) _herd.Visible = Sim.HerdHere;
         for (int i = _mounds.Count - 1; i >= 0; i--)
         {
             var (id, serial, mound) = _mounds[i];
@@ -289,6 +340,7 @@ public partial class GameSession : Node3D
         int team = Local.Me;
         if (item < 3 && Sim.Items[team, item] >= Lane.MaxItemTier) { Hud.Alert($"{Lane.ItemNames[item]} is fully upgraded", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your hero is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (item == 3 && Sim.JellyCd[team] > 0) { Hud.Alert($"The last dose of Royal Jelly is still settling ({Mathf.Ceil(Sim.JellyCd[team]):0}s)", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (!Sim.CanBuy(team, item))
         {
             Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your hero is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
@@ -606,6 +658,20 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.Spawn:
                     if (seen) { Effects.Burst(wp, 8, 0, 2f, 0.8f, 1f); if (Audible(e.Pos)) Audio.At("spawn", wp, -8, 0.2f); }
+                    break;
+                case EvKind.HerdArrives:
+                    if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone hero among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
+                    break;
+                case EvKind.HerdMilked:
+                    if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your hero milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy hero milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
+                    if (!Demo && e.Team == Local.Me) Audio.Ui("research", -4);
+                    break;
+                case EvKind.StagWakes:
+                    if (!Demo) { Hud.Alert("The Old Stag has woken under its log in the lower undergrowth. Fell it and it will march for you.", new Color(1f, 0.75f, 0.4f)); Audio.Ui("ui_ready", -2); }
+                    break;
+                case EvKind.StagRoused:
+                    if (!Demo) Hud.Alert(e.Team == Local.Me ? "The Old Stag marches for your colony! Follow it down the lane." : "The Old Stag marches against you! Hold the lane.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.5f, 0.35f));
+                    if (!Demo) Audio.Ui(e.Team == Local.Me ? "ui_ready" : "ui_error", -2);
                     break;
                 case EvKind.ProdDone:
                     if (!Demo && e.Team == Local.Me && e.Prod != ProdKind.Worker)
