@@ -75,6 +75,9 @@ struct RenderAnt
 public sealed class AntRenderer
 {
     readonly Batch[,] _live = new Batch[3, 13];
+    /// The rank and file far from the camera: the same material on a mesh with half the detail, no shadow.
+    readonly Batch[,] _far = new Batch[3, 13];
+    public const float FarDist = 62f;
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
     float _now, _lastNow = -1;
@@ -159,6 +162,8 @@ public sealed class AntRenderer
                 var dmat = AntMat(shader, team, (AntType)t, true);
                 _live[team, t] = new Batch(root, mesh, mat, true, $"Ants{team}_{t}");
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
+                if (team != Config.Wild && !Config.IsHero((AntType)t) && t != (int)AntType.Queen)
+                    _far[team, t] = new Batch(root, AntMesh.Build((AntType)t, true), mat, false, $"Far{team}_{t}");
             }
         ApplyQuality();
         // translucent wings for every flyer, beating in their own batch
@@ -254,6 +259,7 @@ public sealed class AntRenderer
     public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
         foreach (var b in _live) b?.Begin();
+        foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         _crumbs.Begin(); _rings.Begin(); _bars.Begin(); _pips.Begin();
         foreach (var w in _wings.Values) w.Begin();
@@ -294,7 +300,11 @@ public sealed class AntRenderer
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
-            _live[a.Team, (int)a.Type].Add(b, o, Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease));
+            float camDist = camPos.DistanceTo(o);
+            var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
+            var farBatch = _far[a.Team, (int)a.Type];
+            if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
+            else _live[a.Team, (int)a.Type].Add(b, o, data);
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
@@ -416,6 +426,7 @@ public sealed class AntRenderer
             _blobs.Add(Basis.FromScale(Vector3.One * 1.6f), wo, new Color(0.95f, 0, 0, 0));
         }
         foreach (var b in _live) b?.End();
+        foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
         _crumbs.End(); _rings.End(); _bars.End(); _pips.End();
         foreach (var w in _wings.Values) w.End();
@@ -424,7 +435,32 @@ public sealed class AntRenderer
 
     /// Decides where this ant looks and what it is doing with its face this frame, from read-only sim state,
     /// and packs it with the gait into the four per-instance floats the Ant shader decodes (see its vertex()).
-    Color Mind(Sim sim, int i, ref Ant a, Vector2 ip, float ih, float amp, Vector2 cam2, List<(int team, Vector2 pos)> heroes, float ease)
+    /// The nearest idle nestmate standing within touching distance, or -1: the one this ant turns to groom.
+    static int IdleNeighbour(Sim sim, int i, in Ant a)
+    {
+        int best = -1;
+        float bestD = (a.Size * 0.5f + 0.9f) * (a.Size * 0.5f + 0.9f);
+        int cx = (int)(a.Pos.X / SpatialHash.Cell), cz = (int)(a.Pos.Y / SpatialHash.Cell);
+        for (int z = cz - 1; z <= cz + 1; z++)
+        {
+            if (z < 0 || z >= sim.Hash.N) continue;
+            for (int x = cx - 1; x <= cx + 1; x++)
+            {
+                if (x < 0 || x >= sim.Hash.N) continue;
+                for (int j = sim.Hash.Head[z * sim.Hash.N + x]; j >= 0; j = sim.Hash.Next[j])
+                {
+                    if (j == i) continue;
+                    ref var b = ref sim.Ants[j];
+                    if (!b.Alive || b.Team != a.Team || b.State != AntState.Idle || b.Layer != a.Layer) continue;
+                    float d = b.Pos.DistanceSquaredTo(a.Pos);
+                    if (d < bestD) { bestD = d; best = j; }
+                }
+            }
+        }
+        return best;
+    }
+
+    Color Mind(Sim sim, int i, ref Ant a, Vector2 ip, float ih, float amp, Vector2 cam2, List<(int team, Vector2 pos)> heroes, float ease, float camDist)
     {
         ref var r = ref _ra[i];
         if (r.Serial != a.Serial)
@@ -462,6 +498,11 @@ public sealed class AntRenderer
         else if (a.State == AntState.Move || a.State == AntState.AttackMove) at = a.Goal;
         else if (a.State == AntState.Hold) { direct = true; wantYaw = Mathf.Sin(_now * 0.8f + r.Serial) * 0.7f; wantPitch = 0.25f; }
         else if (a.Selected && a.State == AntState.Idle) { at = cam2; wantPitch = 0.4f; }
+        else if (a.State == AntState.Idle && a.Team < 2 && camDist < 60f && IdleNeighbour(sim, i, a) is int mate && mate >= 0)
+        {
+            // antennation: idle nestmates close enough to touch turn to each other and tap antennae
+            at = sim.Ants[mate].Pos; wantPitch = -0.12f; pose = 3;
+        }
         else
         {
             // idle: glances about, holding each for a second or three

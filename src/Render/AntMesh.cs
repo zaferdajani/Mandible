@@ -31,7 +31,9 @@ public static class AntMesh
         public float Head, Mandible, Gaster, Thorax, Leg, Seg;
     }
 
-    public static ArrayMesh Build(AntType type)
+    /// `far`: the distant-crowd build of a colony caste, with half the rings, four-sided limbs and no setae,
+    /// drawn by the renderer once an ant is far enough from the camera that the detail would be sub-pixel.
+    public static ArrayMesh Build(AntType type, bool far = false)
     {
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
@@ -50,7 +52,8 @@ public static class AntMesh
             AntType.Queen => new Shape { Head = 1.15f, Mandible = 1.0f, Gaster = 1.55f, Thorax = 1.45f, Leg = 0.95f, Seg = 18 },
             _ => new Shape { Head = 1.0f, Mandible = 1.0f, Gaster = 1.0f, Thorax = 1.0f, Leg = 1.0f, Seg = 12 },
         };
-        int seg = (int)s.Seg;
+        int seg = far ? System.Math.Max(8, (int)s.Seg / 2) : (int)s.Seg;
+        int sides = far ? 4 : 6, sub = far ? 1 : 2;
         var k = new MeshKit();
         Color Part(int id, float w = 0, float region = 0) => new(id / 255f, w, region, 1);
 
@@ -93,7 +96,7 @@ public static class AntMesh
         k.SmoothNormals(hv, hi);
         // Eyes: big enough to read at RTS zoom, converged forward so both catch the camera from the three-quarter view
         for (int side = -1; side <= 1; side += 2)
-            k.Ellipsoid(headC + new Vector3(side * 0.066f * h, 0.026f * h, 0.05f * h), new Basis(Vector3.Up, -side * 0.35f) * Scaled(0.027f * h, 0.029f * h, 0.025f * h, -0.1f), 12, 8, Part(Eye), Vector2.Zero);
+            k.Ellipsoid(headC + new Vector3(side * 0.066f * h, 0.026f * h, 0.05f * h), new Basis(Vector3.Up, -side * 0.35f) * Scaled(0.027f * h, 0.029f * h, 0.025f * h, -0.1f), far ? 6 : 12, far ? 4 : 8, Part(Eye), Vector2.Zero);
 
         // Mandibles: two curved segments, pivot at the jaw hinge
         for (int side = -1; side <= 1; side += 2)
@@ -104,7 +107,7 @@ public static class AntMesh
             var mid = hinge + new Vector3(side * 0.02f * m, -0.005f, 0.06f * m);
             var tip = mid + new Vector3(-side * 0.045f * m, -0.004f, 0.035f * m);
             var piv = new Vector2(hinge.X, hinge.Z);
-            k.Loft(new[] { hinge, mid, tip }, new[] { 0.018f * m, 0.012f * m, 0.0025f }, new[] { 0.3f, 0.7f, 1f }, id, 0, 6, piv, 3);
+            k.Loft(new[] { hinge, mid, tip }, new[] { 0.018f * m, 0.012f * m, 0.0025f }, new[] { 0.3f, 0.7f, 1f }, id, 0, far ? 4 : 6, piv, far ? 2 : 3);
         }
 
         // Antennae: elbowed scape + funiculus with a club
@@ -129,7 +132,7 @@ public static class AntMesh
             knots.Add(tip + new Vector3(side * 0.01f, -0.01f, 0.035f));
             radii.Add(0.003f);
             wts.Add(1f);
-            k.Loft(knots.ToArray(), radii.ToArray(), wts.ToArray(), id, 0, 5, piv, 2);
+            k.Loft(knots.ToArray(), radii.ToArray(), wts.ToArray(), id, 0, far ? 3 : 5, piv, far ? 1 : 2);
         }
 
         // Legs: coxa -> femur (up/out) -> tibia/tarsus (down to ground)
@@ -151,11 +154,12 @@ public static class AntMesh
                 var tarsus = ankle.Lerp(foot, 0.5f) + new Vector3(0, -0.006f, 0);
                 k.Loft(new[] { hip, femur, knee, tibia, ankle, tarsus, foot },
                     new[] { 0.021f * t, 0.016f, 0.019f, 0.011f, 0.012f, 0.0065f, 0.0025f },
-                    new[] { 0f, 0.25f, 0.45f, 0.7f, 0.9f, 0.95f, 1f }, id, 0, 6, piv, 2);
+                    new[] { 0f, 0.25f, 0.45f, 0.7f, 0.9f, 0.95f, 1f }, id, 0, sides, piv, sub);
             }
         if (Config.IsHero(type))
         {
             HeroRegalia(k, type, s, headC, bodyY, gz);
+            if (far) goto bake;
             // a brush of setae over the gaster and thorax: close-up texture a hero earns
             var hair = new Rng((uint)type * 31 + 5);
             for (int i = 0; i < 28; i++)
@@ -170,6 +174,7 @@ public static class AntMesh
                 k.Tube(at, at + dir, 0.0032f, 0.0006f, 3, Part(onGaster ? Gaster : Body, 0, onGaster ? 1 : 0.5f), Part(onGaster ? Gaster : Body, 0, onGaster ? 1 : 0.5f), Vector2.Zero);
             }
         }
+        bake:
         // baked occlusion under the three masses of the body
         k.BakeAO(new (Vector3, float)[]
         {

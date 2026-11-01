@@ -61,7 +61,7 @@ void vertex() {
     float w = COLOR.g;
     float region = COLOR.b;
     // Per-instance data, packed by AntRenderer:
-    //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening) + gait fraction (distance-locked in the sim)
+    //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening, 3 grooming) + gait fraction (distance-locked in the sim)
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
     //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15) + bite fraction
     //   w = one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
@@ -131,12 +131,14 @@ void vertex() {
         float side = part == 7.0 ? 1.0 : -1.0;
         // antennae: an idle sweep; still and forward when listening; a flick on an order; swept back on a strike or a flinch
         float a = (sin(TIME * 5.0 + id * 1.7 + side) * 0.22 + sin(TIME * 2.3 + id) * 0.12) * (1.0 - ack) * (pose == 2.0 ? 0.3 : 1.0);
+        // grooming: the two antennae tap in turn, quick and small
+        if (pose == 3.0) a = sin(TIME * 11.0 + side * 1.57 + id) * 0.3;
         float sweep = (bite * 0.5 + flinch * 0.8) * side;
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, (a * w + sweep) * alive);
         p = q + vec3(piv.x, 0.0, piv.y);
         // the flick: up, then pointing at the order; a greeting raises and quivers them; listening holds them high
-        p.y += w * alive * (ack * 0.06 + greet * (0.05 + 0.012 * sin(TIME * 40.0)) + (pose == 2.0 ? 0.035 : 0.0));
+        p.y += w * alive * (ack * 0.06 + greet * (0.05 + 0.012 * sin(TIME * 40.0)) + (pose == 2.0 ? 0.035 : 0.0) + (pose == 3.0 ? 0.02 * max(0.0, sin(TIME * 11.0 + side * 1.57 + id)) : 0.0));
     } else if (part == 9.0 || part == 10.0) {
         float side = part == 9.0 ? 1.0 : -1.0;
         // jaws gape on the bite; held open on sentry; a slow gnash at rest; wide on a charge
@@ -173,7 +175,7 @@ void vertex() {
         vec3 q = p - neck;
         float lunge = (bite * (0.03 + 0.03 * hero) + charge * 0.05) * alive;
         q.z += lunge;
-        float pt = (-pitch + sin(TIME * 1.4 + id) * 0.04 * hero - flinch * 0.3 + charge * 0.2 + bite * 0.1) * alive;
+        float pt = (-pitch + sin(TIME * 1.4 + id) * 0.04 * hero - flinch * 0.3 + charge * 0.2 + bite * 0.1 + (pose == 3.0 ? 0.12 : 0.0)) * alive;
         q = rot_x(q, pt); n = rot_x(n, pt);
         q = rot_y(q, yaw * alive); n = rot_y(n, yaw * alive);
         p = q + neck;
