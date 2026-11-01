@@ -10,6 +10,9 @@ public partial class PlayerInput : Node
     public bool NestSelected;
     public int Inspect = -1, InspectSerial;
     public FoodSource InspectFood;
+    /// Build mode: the chamber (id) the player clicked under the floor, or -1.
+    public int SelectedRoom = -1;
+    MeshInstance3D _cue, _cueNode;
     enum Mode { None, AttackMove, Gather, Dig }
     ChamberKind _digKind;
     Upgrade? _digUpgrade;
@@ -31,6 +34,64 @@ public partial class PlayerInput : Node
     {
         bool ok = _digUpgrade.HasValue ? PlaceUpgrade(_digUpgrade.Value, world) : Game.TryDigAt(_digKind, world);
         if (ok) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); }
+    }
+
+    /// Opens or closes build mode (the hole, N, the Build button).
+    public void ToggleBuild() => Game.SetNestView(!Game.NestView);
+
+    /// Called by the session when build mode closes: nothing of it lingers.
+    public void LeaveBuild()
+    {
+        SelectedRoom = -1;
+        if (_mode == Mode.Dig) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); }
+    }
+
+    /// The chamber under a screen point (by its dug footprint), or -1.
+    int PickRoom(Vector2 screen)
+    {
+        if (!Game.NestView || !Cam.ScreenToGround(screen, out var g)) return -1;
+        var p = new Vector2(g.X, g.Z);
+        int best = -1; float bestD = float.MaxValue;
+        foreach (var ch in Sim.Col[Local.Me].Chambers)
+        {
+            float d = Sim.ChamberPos(Local.Me, ch).DistanceTo(p) - (ch.Radius + 0.9f);
+            if (d < 0 && d < bestD) { bestD = d; best = ch.Id; }
+        }
+        return best;
+    }
+
+    /// The placement cue: a ring the size of a room under the cursor, green where it may be dug and red where
+    /// not, and a small gold ring on the node its gallery would start from.
+    public override void _Process(double delta)
+    {
+        bool show = _mode == Mode.Dig && !Settings.Mobile && Game.Hud != null && !Game.Hud.Blocking;
+        if (!show) { if (_cue != null) { _cue.Visible = false; _cueNode.Visible = false; } return; }
+        if (_cue == null)
+        {
+            MeshInstance3D Ring(float size)
+            {
+                var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Cue) };
+                var mi = new MeshInstance3D { Mesh = new PlaneMesh { Size = Vector2.One * size }, MaterialOverride = m, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, SortingOffset = 60 };
+                Game.AddChild(mi);
+                return mi;
+            }
+            _cue = Ring(Sim.RoomSpacing);
+            _cueNode = Ring(2.4f);
+        }
+        var mp = GetViewport().GetMousePosition();
+        if (!Cam.ScreenToGround(mp, out var g)) { _cue.Visible = false; _cueNode.Visible = false; return; }
+        var p = new Vector2(g.X, g.Z);
+        bool ok = Sim.PlaceCheck(Local.Me, p) == Sim.DigResult.Ok;
+        _cue.Visible = true;
+        _cue.Position = Game.World.HF.Point(p, 0.12f);
+        ((ShaderMaterial)_cue.MaterialOverride).SetShaderParameter("color", ok ? new Color(0.55f, 1f, 0.45f, 0.95f) : new Color(1f, 0.35f, 0.25f, 0.95f));
+        int node = Sim.DigNodeFor(Local.Me, p);
+        _cueNode.Visible = node != int.MinValue;
+        if (node != int.MinValue)
+        {
+            _cueNode.Position = Game.World.HF.Point(Sim.NodePos(Local.Me, node), 0.12f);
+            ((ShaderMaterial)_cueNode.MaterialOverride).SetShaderParameter("color", new Color(1f, 0.85f, 0.4f, 0.9f));
+        }
     }
 
     bool PlaceUpgrade(Upgrade u, Vector2 world)
@@ -163,6 +224,7 @@ public partial class PlayerInput : Node
         else if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
         {
             if (_mode != Mode.None) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); return; }
+            if (Game.NestView && Selection.Count == 0 && Pick(mb.Position, false, 26) < 0) { Game.SetNestView(false); return; }
             if (Cam.ScreenToGround(mb.Position, out var g)) Issue(new Vector2(g.X, g.Z), mb.Position, false, true);
         }
     }
@@ -204,6 +266,7 @@ public partial class PlayerInput : Node
         {
             case Godot.Key.Escape:
                 if (_mode != Mode.None) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); }
+                else if (Game.NestView) Game.SetNestView(false);
                 else Game.Hud.TogglePause();
                 return;
             case Godot.Key.F1: Game.Hud.ToggleHelp(); return;
@@ -216,7 +279,7 @@ public partial class PlayerInput : Node
             case Godot.Key.C: Game.TryEnqueue(ProdKind.Major); return;
             case Godot.Key.V: Game.TryDig(ChamberKind.Brood); return;
             case Godot.Key.L: Game.TryDig(ChamberKind.Storage); return;
-            case Godot.Key.N: Game.ToggleNestView(); return;
+            case Godot.Key.N: ToggleBuild(); return;
             case Godot.Key.F: Game.TryEnqueue(ProdKind.Flyer); return;
             case Godot.Key.B: Reinforce(); return;
             case Godot.Key.D: Game.TryEnqueue(ProdKind.Gunner); return;
@@ -325,6 +388,7 @@ public partial class PlayerInput : Node
             Sim.Ants[id].Selected = true;
         }
         NestSelected = false;
+        SelectedRoom = -1;
         Inspect = -1;
         InspectFood = null;
         if (ids.Count > 0) Game.Audio.Ui("ui_click", -6);
@@ -392,11 +456,14 @@ public partial class PlayerInput : Node
             SetSelection(new List<int> { id }, shift);
             return;
         }
-        // nest click?
-        if (Cam.ScreenToGround(screen, out var g) && new Vector2(g.X, g.Z).DistanceTo(Game.World.Nests[Local.Me].Pos) < 7)
+        // the entrance hole itself opens (and closes) build mode; the mound around it selects the nest
+        if (Cam.ScreenToGround(screen, out var g))
         {
-            SelectNest(false);
-            return;
+            float dn = new Vector2(g.X, g.Z).DistanceTo(Game.World.Nests[Local.Me].Pos);
+            if (dn < 2.6f && !Game.Lanes) { ToggleBuild(); return; }
+            int room = PickRoom(screen);
+            if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
+            if (dn < 7) { SelectNest(false); return; }
         }
         if (!shift) SetSelection(new List<int>());
         // clicking an enemy or wild bug shows its details

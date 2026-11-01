@@ -98,8 +98,8 @@ public partial class Tutorial : Control
             "A real colony starts as a queen with a few workers on bare ground. Until the shaft and royal chamber are dug she is out in the open, so this is the most dangerous time.",
             () => Me.Founded, () => nest);
         Add("Look inside",
-            "Press N. The earth over your nest turns to glass: watch the queen walk down to her chamber. Press N again to close it.",
-            "Glass Earth shows the shaft, the galleries and every room at its depth while the surface stays in view around it, so nothing can sneak up while you look.",
+            "Click the nest entrance (the hole in the mound) or press N. The ground over your nest turns to a thin roof: watch the queen walk down to her chamber. Click the hole, press N or Esc to close it.",
+            "This is build mode: the shaft, the galleries and every room show through the roof while the yard stays in view around them, and the panel on the left lists the rooms you can dig.",
             () => _base < 0 ? false : Game.NestView ? (_base = 1) < 0 : _base == 1,
             () => nest, begin: () => _base = 0);
         Add("Hatch a worker",
@@ -136,8 +136,8 @@ public partial class Tutorial : Control
             "Each food has a different effect: sugar speeds workers, fruit heals, insect protein makes the queen lay faster. Your race also prefers some foods.",
             () => Game.Input.InspectFood != null, () => NearestFood(nest));
         Add("Dig a brood chamber",
-            "Press V, then click the ground where the chamber should go: anywhere within reach of the entrance or another room. Workers dig a gallery to it and the room itself.",
-            "Every room must connect to the tunnel network, like roads in a Settlers town. Brood chambers set how many ants you can keep (BROOD in the top bar); stores (L) set how much food you can hold. Esc cancels a placement.",
+            "Open build mode (click the hole or press N), press V or the Brood Chamber button, then click the ground where the room should go: the ring is green within reach of the entrance or another room. Workers dig a gallery to it and the room itself.",
+            "Every room must connect to the tunnel network, like roads in a Settlers town. Brood chambers set how many ants you can keep (BROOD in the top bar); stores (L) set how much food you can hold. Click a room under the roof to see what it holds. Esc cancels a placement.",
             () => Sim.ChamberCount(Local.Me, ChamberKind.Brood, false) > _startCount,
             begin: () => _startCount = Sim.ChamberCount(Local.Me, ChamberKind.Brood, false));
         Add("Raise your queen",

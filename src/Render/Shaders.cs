@@ -409,29 +409,14 @@ float net_dist(vec3 p, vec3 cam) {
 float glass_at(vec3 p, vec3 cam) { return xray_on > 0.001 ? xray_on * (1.0 - smoothstep(0.0, 1.0, net_dist(p, cam))) : 0.0; }
 ";
 
-    /// The glass pane over an opened nest: a faint cool tint with a brighter rim, drawn after the opaque world.
-    /// It only shows where the terrain has been cut away, so the ground around the tunnels stays ordinary soil.
-    public static readonly string Glass = @"
-shader_type spatial;
-render_mode blend_mix, depth_draw_never, cull_disabled, unshaded;
-uniform float strength = 1.0;
-varying vec3 wpos;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
-" + NetworkFn + @"
-void fragment() {
-    if (strength < 0.001) discard;
-    float nd = net_dist(wpos, CAMERA_POSITION_WORLD);
-    float inside = 1.0 - smoothstep(0.4, 0.8, nd);        // the terrain shader discards soil up to about here
-    float edge = smoothstep(0.22, 0.42, nd) * inside;     // the crumbling lip of the cut, right at the edge
-    // Not glass. Blending happens in linear light, so over the dark pit even a few percent reads as a grey slab after
-    // tonemapping: the opening itself is left completely clear and only the lip carries a thin skin of sunlit sand.
-    ALBEDO = vec3(0.78, 0.62, 0.40);
-    ALPHA = strength * 0.06 * edge;
-}
-";
+    /// The terrain while the Glass Earth is open: the same shader, drawn in the transparent pass so the soil over
+    /// the galleries thins to a translucent roof instead of vanishing. Swapped in only while the earth is opened.
+    public static string TerrainRoof => _roof ??= Terrain.Replace("//ROOF_MODE", "render_mode depth_draw_always;").Replace("//ROOF_ALPHA", "ALPHA = 1.0 - glass * 0.74;");
+    static string _roof;
 
     public static readonly string Terrain = @"
 shader_type spatial;
+//ROOF_MODE
 " + Fow + @"
 uniform sampler2D noise_a : filter_linear_mipmap, repeat_enable;
 uniform sampler2D noise_b : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -453,9 +438,11 @@ void vertex() {
 " + NetworkFn + @"
 void fragment() {
     vec2 uv = wpos.xz;
-    float glass = glass_at(wpos, CAMERA_POSITION_WORLD);
-    // the soil over the tunnels is simply gone while the glass is up (a translucent pane is drawn in its place)
-    if (glass > 0.55) discard;
+    // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
+    // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
+    float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
+    float glass = xray_on * (1.0 - smoothstep(0.0, 1.0, nd));
+    float band = exp(-pow((nd - 0.1) / 0.9, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
     float inHollow = smoothstep(0.05, 0.7, hollow);
@@ -505,7 +492,8 @@ void fragment() {
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
     // the freshly cut soil at the opening's edge: darker and damper than the surface
-    col = mix(col, col * vec3(0.62, 0.50, 0.38), glass * 0.7);
+    col *= 1.0 - 0.42 * band - 0.14 * glass;
+    col = mix(col, col * vec3(1.0, 0.9, 0.8), 0.5 * max(band, glass));
     ALBEDO = col;
     ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
     SPECULAR = 0.3;
@@ -520,6 +508,7 @@ void fragment() {
     float f = fow(wpos);
     ALBEDO = mix(ALBEDO, vec3(1.0, 0.72, 0.32), clamp(ph, 0.0, 1.0) * pher_view * 0.35) * f;
     EMISSION = vec3(1.0, 0.55, 0.12) * clamp(ph, 0.0, 1.5) * pher_view * 0.35 * step(0.5, f);
+    //ROOF_ALPHA
 }
 ";
 
@@ -686,10 +675,12 @@ uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec4 v_c;
 varying vec3 v_n;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_c = INSTANCE_CUSTOM; v_n = NORMAL; }
+varying float v_h;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_c = INSTANCE_CUSTOM; v_n = NORMAL; v_h = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453); }
 " + NetworkFn + @"
 void fragment() {
-    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // pebbles do not hover over an opened gallery
+    // over an opening the litter thins out with the roof: each pebble sinks away at its own moment, most of them before the middle clears
+    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.2 + 0.6 * v_h) discard;
     // weathered grit: warm greys and tans, never brighter than the sand they lie on
     vec3 a = mix(vec3(0.30, 0.23, 0.16), vec3(0.50, 0.41, 0.29), v_c.x);   // sand and ochre grit (the sun is strong: keep them under the sand's own albedo)
     a = mix(a, vec3(0.64, 0.57, 0.46), v_c.y * 0.5);                      // pale quartz
@@ -708,10 +699,11 @@ shader_type spatial;
 " + Fow + @"
 varying vec3 wpos;
 varying float v_tint;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_tint = INSTANCE_CUSTOM.x; }
+varying float v_h;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_tint = INSTANCE_CUSTOM.x; v_h = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453); }
 " + NetworkFn + @"
 void fragment() {
-    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // straw and thatch do not hover over an opened gallery
+    if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.2 + 0.6 * v_h) discard; // straw and thatch thin out with the roof
     vec3 col = mix(vec3(0.32, 0.17, 0.07), vec3(0.62, 0.38, 0.16), v_tint);
     col *= 0.85 + 0.15 * sin(UV.y * 30.0);
     ALBEDO = col * fow(wpos);
@@ -909,6 +901,21 @@ void fragment() {
 }
 ";
 
+    /// Build mode: the footprint of the room being placed (green where it may go, red where it may not) and a
+    /// smaller ring on the node its gallery would be dug from.
+    public const string Cue = @"
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform vec4 color : source_color = vec4(0.5, 1.0, 0.4, 1.0);
+void fragment() {
+    float r = length(UV - 0.5) * 2.0;
+    float ring = smoothstep(0.84, 0.9, r) * (1.0 - smoothstep(0.95, 1.0, r));
+    float fill = (1.0 - smoothstep(0.0, 0.9, r)) * 0.14;
+    ALBEDO = color.rgb;
+    ALPHA = (ring + fill) * color.a;
+}
+";
+
     public const string Marker = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
@@ -979,6 +986,8 @@ void fragment() {
     col *= 1.0 - claw * 0.14 * scal;
     col *= 0.72 + 0.44 * g2;
     if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
+    // a trodden floor darkens toward the foot of the wall, so the cavity reads as a depression
+    if (grooves < 0.01) { float rr = length(UV - 0.5) * 2.0; col *= 1.0 - 0.42 * smoothstep(0.5, 1.0, rr); }
     ALBEDO = col * shade;
     ROUGHNESS = 0.96 - t2 * 0.08;
     SPECULAR = 0.2;

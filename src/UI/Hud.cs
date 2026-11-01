@@ -68,6 +68,7 @@ public partial class Hud : CanvasLayer
         _root.AddChild(_hint);
 
         BuildHelp();
+        if (!Game.Lanes) BuildBuildPanel();
 
         if (Game.Net != null)
         {
@@ -96,8 +97,8 @@ public partial class Hud : CanvasLayer
         _clock = Stat(h, "", UiTheme.Dim);
         if (!Game.Lanes)
         {
-            var nestBtn = new Button { Text = "Nest  N", TooltipText = "Glass Earth: see the chambers under your mound without losing the surface (N)" };
-            nestBtn.Pressed += () => Game.ToggleNestView();
+            var nestBtn = new Button { Text = "Build  N", TooltipText = "Build mode: the ground over your nest turns to a thin roof, the rooms show through it and you choose what to dig (N, or click the entrance hole)" };
+            nestBtn.Pressed += () => Game.Input.ToggleBuild();
             h.AddChild(nestBtn);
         }
         var menu = new Button { Text = "Menu", TooltipText = "Pause (Esc)" };
@@ -208,6 +209,115 @@ public partial class Hud : CanvasLayer
         else UiTheme.Place(_groupRow, 0.5f, 1, 0.5f, 1, -330, -212, 300, -180);
     }
 
+    PanelContainer _buildPanel;
+    readonly Button[] _buildBtn = new Button[7];
+    static readonly (string key, string name, ChamberKind kind, Upgrade? up)[] BuildRooms =
+    {
+        ("V", "Brood Chamber", ChamberKind.Brood, null), ("L", "Storage", ChamberKind.Storage, null),
+        ("Q", "Royal Chamber", ChamberKind.Royal, Upgrade.Queen), ("W", "Wing Chamber", ChamberKind.Wings, Upgrade.Wings),
+        ("E", "Mandible Forge", ChamberKind.Forge, Upgrade.Mandibles), ("R", "Chitin Armory", ChamberKind.Armory, Upgrade.Chitin),
+        ("T", "Silk Cutters", ChamberKind.Silk, Upgrade.SilkCutters),
+    };
+
+    /// Build mode's own panel: every room the workers can dig, then a click on the ground places it.
+    void BuildBuildPanel()
+    {
+        _buildPanel = new PanelContainer { Visible = false };
+        UiTheme.Place(_buildPanel, 0, 0, 0, 0, 22, 112, 352, 112 + 46 + 7 * 40 + 56);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 4);
+        var head = UiTheme.Text("BUILD MODE", 15, UiTheme.Title, UiTheme.Gold);
+        v.AddChild(head);
+        v.AddChild(UiTheme.Text("Pick a room, then click where to dig it", 13, null, UiTheme.Dim));
+        for (int i = 0; i < BuildRooms.Length; i++)
+        {
+            var (key, name, kind, up) = BuildRooms[i];
+            var b = new Button { CustomMinimumSize = new Vector2(0, 36), Alignment = HorizontalAlignment.Left };
+            b.AddThemeFontSizeOverride("font_size", 14);
+            b.Pressed += () => { if (up.HasValue) Game.TryResearch(up.Value); else Game.TryDig(kind); };
+            b.MouseEntered += () => Game.Audio.Ui("ui_hover");
+            v.AddChild(b);
+            _buildBtn[i] = b;
+        }
+        var foot = UiTheme.Text("Click a room below to see it  ·  Esc or right-click to close", 12, null, new Color(UiTheme.Dim, 0.85f));
+        foot.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        v.AddChild(foot);
+        _buildPanel.AddChild(v);
+        _root.AddChild(_buildPanel);
+    }
+
+    void RefreshBuildPanel(Colony c)
+    {
+        _buildPanel.Visible = Game.NestView;
+        if (!Game.NestView) return;
+        for (int i = 0; i < BuildRooms.Length; i++)
+        {
+            var (key, name, kind, up) = BuildRooms[i];
+            string status; bool ok;
+            if (up.HasValue)
+            {
+                int next = c.T(up.Value) + 1;
+                bool maxed = next > Config.MaxTier(up.Value);
+                var r = Game.Sim.CanResearch(Local.Me, up.Value);
+                ok = r == ResearchResult.Ok;
+                bool exists = Game.Sim.ChamberOf(Local.Me, kind) != null;
+                status = maxed ? "complete" : $"{(exists ? "enlarge" : "dig")}  {(int)Config.ResearchCost(up.Value, next)}";
+            }
+            else
+            {
+                ok = Game.Sim.CanDig(Local.Me, kind) == Sim.DigResult.Ok;
+                int n = Game.Sim.ChamberCount(Local.Me, kind, false);
+                status = $"{n} built  ·  {(int)(kind == ChamberKind.Brood ? Sim.BroodCost : Sim.StorageCost)}";
+            }
+            _buildBtn[i].Text = $"{key}   {name}    {status}";
+            _buildBtn[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, 0.45f);
+        }
+    }
+
+    HBoxContainer _roomActions;
+    Button _roomActA, _roomActB;
+    Upgrade? _roomUp;
+
+    static Upgrade? UpgradeOf(ChamberKind k) => k switch
+    {
+        ChamberKind.Royal => Upgrade.Queen, ChamberKind.Wings => Upgrade.Wings, ChamberKind.Forge => Upgrade.Mandibles,
+        ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null,
+    };
+
+    /// A room clicked in build mode: what it is, how far along, what it holds, and what can be done with it.
+    bool RefreshRoom(Colony c)
+    {
+        var sim = Game.Sim;
+        int id = Game.Input.SelectedRoom;
+        if (!Game.NestView || id < 0 || id >= c.Chambers.Count) { _roomActions.Visible = false; return false; }
+        var ch = c.Chambers[id];
+        var up = UpgradeOf(ch.Kind);
+        _roomUp = up;
+        string name = ch.Kind == ChamberKind.Royal ? $"Royal Chamber  ·  {Config.QueenTitles[System.Math.Min(5, c.T(Upgrade.Queen))]}" : Sim.ChamberName(ch.Kind);
+        _selTitle.Text = up.HasValue && Config.MaxTier(up.Value) > 1 ? $"{name}  ·  tier {ch.Tier}" : name;
+        _selHp.Value = ch.Progress;
+        string state = ch.Digging ? $"Being dug: {ch.Progress * 100:0}%  ·  {ch.Diggers} of {Sim.MaxDiggers} workers" : "Built";
+        string holds = ch.Kind switch
+        {
+            ChamberKind.Brood => $"Eggs and larvae of {c.Queue.Count} brood order{(c.Queue.Count == 1 ? "" : "s")}; this room adds {Config.ChamberPop} to the brood cap ({c.PopUsed} / {c.PopCap}).",
+            ChamberKind.Storage => $"Seeds, pulp and honeydew: the stores hold {(int)c.Food} / {(int)c.FoodCap} food ({Config.StorageFoodCap:0} of it here).",
+            ChamberKind.Royal => $"The queen on her bed of eggs. Royal jelly raises her title and unlocks new castes.",
+            _ => Config.ResearchDesc(up.Value),
+        };
+        bool researchingHere = c.Researching && up.HasValue && c.ResearchKind == up.Value;
+        string act = up.HasValue
+            ? (researchingHere ? "Research under way here." : c.T(up.Value) + 1 > Config.MaxTier(up.Value) ? "Fully developed." : $"{ResKeys[(int)up.Value]} enlarges it ({(int)Config.ResearchCost(up.Value, c.T(up.Value) + 1)} food).")
+            : ch.Kind == ChamberKind.Brood ? "V digs another." : "L digs another.";
+        _selDetail.Text = $"{state}.  {holds}  {act}";
+        _roomActions.Visible = true;
+        _roomActA.Visible = up.HasValue && !researchingHere && c.T(up.Value) + 1 <= Config.MaxTier(up.Value);
+        if (_roomActA.Visible) { _roomActA.Text = $"{(ch.Built ? "Enlarge" : "Dig")}  {ResKeys[(int)up.Value]}"; _roomActA.Modulate = sim.CanResearch(Local.Me, up.Value) == ResearchResult.Ok ? Colors.White : new Color(1, 1, 1, 0.45f); }
+        _roomActB.Visible = researchingHere;
+        var glyph = new ChamberGlyph { Store = ch.Kind == ChamberKind.Storage, CustomMinimumSize = new Vector2(40, 40), MouseFilter = Control.MouseFilterEnum.Ignore };
+        _selIcons.AddChild(glyph);
+        return true;
+    }
+
     void BuildSelection()
     {
         _groupRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
@@ -228,6 +338,15 @@ public partial class Hud : CanvasLayer
         v.AddChild(_selIcons);
         v.AddChild(_selHp);
         v.AddChild(_selDetail);
+        _roomActions = new HBoxContainer { Visible = false };
+        _roomActions.AddThemeConstantOverride("separation", 6);
+        _roomActA = new Button { CustomMinimumSize = new Vector2(150, 32) };
+        _roomActA.Pressed += () => { if (_roomUp.HasValue) Game.TryResearch(_roomUp.Value); };
+        _roomActB = new Button { Text = "Cancel research", CustomMinimumSize = new Vector2(150, 32) };
+        _roomActB.Pressed += () => { Game.Issue(new Cmd { Kind = CmdKind.CancelResearch, Team = (byte)Local.Me }); Game.Audio.Ui("ui_click"); };
+        _roomActions.AddChild(_roomActA);
+        _roomActions.AddChild(_roomActB);
+        v.AddChild(_roomActions);
         p.AddChild(v);
         _root.AddChild(p);
     }
@@ -587,7 +706,7 @@ public partial class Hud : CanvasLayer
         _food.Text = Game.Lanes ? ((int)c.Food).ToString() : $"{(int)c.Food} / {(int)c.FoodCap}";
         _food.AddThemeColorOverride("font_color", !Game.Lanes && c.Food >= c.FoodCap * 0.95f ? new Color(1, 0.55f, 0.35f) : new Color(0.95f, 0.78f, 0.35f));
         _pop.Text = $"{c.PopUsed} / {c.PopCap}";
-        if (!Game.Lanes) RefreshDig(c);
+        if (!Game.Lanes) { RefreshDig(c); RefreshBuildPanel(c); }
         _pop.AddThemeColorOverride("font_color", c.PopUsed >= c.PopCap ? new Color(1, 0.45f, 0.3f) : UiTheme.Ink);
         _clock.Text = $"{(int)sim.Time / 60}:{(int)sim.Time % 60:00}";
         SetEffect(0, c.SugarT);
@@ -682,6 +801,8 @@ public partial class Hud : CanvasLayer
         }
         foreach (var ch in _selIcons.GetChildren()) ch.QueueFree();
         _selDetail.TooltipText = "";
+        _selTitle.AddThemeColorOverride("font_color", UiTheme.Gold);
+        if (!Game.Lanes && RefreshRoom(sim.Col[Local.Me])) return;
         if (Game.Input.NestSelected)
         {
             var c = sim.Col[Local.Me];
@@ -699,7 +820,7 @@ public partial class Hud : CanvasLayer
                 rooms.Add(entry);
             }
             string where = q.Alive ? (q.Layer > 0 ? "in her chamber" : c.Founded ? "going below" : "waiting on the surface") : "dead";
-            _selDetail.Text = $"Queen {(int)Mathf.Max(0, q.Hp)} / {(int)q.MaxHp}, {where}.  Rooms: {string.Join(", ", rooms)}.  Food {(int)c.Food} / {(int)c.FoodCap}.  N looks inside · right-click the ground for a rally point · right-click the nest with warriors to garrison.";
+            _selDetail.Text = $"Queen {(int)Mathf.Max(0, q.Hp)} / {(int)q.MaxHp}, {where}.  Rooms: {string.Join(", ", rooms)}.  Food {(int)c.Food} / {(int)c.FoodCap}.  Click the hole (or N) to build · right-click the ground for a rally point · right-click the nest with warriors to garrison.";
             AddIcon(AntType.Queen, 1);
             return;
         }

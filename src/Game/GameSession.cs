@@ -270,21 +270,15 @@ public partial class GameSession : Node3D
     readonly List<(int id, int serial, Node3D mound)> _mounds = new();
 
     /// Lane War scenery: worn dirt paths along the three lanes and an earth mound under every guardian.
+    /// Lane War scenery, made of the ground itself: a worn ribbon of slightly darker, damp-trodden soil along
+    /// each lane and a low sand mound under every guardian, both drawn with the terrain shader (same grain,
+    /// pebble bed, normal map and fog of war) so nothing is stamped on the yard; the mounds wear a ring of
+    /// excavated crumbs like the nest crater.
     void BuildLaneDressing()
     {
         var hf = World.HF;
-        var grad = new Gradient();
-        grad.SetColor(0, new Color(1, 1, 1, 0));
-        grad.AddPoint(0.35f, new Color(1, 1, 1, 1));
-        grad.AddPoint(0.65f, new Color(1, 1, 1, 1));
-        grad.SetColor(grad.GetPointCount() - 1, new Color(1, 1, 1, 0));
-        var path = new StandardMaterial3D
-        {
-            AlbedoColor = new Color(0.25f, 0.19f, 0.13f, 0.55f), AlbedoTexture = new GradientTexture2D { Gradient = grad, Width = 64, Height = 4 },
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
-        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = new QuadMesh { Size = new Vector2(7f, 3.2f) } };
-        var xforms = new List<Transform3D>();
+        var k = new MeshKit();
+        const int across = 7; const float half = 1.7f;
         foreach (var lane in Sim.Lanes)
             for (int i = 0; i + 1 < lane.Length; i++)
             {
@@ -292,28 +286,76 @@ public partial class GameSession : Node3D
                 var b = lane[i + 1];
                 float len = a.DistanceTo(b);
                 var dir = (b - a) / len;
-                for (float d = 9; d < len - 1; d += 2.6f)
-                {
-                    var p = a + dir * d;
-                    // lie flat on the ground, the strip's width across the lane
-                    var basis = new Basis(Vector3.Up, -Mathf.Atan2(dir.Y, dir.X)) * new Basis(Vector3.Right, -Mathf.Pi / 2);
-                    xforms.Add(new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) + 0.06f, p.Y)));
-                }
+                var side = new Vector2(-dir.Y, dir.X);
+                int rows = 0, start = k.V.Count;
+                for (float d = 8; d < len - 0.5f; d += 1.4f, rows++)
+                    for (int c = 0; c < across; c++)
+                    {
+                        float t = (float)c / (across - 1) * 2 - 1;               // -1 .. 1 across the lane
+                        float wear = (1 - t * t) * Mathf.Clamp(Mathf.Min(d - 8, len - 0.5f - d) / 6f, 0, 1); // fades at the ends
+                        var p = a + dir * d + side * (t * half);
+                        // r: shade (a touch darker where trodden), a: damp hollow (pebble bed, less dry highlight)
+                        k.Add(new Vector3(p.X, hf.Sample(p.X, p.Y) + 0.05f, p.Y), Vector3.Up, new Color(1 - 0.12f * wear, 0, 0, 0.5f + 0.3f * wear), new Vector2(p.X, p.Y) / Config.MapSize, Vector2.Zero);
+                    }
+                for (int r = 0; r + 1 < rows; r++)
+                    for (int c = 0; c + 1 < across; c++)
+                    {
+                        int v = start + r * across + c;
+                        k.Quad(v, v + 1, v + across + 1, v + across);
+                    }
             }
-        mm.InstanceCount = xforms.Count;
-        for (int i = 0; i < xforms.Count; i++) mm.SetInstanceTransform(i, xforms[i]);
-        AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = path, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Name = "LanePaths" });
+        k.RecalcNormals();
+        AddChild(new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = WorldBuilder.Mat(World, Shaders.Terrain), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Name = "LanePaths" });
 
-        var soil = new StandardMaterial3D { AlbedoColor = new Color(0.36f, 0.27f, 0.18f), Roughness = 1 };
+        var crumbMat = WorldBuilder.Mat(World, Shaders.Pebble);
+        var rng = new Rng(Seed ^ 0x40BA5u);
         for (int i = 0; i < Sim.High; i++)
         {
             ref var g = ref Sim.Ants[i];
             if (!g.Alive || !g.Guardian) continue;
-            var mound = new MeshInstance3D
+            var mound = new Node3D { Position = new Vector3(g.Pos.X, 0, g.Pos.Y) };
+            // the dome: ground height plus a soft bump that reaches zero at the rim, so it joins the yard without a seam
+            const float R = 4.6f, H = 0.55f; const int sides = 28, rings = 6;
+            var mk = new MeshKit();
+            var cx = g.Pos;
+            int centre = mk.Add(new Vector3(0, hf.Sample(cx.X, cx.Y) + H + 0.04f, 0), Vector3.Up, new Color(0.92f, 0, 0, 0.2f), cx / Config.MapSize, Vector2.Zero);
+            for (int ri = 1; ri <= rings; ri++)
             {
-                Mesh = new CylinderMesh { TopRadius = 1.6f, BottomRadius = 4.2f, Height = 1.1f, RadialSegments = 24, Rings = 2 },
-                MaterialOverride = soil, Position = new Vector3(g.Pos.X, hf.Sample(g.Pos.X, g.Pos.Y) + 0.1f, g.Pos.Y),
-            };
+                float fr = (float)ri / rings, rr = R * fr;
+                float bump = H * Mathf.Pow(1 - fr * fr, 1.5f);
+                float hf01 = bump / H;
+                for (int s = 0; s <= sides; s++)
+                {
+                    float t = (float)s / sides * Mathf.Tau;
+                    float wob = 1 + 0.07f * Mathf.Sin(t * 3 + i) + 0.04f * Mathf.Sin(t * 7 + 2);
+                    var o = new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * rr * wob;
+                    var p = cx + o;
+                    mk.Add(new Vector3(o.X, hf.Sample(p.X, p.Y) + bump + 0.04f, o.Y), Vector3.Up, new Color(1 - 0.08f * hf01, 0, 0, 0.5f - 0.3f * hf01), p / Config.MapSize, Vector2.Zero);
+                }
+            }
+            int row = sides + 1;
+            for (int s = 0; s < sides; s++) mk.Tri(centre, 1 + s + 1, 1 + s);
+            for (int ri = 1; ri < rings; ri++)
+                for (int s = 0; s < sides; s++)
+                {
+                    int a = 1 + (ri - 1) * row + s, b = a + row;
+                    mk.Quad(a, a + 1, b + 1, b);
+                }
+            mk.RecalcNormals();
+            mound.AddChild(new MeshInstance3D { Mesh = mk.Commit(), MaterialOverride = WorldBuilder.Mat(World, Shaders.Terrain), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+            // excavated crumbs around the rim
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = WorldBuilder.PebbleMesh(21 + (i % 3)), InstanceCount = 70 };
+            for (int c = 0; c < 70; c++)
+            {
+                float ang = rng.R(0, Mathf.Tau), rad = R * rng.R(0.55f, 1.15f);
+                var o = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * rad;
+                var p = cx + o;
+                float fr = Mathf.Min(1, rad / R), bump = H * Mathf.Pow(Mathf.Max(0, 1 - fr * fr), 1.5f);
+                float sc = rng.R(0.12f, 0.34f);
+                mm.SetInstanceTransform(c, new Transform3D(new Basis(Vector3.Up, rng.R(0, 6)) * Basis.FromScale(Vector3.One * sc), new Vector3(o.X, hf.Sample(p.X, p.Y) + bump + sc * 0.15f, o.Y)));
+                mm.SetInstanceCustomData(c, new Color(rng.R(0.5f, 1f), rng.F() < 0.1f ? 1 : 0, rng.R(0, 0.3f), rng.F()));
+            }
+            mound.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = crumbMat, CastShadow = Settings.PebbleShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off });
             AddChild(mound);
             _mounds.Add((i, g.Serial, mound));
         }
@@ -437,15 +479,21 @@ public partial class GameSession : Node3D
     float _glass; // 0..1 animated
     bool _glassWasOpen;
 
-    public void ToggleNestView()
+    public void ToggleNestView() => SetNestView(!NestView);
+
+    /// Build mode: the ground over the nest turns to a translucent roof, the rooms show through it and the HUD
+    /// offers the rooms to dig. Opened by clicking the entrance hole or pressing N; closed the same way, by Esc
+    /// or by a right-click on open ground.
+    public void SetNestView(bool on)
     {
-        if (Demo) return;
-        NestView = !NestView;
+        if (Demo || on == NestView) return;
+        NestView = on;
         Audio.Ui("ui_click", -4);
         var home = World.Nests[Local.Me].Pos;
-        if (NestView && Camera.Focus2D.DistanceTo(home) > 30) { Camera.PanTo(home); Camera.TargetDistance = Mathf.Min(Camera.TargetDistance, 40); }
-        if (NestView && !Sim.Col[Local.Me].Founded) Hud.Alert("Nothing below yet: the workers are still digging", UiTheme.Dim);
-        else if (NestView) Hud.Alert("Glass Earth: looking into the nest (N to close)", UiTheme.Dim);
+        if (!on) { Input?.LeaveBuild(); return; }
+        if (Camera.Focus2D.DistanceTo(home) > 30) { Camera.PanTo(home); Camera.TargetDistance = Mathf.Min(Camera.TargetDistance, 40); }
+        if (!Sim.Col[Local.Me].Founded) Hud.Alert("Nothing below yet: the workers are still digging", UiTheme.Dim);
+        else Hud.Alert("Build mode: pick a room to dig, or click a room below to see it (Esc or right-click to close)", UiTheme.Dim);
     }
 
     void UpdateGlass(float dt)
@@ -465,7 +513,8 @@ public partial class GameSession : Node3D
                 m.SetShaderParameter("xray_on", _glass);
                 if (_glass > 0) { m.SetShaderParameter("xray_center", nest); m.SetShaderParameter("net", net); m.SetShaderParameter("net_count", count); }
             }
-            Interior.SetNetwork(net, count, nest);
+            // the yard's soil is drawn translucent only while the earth is open: opaque (and cheap) the rest of the time
+            World.TerrainMaterial.Shader = Shaders.Get(_glass > 0 ? Shaders.TerrainRoof : Shaders.Terrain);
         }
         Interior.SetGlass(_glass);
         Camera.NestView = NestView && Camera.Focus2D.DistanceTo(nest) < 40;

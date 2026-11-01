@@ -34,8 +34,11 @@ public partial class RtsCamera : Node3D
         _yawTarget = Yaw;
     }
 
+    float _nestTilt;
+
     public void JumpTo(Vector2 p, float? dist = null)
     {
+        _nestTilt = NestView ? 1 : 0;
         _focusTarget = new Vector3(p.X, HF?.Sample(p.X, p.Y) ?? 0, p.Y);
         Focus = _focusTarget;
         if (dist.HasValue) { TargetDistance = dist.Value; Distance = dist.Value; }
@@ -112,13 +115,15 @@ public partial class RtsCamera : Node3D
         Focus = Focus.Lerp(_focusTarget, k);
         Distance = Mathf.Lerp(Distance, TargetDistance, 1 - Mathf.Exp(-dt * 8));
         Yaw = Mathf.LerpAngle(Yaw, _yawTarget, 1 - Mathf.Exp(-dt * 8));
+        // build mode looks nearly straight down, so the rooms read as shapes under the roof; it eases in and out
+        _nestTilt = Mathf.Lerp(_nestTilt, NestView ? 1 : 0, 1 - Mathf.Exp(-dt * 5));
         Apply();
     }
 
     public void Apply()
     {
         float t = Mathf.Clamp((Distance - MinDist) / (MaxDist - MinDist), 0, 1);
-        float pitch = Mathf.Lerp(Mathf.DegToRad(NestView ? 24 : 30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f));
+        float pitch = Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(64), _nestTilt);
         var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(Yaw) * Mathf.Cos(pitch)) * Distance;
         var pos = Focus + offset;
         if (HF != null) pos.Y = Mathf.Max(pos.Y, HF.Sample(pos.X, pos.Z) + 3);

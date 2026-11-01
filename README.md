@@ -26,9 +26,9 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 | A, then click | Attack-move |
 | S / H / G | Stop / hold position / gather |
 | Z X C F D | Raise worker / soldier / major / flying ant / acid gunner (the queen lays them in a brood chamber) |
-| V / L, then click | Plan a brood chamber (+brood capacity) / a store (+food capacity) where you click; it must lie within reach of the entrance or another room, and workers dig a gallery to it |
+| Click the nest entrance, or N | Build mode: the ground over your nest becomes a thin translucent roof, the galleries and rooms show through it, a panel lists the rooms to dig, and clicking a room shows what it holds and what it can do. Esc, right-click on open ground or the hole again closes it |
+| V / L, then click | Plan a brood chamber (+brood capacity) / a store (+food capacity) where you click (green ring: within reach of the entrance or another room); workers dig a gallery to it |
 | Q W E R T | Workers dig or enlarge the upgrade rooms: royal chamber (queen level) / wings / mandible forge / chitin armory / silk cutters (a new room is placed with a click, like V) |
-| N | Glass Earth: the soil over your galleries and rooms turns to glass, the ground around them stays as it is |
 | Right-click your nest | With warriors selected: garrison the royal chamber |
 | Y U I | Hatch a hero: Warlord / Acid Matron / Sky Marshal |
 | B | Send the selected squads home to heal and re-hatch fallen members |
@@ -42,7 +42,7 @@ dotnet build && "D:\Tools\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stab
 
 ## The nest
 
-A match begins the way a real colony does: a queen and eight workers on bare soil. The workers dig the shaft and royal chamber (a plug of soil over the hole sinks as they go, with the progress shown above it), then the queen walks down to her chamber and only then starts to lay. Every room after that is dug by workers too: brood chambers near the warm surface set how many ants you can keep, stores at mid depth set how much food you can hold, and the upgrade rooms carry the colony's research. New ants hatch below and climb out of the shaft. Enemies must break in through the entrance to reach the queen; warriors can garrison inside. Press **N** for Glass Earth: the ground over your nest turns translucent and shows the galleries and rooms at their real depths while the surface stays in view.
+A match begins the way a real colony does: a queen and eight workers on bare soil. The workers dig the shaft and royal chamber (a plug of soil over the hole sinks as they go, with the progress shown above it), then the queen walks down to her chamber and only then starts to lay. Every room after that is dug by workers too: brood chambers near the warm surface set how many ants you can keep, stores at mid depth set how much food you can hold, and the upgrade rooms carry the colony's research. New ants hatch below and climb out of the shaft. Enemies must break in through the entrance to reach the queen; warriors can garrison inside. Click the entrance hole (or press **N**) for build mode: the ground over your nest turns into a thin translucent roof that shows the galleries and rooms beneath, and you pick what to dig next.
 
 ## Lane War (hero mode)
 

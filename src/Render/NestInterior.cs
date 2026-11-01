@@ -91,36 +91,6 @@ public sealed class NestInterior
             Position = new Vector3(0, 4.2f, 0), Visible = false,
         };
         n.AddChild(_status[team]);
-        // the glass pane itself: a disc that follows the ground, drawn only while the earth is opened
-        if (team == Local.Me)
-        {
-            float gr = Sim.NestReachMax + 6f; // the pane covers wherever the network may grow; its shader cuts it to the tunnels
-            var k = new MeshKit();
-            const int sides = 48, rings = 6;
-            int c0 = k.Add(new Vector3(0, 0.06f, 0), Vector3.Up, Colors.White, Vector2.Zero, Vector2.Zero);
-            for (int ri = 1; ri <= rings; ri++)
-            {
-                float rr = gr * ri / rings;
-                for (int s = 0; s <= sides; s++)
-                {
-                    float t = (float)s / sides * Mathf.Tau;
-                    var p = nest + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * rr;
-                    k.Add(new Vector3(Mathf.Cos(t) * rr, _g.World.HF.Sample(p.X, p.Y) - gy + 0.06f, Mathf.Sin(t) * rr), Vector3.Up, Colors.White, Vector2.Zero, Vector2.Zero);
-                }
-            }
-            int row = sides + 1;
-            for (int s = 0; s < sides; s++) k.Tri(c0, 1 + s + 1, 1 + s);
-            for (int ri = 1; ri < rings; ri++)
-                for (int s = 0; s < sides; s++)
-                {
-                    int a = 1 + (ri - 1) * row + s, b = a + row;
-                    k.Quad(a, a + 1, b + 1, b);
-                }
-            _glassMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Glass) };
-            _glassMat.SetShaderParameter("radius", gr);
-            _glassMat.SetShaderParameter("strength", 0f);
-            n.AddChild(new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = _glassMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, SortingOffset = 50 });
-        }
     }
 
     /// A cone of sunlight from `top` along the sun's direction, `r0` wide at the top, `r1` at the bottom.
@@ -145,13 +115,12 @@ public sealed class NestInterior
         mi.Position = top;
     }
 
-    ShaderMaterial _glassMat;
-
     /// How open the earth is (0..1), driven by the session's Glass Earth fade. The sun shafts come with the glass.
+    float _open;
     public void SetGlass(float strength)
     {
-        if (OS.GetEnvironment("MANDIBLE_NOPANE") != "") strength = 0;
-        _glassMat?.SetShaderParameter("strength", strength);
+        if (OS.GetEnvironment("MANDIBLE_NOPANE") != "") strength = 0; // perf A/B: no shafts
+        _open = strength;
         float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength : 0f;
         foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
     }
@@ -164,16 +133,6 @@ public sealed class NestInterior
         bool rich = Settings.Gfx >= Settings.Quality.Medium;
         foreach (var r in _rootNodes) r.Visible = rich;
         _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
-    }
-
-    /// The tunnel network as the shaders see it: one capsule per gallery (parent node to room) and the room's own disc.
-    /// The same packed array feeds the terrain cut and the pane, so both open exactly over the galleries.
-    public void SetNetwork(float[] net, int count, Vector2 centre)
-    {
-        if (_glassMat == null) return;
-        _glassMat.SetShaderParameter("net", net);
-        _glassMat.SetShaderParameter("net_count", count);
-        _glassMat.SetShaderParameter("xray_center", centre);
     }
 
     readonly float[] _net = new float[224];
@@ -431,7 +390,7 @@ public sealed class NestInterior
         room.Contents = new Node3D();
         room.Label = new Label3D
         {
-            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 30, OutlineSize = 10, PixelSize = 0.02f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 30, OutlineSize = 10, PixelSize = 0.00085f, FixedSize = true, // a caption's size on screen, whatever the zoom
             Modulate = new Color(1f, 0.88f, 0.6f, 0.95f), OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
         };
         room.Node.AddChild(room.Shell);
@@ -616,6 +575,9 @@ public sealed class NestInterior
             foreach (var ch in col.Chambers)
             {
                 if (!_rooms.TryGetValue((team, ch.Id), out var room)) _rooms[(team, ch.Id)] = room = MakeRoom(team, ch);
+                // the underground is hidden under plain ground until the player opens it; the enemy's never shows
+                bool shown = mine && _open > 0.001f;
+                room.Node.Visible = shown; room.Tunnel.Visible = shown; room.Roots.Visible = shown && Settings.Gfx >= Settings.Quality.Medium;
                 if (room.ShownProgress != ch.Progress || room.Tier != ch.Tier) { LayoutRoom(room); room.ShownProgress = ch.Progress; }
                 if (full)
                 {
@@ -623,7 +585,7 @@ public sealed class NestInterior
                     string name = ch.Kind == ChamberKind.Royal ? $"Royal Chamber · {Config.QueenTitles[System.Math.Min(5, col.T(Upgrade.Queen))]}" : Sim.ChamberName(ch.Kind);
                     room.Label.Text = ch.Digging ? $"{name}  {ch.Progress * 100:0}%  ({ch.Diggers} digging)" : name;
                     room.Label.Modulate = ch.Digging ? new Color(1f, 0.75f, 0.35f) : new Color(1f, 0.88f, 0.6f, 0.95f);
-                    room.Label.Visible = mine && (nestView || ch.Digging && !col.Founded);
+                    room.Label.Visible = mine && nestView && col.Founded; // while founding, the status over the entrance says it all
                 }
             }
             if (full)

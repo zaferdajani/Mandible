@@ -120,6 +120,9 @@ public sealed partial class Sim
     }
 
     /// The node (chamber id or -1) a room at p would be dug from: the nearest one within tunnel reach.
+    /// The node (chamber id, -1 the entrance, int.MinValue none in reach) a room at p would be dug from. Read-only, for the placement cue.
+    public int DigNodeFor(int team, Vector2 p) => ConnectFrom(team, p, false);
+
     int ConnectFrom(int team, Vector2 p, bool builtOnly)
     {
         int best = -1;

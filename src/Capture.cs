@@ -574,10 +574,10 @@ public static class Capture
         await Expect(1, "camera moved");
         await FastUntil(() => s.Sim.Col[0].Founded, 20);
         await Expect(2, "nest founded");
-        s.ToggleNestView();
+        s.Input.ToggleBuild(); // the hole click and N both come here
         await Wait(1.5f);
         await Shot("tut_02_glass");
-        s.ToggleNestView();
+        s.Input.ToggleBuild();
         await Expect(3, "looked inside with N");
         s.TryEnqueue(ProdKind.Worker);
         await Expect(4, "worker queued");
