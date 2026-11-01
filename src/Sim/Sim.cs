@@ -149,10 +149,14 @@ public sealed partial class Sim
     int _serial;
     public int Winner = -1;
 
-    public Sim(World w, GameMode mode = GameMode.Colony, AntType hero0 = AntType.Warlord, AntType hero1 = AntType.Warlord)
+    /// Colony War option: every nest starts with mound guardians at its entrance (Lane War always has them).
+    public readonly bool Fortified;
+
+    public Sim(World w, GameMode mode = GameMode.Colony, AntType hero0 = AntType.Warlord, AntType hero1 = AntType.Warlord, bool fortified = false)
     {
         W = w;
         Mode = mode;
+        Fortified = fortified;
         HeroType[0] = hero0;
         HeroType[1] = hero1;
         if (mode == GameMode.Lanes) BuildLanes();
@@ -167,6 +171,7 @@ public sealed partial class Sim
             AddChamber(c.Team, ChamberKind.Royal, FoundingWork, false);
             RecountCapacity(c);
             if (mode == GameMode.Lanes) { FoundInstantly(c.Team); SetupLaneColony(c); continue; }
+            if (fortified) SpawnNestGuardians(c.Team);
         }
         foreach (var camp in W.Camps)
         {
@@ -214,6 +219,7 @@ public sealed partial class Sim
             a.DmgMul *= 1 + 0.25f * q;
             a.Size *= 1 + 0.12f * q;
         }
+        if (a.Guardian) ApplyGuardianStats(ref a);
         if (Mode == GameMode.Lanes && a.Team < 2) ApplyLaneStats(ref a);
         a.Hp = a.MaxHp * frac;
     }
@@ -569,6 +575,7 @@ public sealed partial class Sim
             Mix(c.Founded ? 1u : 0u); Mix(F(c.FoodCap));
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
         }
+        Mix(Fortified ? 1u : 0u);
         if (Mode == GameMode.Lanes) for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
         Mix((uint)W.Food.Count);
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
@@ -805,6 +812,7 @@ public sealed partial class Sim
         }
         // fruit water: the whole colony slowly mends while it keeps coming in
         if (a.Team < 2 && Col[a.Team].JuiceT > 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp && a.Type != AntType.Queen && !a.Guardian) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.015f * dt);
+        if (a.Guardian) TickGuardian(ref a, dt);
         a.AttackAnim = Mathf.Max(0, a.AttackAnim - dt * 3.5f);
         Vector2 desired = Vector2.Zero;
         float speedMul = 1f;
@@ -1225,6 +1233,7 @@ public sealed partial class Sim
         ref var t = ref Ants[target];
         if (!t.Alive) return;
         if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
+        if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;
         t.HitFlash = 1;
         t.DamagedT = 3f;
@@ -1256,7 +1265,7 @@ public sealed partial class Sim
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);
         var c = t.Team < 2 ? Col[t.Team] : null;
-        if (c != null) { c.Count[(int)t.Type]--; c.Lost++; }
+        if (c != null) { if (!t.Guardian) c.Count[(int)t.Type]--; c.Lost++; }
         else WildCount--;
         if (killer >= 0 && Ants[killer].Team < 2)
         {

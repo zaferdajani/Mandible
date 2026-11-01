@@ -106,12 +106,12 @@ public partial class Main : Node
     }
 
     /// Starts a battle against the AI; team 0 leads the black garden ants, team 1 the red fire ants.
-    public void StartBattle(Difficulty d, int team = Config.Player)
+    public void StartBattle(Difficulty d, int team = Config.Player, bool fortified = false)
     {
         Local.Me = team;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { Demo = false, Diff = d, App = this });
+        Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified });
     }
 
     /// The guided first battle: black garden ants against a peaceful red colony, one lesson at a time.
@@ -145,7 +145,7 @@ public partial class Main : Node
         var heroes = new AntType[2];
         heroes[net.Me] = net.MyHero;
         heroes[1 - net.Me] = net.PeerHero;
-        Swap(new GameSession { Demo = false, App = this, Net = net, Seed = net.Seed, AutoPlayLocal = autoPlay, FastForward = fastForward, Mode = net.Mode, Heroes = heroes });
+        Swap(new GameSession { Demo = false, App = this, Net = net, Seed = net.Seed, AutoPlayLocal = autoPlay, FastForward = fastForward, Mode = net.Mode, Heroes = heroes, Fortified = net.Fortified });
     }
 
     public GameSession Session => _session;
@@ -198,7 +198,10 @@ public partial class MainMenu : CanvasLayer
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
             ("Normal  ·  a fair war", () => Start(Difficulty.Normal)),
             ("Hard  ·  a ravenous swarm", () => Start(Difficulty.Hard)),
+            (FortifiedLabel(), ToggleFortified),
             ("Back", () => { _diff.Visible = false; if (_lanes) PickHero(); else PickRace(); }));
+        _fortifiedButton = (Button)_diff.GetChild(3);
+        _fortifiedButton.TooltipText = "Colony War only. Two majors and two acid gunners, grown into the mound, guard each nest entrance.\nThey never leave their posts and the colony repairs them when left alone. Lane War always has them.";
         _diff.Visible = false;
 
         BuildUpdateBanner();
@@ -306,14 +309,23 @@ public partial class MainMenu : CanvasLayer
     }
 
     int _team;
-    bool _lanes;
+    bool _lanes, _fortified;
     AntType _hero = AntType.Warlord;
     Control _overlay;
+    Button _fortifiedButton;
+
+    string FortifiedLabel() => _fortified ? "Mound guardians: On" : "Mound guardians: Off";
+
+    void ToggleFortified()
+    {
+        _fortified = !_fortified;
+        _fortifiedButton.Text = FortifiedLabel();
+    }
 
     void Start(Difficulty d)
     {
         if (_lanes) App.StartLanes(d, _team, _hero);
-        else App.StartBattle(d, _team);
+        else App.StartBattle(d, _team, _fortified);
     }
 
     public void PickHero()
@@ -324,7 +336,7 @@ public partial class MainMenu : CanvasLayer
         var picker = new HeroPicker
         {
             Team = _team,
-            OnPick = hero => { App.Audio.Ui("ui_click"); _hero = hero; CloseOverlay(); _diff.Visible = true; },
+            OnPick = hero => { App.Audio.Ui("ui_click"); _hero = hero; CloseOverlay(); _fortifiedButton.Visible = false; _diff.Visible = true; },
             OnBack = () => { App.Audio.Ui("ui_click"); PickRace(); },
         };
         _overlay = picker;
@@ -359,7 +371,7 @@ public partial class MainMenu : CanvasLayer
                 App.Audio.Ui("ui_click");
                 _team = team;
                 CloseOverlay();
-                if (_lanes) PickHero(); else _diff.Visible = true;
+                if (_lanes) PickHero(); else { _fortifiedButton.Visible = true; _diff.Visible = true; }
             },
             OnBack = () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; },
         };
@@ -435,6 +447,18 @@ public partial class Lobby : Control
         modeRow.AddChild(colony);
         modeRow.AddChild(lanes);
         v.AddChild(modeRow);
+
+        var fortRow = new HBoxContainer();
+        fortRow.AddChild(UiTheme.Text("Mound guardians (Colony War)", 16, UiTheme.Bold, UiTheme.Dim));
+        Button fortOff = null, fortOn = null;
+        fortOff = Btn("Off", () => { _fortified = false; fortOff.ButtonPressed = true; fortOn.ButtonPressed = false; });
+        fortOn = Btn("On", () => { _fortified = true; fortOff.ButtonPressed = false; fortOn.ButtonPressed = true; });
+        fortOff.ToggleMode = fortOn.ToggleMode = true;
+        fortOff.ButtonPressed = true;
+        fortOn.TooltipText = "Two majors and two acid gunners grown into each mound guard the nest entrance. Lane War always has them.";
+        fortRow.AddChild(fortOff);
+        fortRow.AddChild(fortOn);
+        v.AddChild(fortRow);
 
         var heroRow = new HBoxContainer();
         heroRow.AddChild(UiTheme.Text("Lane War hero", 16, UiTheme.Bold, UiTheme.Dim));
@@ -522,6 +546,7 @@ public partial class Lobby : Control
         var net = NewNet();
         net.HostTeam = _hostTeam;
         net.Mode = _mode;
+        net.Fortified = _fortified;
         if (net.Host(Name(), internet) != Error.Ok) App.Audio.Ui("ui_error");
         _hostLan.Disabled = _hostNet.Disabled = _join.Disabled = true;
     }
@@ -537,6 +562,7 @@ public partial class Lobby : Control
     string Name() => _name.Text.Trim() == "" ? "Commander" : _name.Text.Trim();
     int _hostTeam;
     GameMode _mode;
+    bool _fortified;
     AntType _hero = AntType.Warlord;
 
     void Back()

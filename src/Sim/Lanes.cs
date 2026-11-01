@@ -11,6 +11,9 @@ public static class Lane
     public const float FirstWave = 10f, WaveEvery = 30f;
     public const float FountainRadius = 14f;
     public const int MaxItemTier = 3;
+    public const float GuardianRepair = 0.02f; // share of max health a guardian regains per second once left alone
+    public const float Backdoor = 0.35f;       // damage a hero deals to a guardian with no creep wave at its feet
+    public const float SiegeRadius = 12f;      // how close a creep must be for the post to be "under siege"
     public static readonly string[] ItemNames = { "Mandibles", "Carapace", "Swift Legs", "Royal Jelly" };
     public static readonly string[] ItemDesc =
     {
@@ -52,16 +55,23 @@ public sealed partial class Sim
     public readonly int[] HeroKills = new int[2];
     float _nextLaneWave = Lane.FirstWave;
 
+    /// Whether the colonies face each other across the yard (Lane War) rather than corner to corner.
+    public bool Horizontal => Mathf.Abs(W.Nests[0].Pos.Y - W.Nests[1].Pos.Y) < 1f;
+
     void BuildLanes()
     {
         var n0 = W.Nests[0].Pos;
         var n1 = W.Nests[1].Pos;
-        // the two flank lanes turn at the corners the nests do not occupy
-        // flank corners sit well inside the yard: the very corners are rock-choked
-        var top = new Vector2(n0.X, n1.Y) + new Vector2(26, 26);
-        var bot = new Vector2(n1.X, n0.Y) - new Vector2(26, 26);
+        var mid = (n0 + n1) * 0.5f;
+        var dir = (n1 - n0).Normalized();
+        var side = new Vector2(dir.Y, -dir.X);
+        // the flank lanes bow out to either side of the yard; the very edges and corners are rock-choked,
+        // so the apex stays well inside (88 across the short axis when the nests face each other, 102 along the diagonal)
+        float bow = Horizontal ? 88f : 102f;
+        var top = mid + side * bow;
+        var bot = mid - side * bow;
         Lanes[0] = new[] { n0, n0.Lerp(top, 0.5f), top, top.Lerp(n1, 0.5f), n1 };
-        Lanes[1] = new[] { n0, n0.Lerp(n1, 0.25f), n0.Lerp(n1, 0.5f), n0.Lerp(n1, 0.75f), n1 };
+        Lanes[1] = new[] { n0, n0.Lerp(n1, 0.25f), mid, n0.Lerp(n1, 0.75f), n1 };
         Lanes[2] = new[] { n0, n0.Lerp(bot, 0.5f), bot, bot.Lerp(n1, 0.5f), n1 };
         // a waypoint inside a rock or the great raspberry could never be reached: slide it onto open ground
         foreach (var lane in Lanes)
@@ -118,30 +128,81 @@ public sealed partial class Sim
     void SetupLaneColony(Colony c)
     {
         int team = c.Team;
-        var nest = W.Nests[team].Pos;
-        var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
-        // two guardians on every lane, and two at the mound itself
+        // two guardian posts on every lane: a major in front, an acid gunner a few lengths behind it,
+        // so a hero cannot siege a post from outside its reach
         for (int lane = 0; lane < 3; lane++)
         {
-            SpawnGuardian(team, AlongLane(team, lane, 0.36f));
-            SpawnGuardian(team, AlongLane(team, lane, 0.2f));
+            SpawnGuardianPost(team, lane, 0.36f);
+            SpawnGuardianPost(team, lane, 0.2f);
         }
-        var side = new Vector2(-toCenter.Y, toCenter.X);
-        SpawnGuardian(team, nest + toCenter * 9 + side * 6);
-        SpawnGuardian(team, nest + toCenter * 9 - side * 6);
+        SpawnNestGuardians(team);
         SpawnHero(team);
     }
 
-    void SpawnGuardian(int team, Vector2 p)
+    void SpawnGuardianPost(int team, int lane, float frac)
+    {
+        var p = AlongLane(team, lane, frac);
+        var back = (AlongLane(team, lane, frac - 0.04f) - p).Normalized();
+        SpawnGuardian(team, p, AntType.Major);
+        SpawnGuardian(team, p + back * 3.2f, AntType.Gunner);
+    }
+
+    /// The mound's own guard: two majors flanking the entrance and two gunners on the slope behind them.
+    /// Lane War always has them (the queen is shielded while any stands); Colony War adds them with the Fortified option.
+    public void SpawnNestGuardians(int team)
+    {
+        var nest = W.Nests[team].Pos;
+        var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
+        var side = new Vector2(-toCenter.Y, toCenter.X);
+        SpawnGuardian(team, nest + toCenter * 9 + side * 6, AntType.Major);
+        SpawnGuardian(team, nest + toCenter * 9 - side * 6, AntType.Major);
+        SpawnGuardian(team, nest + toCenter * 6 + side * 3, AntType.Gunner);
+        SpawnGuardian(team, nest + toCenter * 6 - side * 3, AntType.Gunner);
+    }
+
+    void SpawnGuardian(int team, Vector2 p, AntType type)
     {
         var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - p).Normalized();
-        int id = Spawn(team, AntType.Major, p, toCenter.AngleD());
+        int id = Spawn(team, type, p, toCenter.AngleD());
         if (id < 0) return;
         ref var a = ref Ants[id];
         a.Guardian = true;
+        Col[team].Count[(int)type]--; // guardians are the mound's, not the brood's: they take no population
         ApplyLevel(ref a);
         a.Hp = a.MaxHp;
         a.State = AntState.Hold;
+    }
+
+    /// Guardians are part of the mound: far tougher than the ant they grew from, rooted, and repaired by the
+    /// colony when nobody is biting them (see TickGuardian).
+    void ApplyGuardianStats(ref Ant a)
+    {
+        bool ranged = Config.Ranged(a.Type);
+        a.MaxHp *= ranged ? 14f : 9f;
+        a.DmgMul *= 3.2f;
+        a.Size *= ranged ? 1.5f : 1.6f;
+        a.SpeedMul = 0;
+    }
+
+    /// The mound repairs a guardian that has not been bitten for a few seconds.
+    void TickGuardian(ref Ant a, float dt)
+    {
+        if (a.DamagedT <= 0 && a.Hp < a.MaxHp) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Lane.GuardianRepair * dt);
+    }
+
+    /// Lane War: a guardian with no enemy creep wave at its feet shrugs off most of a hero's blows,
+    /// so posts fall to a pushed lane, not to a lone hero slipping past the fighting.
+    float GuardianDamageMul(in Ant guardian, int attacker)
+    {
+        if (Mode != GameMode.Lanes || attacker < 0) return 1f;
+        ref var k = ref Ants[attacker];
+        if (k.Team > 1 || k.Lane > 0) return 1f;
+        for (int i = 0; i < High; i++)
+        {
+            ref var c = ref Ants[i];
+            if (c.Alive && c.Team == k.Team && c.Lane > 0 && c.Pos.DistanceTo(guardian.Pos) < Lane.SiegeRadius) return 1f;
+        }
+        return Lane.Backdoor;
     }
 
     void SpawnHero(int team)
@@ -161,13 +222,6 @@ public sealed partial class Sim
 
     void ApplyLaneStats(ref Ant a)
     {
-        if (a.Guardian)
-        {
-            a.MaxHp *= 9f;
-            a.DmgMul *= 3.2f;
-            a.Size *= 1.6f;
-            a.SpeedMul = 0;
-        }
         if (Config.IsHero(a.Type))
         {
             // lane duel balance: the brawler is toned down, the spitter and the flyer toughened up
@@ -232,7 +286,7 @@ public sealed partial class Sim
                 SpawnCreep(team, lane, AntType.Soldier, Col[team].Race == Race.BlackGarden ? 5 : 4);
                 if (Time > 300) SpawnCreep(team, lane, AntType.Gunner, 1);
                 if (Time > 600) SpawnCreep(team, lane, AntType.Major, 1);
-                if (Time > 900) SpawnCreep(team, lane, AntType.Major, 2); // elite waves: the war must end
+                if (Time > 900) SpawnCreep(team, lane, AntType.Major, 2 + (int)((Time - 900) / 300)); // elite waves, one major more every 5 minutes: the war must end
             }
         }
     }
@@ -241,7 +295,7 @@ public sealed partial class Sim
     {
         var nest = W.Nests[team].Pos;
         var dir = (Waypoint(team, lane, 1) - nest).Normalized();
-        int level = System.Math.Min(6, 1 + (int)(Time / 300)); // waves hatch stronger as the war drags on
+        int level = System.Math.Min(Config.HeroMaxLevel, 1 + (int)(Time / 300)); // waves hatch stronger as the war drags on
         for (int k = 0; k < n; k++)
         {
             int id = Spawn(team, type, nest + dir * 7 + Rng.InDisk(2.5f), dir.AngleD(), level);

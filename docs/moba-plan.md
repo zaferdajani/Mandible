@@ -130,6 +130,8 @@ What exists (from `src/Sim/Lanes.cs`, `src/Game/LaneAI.cs`, `src/UI/LaneHud.cs`,
 - Tooling: `--lanetest` headless matches and `tools/lanebalance.ps1` for all six hero matchups.
 - In flight on main (uncommitted in the sibling session): armour per unit, redesigned bug specials and three-line hero cards (attack, defence, special) with the numbers the sim uses. This plan assumes those land.
 
+**Landed on this branch after the audit (1 November 2026):** the Lane War yard is now horizontal (nests left and right, lanes along a phone held sideways, `WorldBuilder.Build(…, horizontal)` and a nest-derived `BuildLanes`); every lane post is a major with an acid gunner behind it so ranged heroes cannot siege from outside a post's reach; four guardians stand at each queen; guardians are repaired by the colony when left alone and take only 35 % damage from a hero with no creep wave at the post (`Lane.Backdoor`, `Lane.SiegeRadius`); late waves add a major every five minutes after 15:00 and level to 10; and Colony War gained an optional *Mound guardians* setting (menu and lobby, carried in the lockstep start packet, protocol `mandible-mp-6`). See [open-source-moba-survey.md](open-source-moba-survey.md) for the codebase survey.
+
 **Measured pacing, 1 November 2026.** `tools/lanebalance.ps1 -Diff Normal -Seconds 1800` on commit `beac140` (headless, AI versus AI, seed 20261031):
 
 | Matchup (black vs red) | Result |

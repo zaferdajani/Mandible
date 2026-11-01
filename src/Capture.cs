@@ -145,7 +145,7 @@ public static class Capture
         await Wait(3);
         s = app.Session;
         int heroId = s.Sim.HeroId[0];
-        GD.Print($"[selftest] lane war: hero {(heroId >= 0 && s.Sim.Ants[heroId].Type == AntType.Warlord ? "spawned" : "MISSING")}, guardians {s.Sim.GuardiansLeft(0)}/{s.Sim.GuardiansLeft(1)}, queen shielded {s.Sim.QueenShielded(1)}  {(heroId >= 0 && s.Sim.GuardiansLeft(0) == 8 && s.Sim.QueenShielded(1) ? "PASS" : "FAIL")}");
+        GD.Print($"[selftest] lane war: hero {(heroId >= 0 && s.Sim.Ants[heroId].Type == AntType.Warlord ? "spawned" : "MISSING")}, guardians {s.Sim.GuardiansLeft(0)}/{s.Sim.GuardiansLeft(1)}, queen shielded {s.Sim.QueenShielded(1)}  {(heroId >= 0 && s.Sim.GuardiansLeft(0) == 16 && s.Sim.QueenShielded(1) ? "PASS" : "FAIL")}");
         s.Input.FocusHero();
         await Wait(1.5f);
         GD.Print($"[selftest] lane war: hero selected {(s.Input.Selection.Count == 1 && s.Input.Selection[0] == heroId ? "PASS" : "FAIL")}");
@@ -458,7 +458,7 @@ public static class Capture
         {
             var root = new Node3D();
             app.AddChild(root);
-            var world = WorldBuilder.Build(root, 20261031);
+            var world = WorldBuilder.Build(root, 20261031, mode == GameMode.Lanes);
             var sim = new Sim(world, mode, AntType.Warlord, AntType.Marshal);
             var ais = mode == GameMode.Colony
                 ? new IColonyAI[] { new AIController(sim, 0, Difficulty.Hard), new AIController(sim, 1, Difficulty.Normal) }
@@ -613,7 +613,7 @@ public static class Capture
     {
         var root = new Node3D();
         app.AddChild(root);
-        var world = WorldBuilder.Build(root, seed);
+        var world = WorldBuilder.Build(root, seed, true);
         var sim = new Sim(world, GameMode.Lanes, h0, h1);
         var ais = new IColonyAI[] { new LaneAI(sim, 0, a), new LaneAI(sim, 1, b) };
         const float dt = 1f / 30f;

@@ -30,6 +30,7 @@ public partial class GameSession : Node3D
     public Tutorial Tutor;
     public AntType[] Heroes = { AntType.Warlord, AntType.Warlord }; // Lane War hero of each team
     public bool Lanes => Mode == GameMode.Lanes;
+    public bool Fortified;        // Colony War option: mound guardians stand at every nest entrance
     const float TickDt = 1f / 30f;
     float _acc, _alpha, _stall;
     bool _netEnded;
@@ -48,9 +49,9 @@ public partial class GameSession : Node3D
     public override void _Ready()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        World = WorldBuilder.Build(this, Seed);
+        World = WorldBuilder.Build(this, Seed, Lanes);
         long tWorld = sw.ElapsedMilliseconds;
-        Sim = new Sim(World, Mode, Heroes[0], Heroes[1]);
+        Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
         Orders = Net != null ? Net : new DirectOrders(Sim);
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);

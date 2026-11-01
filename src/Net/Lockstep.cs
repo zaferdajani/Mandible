@@ -13,7 +13,7 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-5";
+    const string Version = "mandible-mp-6";
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }
@@ -22,6 +22,7 @@ public partial class Lockstep : Node, IOrders
     /// The host picks a race (colony); the guest leads the other one.
     public int HostTeam;
     public GameMode Mode;                       // chosen by the host
+    public bool Fortified;                      // Colony War: mound guardians at every nest (host picks)
     public AntType MyHero = AntType.Warlord, PeerHero = AntType.Warlord; // Lane War heroes
     public int Me => IsHost ? HostTeam : 1 - HostTeam;
     public string MyName = "Player", PeerName = "";
@@ -103,7 +104,7 @@ public partial class Lockstep : Node, IOrders
         float ping = PingMs < 0 ? 60 : PingMs;
         Delay = Math.Clamp((int)Math.Ceiling((ping * 0.5f + 60f) / (TicksPerTurn * 1000f / 30f)) + 1, 2, 6);
         Seed = (uint)GD.Randi();
-        Send(Packet(2, w => { w.Write(Seed); w.Write(Delay); w.Write((byte)HostTeam); w.Write((byte)Mode); }));
+        Send(Packet(2, w => { w.Write(Seed); w.Write(Delay); w.Write((byte)HostTeam); w.Write((byte)Mode); w.Write(Fortified); }));
         Begin();
     }
 
@@ -267,6 +268,7 @@ public partial class Lockstep : Node, IOrders
                 Delay = r.ReadInt32();
                 HostTeam = r.ReadByte();
                 Mode = (GameMode)r.ReadByte();
+                Fortified = r.ReadBoolean();
                 Begin();
                 break;
             case 3: // orders for a turn

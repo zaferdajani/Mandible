@@ -11,7 +11,9 @@ public static class WorldBuilder
     static readonly Vector2 Center = new(S * 0.5f, S * 0.5f);
     static Vector2 Mirror(Vector2 p) => new(S - p.X, S - p.Y);
 
-    public static World Build(Node3D parent, uint seed)
+    /// `horizontal`: the colonies face each other across the yard (left and right) instead of corner to corner.
+    /// Lane War uses it so the lanes run along a phone held sideways.
+    public static World Build(Node3D parent, uint seed, bool horizontal = false)
     {
         var w = new World { Root = new Node3D { Name = "World" } };
         parent.AddChild(w.Root);
@@ -22,8 +24,9 @@ public static class WorldBuilder
         BuildTextures(w);
         BaseHeights(hf, seed);
 
-        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = new Vector2(62, 258), Radius = 9 };
-        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(new Vector2(62, 258)), Radius = 13 };
+        var home = horizontal ? new Vector2(46, S * 0.5f) : new Vector2(62, 258);
+        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = home, Radius = 9 };
+        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(home), Radius = 13 };
         Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
         hf.SnapshotGround();

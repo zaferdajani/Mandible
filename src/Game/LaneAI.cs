@@ -141,7 +141,7 @@ public sealed class LaneAI : IColonyAI
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (a.Alive && a.Guardian && a.Team != _team && a.Pos.DistanceTo(p) < 8) return true;
+            if (a.Alive && a.Guardian && a.Team != _team && a.Pos.DistanceTo(p) < (Config.Ranged(a.Type) ? 11 : 8)) return true;
         }
         return false;
     }
