@@ -400,12 +400,13 @@ void fragment() {
     if (strength < 0.001) discard;
     float nd = net_dist(wpos, CAMERA_POSITION_WORLD);
     float inside = 1.0 - smoothstep(0.4, 0.8, nd);        // the terrain shader discards soil up to about here
-    float edge = smoothstep(-0.5, 0.35, nd) * inside;     // a thin brighter lip at the cut (galleries are only 3 wide)
+    float edge = smoothstep(0.05, 0.4, nd) * inside;      // the crumbling lip of the cut, a hand's width wide
     float fres = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 2.5);
-    vec3 tint = mix(vec3(0.45, 0.62, 0.72), vec3(0.8, 0.9, 1.0), fres);
+    // Not glass. Blending happens in linear light, so over the dark pit even a few percent reads as a grey slab after
+    // tonemapping: the opening itself stays clear and only the lip carries a thin skin of sunlit sand.
+    vec3 tint = mix(vec3(0.78, 0.62, 0.40), vec3(1.0, 0.9, 0.7), fres);
     ALBEDO = tint;
-    // the hole below is nearly black, so even a few percent of pale glass reads as a veil after gamma: keep it to a breath
-    ALPHA = strength * (0.006 + 0.014 * fres + 0.10 * edge) * inside;
+    ALPHA = strength * (0.012 * fres + 0.08 * edge) * inside;
 }
 ";
 
@@ -413,17 +414,21 @@ void fragment() {
 shader_type spatial;
 " + Fow + @"
 uniform sampler2D noise_a : filter_linear_mipmap, repeat_enable;
-uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform sampler2D noise_b : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D normal_a : hint_normal, filter_linear_mipmap, repeat_enable;
-uniform sampler2D normal_b : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D normal_b : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_c : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable; // the sand grains themselves
 uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
+uniform int detail = 1; // graphics tier: 0 plain soil (phones), 1 grain and clods, 2 a finer grain octave on top
 // Glass Earth: while xray_on, the soil directly over the colony's galleries and rooms is cut away
 varying vec3 wpos;
-varying vec3 vcol;
+varying vec4 vcol;   // r baked shade, g excavated sand, b pine thatch, a 0.5 level / <0.5 crest / >0.5 hollow
+varying vec3 wnrm;
 void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    vcol = COLOR.rgb;
+    wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    vcol = COLOR;
 }
 " + NetworkFn + @"
 void fragment() {
@@ -431,29 +436,40 @@ void fragment() {
     float glass = glass_at(wpos, CAMERA_POSITION_WORLD);
     // the soil over the tunnels is simply gone while the glass is up (a translucent pane is drawn in its place)
     if (glass > 0.55) discard;
+    // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
+    float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
+    float inHollow = smoothstep(0.05, 0.7, hollow);
+    float onCrest = smoothstep(0.05, 0.7, -hollow);
+    float steep = smoothstep(0.08, 0.35, 1.0 - wnrm.y);
     float n1 = texture(noise_a, uv * 0.0035).r;
     float n2 = texture(noise_a, uv * 0.017 + 0.3).r;
     float g = texture(noise_b, uv * 0.09).r;
     float g2 = texture(noise_b, uv * 0.41 + 0.7).r;
     float grain = texture(noise_b, uv * 1.7).r;
-    float grain2 = texture(noise_b, uv * 4.3 + 0.23).r;
-    float grain3 = texture(noise_b, uv * 9.1 + 0.61).r;
-    float ripple = sin((uv.x * 0.9 + uv.y * 0.35 + n1 * 6.0) * 3.1) * 0.5 + 0.5;
+    float grain2 = detail > 0 ? texture(noise_b, uv * 4.3 + 0.23).r : 0.5;
+    float grain3 = detail > 0 ? texture(noise_b, uv * 9.1 + 0.61).r : 0.5;
     float grit = texture(noise_b, uv * 0.83 + 0.37).r;
-    vec3 dry = vec3(0.36, 0.27, 0.19);
-    vec3 damp = vec3(0.17, 0.12, 0.085);
-    vec3 clay = vec3(0.34, 0.20, 0.12);
-    vec3 col = mix(dry, damp, smoothstep(0.40, 0.80, n1));
+    vec3 dry = vec3(0.42, 0.315, 0.22);
+    vec3 damp = vec3(0.19, 0.135, 0.09);
+    vec3 clay = vec3(0.38, 0.23, 0.13);
+    vec3 pale = vec3(0.58, 0.49, 0.37);   // sun-dried crests
+    vec3 col = mix(dry, damp, smoothstep(0.45, 0.85, n1) * 0.8);
     col = mix(col, clay, smoothstep(0.5, 0.8, n2) * 0.5);
+    // hollows hold the damp and the fines; crests dry pale; steep sides show the lighter subsoil
+    col = mix(col, damp * 0.9, inHollow * 0.55);
+    col = mix(col, pale, onCrest * 0.45 + steep * 0.25);
     col *= 0.72 + 0.45 * g;
     col *= 0.8 + 0.3 * g2;
-    // individual sand grains: bright quartz flecks and dark pores
-    col *= 0.74 + 0.32 * grain;
+    // individual sand grains: bright quartz flecks and dark pores (stronger in the pebble beds of the hollows)
+    float gc = 1.0 + 0.5 * inHollow;
+    col *= 1.0 - (0.26 - 0.32 * grain) * gc;
     col *= 0.86 + 0.28 * grain2;
     col *= 0.92 + 0.16 * grain3;
-    col *= 0.96 + 0.08 * ripple;
-    float quartz = smoothstep(0.80, 0.88, grit) * smoothstep(0.35, 0.7, g);
-    col = mix(col, vec3(0.62, 0.57, 0.50), quartz * 0.6);
+    float quartz = smoothstep(0.80, 0.88, grit) * smoothstep(0.35, 0.7, g) * (1.0 + 0.7 * onCrest);
+    col = mix(col, vec3(0.64, 0.59, 0.52), clamp(quartz, 0.0, 1.0) * 0.6);
+    // a bed of small stones where the fines have washed in
+    float bed = step(0.74 - 0.08 * inHollow, g2) * inHollow * float(detail > 0);
+    col = mix(col, vec3(0.38, 0.35, 0.31) * (0.7 + 0.5 * grain3), bed * 0.65);
     float pore = smoothstep(0.72, 0.8, texture(noise_b, uv * 0.6 + 0.11).r);
     col = mix(col, vec3(0.06, 0.045, 0.035), pore * 0.35);
     float dark = smoothstep(0.7, 0.8, texture(noise_b, uv * 0.23).r);
@@ -467,17 +483,19 @@ void fragment() {
     vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g) * (0.7 + 0.4 * g2);
     col = mix(col, thatch, vcol.b);
     col *= vcol.r;
-    float wet = smoothstep(0.55, 0.85, n1);
-    // a pale, slightly glassy rim of soil around the opening
-    col = mix(col, col * 0.75 + vec3(0.12, 0.16, 0.19), glass * 0.6);
+    float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
+    // the freshly cut soil at the opening's edge: darker and damper than the surface
+    col = mix(col, col * vec3(0.55, 0.46, 0.38), glass * 0.7);
     ALBEDO = col;
-    ROUGHNESS = mix(0.95, 0.72, wet) - quartz * 0.3;
-    vec3 na = texture(normal_a, uv * 0.11).rgb;
-    vec3 nb = texture(normal_b, uv * 0.47).rgb;
-    vec3 nc = texture(normal_b, uv * 2.1 + 0.37).rgb;
-    NORMAL_MAP = normalize(vec3((na.xy + nb.xy + nc.xy * 0.9) - 1.45, 1.0)) * 0.5 + 0.5;
-    NORMAL_MAP_DEPTH = 1.35;
-    NORMAL_MAP_DEPTH = 1.4;
+    ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
+    SPECULAR = 0.3;
+    // the surface: broad undulations, clods, then the grains (two octaves at Ultra); plain soil keeps only the first two
+    vec2 nm = (texture(normal_a, uv * 0.11).xy - 0.5) * 1.0 + (texture(normal_b, uv * 0.47).xy - 0.5) * 0.9;
+    if (detail > 0) nm += (texture(normal_c, uv * 0.26).xy - 0.5) * (1.0 + 0.4 * inHollow);
+    if (detail > 1) nm += (texture(normal_c, uv * 0.95 + 0.31).xy - 0.5) * 0.6;
+    nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
+    NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
+    NORMAL_MAP_DEPTH = detail > 0 ? 1.5 : 1.1;
     float ph = texture(pher_tex, uv / map_size).r;
     float f = fow(wpos);
     ALBEDO = mix(ALBEDO, vec3(1.0, 0.72, 0.32), clamp(ph, 0.0, 1.0) * pher_view * 0.35) * f;
@@ -652,14 +670,16 @@ void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_c = INSTANCE_CU
 " + NetworkFn + @"
 void fragment() {
     if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // pebbles do not hover over an opened gallery
-    vec3 a = mix(vec3(0.22, 0.20, 0.18), vec3(0.38, 0.31, 0.23), v_c.x);
-    a = mix(a, vec3(0.52, 0.49, 0.44), v_c.y * 0.5);
+    // weathered grit: warm greys and tans, never brighter than the sand they lie on
+    vec3 a = mix(vec3(0.19, 0.17, 0.15), vec3(0.33, 0.27, 0.20), v_c.x);
+    a = mix(a, vec3(0.42, 0.39, 0.34), v_c.y * 0.5);
     a = mix(a, vec3(0.26, 0.15, 0.08), v_c.z);
     float n = texture(noise_b, wpos.xz * 2.5 + v_c.w * 9.0).r;
-    a *= 0.7 + 0.5 * n;
-    a *= mix(0.55, 1.05, smoothstep(-0.6, 0.6, v_n.y));
+    a *= 0.72 + 0.42 * n;
+    a *= mix(0.6, 1.0, smoothstep(-0.6, 0.6, v_n.y));
     ALBEDO = a * fow(wpos);
-    ROUGHNESS = mix(0.85, 0.45, v_c.y);
+    ROUGHNESS = mix(0.9, 0.6, v_c.y);
+    SPECULAR = 0.25;
 }
 ";
 

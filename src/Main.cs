@@ -28,6 +28,7 @@ public partial class Main : Node
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
             if (a.StartsWith("--layout=")) _layout = a.Substring(9);
+            if (a.StartsWith("--gfx=")) _gfx = a.Substring(6); // test runs: start on this graphics tier
             if (a.StartsWith("--simtest="))
             {
                 var parts = a.Substring(10).Split(',');
@@ -60,6 +61,7 @@ public partial class Main : Node
             }
         }
         Settings.Load();
+        if (_gfx != null && System.Enum.TryParse<Settings.Quality>(_gfx, true, out var gq)) Settings.Gfx = gq;
         if (args.Count == 0) Settings.ApplyDisplay(); // test runs keep the window size they asked for
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
         GetTree().Root.SizeChanged += ApplyOrientation;
@@ -69,10 +71,11 @@ public partial class Main : Node
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
+        foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
     }
 
-    string _layout;
+    string _layout, _gfx;
     public bool TestRun; // started by a test harness: no update checks, keep the window as asked
 
     /// The device was rotated (or the window resized): in portrait the UI is laid out on a narrower
@@ -191,7 +194,7 @@ public partial class MainMenu : CanvasLayer
             ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
             ("Field Guide", ShowGuide),
-            ($"Graphics: {Settings.Gfx}", CycleGraphics),
+            ($"Graphics: {Settings.Gfx}", OpenGraphics),
             (DisplayLabel(), ToggleDisplay),
             ("Quit", () => GetTree().Quit()));
         _diff = Column(
@@ -269,13 +272,70 @@ public partial class MainMenu : CanvasLayer
         if (Visible && e is InputEventKey { Pressed: true, Echo: false } k && k.PhysicalKeycode == Key.F11) ToggleDisplay();
     }
 
-    void CycleGraphics()
+    /// The graphics panel: the four tiers with a line on each, applied to the yard behind the menu as you click.
+    void OpenGraphics()
     {
-        Settings.Gfx = (Settings.Quality)(((int)Settings.Gfx + 2) % 3); // High -> Medium -> Low -> High
-        Settings.Save();
-        foreach (var n in _main.GetChildren())
-            if (n is Button b && b.Text.StartsWith("Graphics")) b.Text = $"Graphics: {Settings.Gfx}";
-        App.ShowMenu(); // rebuild the backdrop at the new quality
+        _main.Visible = false;
+        CloseOverlay();
+        var panel = new PanelContainer();
+        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -400, -300, 400, 300);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 10);
+        var title = UiTheme.Text("GRAPHICS", 34, UiTheme.Title, UiTheme.Gold);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(title);
+        var note = UiTheme.Text("Changes apply at once. The amount of pebbles, straw and grass takes effect when the next battle is laid out.", 15, null, UiTheme.Dim);
+        note.HorizontalAlignment = HorizontalAlignment.Center;
+        note.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        v.AddChild(note);
+        var buttons = new System.Collections.Generic.List<(Button, Settings.Quality)>();
+        void Refresh()
+        {
+            foreach (var (b, q) in buttons)
+            {
+                b.Text = (q == Settings.Gfx ? "●  " : "") + q;
+                b.AddThemeColorOverride("font_color", q == Settings.Gfx ? UiTheme.Gold : UiTheme.Ink);
+            }
+            foreach (var n in _main.GetChildren())
+                if (n is Button mb && mb.Text.StartsWith("Graphics")) mb.Text = $"Graphics: {Settings.Gfx}";
+        }
+        foreach (Settings.Quality q in System.Enum.GetValues<Settings.Quality>())
+        {
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 16);
+            var b = new Button { CustomMinimumSize = new Vector2(170, 52) };
+            b.AddThemeFontSizeOverride("font_size", 20);
+            b.AddThemeFontOverride("font", UiTheme.Title);
+            var tier = q;
+            b.Pressed += () =>
+            {
+                App.Audio.Ui("ui_click");
+                Settings.Gfx = tier;
+                Settings.Save();
+                App.Session?.ApplyQuality(); // live: the yard behind the menu changes on the spot
+                Refresh();
+            };
+            b.MouseEntered += () => App.Audio.Ui("ui_hover");
+            row.AddChild(b);
+            var d = UiTheme.Text(Settings.Describe(q), 15, null, UiTheme.Ink);
+            d.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            d.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            d.VerticalAlignment = VerticalAlignment.Center;
+            row.AddChild(d);
+            v.AddChild(row);
+            buttons.Add((b, q));
+        }
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(170, 48) };
+        back.AddThemeFontOverride("font", UiTheme.Title);
+        back.Pressed += () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; };
+        var foot = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        foot.AddChild(back);
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6) });
+        v.AddChild(foot);
+        panel.AddChild(v);
+        Refresh();
+        _overlay = panel;
+        _root.AddChild(panel);
     }
 
     public void OpenLobby()

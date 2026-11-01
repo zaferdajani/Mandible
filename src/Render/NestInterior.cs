@@ -33,12 +33,28 @@ public sealed class NestInterior
         _g = g;
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
-        // warm, readable earth tones: the rooms sit in a near-black bowl and must stay legible through the glass
-        _wall = new StandardMaterial3D { AlbedoColor = new Color(0.40f, 0.29f, 0.19f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
-        _floor = new StandardMaterial3D { AlbedoColor = new Color(0.52f, 0.40f, 0.27f), Roughness = 1 };
-        _earth = new StandardMaterial3D { AlbedoColor = new Color(0.07f, 0.05f, 0.035f), Roughness = 1, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        // real earth, lit by the one sun that comes in through the opened ground: the cut face of the soil, the
+        // damp walls of the cavities and their trodden floors all carry the yard's own grain (the noise is grey,
+        // so the base colours are set brighter than they read)
+        var grain = g.World.NoiseB;
+        // every underground surface is the ground's own dry-soil colour in shades: floors as light as the surface,
+        // gallery walls darker, the deep earth darkest (the grey noise halves them, so the bases are doubled)
+        var soil = new Color(0.84f, 0.63f, 0.44f);
+        // the pit lies in the surface's own shadow for most of the day, so each surface carries a little warm bounce
+        // light (emission) the way sunlit sand throws light into a hole; the sun still shapes whatever it reaches
+        StandardMaterial3D Soil(float shade, float scale, BaseMaterial3D.CullModeEnum cull, float bounce, float rough = 1f) => new()
+        {
+            AlbedoColor = soil * shade, Roughness = rough, CullMode = cull, AlbedoTexture = grain, Uv1Triplanar = true, Uv1Scale = Vector3.One * scale,
+            EmissionEnabled = true, Emission = new Color(0.42f, 0.30f, 0.19f) * shade * bounce,
+        };
+        _wall = Soil(0.78f, 0.6f, BaseMaterial3D.CullModeEnum.Disabled, 0.35f);
+        _cavity = Soil(0.6f, 1.4f, BaseMaterial3D.CullModeEnum.Back, 0.35f);
+        _floor = Soil(0.98f, 1.8f, BaseMaterial3D.CullModeEnum.Back, 0.3f, 0.95f);
+        _earth = Soil(0.7f, 0.12f, BaseMaterial3D.CullModeEnum.Disabled, 0.6f); // the deep earth sees the least sun: the most bounce
         for (int team = 0; team < 2; team++) BuildNest(team);
     }
+
+    readonly StandardMaterial3D _cavity;
 
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
 
@@ -51,14 +67,15 @@ public sealed class NestInterior
         _nest[team] = n;
         // the dark earth that fills the view through the glass: a bowl of soil below everything
         float r = Sim.NestReachMax + 12f;
-        n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 17f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        // shallow, like the nest itself now spreads: its floor stays in the sun, so the opened ground reads as a dug pit
+        n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 7.5f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         // the ragged mouth of the shaft under the entrance (its inside faces show; the lip is uneven)
         n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = _wall, Position = new Vector3(0, 0, 0) });
         // the plug of soil the founders dig away (sinks and shrinks with progress)
         _plug[team] = new MeshInstance3D
         {
-            Mesh = RoughRoom(), Scale = new Vector3(1.25f, 0.3f, 1.25f),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.46f, 0.36f, 0.25f), Roughness = 1 },
+            Mesh = RoughLump(), Scale = new Vector3(1.25f, 0.3f, 1.25f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.84f, 0.63f, 0.44f) * 0.9f, Roughness = 1, AlbedoTexture = _g.World.NoiseB, Uv1Triplanar = true, Uv1Scale = new Vector3(1.5f, 1.5f, 1.5f) },
             Position = new Vector3(0, 0.25f, 0),
         };
         n.AddChild(_plug[team]);
@@ -152,12 +169,36 @@ public sealed class NestInterior
     static readonly FastNoiseLite Lump = new() { Seed = 9, Frequency = 1.9f, NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth };
     static ArrayMesh _roughRoom, _roughTube, _roughMouth, _roughFloor;
 
-    /// A unit ellipsoid cavity with uneven walls (scaled per room).
-    static ArrayMesh RoughRoom() => _roughRoom ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero,
+    /// A unit ellipsoid cavity with uneven walls (scaled per room), seen from inside: the ceiling nearest the
+    /// camera is culled away, so from above you look down onto the lit floor and the far wall of the hollow.
+    static ArrayMesh RoughRoom() => _roughRoom ??= Build(k =>
+    {
+        k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero,
+            u => 1f + 0.16f * Lump.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.06f * Lump.GetNoise3D(u.X * 9 + 5, u.Y * 9, u.Z * 9));
+        InsideOut(k);
+    }, false);
+
+    /// The same lumpy ellipsoid, solid: the plug of soil the founders dig away.
+    static ArrayMesh _roughLump;
+    static ArrayMesh RoughLump() => _roughLump ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero,
         u => 1f + 0.16f * Lump.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.06f * Lump.GetNoise3D(u.X * 9 + 5, u.Y * 9, u.Z * 9)));
 
-    /// A unit-length tube along +Y (radius 1) whose walls bulge and pinch like a dug gallery.
+    /// Flips a closed mesh so its inside is what is drawn and lit.
+    static void InsideOut(MeshKit k)
+    {
+        k.RecalcNormals();
+        for (int i = 0; i < k.Nrm.Count; i++) k.Nrm[i] = -k.Nrm[i];
+        for (int i = 0; i + 2 < k.I.Count; i += 3) (k.I[i + 1], k.I[i + 2]) = (k.I[i + 2], k.I[i + 1]);
+    }
+
+    /// A unit-length tube along +Y (radius 1) whose walls bulge and pinch like a dug gallery, drawn from inside.
     static ArrayMesh RoughTube() => _roughTube ??= Build(k =>
+    {
+        TubeShell(k);
+        InsideOut(k);
+    }, false);
+
+    static void TubeShell(MeshKit k)
     {
         const int sides = 16, rings = 10;
         int start = k.V.Count;
@@ -175,7 +216,7 @@ public sealed class NestInterior
         int row = sides + 1;
         for (int r = 0; r < rings; r++)
             for (int s = 0; s < sides; s++) { int a = start + r * row + s; k.Quad(a, a + 1, a + row + 1, a + row); }
-    });
+    }
 
     /// The entrance: a ragged funnel with a crumbling lip, open at both ends.
     static ArrayMesh RoughMouth() => _roughMouth ??= Build(k =>
@@ -246,11 +287,11 @@ public sealed class NestInterior
         for (int s = 0; s < sides; s++) k.Tri(centre, start + s + 1, start + s);
     });
 
-    static ArrayMesh Build(System.Action<MeshKit> f)
+    static ArrayMesh Build(System.Action<MeshKit> f, bool recalc = true)
     {
         var k = new MeshKit();
         f(k);
-        k.RecalcNormals();
+        if (recalc) k.RecalcNormals();
         return k.Commit();
     }
 
@@ -266,9 +307,10 @@ public sealed class NestInterior
     {
         var room = new Room { Ch = ch, Team = team, Node = new Node3D { Name = $"Room_{ch.Kind}_{ch.Id}" } };
         _nest[team].AddChild(room.Node);
-        room.Shell = new MeshInstance3D { Mesh = RoughRoom(), MaterialOverride = _wall, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        // the cavities face inward, with back faces culled: the ceiling between the camera and the room is not drawn
+        room.Shell = new MeshInstance3D { Mesh = RoughRoom(), MaterialOverride = _cavity, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         room.Floor = new MeshInstance3D { Mesh = RoughFloor(), MaterialOverride = _floor, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
-        room.Tunnel = new MeshInstance3D { Mesh = RoughTube(), MaterialOverride = _wall, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        room.Tunnel = new MeshInstance3D { Mesh = RoughTube(), MaterialOverride = _cavity, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         room.Contents = new Node3D();
         room.Label = new Label3D
         {

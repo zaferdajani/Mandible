@@ -516,10 +516,27 @@ public partial class Hud : CanvasLayer
     {
         if (_end != null && _end.Visible) return;
         if (_pause == null)
+        {
             _pause = Overlay(Game.Net == null ? "PAUSED" : "MENU", new[] { Game.Net == null ? "The colony waits." : "The battle goes on: multiplayer games cannot pause." },
-                ("Resume", () => TogglePause()), ("Restart", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+                ("Resume", () => TogglePause()), ("Restart", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()), ($"Graphics: {Settings.Gfx}", CycleGraphics));
+        }
         _pause.Visible = !_pause.Visible;
         Game.SetPaused(_pause.Visible);
+    }
+
+    /// Mid-battle graphics switch: Low → Medium → High → Ultra → Low, applied on the spot (litter density waits for the next battle).
+    void CycleGraphics()
+    {
+        Settings.Gfx = (Settings.Quality)(((int)Settings.Gfx + 1) % 4);
+        Settings.Save();
+        Game.ApplyQuality();
+        Relabel(_pause);
+    }
+
+    static void Relabel(Node n)
+    {
+        if (n is Button b && b.Text.StartsWith("Graphics")) b.Text = $"Graphics: {Settings.Gfx}";
+        foreach (var c in n.GetChildren()) Relabel(c);
     }
 
     public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || _help.Visible;

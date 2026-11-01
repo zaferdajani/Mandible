@@ -82,7 +82,7 @@ Tested: two-process matches with 0 desyncs; 240 ms and 500 ms round trips with j
 
 Touch: tap to select, drag to box-select, tap the ground to order the selection, long-press for attack-move, double-tap empty ground to deselect, two fingers to pan / pinch-zoom / twist-rotate.
 
-Graphics: Main menu, then *Graphics* cycles High / Medium / Low. Phones and tablets start on Low.
+Graphics: Main menu, then *Graphics* opens the tier panel: Low (phones: hard shadows, workers cast none, plain soil, a third of the litter), Medium (shadows on every ant, bloom), High (the desktop default: four-split shadows, ambient occlusion and bounced light, 2x MSAA, detailed soil) and Ultra (soft shadows to the horizon, richer grain, dust haze, 4x MSAA, every pebble, straw shadows). Tiers apply at once, also from the pause menu in a battle; the litter density takes effect when the next yard is laid out. Phones and tablets start on Low.
 
 ## Layout
 

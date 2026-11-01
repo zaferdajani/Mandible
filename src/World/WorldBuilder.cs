@@ -22,13 +22,15 @@ public static class WorldBuilder
         BuildTextures(w);
         BaseHeights(hf, seed);
 
-        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = new Vector2(62, 258), Radius = 9 };
-        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(new Vector2(62, 258)), Radius = 13 };
+        w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = NestA, Radius = 9 };
+        w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(NestA), Radius = 13 };
+        // rocks are placed before the soil settles so the ground can sag around them (the rock itself sits on the sagged soil)
+        var rocks = PlaceRocks(w, rng);
+        RockDips(hf, rocks);
         Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
         hf.SnapshotGround();
 
-        var rocks = PlaceRocks(w, rng);
         w.IndexObstacles();
         var leaves = PlaceLeaves(w, deco, rocks);
         var twigs = PlaceTwigs(w, deco);
@@ -66,11 +68,19 @@ public static class WorldBuilder
         var a = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex, Frequency = 0.008f, FractalType = FastNoiseLite.FractalTypeEnum.Fbm, FractalOctaves = 5, Seed = 11 };
         var b = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Cellular, Frequency = 0.035f, FractalType = FastNoiseLite.FractalTypeEnum.Fbm, FractalOctaves = 3, Seed = 23, CellularReturnType = FastNoiseLite.CellularReturnTypeEnum.Distance2Sub };
         var bn = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Cellular, Frequency = 0.05f, FractalType = FastNoiseLite.FractalTypeEnum.Fbm, FractalOctaves = 2, Seed = 41, CellularReturnType = FastNoiseLite.CellularReturnTypeEnum.Distance };
+        // sand grains: rounded cells (distance2 - distance peaks at each cell's centre) over a scatter of finer lumps
+        var grains = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Cellular, Frequency = 0.07f, Seed = 57, CellularReturnType = FastNoiseLite.CellularReturnTypeEnum.Distance2Sub, CellularJitter = 1.0f, FractalType = FastNoiseLite.FractalTypeEnum.Fbm, FractalOctaves = 2, FractalGain = 0.35f };
         w.NoiseA = Tex(a, 512, false);
         w.NoiseB = Tex(b, 512, false);
-        w.NormalA = Tex(a, 512, true, 10f);
-        w.NormalB = Tex(bn, 512, true, 5f);
+        w.NormalA = Tex(a, 512, true, 16f);   // broad undulations: the smooth fbm needs a strong bump scale to register at all
+        w.NormalB = Tex(bn, 512, true, 7f);   // clods and pits
+        w.NormalC = Tex(grains, 512, true, 9f); // the grains themselves
     }
+
+    /// The sun's direction and what faces it, shared by the baked shading (minimap) and the live light.
+    static Vector3 ToSun => -(Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward).Normalized();
+
+    static readonly Vector2 NestA = new(62, 258);
 
     static ShaderMaterial Mat(World w, string code, bool fow = true)
     {
@@ -85,17 +95,45 @@ public static class WorldBuilder
     }
 
     // ---------------------------------------------------------------- heights
+    /// The lie of the land. Only rendering reads these heights (the sim walks a flat plane and samples them for
+    /// drawing), but they are still built from the same FastNoiseLite calls on every platform so all players see
+    /// one yard. Four layers: slow swells, dune ridges, shallow cellular hollows (where the pebbles collect) and
+    /// small lumps; a worn hollow runs between the nests through the middle, and the ground is held nearly flat
+    /// around each nest so the galleries, pane and crater still fit.
     static void BaseHeights(Heightfield hf, uint seed)
     {
         var n1 = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 0.011f, Seed = (int)seed, FractalOctaves = 3 };
         var n2 = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex, Frequency = 0.06f, Seed = (int)seed + 5 };
+        var dune = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth, Frequency = 0.026f, Seed = (int)seed + 11, FractalType = FastNoiseLite.FractalTypeEnum.Ridged, FractalOctaves = 2, FractalGain = 0.45f };
+        var dip = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Cellular, Frequency = 0.04f, Seed = (int)seed + 17, CellularReturnType = FastNoiseLite.CellularReturnTypeEnum.Distance, CellularJitter = 0.9f };
+        var fine = new FastNoiseLite { NoiseType = FastNoiseLite.NoiseTypeEnum.Simplex, Frequency = 0.13f, Seed = (int)seed + 23 };
+        var nestB = Mirror(NestA);
+        float Relief(float wx, float wz)
+        {
+            float h = 2.2f * n1.GetNoise2D(wx, wz) + 0.35f * n2.GetNoise2D(wx, wz);
+            // ridged noise: sharp crests, broad troughs, like wind-set sand
+            float r = 1.7f * (1f - Mathf.Abs(dune.GetNoise2D(wx, wz))) - 0.85f;
+            // shallow bowls around each cell point: pebble beds and damp hollows
+            float d01 = dip.GetNoise2D(wx, wz) * 0.5f + 0.5f;
+            float bowl = -1.1f * (1f - Mathf.SmoothStep(0.05f, 0.6f, d01));
+            float lumps = 0.3f * fine.GetNoise2D(wx, wz);
+            // the worn hollow of the main path: nest to nest through the middle of the yard
+            var p = new Vector2(wx, wz);
+            float along = Mathf.Clamp((p - NestA).Dot(nestB - NestA) / (nestB - NestA).LengthSquared(), 0, 1);
+            float offPath = p.DistanceTo(NestA + (nestB - NestA) * along);
+            float path = -0.6f * (1f - Mathf.SmoothStep(2.5f, 9f, offPath));
+            // flat ground around the nests
+            float nd = Mathf.Min(p.DistanceTo(NestA), p.DistanceTo(nestB));
+            float keep = Mathf.SmoothStep(13f, 26f, nd);
+            return h + (r + bowl + lumps + path) * keep;
+        }
         for (int z = 0; z < hf.N; z++)
             for (int x = 0; x < hf.N; x++)
             {
                 // symmetric: average a point with its mirror so both colonies face identical ground
                 float wx = x * hf.Cell, wz = z * hf.Cell;
-                float h0 = 2.2f * n1.GetNoise2D(wx, wz) + 0.35f * n2.GetNoise2D(wx, wz);
-                float h1 = 2.2f * n1.GetNoise2D(S - wx, S - wz) + 0.35f * n2.GetNoise2D(S - wx, S - wz);
+                float h0 = Relief(wx, wz);
+                float h1 = Relief(S - wx, S - wz);
                 // banks rise toward the yard edges
                 float edge = Mathf.Min(Mathf.Min(wx, S - wx), Mathf.Min(wz, S - wz));
                 float bank = Mathf.Pow(Mathf.Clamp(1 - edge / 26f, 0, 1), 2) * 7f;
@@ -103,11 +141,29 @@ public static class WorldBuilder
             }
     }
 
+    /// The soil sags around every stone, as if it had pressed itself in, with a faint rim of pushed-up earth.
+    static void RockDips(Heightfield hf, List<Rock> rocks)
+    {
+        foreach (var r in rocks)
+        {
+            float reach = r.R * 1.9f + 1.5f;
+            float depth = 0.22f * Mathf.Sqrt(r.R) + 0.1f;
+            hf.ForEachInRadius(r.P.X, r.P.Y, reach, (i, d) =>
+            {
+                float t = d / reach;
+                float sag = -(1f - Mathf.SmoothStep(0.45f, 1f, t));
+                float rim = 0.25f * Mathf.Exp(-Mathf.Pow((t - 0.78f) / 0.12f, 2));
+                hf.H[i] += depth * (sag + rim);
+            });
+        }
+    }
+
     static void Crater(Heightfield hf, Vector2 c)
     {
-        hf.ForEachInRadius(c.X, c.Y, 11f, (i, r) =>
+        hf.ForEachInRadius(c.X, c.Y, 12f, (i, r) =>
         {
-            hf.H[i] += 2.1f * Mathf.Exp(-Mathf.Pow((r - 3.6f) / 2.1f, 2)) - 1.9f * Mathf.Exp(-Mathf.Pow(r / 1.35f, 2));
+            // the excavated ring, its lip a little sharper on the inside, and a soft apron of spoil beyond it
+            hf.H[i] += 2.3f * Mathf.Exp(-Mathf.Pow((r - 3.6f) / (r < 3.6f ? 1.7f : 2.4f), 2)) + 0.35f * Mathf.Exp(-Mathf.Pow((r - 7.5f) / 2.5f, 2)) - 1.9f * Mathf.Exp(-Mathf.Pow(r / 1.35f, 2));
             hf.Mound[i] = Mathf.Max(hf.Mound[i], Mathf.SmoothStep(10.5f, 3.5f, r));
         });
     }
@@ -393,6 +449,21 @@ public static class WorldBuilder
         var cols = new Color[n * n];
         var uvs = new Vector2[n * n];
         var enemyNest = w.Nests[1].Pos;
+        // how far below (or above) its surroundings each point lies, over about eight cells: the shader darkens
+        // hollows into damp pebble beds and dries the crests pale
+        var hollow = new float[n * n];
+        for (int z = 0; z < n; z++)
+            for (int x = 0; x < n; x++)
+            {
+                float sum = 0; int cnt = 0;
+                for (int dz = -8; dz <= 8; dz += 4)
+                    for (int dx = -8; dx <= 8; dx += 4)
+                    {
+                        int xx = Math.Clamp(x + dx, 0, n - 1), zz = Math.Clamp(z + dz, 0, n - 1);
+                        sum += hf.Ground[zz * n + xx]; cnt++;
+                    }
+                hollow[z * n + x] = Mathf.Clamp(0.5f + (sum / cnt - hf.Ground[z * n + x]) * 0.55f, 0, 1);
+            }
         for (int z = 0; z < n; z++)
             for (int x = 0; x < n; x++)
             {
@@ -401,7 +472,7 @@ public static class WorldBuilder
                 verts[i] = new Vector3(wx, hf.Ground[i], wz);
                 nrm[i] = GroundNormal(hf, x, z);
                 float thatch = Mathf.SmoothStep(13.5f, 6f, new Vector2(wx, wz).DistanceTo(enemyNest));
-                cols[i] = new Color(ao[i], hf.Mound[i], thatch, 1);
+                cols[i] = new Color(ao[i], hf.Mound[i], thatch, hollow[i]);
                 uvs[i] = new Vector2(wx, wz) / Config.MapSize;
             }
         var idx = new int[(n - 1) * (n - 1) * 6];
@@ -424,6 +495,8 @@ public static class WorldBuilder
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
+        w.TerrainMaterial.SetShaderParameter("normal_c", w.NormalC);
+        w.TerrainMaterials.Add(w.TerrainMaterial);
         var mi = new MeshInstance3D { Mesh = mesh, MaterialOverride = w.TerrainMaterial, Name = "Terrain" };
         w.Root.AddChild(mi);
     }
@@ -476,12 +549,15 @@ public static class WorldBuilder
                 foreach (var v in new[] { a, b, c, a, c, d })
                 {
                     float far = Mathf.Clamp((new Vector2(v.X, v.Z) - Center).Length() / 520f, 0, 1);
-                    st.SetColor(new Color(1f - 0.25f * far, 0, 0)); // r: shade, g/b: no sand or thatch
+                    st.SetColor(new Color(1f - 0.25f * far, 0, 0, 0.5f)); // r: shade, g/b: no sand or thatch, a: level ground
                     st.AddVertex(v);
                 }
             }
         st.GenerateNormals();
-        w.Root.AddChild(new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = Mat(w, Shaders.Terrain), Name = "Skirt" }); // fog of war carries on seamlessly past the edge
+        var skirt = Mat(w, Shaders.Terrain);
+        skirt.SetShaderParameter("normal_c", w.NormalC);
+        w.TerrainMaterials.Add(skirt);
+        w.Root.AddChild(new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = skirt, Name = "Skirt" }); // fog of war carries on seamlessly past the edge
     }
 
     static void BuildGrass(World w, Rng rng)
@@ -545,6 +621,7 @@ public static class WorldBuilder
         }
         var mmi = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = Mat(w, Shaders.Grass), Name = "Grass" };
         w.Root.AddChild(mmi);
+        w.Scatter.Add((mmi, Scatter.Grass));
     }
 
     // ---------------------------------------------------------------- nests
@@ -849,7 +926,9 @@ public static class WorldBuilder
             }
             mm.InstanceCount = xf.Count;
             for (int i = 0; i < xf.Count; i++) { mm.SetInstanceTransform(i, xf[i]); mm.SetInstanceCustomData(i, cd[i]); }
-            w.Root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, Name = "Pebbles" + variant });
+            var pmi = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, Name = "Pebbles" + variant };
+            w.Root.AddChild(pmi);
+            w.Scatter.Add((pmi, Scatter.Pebbles));
         }
         // dry grass bits and pine needles lying around
         var sk = new MeshKit();
@@ -869,7 +948,10 @@ public static class WorldBuilder
         }
         smm.InstanceCount = sx.Count;
         for (int i = 0; i < sx.Count; i++) { smm.SetInstanceTransform(i, sx[i]); smm.SetInstanceCustomData(i, new Color(sc[i], 0, 0, 0)); }
-        w.Root.AddChild(new MultiMeshInstance3D { Multimesh = smm, MaterialOverride = Mat(w, Shaders.Needle), Name = "Straw", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        var strawMi = new MultiMeshInstance3D { Multimesh = smm, MaterialOverride = Mat(w, Shaders.Needle), Name = "Straw" };
+        w.Root.AddChild(strawMi);
+        w.Scatter.Add((strawMi, Scatter.Straw));
+        w.ApplyQuality();
     }
 
     // ---------------------------------------------------------------- minimap
@@ -878,12 +960,13 @@ public static class WorldBuilder
         int res = 200;
         var img = Image.CreateEmpty(res, res, false, Image.Format.Rgba8);
         var hf = w.HF;
+        var sun = ToSun; // the minimap is lit by the same sun as the yard
         for (int y = 0; y < res; y++)
             for (int x = 0; x < res; x++)
             {
                 float wx = (x + 0.5f) / res * S, wz = (y + 0.5f) / res * S;
                 var n = hf.Normal(wx, wz);
-                float shade = Mathf.Clamp(0.75f + (n.X * -0.6f + n.Z * -0.4f) * 2.5f, 0.45f, 1.2f);
+                float shade = Mathf.Clamp(0.75f + (n.X * sun.X + n.Z * sun.Z) * 2.5f, 0.45f, 1.2f);
                 Color c = new Color(0.42f, 0.33f, 0.24f);
                 if (hf.Bilinear(hf.Leaf, wx, wz) > 0.5f) c = new Color(0.45f, 0.38f, 0.15f);
                 float m = hf.Bilinear(hf.Mound, wx, wz);

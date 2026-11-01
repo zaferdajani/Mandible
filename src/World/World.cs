@@ -44,6 +44,8 @@ public sealed class Nest
     public float Radius;
 }
 
+public enum Scatter { Grass, Pebbles, Straw }
+
 public sealed class World
 {
     public Heightfield HF;
@@ -61,8 +63,21 @@ public sealed class World
     public readonly List<ShaderMaterial> FowMaterials = new();
     public Node3D Root;
     public Image MinimapBase;
-    public Texture2D NoiseA, NoiseB, NormalA, NormalB;
+    public Texture2D NoiseA, NoiseB, NormalA, NormalB, NormalC;
     public ShaderMaterial TerrainMaterial;
+    public readonly List<ShaderMaterial> TerrainMaterials = new(); // the yard and the skirt around it
+    public readonly List<(MultiMeshInstance3D node, Scatter kind)> Scatter = new();
+
+    /// Rendering-only knobs that follow the graphics tier: soil detail and which ground litter casts shadows.
+    public void ApplyQuality()
+    {
+        foreach (var m in TerrainMaterials) m.SetShaderParameter("detail", Settings.TerrainDetail);
+        foreach (var (node, kind) in Scatter)
+        {
+            bool on = kind switch { Mandible.Scatter.Grass => Settings.GrassShadows, Mandible.Scatter.Pebbles => Settings.PebbleShadows, _ => Settings.StrawShadows };
+            node.CastShadow = on ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+    }
 
     // coarse bucket grid for obstacle queries
     const float Bucket = 16f;

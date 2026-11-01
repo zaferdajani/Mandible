@@ -160,6 +160,7 @@ public sealed class AntRenderer
                 _live[team, t] = new Batch(root, mesh, mat, true, $"Ants{team}_{t}");
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
             }
+        ApplyQuality();
         // translucent wings for every flyer, beating in their own batch
         var wingShader = Shaders.Get(Shaders.Wing);
         foreach (var (team, type) in new[] { (0, AntType.Flyer), (1, AntType.Flyer), (0, AntType.Marshal), (1, AntType.Marshal), (Config.Wild, AntType.Wasp) })
@@ -194,6 +195,22 @@ public sealed class AntRenderer
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
+    }
+
+    /// Low tier: the rank and file cast no shadows (hundreds of them, each a few pixels); heroes, the queens and
+    /// the wild bugs always do, since they are what the eye follows.
+    public void ApplyQuality()
+    {
+        for (int team = 0; team < 3; team++)
+            for (int t = 0; t < 13; t++)
+            {
+                if (_live[team, t] == null) continue;
+                var type = (AntType)t;
+                bool small = team != Config.Wild && !Config.IsHero(type) && type != AntType.Queen;
+                var cast = !small || Settings.SmallAntShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
+                _live[team, t].Node.CastShadow = cast;
+                _dead[team, t].Node.CastShadow = cast;
+            }
     }
 
     internal static ShaderMaterial AntMat(Shader s, int team, AntType type, bool dead)

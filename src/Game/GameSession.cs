@@ -119,50 +119,97 @@ public partial class GameSession : Node3D
         }
     }
 
+    Environment _env;
+
+    /// One sun, one sky. The ProceduralSkyMaterial draws its sun disc where the DirectionalLight3D points, the
+    /// ambient and reflections come from that sky, and the sun is the only light in the scene: every shadow in
+    /// the yard falls the same way. The key light is strong and warm and the sky fill cool and modest, so the
+    /// lit and shadowed sides of an ant differ the way they do outdoors at mid-morning.
     void BuildLighting()
     {
-        var env = new Environment
+        _env = new Environment
         {
             BackgroundMode = Environment.BGMode.Sky,
             Sky = new Sky
             {
                 SkyMaterial = new ProceduralSkyMaterial
                 {
-                    SkyTopColor = new Color(0.33f, 0.52f, 0.78f), SkyHorizonColor = new Color(0.78f, 0.80f, 0.78f),
-                    GroundHorizonColor = new Color(0.55f, 0.48f, 0.38f), GroundBottomColor = new Color(0.2f, 0.16f, 0.12f),
-                    SunAngleMax = 30, SunCurve = 0.12f,
+                    SkyTopColor = new Color(0.30f, 0.50f, 0.80f), SkyHorizonColor = new Color(0.76f, 0.80f, 0.82f),
+                    GroundHorizonColor = new Color(0.52f, 0.46f, 0.37f), GroundBottomColor = new Color(0.2f, 0.16f, 0.12f),
+                    SunAngleMax = 30, SunCurve = 0.12f, SkyEnergyMultiplier = 1.0f,
                 },
             },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightSkyContribution = 0.8f,
-            AmbientLightEnergy = 0.5f,
+            AmbientLightSkyContribution = 1.0f,
+            AmbientLightEnergy = 0.42f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Aces,
-            TonemapExposure = 1.1f,
+            TonemapExposure = 1.05f,
             TonemapWhite = 6f,
-            SsaoEnabled = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") == null, SsaoRadius = 1.4f, SsaoIntensity = 2.6f, SsaoPower = 1.6f, SsaoDetail = 0.8f,
-            SsilEnabled = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") == null, SsilRadius = 6f, SsilIntensity = 0.5f,
-            GlowEnabled = true, GlowIntensity = 0.45f, GlowBloom = 0.04f, GlowHdrThreshold = 1.1f,
-            FogEnabled = true, FogLightColor = new Color(0.74f, 0.76f, 0.72f), FogDensity = 0.0012f, FogAerialPerspective = 0.25f, FogSkyAffect = 0.3f,
-            AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.06f, AdjustmentBrightness = 1.0f,
+            SsaoRadius = 1.2f, SsaoIntensity = 2.2f, SsaoPower = 1.5f, SsaoDetail = 0.8f,
+            SsilRadius = 5f, SsilIntensity = 0.45f,
+            GlowIntensity = 0.4f, GlowBloom = 0.03f, GlowHdrThreshold = 1.15f,
+            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0011f, FogAerialPerspective = 0.3f, FogSkyAffect = 0.3f,
+            // Ultra: a breath of dust in the air that the sun shafts through; set up once, switched by the tier
+            VolumetricFogDensity = 0.004f, VolumetricFogAlbedo = new Color(0.95f, 0.9f, 0.82f), VolumetricFogEmission = new Color(0.2f, 0.17f, 0.12f), VolumetricFogEmissionEnergy = 0.02f,
+            VolumetricFogAnisotropy = 0.55f, VolumetricFogLength = 180f, VolumetricFogDetailSpread = 1.6f, VolumetricFogAmbientInject = 0.15f, VolumetricFogSkyAffect = 0.2f,
+            AdjustmentEnabled = true, AdjustmentSaturation = 1.1f, AdjustmentContrast = 1.07f, AdjustmentBrightness = 1.0f,
         };
-        // quality presets: phones and tablets drop the screen-space effects and use cheaper shadows
-        var q = Settings.Gfx;
-        env.SsaoEnabled &= q == Settings.Quality.High;
-        env.SsilEnabled &= q == Settings.Quality.High;
-        env.GlowEnabled = q != Settings.Quality.Low;
-        GetViewport().Msaa3D = q == Settings.Quality.High ? Viewport.Msaa.Msaa2X : Viewport.Msaa.Disabled;
-        GetViewport().ScreenSpaceAA = q == Settings.Quality.Low ? Viewport.ScreenSpaceAAEnum.Disabled : Viewport.ScreenSpaceAAEnum.Fxaa;
-        AddChild(new WorldEnvironment { Environment = env });
+        AddChild(new WorldEnvironment { Environment = _env });
         _sun = new DirectionalLight3D
         {
-            LightColor = new Color(1f, 0.92f, 0.8f), LightEnergy = 1.5f, ShadowEnabled = true,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits, DirectionalShadowMaxDistance = 240,
-            LightAngularDistance = 1.0f, ShadowBias = 0.05f, ShadowNormalBias = 2.2f, ShadowBlur = 1.2f,
+            LightColor = new Color(1f, 0.94f, 0.84f), LightEnergy = 1.85f, ShadowEnabled = true,
+            DirectionalShadowBlendSplits = true, DirectionalShadowFadeStart = 0.85f, DirectionalShadowPancakeSize = 10f,
+            ShadowBias = 0.03f, ShadowNormalBias = 1.6f, ShadowOpacity = 1f,
         };
         _sun.RotationDegrees = SunAngles;
-        if (Settings.Gfx != Settings.Quality.High) { _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 150; }
         AddChild(_sun);
+        ApplyQuality();
+    }
+
+    /// Puts the current graphics tier into effect, on a running battle too: screen-space effects, anti-aliasing,
+    /// the sun's shadow maps, the soil shader's detail and which small things cast shadows.
+    public void ApplyQuality()
+    {
+        bool noSs = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") != null; // tests on machines without the effects
+        var q = Settings.Gfx;
+        _env.SsaoEnabled = Settings.Ssao && !noSs;
+        _env.SsilEnabled = Settings.Ssil && !noSs;
+        _env.GlowEnabled = Settings.Glow;
+        _env.VolumetricFogEnabled = Settings.Haze && !noSs;
+        var vp = GetViewport();
+        vp.Msaa3D = q switch { Settings.Quality.Ultra => Viewport.Msaa.Msaa4X, Settings.Quality.High => Viewport.Msaa.Msaa2X, _ => Viewport.Msaa.Disabled };
+        vp.ScreenSpaceAA = q is Settings.Quality.Medium or Settings.Quality.High ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
+        // shadows: how far out the sun's maps reach, how many splits share them, and how soft the edge is
+        switch (q)
+        {
+            case Settings.Quality.Low:
+                _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 110;
+                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f;
+                RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
+                break;
+            case Settings.Quality.Medium:
+                _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 150;
+                _sun.LightAngularDistance = 0.5f; _sun.ShadowBlur = 1.0f;
+                RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftLow);
+                break;
+            case Settings.Quality.High:
+                _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits; _sun.DirectionalShadowMaxDistance = 200;
+                _sun.LightAngularDistance = 0.8f; _sun.ShadowBlur = 1.1f;
+                RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftMedium);
+                break;
+            default:
+                _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits; _sun.DirectionalShadowMaxDistance = 260;
+                _sun.LightAngularDistance = 1.2f; _sun.ShadowBlur = 1.6f;
+                RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftHigh);
+                break;
+        }
+        World?.ApplyQuality();
+        Ants?.ApplyQuality();
     }
 
     // ------------------------------------------------------------- api for UI/input

@@ -23,7 +23,7 @@ public partial class AntPortrait : SubViewportContainer
         MouseFilter = MouseFilterEnum.Ignore;
         _vp = new SubViewport
         {
-            OwnWorld3D = true, Msaa3D = Viewport.Msaa.Msaa4X,
+            OwnWorld3D = true, Msaa3D = Viewport.Msaa.Msaa2X, // fixed, whatever the tier: a portrait never needs the main view's buffers
             RenderTargetUpdateMode = SubViewport.UpdateMode.WhenVisible,
         };
         AddChild(_vp);

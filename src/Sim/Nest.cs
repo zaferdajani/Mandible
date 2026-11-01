@@ -79,10 +79,12 @@ public sealed partial class Sim
         ChamberKind.Forge => "Mandible Forge", ChamberKind.Armory => "Chitin Armory", ChamberKind.Wings => "Wing Chamber", _ => "Silk Cutters",
     };
 
-    /// Each kind of room has its natural depth (brood shallow and warm, the queen deepest).
+    /// Each kind of room has its natural depth (brood shallowest and warm, the queen a little deeper). The nest
+    /// spreads out sideways from the shaft rather than down, so from above every room and gallery shows at once.
+    /// Rendering only: the sim walks the underground as a flat layer.
     public static float DepthOf(ChamberKind k) => k switch
     {
-        ChamberKind.Royal => 11f, ChamberKind.Brood => 3.5f, ChamberKind.Storage => 7f, ChamberKind.Wings => 5f, ChamberKind.Silk => 6f, _ => 8.5f,
+        ChamberKind.Royal => 4.6f, ChamberKind.Brood => 2.4f, ChamberKind.Storage => 3.2f, ChamberKind.Wings => 3.2f, ChamberKind.Silk => 3.6f, _ => 4.0f,
     };
 
     static float RadiusOf(ChamberKind k) => k switch { ChamberKind.Royal => 2.2f, ChamberKind.Storage => 1.7f, _ => 1.5f };

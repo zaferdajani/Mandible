@@ -177,7 +177,70 @@ public static class Capture
         await Wait(2.5f);
         await Shot("25_lane_hero");
         Log(s, "lane war");
+        await TierShots(app);
         _app.GetTree().Quit();
+    }
+
+    /// The hero picker's portraits on their own: --pickertest=<dir> (with --gfx=<tier> to try each tier).
+    public static async Task PickerTest(Main app, string dir)
+    {
+        _app = app; _dir = dir;
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        await Wait(4);
+        app.Menu.PickHero();
+        await Wait(3);
+        await Shot($"picker_{Settings.Gfx}");
+        app.StartBattle(Difficulty.Normal);
+        await Wait(4);
+        app.ShowMenu();
+        await Wait(2);
+        app.Menu.PickHero();
+        await Wait(3);
+        await Shot($"picker_{Settings.Gfx}_after_session");
+        app.GetTree().Quit();
+    }
+
+    /// The four graphics tiers at one spot (a fresh yard each, so the litter density shows too), then the live
+    /// switch in a running battle: Ultra down to Low without a restart.
+    static async Task TierShots(Main app)
+    {
+        var keep = Settings.Gfx;
+        GameSession s = null;
+        Vector2 nest = default;
+        async Task Stage(Settings.Quality q)
+        {
+            Settings.Gfx = q;
+            app.StartBattle(Difficulty.Normal);
+            await Wait(3);
+            s = app.Session;
+            nest = s.World.Nests[Config.Player].Pos;
+            var toC = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
+            var side = new Vector2(-toC.Y, toC.X);
+            // a line of soldiers, a major and the warlord, all facing the yard, so every tier shows the same shadows
+            for (int k = 0; k < 9; k++)
+            {
+                var type = k == 4 ? AntType.Warlord : k % 4 == 0 ? AntType.Major : AntType.Soldier;
+                int id = s.Sim.Spawn(Config.Player, type, nest + toC * 11 + side * (k - 4) * 1.6f, toC.Angle());
+                s.Sim.Ants[id].State = AntState.Hold;
+            }
+            s.Camera.JumpTo(nest + toC * 8, 34);
+            s.Camera.SetYaw(-toC.Angle() + Mathf.Pi * 0.5f, true);
+            await Wait(2.5f);
+        }
+        foreach (Settings.Quality q in System.Enum.GetValues<Settings.Quality>())
+        {
+            await Stage(q);
+            await Shot($"tier_{(int)q}_{q}");
+            await Wait(1.5f);
+            GD.Print($"[perf] tier {q}: fps={Engine.GetFramesPerSecond()} msaa={s.GetViewport().Msaa3D} detail={Settings.TerrainDetail}");
+        }
+        // the same session, switched live
+        Settings.Gfx = Settings.Quality.Low;
+        s.ApplyQuality();
+        await Wait(1.5f);
+        await Shot("tier_live_switch_to_Low");
+        GD.Print($"[selftest] live graphics switch Ultra -> Low: msaa={s.GetViewport().Msaa3D} {(s.GetViewport().Msaa3D == Viewport.Msaa.Disabled ? "PASS" : "FAIL")}");
+        Settings.Gfx = keep;
     }
 
     /// Drives real input events through Godot: box-select, right-click move, hotkeys.
