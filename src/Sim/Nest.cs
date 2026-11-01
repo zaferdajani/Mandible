@@ -28,7 +28,7 @@ public sealed partial class Sim
 {
     public const float MaxTunnel = 12f;           // a new room must lie within this of a node it can be dug from
     public const float NestReachMax = 42f;        // how far from the entrance the network may grow
-    public const float RoomSpacing = 3.6f;        // rooms never overlap
+    public const float RoomSpacing = 8f;          // leave soil between the enlarged visible chamber floors
     public const int MaxDiggers = 4;              // per chamber
     public const float FoundingWork = 150f;       // worker-seconds to dig the shaft and royal chamber
     public const float BroodWork = 90f, StorageWork = 80f, TunnelWorkPerUnit = 5f;
@@ -96,21 +96,30 @@ public sealed partial class Sim
         var away = (nest - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
         float baseAngle = away.AngleD();
         int index = ChamberCount(team, k, false);
-        float ang, r;
-        switch (k)
+        if (index == 0)
         {
-            case ChamberKind.Royal: ang = baseAngle; r = 7f; break;
-            case ChamberKind.Brood: ang = baseAngle + (index % 2 == 0 ? 1 : -1) * (1.25f + 0.55f * (index / 2)); r = 5.5f + 0.9f * (index / 2); break;
-            case ChamberKind.Storage: ang = baseAngle + DMath.Pi + (index % 2 == 0 ? 0.45f : -0.45f) * (1 + index / 2); r = 6.5f + 1.2f * (index / 2); break;
-            case ChamberKind.Forge: ang = baseAngle + 2.45f; r = 8.5f; break;
-            case ChamberKind.Armory: ang = baseAngle - 2.45f; r = 8.5f; break;
-            case ChamberKind.Wings: ang = baseAngle + 0.7f; r = 9.5f; break;
-            default: ang = baseAngle - 0.7f; r = 9.5f; break;
+            var offset = k switch
+            {
+                ChamberKind.Royal => new Vector2(0, 8), ChamberKind.Brood => new Vector2(11, 8),
+                ChamberKind.Storage => new Vector2(-4, -9), ChamberKind.Forge => new Vector2(7, -9),
+                ChamberKind.Armory => new Vector2(12, 0), ChamberKind.Wings => new Vector2(-11, -2),
+                _ => new Vector2(-10, 7),
+            };
+            var spot = nest + offset * (team == 0 ? 1 : -1);
+            if (PlaceCheck(team, spot) == DigResult.Ok) return spot;
         }
-        var p = nest + MathX.Dir(ang) * r;
-        // slide out of the way of rooms already there
-        for (int tries = 0; tries < 12 && !Clear(team, p); tries++) p += MathX.Dir(ang + 1.7f * tries) * 2.5f;
-        return p;
+        // A bounded search keeps every automatic placement connected and separated.
+        // The old short random walk could stop inside a neighbouring enlarged room.
+        float startAngle = baseAngle + (int)k * 0.45f + index * 0.55f;
+        for (float r = RoomSpacing + 1; r <= NestReachMax; r += 2)
+        {
+            for (int step = 0; step < 64; step++)
+            {
+                var p = nest + MathX.Dir(startAngle + step * DMath.Tau / 64) * r;
+                if (PlaceCheck(team, p) == DigResult.Ok) return p;
+            }
+        }
+        return nest; // a full network is rejected by PlaceCheck without spending food
     }
 
     bool Clear(int team, Vector2 p)
@@ -202,11 +211,13 @@ public sealed partial class Sim
     /// May a room of this kind be dug at all (food, counts, founding)? Position rules are in PlaceCheck.
     public DigResult CanDig(int team, ChamberKind k)
     {
+        if (Mission != null && (team != 0 || k is not (ChamberKind.Brood or ChamberKind.Storage))) return DigResult.Busy;
+        if (Mission != null && k == ChamberKind.Storage && ChamberCount(team, ChamberKind.Brood, true) == 0) return DigResult.Busy;
         var c = Col[team];
         if (!c.Alive) return DigResult.Dead;
         if (Mode == GameMode.Lanes) return DigResult.Busy;
         if (!c.Founded) return DigResult.NotFounded;
-        if (k == ChamberKind.Brood && c.PopCap + Config.ChamberPop * (1 + CountDigging(team, k)) > Config.MaxPopCap + Config.ChamberPop) return DigResult.TooMany;
+        if (k == ChamberKind.Brood && c.PopCap + Config.ChamberPop * CountDigging(team, k) >= Config.MaxPopCap) return DigResult.TooMany;
         if (k == ChamberKind.Storage && ChamberCount(team, k, false) >= MaxStorages) return DigResult.TooMany;
         if (k is not (ChamberKind.Brood or ChamberKind.Storage))
         {
@@ -247,6 +258,7 @@ public sealed partial class Sim
     /// Orders a new brood chamber or store at p: pays the food and opens the dig; workers are sent on the next tick.
     public DigResult Dig(int team, ChamberKind k, Vector2 p)
     {
+        if (k is not (ChamberKind.Brood or ChamberKind.Storage)) return DigResult.Busy;
         var r = CanDig(team, k);
         if (r != DigResult.Ok) return r;
         r = PlaceCheck(team, p);
@@ -311,8 +323,11 @@ public sealed partial class Sim
         if (ch.Kind == ChamberKind.Royal && !c.Founded)
         {
             c.Founded = true;
-            if (ChamberCount(c.Team, ChamberKind.Brood, false) == 0) AddChamber(c.Team, ChamberKind.Brood, BroodWork, true);
-            if (ChamberCount(c.Team, ChamberKind.Storage, false) == 0) AddChamber(c.Team, ChamberKind.Storage, StorageWork, true);
+            if (Mission == null)
+            {
+                if (ChamberCount(c.Team, ChamberKind.Brood, false) == 0) AddChamber(c.Team, ChamberKind.Brood, BroodWork, true);
+                if (ChamberCount(c.Team, ChamberKind.Storage, false) == 0) AddChamber(c.Team, ChamberKind.Storage, StorageWork, true);
+            }
             Events.Add(new SimEvent { Kind = EvKind.NestFounded, Pos = W.Nests[c.Team].Pos, Team = c.Team });
         }
         else if (!wasBuilt) Events.Add(new SimEvent { Kind = EvKind.ChamberDone, Pos = W.Nests[c.Team].Pos, Team = c.Team, Chamber = ch.Kind });
@@ -515,6 +530,7 @@ public sealed partial class Sim
     Vector2 QueenWalk(ref Ant a)
     {
         var c = Col[a.Team];
+        if (Mission != null && a.Team == 0 && !c.Founded) return ExpeditionQueenWalk(ref a);
         if (!c.Founded) return Vector2.Zero;
         var royal = ChamberPos(a.Team, Royal(a.Team));
         if (a.Layer == 0)

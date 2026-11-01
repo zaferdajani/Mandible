@@ -5,7 +5,7 @@ namespace Mandible;
 
 /// A connected horizontal excavation beneath a translucent soil roof. Room contents sit on the same
 /// floor as their galleries; the simulation retains its own graph and depths. Everything here is rendering only.
-public sealed class NestInterior
+public sealed partial class NestInterior
 {
     readonly GameSession _g;
     readonly Node3D _root;
@@ -66,6 +66,9 @@ public sealed class NestInterior
         _root.AddChild(n);
         _nest[team] = n;
         var earth = Soil(gy, 0.66f, 0.28f, 0.45f, false);
+        // The soil roof is a cutaway presentation. Its physical shadow map cannot
+        // light the exposed underground floor: the bank shader supplies that shading.
+        earth.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", "cull_disabled, shadows_disabled"));
         earth.SetShaderParameter("cavity_surface", true);
         _excavation[team] = new MeshInstance3D
         {
@@ -255,8 +258,8 @@ public sealed class NestInterior
 
     // prop materials, shared
     static StandardMaterial3D _mEgg, _mLarva, _mCocoon, _mSeed, _mDrop, _mGrit, _mQuartz, _mThread, _mHusk, _mJelly;
-    static StandardMaterial3D MEgg => _mEgg ??= new() { AlbedoColor = new Color(0.97f, 0.95f, 0.88f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.6f };
-    static StandardMaterial3D MLarva => _mLarva ??= new() { AlbedoColor = new Color(0.95f, 0.88f, 0.72f), Roughness = 0.5f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.8f };
+    static StandardMaterial3D MEgg => _mEgg ??= new() { AlbedoColor = new Color(0.82f, 0.73f, 0.57f), Roughness = 0.28f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.18f };
+    static StandardMaterial3D MLarva => _mLarva ??= new() { AlbedoColor = new Color(0.8f, 0.68f, 0.48f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.25f };
     static StandardMaterial3D MCocoon => _mCocoon ??= new() { AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
     static StandardMaterial3D MSeed => _mSeed ??= new() { AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
     static StandardMaterial3D MDrop => _mDrop ??= new() { AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
@@ -264,7 +267,7 @@ public sealed class NestInterior
     static StandardMaterial3D MQuartz => _mQuartz ??= new() { AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
     static StandardMaterial3D MThread => _mThread ??= new() { AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
     static StandardMaterial3D MHusk => _mHusk ??= new() { AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
-    static StandardMaterial3D MJelly => _mJelly ??= new() { AlbedoColor = new Color(0.95f, 0.7f, 0.22f), Roughness = 0.05f, EmissionEnabled = true, Emission = new Color(0.3f, 0.18f, 0.03f) };
+    static StandardMaterial3D MJelly => _mJelly ??= new() { AlbedoColor = new Color(0.69f, 0.37f, 0.055f), Roughness = 0.12f, ClearcoatEnabled = true };
 
     static (float w, float h, float d) RoomSize(NestChamber ch) => NestGeometry.RoomSize(ch);
 
@@ -324,70 +327,7 @@ public sealed class NestInterior
         foreach (var c in room.Contents.GetChildren()) c.QueueFree();
         if (count == 0) return;
         float dens = Settings.Gfx switch { Settings.Quality.Low => 0.5f, Settings.Quality.Medium => 0.8f, Settings.Quality.High => 1f, _ => 1.3f };
-        int N(float n) => Mathf.Max(1, Mathf.RoundToInt(n * dens));
-        var rng = new Rng((uint)(team * 131 + ch.Id * 17 + 5));
-        var (w, h, d) = RoomSize(ch);
-        var node = room.Contents;
-        // a spot on the floor, biased toward the far half of the room (the near half is where the ants come in)
-        Vector3 Floor(float spread = 0.42f, float lift = 0f) { var o = rng.InDisk(1f); return new Vector3(o.X * w * spread, lift, o.Y * d * spread); }
-        Basis Yaw(float s = 1f) => new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * Basis.FromScale(Vector3.One * s);
-        // a spot on the room's wall or ceiling, for things that cling
-        Vector3 Wall(float minY)
-        {
-            var o = rng.InDisk(1f);
-            var u = new Vector3(o.X, rng.R(minY, 1f), o.Y).Normalized();
-            return new Vector3(u.X * w * 0.9f, h * 0.45f + u.Y * h * 0.9f, u.Z * d * 0.9f);
-        }
-        switch (ch.Kind)
-        {
-            case ChamberKind.Brood:
-                // eggs in a heap, larvae beside them, cocoons along the wall
-                Scatter(node, Egg(), MEgg, N(count), _ => new Transform3D(Yaw(rng.R(0.85f, 1.15f)), Floor(0.3f, 0.13f)));
-                Scatter(node, Larva(), MLarva, N(count * 0.4f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.2f)), Floor(0.4f, 0.1f)));
-                Scatter(node, Cocoon(), MCocoon, N(count * 0.3f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.1f)), Floor(0.46f, 0.13f)));
-                break;
-            case ChamberKind.Storage:
-                // seeds heaped on the floor, berry pulp beside them, honeydew drops glistening in the walls
-                Scatter(node, Seed(), MSeed, N(count), _ => new Transform3D(Yaw(rng.R(0.9f, 1.3f)), Floor(0.4f, 0.09f)));
-                if (fill > 0.35f) Scatter(node, Pulp(), FoodMat(1), 1, _ => new Transform3D(Yaw(1.3f), Floor(0.35f)));
-                Scatter(node, Drop(), MDrop, N(3 + fill * 7), _ => new Transform3D(Yaw(rng.R(0.8f, 1.2f)), Wall(0.15f)));
-                break;
-            case ChamberKind.Royal:
-                // the queen rests on a bed of eggs; royal jelly glows beside her
-                Scatter(node, Egg(), MEgg, N(count), _ => new Transform3D(Yaw(rng.R(0.85f, 1.15f)), Floor(0.34f, 0.13f)));
-                Scatter(node, Larva(), MLarva, N(count * 0.25f), _ => new Transform3D(Yaw(), Floor(0.42f, 0.1f)));
-                Scatter(node, Drop(), MJelly, N(2 + 2 * ch.Tier), _ => new Transform3D(Yaw(rng.R(1.1f, 1.5f)), Floor(0.44f, 0.2f)));
-                break;
-            case ChamberKind.Forge:
-                // a heap of dark grit, a few quartz grains glinting in it
-                Scatter(node, Grit(), MGrit, N(28 + 10 * ch.Tier), _ => { var o = rng.InDisk(1f) * rng.F(); return new Transform3D(Yaw(rng.R(0.8f, 1.5f)), new Vector3(o.X * w * 0.3f, 0.07f + (1 - o.Length()) * 0.28f, o.Y * d * 0.3f)); });
-                Scatter(node, Grit(), MQuartz, N(3 + ch.Tier), _ => new Transform3D(Yaw(rng.R(0.9f, 1.3f)), Floor(0.3f, 0.2f)));
-                break;
-            case ChamberKind.Armory:
-                // shed exoskeletons sorted along the walls, pale and hollow
-                Scatter(node, Husk(), MHusk, N(count), _ =>
-                {
-                    bool over = rng.F() < 0.4f;
-                    var b = Yaw(rng.R(0.8f, 1.05f)) * new Basis(Vector3.Forward, over ? Mathf.Pi : rng.R(-0.5f, 0.5f));
-                    return new Transform3D(b, Floor(0.46f, over ? 0.3f : 0.02f));
-                });
-                break;
-            case ChamberKind.Wings:
-                // wings hung from the ceiling to dry, in pairs
-                Scatter(node, AntMesh.Wings(AntType.Flyer), new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) }, N(count), _ => new Transform3D(Yaw(1.4f) * new Basis(Vector3.Right, Mathf.Pi / 2), Wall(0.55f) + Vector3.Down * 0.25f));
-                break;
-            default:
-                // silk cutters: threads strung across the room, cocoons waiting to be sheared
-                Scatter(node, Thread(), MThread, N(count * 2), _ =>
-                {
-                    var a = Wall(-0.1f); var b = Wall(-0.1f);
-                    var mid = (a + b) * 0.5f; var ax = b - a; float len = ax.Length();
-                    if (len < 0.1f) return new Transform3D(Basis.Identity, mid);
-                    return new Transform3D(Basis.LookingAt(ax / len, Mathf.Abs(ax.Normalized().Y) > 0.98f ? Vector3.Right : Vector3.Up) * Basis.FromScale(new Vector3(1, 1, len)), mid);
-                });
-                Scatter(node, Cocoon(), MCocoon, N(count * 0.8f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.2f)), Floor(0.42f, 0.13f)));
-                break;
-        }
+        FillIdentity(room, dens);
     }
 
     static readonly Dictionary<int, ShaderMaterial> _food = new();
@@ -441,7 +381,7 @@ public sealed class NestInterior
                     string name = Sim.ChamberName(ch.Kind);
                     room.Label.Text = ch.Digging ? $"{name}  {ch.Progress * 100:0}%  ({ch.Diggers} digging)" : name;
                     room.Label.Modulate = ch.Digging ? new Color(1f, 0.75f, 0.35f) : new Color(1f, 0.88f, 0.6f, 0.95f);
-                    room.Label.Visible = mine && nestView && col.Founded && (_g.Input?.SelectedRoom == ch.Id || ch.Digging); // while founding, the status over the entrance says it all
+                    room.Label.Visible = _g.Hud?.CommandHud == null && mine && nestView && col.Founded && (_g.Input?.SelectedRoom == ch.Id || ch.Digging);
                 }
             }
             if (full)

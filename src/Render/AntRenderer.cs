@@ -284,6 +284,7 @@ public sealed class AntRenderer
             if (a.Team != Local.Me && !VisibleToPlayer(a.Pos)) continue;
             var st = Config.Of(a.Type);
             st.Size = a.Size;
+            if (a.Type == AntType.Queen && a.Layer > 0) st.Size *= 0.65f;
             bool flies = Config.Flies(a.Type);
             // blend between the last two simulation ticks so motion is smooth at any frame rate
             var ip = a.PrevPos.DistanceSquaredTo(a.Pos) > 36 ? a.Pos : a.PrevPos.Lerp(a.Pos, alpha);

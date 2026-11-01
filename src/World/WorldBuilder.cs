@@ -5,7 +5,7 @@ using Godot;
 namespace Mandible;
 
 /// Generates a 180°-symmetric backyard battlefield at ant scale.
-public static class WorldBuilder
+public static partial class WorldBuilder
 {
     const float S = Config.MapSize;
     static readonly Vector2 Center = new(S * 0.5f, S * 0.5f);
@@ -13,22 +13,27 @@ public static class WorldBuilder
 
     /// `horizontal`: the colonies face each other across the yard (left and right) instead of corner to corner.
     /// Lane War uses it so the lanes run along a phone held sideways.
-    public static World Build(Node3D parent, uint seed, bool horizontal = false)
+    public static World Build(Node3D parent, uint seed, bool horizontal = false, bool firstNest = false)
     {
-        var w = new World { Root = new Node3D { Name = "World" } };
+        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest };
         parent.AddChild(w.Root);
         var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
         var deco = new Rng(seed ^ 0x5EEDu);      // decoration only: leaves, twigs, grass, litter
         var hf = w.HF = new Heightfield(S, 1f);
 
         BuildTextures(w);
-        var home = horizontal ? new Vector2(46, S * 0.5f) : NestA;
+        var home = firstNest ? Expedition.Clearing : horizontal ? new Vector2(46, S * 0.5f) : NestA;
         BaseHeights(hf, seed, home);
 
         w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = home, Radius = 9 };
         w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(home), Radius = 13 };
         // rocks are placed before the soil settles so the ground can sag around them (the rock itself sits on the sagged soil)
         var rocks = PlaceRocks(w, rng);
+        if (firstNest)
+        {
+            rocks.RemoveAll(r => Expedition.Contains(r.P, r.R + 3));
+            w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3));
+        }
         RockDips(hf, rocks);
         Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
@@ -37,6 +42,7 @@ public static class WorldBuilder
         w.IndexObstacles();
         var leaves = PlaceLeaves(w, deco, rocks);
         var twigs = PlaceTwigs(w, deco);
+        if (firstNest) { w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3)); w.IndexObstacles(); }
         var ao = ComputeAO(hf, rocks);
 
         BuildTerrainMesh(w, ao);
@@ -46,8 +52,8 @@ public static class WorldBuilder
         foreach (var r in rocks) BuildRock(w, r);
         BuildGrass(w, deco);
         BuildNestDressing(w, deco);
-        PlaceFood(w, rng);
-        PlaceCamps(w, rng);
+        if (firstNest) BuildExpedition(w, deco);
+        else { PlaceFood(w, rng); PlaceCamps(w, rng); }
         w.IndexObstacles();
         BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);

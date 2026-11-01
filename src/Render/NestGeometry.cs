@@ -19,10 +19,10 @@ public sealed class NestGeometry
 
     public static (float w, float h, float d) RoomSize(NestChamber ch) => ch.Kind switch
     {
-        ChamberKind.Royal => (3.4f + 0.15f * ch.Tier, 1.7f + 0.12f * ch.Tier, 2.8f + 0.12f * ch.Tier),
-        ChamberKind.Brood => (2.35f, 1.2f, 2f),
-        ChamberKind.Storage => (2.5f, 1.4f, 2.1f),
-        _ => (2.15f + 0.12f * ch.Tier, 1.3f, 1.9f + 0.10f * ch.Tier),
+        ChamberKind.Royal => (4.6f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.5f + 0.10f * ch.Tier),
+        ChamberKind.Brood => (4.7f, 1.2f, 3.7f),
+        ChamberKind.Storage => (4.0f, 1.4f, 3.2f),
+        _ => (3.6f + 0.10f * ch.Tier, 1.3f, 2.9f + 0.08f * ch.Tier),
     };
 
     public bool Refresh(IReadOnlyList<NestChamber> chambers)
@@ -54,9 +54,9 @@ public sealed class NestGeometry
             int k = i * Stride;
             var a = new Vector2(Network[k], Network[k + 1]);
             var b = new Vector2(Network[k + 2], Network[k + 3]);
-            var r = new Vector2(Network[k + 4] + 2f, Network[k + 5] + 2f);
-            _min = _min.Min(a - Vector2.One * 2).Min(b - r);
-            _max = _max.Max(a + Vector2.One * 2).Max(b + r);
+            var r = new Vector2(Network[k + 4] + 5f, Network[k + 5] + 5f);
+            _min = _min.Min(a - Vector2.One * 5).Min(b - r);
+            _max = _max.Max(a + Vector2.One * 5).Max(b + r);
         }
         Revision++;
         return true;
@@ -110,7 +110,7 @@ public sealed class NestGeometry
             for (int x = 0; x < nx; x++)
             {
                 int a = z * (nx + 1) + x, b = a + 1, c = a + nx + 2, d = a + nx + 1;
-                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > 1.4f) continue;
+                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > 4f) continue;
                 mesh.Quad(a, b, c, d);
             }
         mesh.RecalcNormals();

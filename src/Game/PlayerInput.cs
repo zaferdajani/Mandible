@@ -68,17 +68,19 @@ public partial class PlayerInput : Node
             _cueNode = Ring(2.4f);
         }
         var mp = GetViewport().GetMousePosition();
-        if (!Cam.ScreenToGround(mp, out var g)) { _cue.Visible = false; _cueNode.Visible = false; return; }
-        var p = new Vector2(g.X, g.Z);
+        if (!Game.Interior.ScreenToColony(mp, out var p)) { _cue.Visible = false; _cueNode.Visible = false; return; }
         bool ok = Sim.PlaceCheck(Local.Me, p) == Sim.DigResult.Ok;
         _cue.Visible = true;
-        _cue.Position = Game.World.HF.Point(p, 0.12f);
+        var home = Game.World.Nests[Local.Me].Pos;
+        float floor = Game.World.HF.Sample(home.X, home.Y) - NestGeometry.Depth + 0.12f;
+        _cue.Position = new Vector3(p.X, floor, p.Y);
         ((ShaderMaterial)_cue.MaterialOverride).SetShaderParameter("color", ok ? new Color(0.55f, 1f, 0.45f, 0.95f) : new Color(1f, 0.35f, 0.25f, 0.95f));
         int node = Sim.DigNodeFor(Local.Me, p);
         _cueNode.Visible = node != int.MinValue;
         if (node != int.MinValue)
         {
-            _cueNode.Position = Game.World.HF.Point(Sim.NodePos(Local.Me, node), 0.12f);
+            var from = Sim.NodePos(Local.Me, node);
+            _cueNode.Position = new Vector3(from.X, floor, from.Y);
             ((ShaderMaterial)_cueNode.MaterialOverride).SetShaderParameter("color", new Color(1f, 0.85f, 0.4f, 0.9f));
         }
     }
@@ -166,9 +168,13 @@ public partial class PlayerInput : Node
             {
                 if (_mode != Mode.None)
                 {
+                    if (_mode == Mode.Dig)
+                    {
+                        if (Game.Interior.ScreenToColony(mb.Position, out var at)) PlaceAt(at);
+                        return;
+                    }
                     if (Cam.ScreenToGround(mb.Position, out var g))
                     {
-                        if (_mode == Mode.Dig) { PlaceAt(new Vector2(g.X, g.Z)); return; }
                         if (_mode == Mode.AttackMove) Issue(new Vector2(g.X, g.Z), mb.Position, true);
                         else Issue(new Vector2(g.X, g.Z), mb.Position, false);
                     }

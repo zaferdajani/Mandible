@@ -411,7 +411,7 @@ float glass_at(vec3 p, vec3 cam) {
 
     /// The terrain while the Glass Earth is open: the same shader, drawn in the transparent pass so the soil over
     /// the galleries thins to a translucent roof instead of vanishing. Swapped in only while the earth is opened.
-    public static string TerrainRoof => _roof ??= Terrain.Replace("//ROOF_MODE", "render_mode depth_draw_never;").Replace("//ROOF_ALPHA", "ALPHA = 1.0 - glass * 0.64;");
+    public static string TerrainRoof => _roof ??= Terrain.Replace("//ROOF_MODE", "render_mode depth_draw_never;").Replace("//ROOF_ALPHA", "ALPHA = 1.0 - glass * 0.92;");
     static string _roof;
 
     public static readonly string Terrain = @"
@@ -957,6 +957,11 @@ varying vec3 wnrm;
 void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    // Excavation UV.x stores a distance and UV.y is constant; it is not a valid
+    // tangent parameterization. Supply a stable basis for the triplanar normal map.
+    vec3 tangent_axis = abs(NORMAL.x) > 0.95 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    TANGENT = normalize(tangent_axis - NORMAL * dot(NORMAL, tangent_axis));
+    BINORMAL = normalize(cross(NORMAL, TANGENT));
 }
 float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;

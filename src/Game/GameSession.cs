@@ -25,9 +25,8 @@ public partial class GameSession : Node3D
     public IOrders Orders;
     public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
     public GameMode Mode = GameMode.Colony;
-    public bool TutorialMode;     // a guided first battle
-    AIController _tutorialFoe;
-    public Tutorial Tutor;
+    public bool TutorialMode;     // Episode 1: the guided colony founding
+    public bool Skirmish;
     public AntType[] Heroes = { AntType.Warlord, AntType.Warlord }; // Lane War hero of each team
     public bool Lanes => Mode == GameMode.Lanes;
     public bool Fortified;        // Colony War option: mound guardians stand at every nest entrance
@@ -49,9 +48,10 @@ public partial class GameSession : Node3D
     public override void _Ready()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        World = WorldBuilder.Build(this, Seed, Lanes);
+        World = WorldBuilder.Build(this, Seed, Lanes, TutorialMode);
         long tWorld = sw.ElapsedMilliseconds;
         Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
+        if (Skirmish) Sim.BeginSkirmish();
         Orders = Net != null ? Net : new DirectOrders(Sim);
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
@@ -69,6 +69,7 @@ public partial class GameSession : Node3D
         var outward = (home - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
         Camera.JumpTo(home - outward * 14, 62);
         Camera.SetYaw(Mathf.Atan2(outward.X, outward.Y), true);
+        if (TutorialMode) { Camera.JumpTo(Expedition.Start + new Vector2(12, 0), 44); Camera.SetYaw(0, true); }
 
         _pherPx = new byte[Sim.Ph.N * Sim.Ph.N];
         _pherImg = Image.CreateFromData(Sim.Ph.N, Sim.Ph.N, false, Image.Format.R8, _pherPx);
@@ -93,11 +94,8 @@ public partial class GameSession : Node3D
             }
             else
             {
-                // the tutorial's opponent stays peaceful until the lessons are done
-                var foe = new AIController(Sim, Local.Foe, Diff) { Passive = TutorialMode };
-                if (Net == null) _ai.Add(foe);
+                if (Net == null && !TutorialMode) _ai.Add(new AIController(Sim, Local.Foe, Diff));
                 if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
-                _tutorialFoe = foe;
             }
             if (Net != null)
             {
@@ -109,14 +107,18 @@ public partial class GameSession : Node3D
             AddChild(Hud);
             if (TutorialMode)
             {
-                Sim.Col[Local.Me].Food = 600; // enough to try every step
-                var foe = _tutorialFoe;
-                Tutor = new Tutorial { Game = this, OnFinished = () => foe.Passive = false };
-                Hud.AddPanel(Tutor);
-                Hud.Alert("Tutorial: follow the card on the left", UiTheme.Gold);
+                Hud.AddPanel(new ExpeditionGuide { Game = this });
+                Hud.Alert("Episode 1: select the attackers with F2", UiTheme.Gold);
             }
             else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
             else Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
+            if (Skirmish)
+            {
+                SetNestView(true); Camera.NestView = true;
+                Camera.SetYaw(Local.Me == 0 ? 0 : Mathf.Pi, true);
+                Camera.JumpTo(home + new Vector2(0, Local.Me == 0 ? 5 : -5), 39);
+                Input.SelectedRoom = Sim.ChamberOf(Local.Me, ChamberKind.Brood).Id;
+            }
         }
     }
 
@@ -227,7 +229,7 @@ public partial class GameSession : Node3D
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.Locked:
-                Hud.Alert(LockReason(k), new Color(1, 0.5f, 0.35f));
+                Hud.Alert(Sim.Mission != null ? "Episode 1: build an incubator, then hatch workers and soldiers. Other castes unlock in later episodes." : Sim.ChamberCount(Local.Me, ChamberKind.Brood, true) == 0 ? "Build a brood chamber (incubator) before hatching ants." : LockReason(k), new Color(1, 0.5f, 0.35f));
                 Audio.Ui("ui_error");
                 break;
         }
@@ -261,7 +263,7 @@ public partial class GameSession : Node3D
             case ResearchResult.Busy: Hud.Alert("The colony is already researching (right-click it to cancel)", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Maxed: Hud.Alert("Already fully developed", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Locked:
-                Hud.Alert($"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
+                Hud.Alert(Sim.Mission != null ? "This chamber is introduced in a later episode. Try it now in Skirmish." : $"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
                 Audio.Ui("ui_error");
                 break;
         }
@@ -546,6 +548,8 @@ public partial class GameSession : Node3D
     public void Restart()
     {
         if (Net != null) QuitToMenu();
+        else if (TutorialMode) App.StartTutorial();
+        else if (Skirmish) App.StartSkirmish(Local.Me);
         else if (Lanes) App.StartLanes(Diff, Local.Me, Heroes[Local.Me]);
         else App.StartBattle(Diff, Local.Me);
     }

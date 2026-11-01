@@ -545,81 +545,9 @@ public static class Capture
         app.GetTree().Quit();
     }
 
-    /// Plays through the tutorial with real game actions, checking each step completes; also shoots the
-    /// map edge from the furthest zoom and the labelled chambers.
-    public static async Task TutorialTest(Main app, string dir)
-    {
-        _app = app;
-        _dir = dir;
-        DirAccess.MakeDirRecursiveAbsolute(dir);
-        await Wait(4);
-        app.StartTutorial();
-        await Wait(3);
-        var s = app.Session;
-        var tut = s.Tutor;
-        await Shot("tut_01_start");
-        var nest = s.World.Nests[0].Pos;
-        async Task Expect(int step, string what)
-        {
-            await Wait(2.4f); // a finished step shows its tick for a moment before moving on
-            GD.Print($"[selftest] tutorial {what}: now on step {tut.StepIndex + 1} '{tut.StepTitle}'  {(tut.StepIndex >= step ? "PASS" : "FAIL")}");
-        }
-        async Task FastUntil(System.Func<bool> done, float maxReal)
-        {
-            s.FastForward = 7;
-            for (float t = 0; t < maxReal && !done(); t += 0.5f) await Wait(0.5f);
-            s.FastForward = 0;
-        }
-        s.Camera.JumpTo(nest + new Vector2(40, -40), 90);
-        await Expect(1, "camera moved");
-        await FastUntil(() => s.Sim.Col[0].Founded, 20);
-        await Expect(2, "nest founded");
-        s.Input.ToggleBuild(); // the hole click and N both come here
-        await Wait(1.5f);
-        await Shot("tut_02_glass");
-        s.Input.ToggleBuild();
-        await Expect(3, "looked inside with N");
-        s.TryEnqueue(ProdKind.Worker);
-        await Expect(4, "worker queued");
-        s.TryEnqueue(ProdKind.Soldier);
-        await FastUntil(() => s.Sim.Col[0].Count[(int)AntType.Soldier] >= 6, 30);
-        await Expect(5, "squad hatched");
-        s.Input.SelectArmy();
-        await Expect(6, "soldiers selected");
-        s.Input.CommandAt(nest + new Vector2(20, -20), false);
-        await Expect(7, "move ordered");
-        s.Input.SaveGroup(1);
-        s.Input.ClearSelection();
-        s.Input.RecallGroup(1);
-        await Wait(0.5f);
-        await Shot("tut_03_groups");
-        await Expect(8, "group saved and recalled");
-        s.ToggleTrails(); s.ToggleTrails();
-        await Expect(9, "trails toggled");
-        foreach (var f in s.World.Food) if (f.Alive && f.Kind == FoodKind.Seed) { s.Input.ClearSelection(); s.Input.InspectFood = f; break; }
-        await Expect(10, "food inspected");
-        s.TryDigAt(ChamberKind.Brood, s.Sim.DefaultSpot(0, ChamberKind.Brood)); // placed where the player would click
-        await Expect(11, "brood chamber ordered");
-        s.TryResearch(Upgrade.Queen);
-        await Expect(12, "queen research");
-        await Shot("tut_03_lair_step");
-        // let research finish and look at the labelled chambers by the nest
-        s.FastForward = 7;
-        await Wait(8);
-        s.FastForward = 0;
-        s.Camera.JumpTo(nest + new Vector2(4, -4), 40);
-        await Wait(2);
-        await Shot("tut_04_chambers");
-        // the yard's edge from the furthest zoom
-        s.Fog.RevealAll = true;
-        s.Camera.JumpTo(new Vector2(20, 300), RtsCamera.MaxDist);
-        await Wait(2.5f);
-        await Shot("tut_05_edge_zoomed_out");
-        s.Camera.JumpTo(new Vector2(160, 10), 120);
-        await Wait(2);
-        await Shot("tut_06_edge_side");
-        app.GetTree().Quit();
-    }
+    /// Compatibility alias for the episode and command-interface capture. The complete
+    /// mission simulation is checked separately by --campaign-test.
+    public static Task TutorialTest(Main app, string dir) => ColonyValidation.Capture(app, dir);
 
     /// Headless raid probe: 20 black soldiers attack-move onto the red mound of a founded colony;
     /// prints where they are, what they are doing and the red queen's health every few seconds.
