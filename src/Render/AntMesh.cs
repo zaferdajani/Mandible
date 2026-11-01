@@ -46,7 +46,7 @@ public static class AntMesh
             // alate: bulky flight-muscle thorax, slender body
             AntType.Gunner => new Shape { Head = 1.1f, Mandible = 0.8f, Gaster = 1.4f, Thorax = 1.0f, Leg = 1.0f, Seg = 14 },
             AntType.Warlord => new Shape { Head = 1.75f, Mandible = 1.9f, Gaster = 1.1f, Thorax = 1.25f, Leg = 1.05f, Seg = 20 },
-            AntType.Matron => new Shape { Head = 1.2f, Mandible = 1.0f, Gaster = 1.65f, Thorax = 1.2f, Leg = 1.0f, Seg = 20 },
+            AntType.Matron => new Shape { Head = 1.2f, Mandible = 1.0f, Gaster = 1.85f, Thorax = 1.2f, Leg = 1.0f, Seg = 20 },
             AntType.Marshal => new Shape { Head = 1.25f, Mandible = 1.45f, Gaster = 1.0f, Thorax = 1.5f, Leg = 0.95f, Seg = 18 },
             AntType.Flyer => new Shape { Head = 1.05f, Mandible = 1.15f, Gaster = 0.95f, Thorax = 1.35f, Leg = 0.95f, Seg = 14 },
             AntType.Queen => new Shape { Head = 1.15f, Mandible = 1.0f, Gaster = 1.55f, Thorax = 1.45f, Leg = 0.95f, Seg = 18 },
@@ -85,13 +85,16 @@ public static class AntMesh
         // the head is a face: a brow that hoods the eyes, sockets the eyes sit in, a flattened clypeus below
         var eyeDir = new Vector3(0.74f, 0.3f, 0.6f).Normalized();
         int hv = k.V.Count, hi = k.I.Count;
-        k.Ellipsoid(headC, Scaled(0.085f * h, 0.072f * h, 0.085f * h, -0.15f), seg + 4, seg, Part(Head, 0, 0), Vector2.Zero, u =>
+        k.Ellipsoid(headC, Scaled(0.09f * h, 0.074f * h, 0.085f * h, -0.15f), seg + 4, seg, Part(Head, 0, 0), Vector2.Zero, u =>
         {
             float d = Mathf.Max(u.Dot(eyeDir), u.Dot(new Vector3(-eyeDir.X, eyeDir.Y, eyeDir.Z)));
             float socket = 0.11f * Mathf.Exp(-Mathf.Pow((1 - d) * 11f, 2));
             float brow = 0.05f * Mathf.SmoothStep(0.2f, 0.5f, u.Y) * Mathf.SmoothStep(0.0f, 0.45f, u.Z) * (1 - Mathf.SmoothStep(0.75f, 0.95f, u.Y));
             float clypeus = -0.045f * Mathf.SmoothStep(0.45f, 0.85f, u.Z) * Mathf.SmoothStep(-0.1f, -0.5f, u.Y);
-            return 1 + brow - socket + clypeus;
+            // the heart shape of a real ant head: broad across the upper cheeks, a notch at the back of the crown
+            float cheeks = 0.05f * Mathf.SmoothStep(0.45f, 0.9f, Mathf.Abs(u.X)) * Mathf.SmoothStep(-0.4f, 0.3f, u.Y) * (1 - Mathf.SmoothStep(0.3f, 0.8f, u.Z));
+            float notch = -0.06f * Mathf.SmoothStep(0.3f, 0.9f, -u.Z) * Mathf.SmoothStep(0.2f, 0.7f, u.Y) * (1 - Mathf.SmoothStep(0.05f, 0.35f, Mathf.Abs(u.X)));
+            return 1 + brow - socket + clypeus + cheeks + notch;
         });
         k.SmoothNormals(hv, hi);
         // Eyes: big enough to read at RTS zoom, converged forward so both catch the camera from the three-quarter view
@@ -108,6 +111,13 @@ public static class AntMesh
             var tip = mid + new Vector3(-side * 0.045f * m, -0.004f, 0.035f * m);
             var piv = new Vector2(hinge.X, hinge.Z);
             k.Loft(new[] { hinge, mid, tip }, new[] { 0.018f * m, 0.012f * m, 0.0025f }, new[] { 0.3f, 0.7f, 1f }, id, 0, far ? 4 : 6, piv, far ? 2 : 3);
+            // every caste's jaws carry teeth along the cutting edge (the Warlord adds its own bigger set)
+            if (!far && type != AntType.Warlord)
+                for (int tooth = 1; tooth <= 2; tooth++)
+                {
+                    var at = mid.Lerp(tip, tooth * 0.3f);
+                    k.Tube(at, at + new Vector3(-side * 0.014f * m, -0.003f, 0.006f), 0.005f * m, 0.001f, 4, Part(id, 0.8f), Part(id, 0.95f), piv);
+                }
         }
 
         // Antennae: elbowed scape + funiculus with a club
@@ -155,7 +165,18 @@ public static class AntMesh
                 k.Loft(new[] { hip, femur, knee, tibia, ankle, tarsus, foot },
                     new[] { 0.021f * t, 0.016f, 0.019f, 0.011f, 0.012f, 0.0065f, 0.0025f },
                     new[] { 0f, 0.25f, 0.45f, 0.7f, 0.9f, 0.95f, 1f }, id, 0, sides, piv, sub);
+                // a pair of pretarsal claws, splayed, hooking the ground
+                if (!far)
+                    for (int cl = -1; cl <= 1; cl += 2)
+                        k.Tube(foot, foot + new Vector3(side * 0.004f + cl * 0.006f, -0.012f, reach[i] * 0.05f + 0.01f), 0.0028f, 0.0006f, 3, Part(id, 1f), Part(id, 1f), piv);
             }
+        if (type == AntType.Queen && !far)
+        {
+            // the scars where her wings were shed: two dark pads either side of the flight thorax
+            for (int side = -1; side <= 1; side += 2)
+                k.Ellipsoid(new Vector3(side * 0.045f * t, bodyY + 0.055f * t, 0.065f), Scaled(0.03f, 0.012f, 0.045f, 0.2f), 10, 5, Part(Plate, 0, 0.5f), Vector2.Zero,
+                    u => u.Y < -0.1f ? 0.4f : 1f);
+        }
         if (Config.IsHero(type))
         {
             HeroRegalia(k, type, s, headC, bodyY, gz);
@@ -244,11 +265,18 @@ public static class AntMesh
                         float z = gz + (0.1f - 0.065f * i) * g;
                         k.Ellipsoid(new Vector3(side * 0.12f * g, bodyY + 0.025f * g, z), Scaled(0.016f, 0.016f, 0.016f, 0), 6, 4, Tag(Crest, 0, 1), Vector2.Zero);
                     }
-                // a collar frill behind the head, like a ruff of plate
-                k.Ellipsoid(new Vector3(0, bodyY + 0.035f, 0.125f), Scaled(0.115f, 0.02f, 0.045f, 0.35f), 16, 6, Tag(Plate, 0, 0.5f), Vector2.Zero,
+                // a radial ruff of gold points behind the head, like a sun collar, over a plate base
+                k.Ellipsoid(new Vector3(0, bodyY + 0.035f, 0.125f), Scaled(0.1f, 0.018f, 0.04f, 0.35f), 16, 6, Tag(Plate, 0, 0.5f), Vector2.Zero,
                     u => u.Y < -0.2f ? 0.3f : 1f);
+                for (int r = 0; r < 11; r++)
+                {
+                    float ang = Mathf.Pi * (0.08f + 0.84f * r / 10f); // a fan over the top half
+                    var dir = new Vector3(Mathf.Cos(ang), Mathf.Sin(ang) * 0.9f, -0.35f).Normalized();
+                    var root = new Vector3(0, bodyY + 0.035f, 0.125f) + dir * 0.045f;
+                    k.Tube(root, root + dir * 0.055f, 0.011f, 0.0015f, 4, Tag(Crest, 0.2f, 0.5f), Tag(Crest, 1f, 0.5f), Vector2.Zero);
+                }
                 // a single tall crown spike
-                k.Tube(headC + new Vector3(0, 0.06f * h, -0.01f), headC + new Vector3(0, 0.14f * h, -0.06f), 0.012f, 0.002f, 5, Tag(Crest, 0.2f, 0), Tag(Crest, 1f, 0), Vector2.Zero);
+                k.Tube(headC + new Vector3(0, 0.06f * h, -0.01f), headC + new Vector3(0, 0.2f * h, -0.07f), 0.014f, 0.002f, 6, Tag(Crest, 0.2f, 0), Tag(Crest, 1f, 0), Vector2.Zero);
                 break;
             }
             case AntType.Marshal:
@@ -260,10 +288,10 @@ public static class AntMesh
                     var tip = root + new Vector3(i * 0.03f, 0.1f - Mathf.Abs(i) * 0.02f, -0.13f);
                     k.Tube(root, tip, 0.011f, 0.002f, 5, Tag(Crest, 0.2f, 0.5f), Tag(Crest, 1f, 0.5f), Vector2.Zero);
                 }
-                // epaulettes over the wing roots
+                // gold epaulettes capping the wing roots, ribbed like a drum
                 for (int side = -1; side <= 1; side += 2)
-                    k.Ellipsoid(new Vector3(side * 0.055f, bodyY + 0.07f, 0.075f), Scaled(0.035f, 0.02f, 0.045f, 0), 10, 5, Tag(Plate, 0, 0.5f), Vector2.Zero,
-                        u => u.Y < -0.1f ? 0.4f : 1f);
+                    k.Ellipsoid(new Vector3(side * 0.055f, bodyY + 0.07f, 0.075f), Scaled(0.038f, 0.022f, 0.048f, 0), 12, 5, Tag(Crest, 0.6f, 0.5f), Vector2.Zero,
+                        u => (u.Y < -0.1f ? 0.4f : 1f) * (1 + 0.04f * Mathf.Sin(u.Z * 18f)));
                 // twin streamers trailing from the gaster tip, like a marshal's pennants
                 for (int side = -1; side <= 1; side += 2)
                 {
@@ -411,6 +439,12 @@ public static class AntMesh
         var ceph = new Vector3(0, y + 0.02f, 0.06f);
         Neck[AntType.Spider] = ceph + new Vector3(0, 0, 0.06f);
         k.Ellipsoid(ceph, Scaled(0.12f, 0.085f, 0.14f, 0.05f), 18, 10, Tag(Head), Vector2.Zero);
+        for (int i = 0; i < 18; i++)
+        {
+            float u = hairRng.R(-1f, 1f), v = hairRng.R(0.2f, 1f), zz = hairRng.R(-0.8f, 0.6f);
+            var at = ceph + new Vector3(u * 0.11f, v * 0.08f, zz * 0.13f);
+            k.Tube(at, at + new Vector3(u * 0.02f, 0.035f, -0.01f), 0.0035f, 0.0008f, 3, Tag(Head), Tag(Head), Vector2.Zero);
+        }
         // eyes: two big forward eyes, a row of four small ones below, and the two large rear eyes on top
         k.Ellipsoid(ceph + new Vector3(0.035f, 0.06f, 0.11f), Scaled(0.03f, 0.03f, 0.03f, 0), 8, 6, Tag(Eye), Vector2.Zero);
         k.Ellipsoid(ceph + new Vector3(-0.035f, 0.06f, 0.11f), Scaled(0.03f, 0.03f, 0.03f, 0), 8, 6, Tag(Eye), Vector2.Zero);
@@ -450,11 +484,13 @@ public static class AntMesh
                 k.Ellipsoid(knee, Scaled(0.032f, 0.032f, 0.032f, 0), 8, 6, Tag(id, 0.45f), piv);
                 k.Tube(knee, ankle, 0.028f, 0.02f, 8, Tag(id, 0.45f), Tag(id, 0.85f), piv, false);
                 k.Tube(ankle, foot, 0.018f, 0.007f, 6, Tag(id, 0.85f), Tag(id, 1f), piv);
-                // bristles along the leg
+                // bristles along the leg, femur and tibia both
                 for (int sp = 1; sp <= 4; sp++)
                 {
                     var at = knee.Lerp(ankle, sp / 5f);
                     k.Tube(at, at + outDir * 0.02f + new Vector3(0, 0.035f, 0), 0.005f, 0.001f, 3, Tag(id, 0.6f), Tag(id, 0.65f), piv);
+                    var fa = hip.Lerp(knee, sp / 5f);
+                    k.Tube(fa, fa + outDir * 0.015f + new Vector3(0, 0.04f, 0), 0.005f, 0.001f, 3, Tag(id, 0.2f), Tag(id, 0.3f), piv);
                 }
             }
         k.BakeAO(new (Vector3, float)[] { (new Vector3(0, y + 0.04f, -0.24f), 0.18f), (ceph, 0.12f) });

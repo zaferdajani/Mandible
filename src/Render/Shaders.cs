@@ -259,8 +259,22 @@ void fragment() {
         c *= 1.0 - (1.0 - smoothstep(0.006, 0.014, abs(v_local.x))) * 0.6;
     }
     if (pattern == 4 && part == 12.0) c = head_color * (0.85 + 0.3 * smoothstep(0.0, 0.05, v_local.y - 0.16)); // polished crown
+    if (pattern == 0 && part == 0.0) {
+        // the thorax is three plates: seams across the back where pronotum, mesonotum and propodeum meet
+        float seam = exp(-pow((v_local.z + 0.03) * 70.0, 2.0)) + exp(-pow((v_local.z - 0.05) * 70.0, 2.0));
+        seam *= smoothstep(0.12, 0.17, v_local.y);
+        c *= 1.0 - 0.4 * seam;
+        vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+        NORMAL = normalize(NORMAL - fwd * seam * 0.3);
+    }
     if (part >= 1.0 && part <= 8.0) {
         c = leg_color; rough = 0.62; BACKLIGHT = leg_color * 0.6;
+        if (hero > 0.0 && part <= 6.0) {
+            // a hero's legs are ringed in its metal at the knee and the ankle
+            float ring = step(0.42, v_w) * step(v_w, 0.48) + step(0.87, v_w) * step(v_w, 0.92);
+            c = mix(c, accent, ring);
+            metal = ring * 0.9; rough = mix(rough, 0.35, ring);
+        }
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
         if (pattern == 1 || pattern == 4) c *= 0.8 + 0.2 * step(0.85, v_w);
         if (part >= 7.0) BACKLIGHT += vec3(0.2, 0.1, 0.02) * v_w; // light through the antenna tips
@@ -303,6 +317,8 @@ void fragment() {
         rough += (hair - 0.5) * 0.08;
     }
     if (part != 11.0) {
+        // the fine grain of chitin, a speckle that reads in close-up and vanishes at distance
+        if (pattern == 0 && part != 14.0 && part != 15.0) c *= 0.9 + 0.2 * hash3(floor(v_local * 230.0));
         // no two ants quite alike
         c *= 0.94 + 0.12 * hash1(v_seed + 1.3);
         rough += (hash1(v_seed + 2.9) - 0.5) * 0.12;
@@ -311,7 +327,7 @@ void fragment() {
     if (pattern == 3 && part != 11.0 && part != 14.0) { rough = 0.48; cc = 0.25; }
     if (hero > 0.0 && part != 11.0 && part != 14.0 && part != 15.0) {
         // metal filigree in the colony's colour: bands on the abdomen, a crest line on the head, edged mandibles
-        float gband = part == 13.0 ? step(0.8, fract(v_local.z * 11.0 + 0.1)) : 0.0;
+        float gband = part == 13.0 ? step(0.74, fract(v_local.z * 11.0 + 0.1)) : 0.0;
         float crest = part == 12.0 ? smoothstep(0.02, 0.0, abs(v_local.x)) * step(0.17, v_local.y) : 0.0;
         float jaw = (part == 9.0 || part == 10.0) ? step(0.75, v_w) : 0.0;
         float g = max(max(gband, crest), jaw) * hero;
@@ -339,7 +355,7 @@ void fragment() {
     if (part == 13.0 && length(acid) > 0.0) {
         // translucent acid sac: smooth glossy green with a slow inner glow, gold bands still on top
         float pulse = 0.75 + 0.25 * sin(TIME * 2.2);
-        float bands = hero * step(0.8, fract(v_local.z * 11.0 + 0.1));
+        float bands = hero * step(0.74, fract(v_local.z * 11.0 + 0.1));
         ALBEDO = mix(acid * 0.6, accent, bands);
         EMISSION += acid * 0.22 * pulse * (1.0 - bands);
         CLEARCOAT = 0.5;
@@ -904,6 +920,89 @@ void fragment() {
     float ring = smoothstep(rr - 0.18, rr - 0.05, r) * (1.0 - smoothstep(rr - 0.05, rr, r));
     ALBEDO = color.rgb;
     ALPHA = ring * (1.0 - t) * color.a;
+}
+";
+    /// Every dug surface of a nest: the pit walls, the shaft, the galleries, the room walls and floors. The soil
+    /// is read by world height below the entrance (`ground_y`): a dark organic topsoil with roots and leaf
+    /// litter, an ochre loam set with pebbles, and a pale loose sandy subsoil underneath, the boundaries wavy.
+    /// The walls carry the scallops of the diggers' jaws (`grooves`), the floors are trodden smooth. There is no
+    /// lamp below ground: the one sun comes in through the opened earth, and the sand around the mouth throws a
+    /// little warm light into the hole (`bounce`). CULL is replaced per use (back faces for the cavities, which
+    /// are seen from inside, both for the bowl and the mouth).
+    public static readonly string Earth = @"
+shader_type spatial;
+render_mode cull_CULL;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform sampler2D normal_c : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform float ground_y = 0.0;   // world height of the nest entrance
+uniform float shade = 1.0;      // how much of the sun this surface can see
+uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
+uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
+uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roots and grooves, 2 finer grain
+varying vec3 wpos;
+varying vec3 wnrm;
+void vertex() {
+    wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+}
+float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
+    return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
+}
+void fragment() {
+    vec3 an = abs(wnrm);
+    an /= an.x + an.y + an.z;
+    float depth = ground_y - wpos.y;
+    float g = tri(noise_b, wpos, an, 0.35, 0.0);     // broad mottling
+    float g2 = tri(noise_b, wpos, an, 1.6, 0.4);     // grain
+    float g3 = detail > 0 ? tri(noise_b, wpos, an, 0.9, 0.7) : 0.5;  // pebbles
+    // the three layers, their boundaries wandering with the mottling
+    vec3 top = vec3(0.34, 0.22, 0.13);
+    vec3 loam = vec3(0.74, 0.50, 0.29);
+    vec3 sand = vec3(0.90, 0.78, 0.58);
+    float t1 = smoothstep(0.6, 1.5, depth + (g - 0.5) * 1.0);
+    float t2 = smoothstep(3.1, 4.3, depth + (g - 0.5) * 1.4);
+    vec3 col = mix(mix(top, loam, t1), sand, t2);
+    if (detail > 0) {
+        // roots and leaf fibres in the topsoil, thinning out through the loam
+        float fib = smoothstep(0.76, 0.82, tri(noise_b, wpos * vec3(1.0, 0.25, 1.0), an, 2.4, 0.13));
+        col = mix(col, vec3(0.80, 0.68, 0.48), fib * (1.0 - t2) * (1.0 - 0.6 * t1) * 0.8);
+        // pebbles set in the loam, fine gravel in the sand
+        float peb = smoothstep(0.78, 0.86, g3);
+        vec3 stone = mix(vec3(0.66, 0.62, 0.55), vec3(0.52, 0.46, 0.40), g2);
+        col = mix(col, stone, peb * (t1 * (1.0 - t2) * 0.95 + t2 * 0.45));
+        float grav = smoothstep(0.7, 0.8, g2) * t2;
+        col = mix(col, vec3(0.70, 0.64, 0.54), grav * 0.5);
+    }
+    // the scallops left by the diggers' jaws: short arcs across the wall, catching the light along their rims
+    float scal = 0.5 + 0.5 * sin(dot(wpos, vec3(5.0, 19.0, 4.0)) + g * 6.0 + g2 * 2.0);
+    float claw = grooves * (1.0 - t2 * 0.5) * float(detail > 0);
+    col *= 1.0 - claw * 0.14 * scal;
+    col *= 0.78 + 0.44 * g2;
+    if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
+    ALBEDO = col * shade;
+    ROUGHNESS = 0.96 - t2 * 0.08;
+    SPECULAR = 0.2;
+    vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
+    NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
+    NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
+    EMISSION = col * vec3(0.62, 0.46, 0.30) * bounce * 0.55;
+}
+";
+
+    /// A shaft of sunlight falling into the opened earth: a cone of warm haze, strongest along its edges where
+    /// the eye looks through the most of it, fading toward the floor. Drawn only while the glass is up.
+    public const string Shaft = @"
+shader_type spatial;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
+uniform float strength = 0.0;
+uniform vec3 color : source_color = vec3(1.0, 0.86, 0.6);
+varying float v_along;
+void vertex() { v_along = UV.y; }
+void fragment() {
+    float edge = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 1.6);
+    float fall = (1.0 - v_along) * (1.0 - v_along);
+    ALBEDO = color * strength * fall * (0.05 + 0.22 * edge);
+    ALPHA = strength;
 }
 ";
 }
