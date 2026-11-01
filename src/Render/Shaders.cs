@@ -400,13 +400,11 @@ void fragment() {
     if (strength < 0.001) discard;
     float nd = net_dist(wpos, CAMERA_POSITION_WORLD);
     float inside = 1.0 - smoothstep(0.4, 0.8, nd);        // the terrain shader discards soil up to about here
-    float edge = smoothstep(0.05, 0.4, nd) * inside;      // the crumbling lip of the cut, a hand's width wide
-    float fres = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 2.5);
+    float edge = smoothstep(0.22, 0.42, nd) * inside;     // the crumbling lip of the cut, right at the edge
     // Not glass. Blending happens in linear light, so over the dark pit even a few percent reads as a grey slab after
-    // tonemapping: the opening itself stays clear and only the lip carries a thin skin of sunlit sand.
-    vec3 tint = mix(vec3(0.78, 0.62, 0.40), vec3(1.0, 0.9, 0.7), fres);
-    ALBEDO = tint;
-    ALPHA = strength * (0.012 * fres + 0.08 * edge) * inside;
+    // tonemapping: the opening itself is left completely clear and only the lip carries a thin skin of sunlit sand.
+    ALBEDO = vec3(0.78, 0.62, 0.40);
+    ALPHA = strength * 0.06 * edge;
 }
 ";
 
@@ -485,7 +483,7 @@ void fragment() {
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
     // the freshly cut soil at the opening's edge: darker and damper than the surface
-    col = mix(col, col * vec3(0.55, 0.46, 0.38), glass * 0.7);
+    col = mix(col, col * vec3(0.62, 0.50, 0.38), glass * 0.7);
     ALBEDO = col;
     ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
     SPECULAR = 0.3;
@@ -671,9 +669,9 @@ void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; v_c = INSTANCE_CU
 void fragment() {
     if (glass_at(wpos, CAMERA_POSITION_WORLD) > 0.55) discard; // pebbles do not hover over an opened gallery
     // weathered grit: warm greys and tans, never brighter than the sand they lie on
-    vec3 a = mix(vec3(0.19, 0.17, 0.15), vec3(0.33, 0.27, 0.20), v_c.x);
-    a = mix(a, vec3(0.42, 0.39, 0.34), v_c.y * 0.5);
-    a = mix(a, vec3(0.26, 0.15, 0.08), v_c.z);
+    vec3 a = mix(vec3(0.30, 0.23, 0.16), vec3(0.50, 0.41, 0.29), v_c.x);   // sand and ochre grit (the sun is strong: keep them under the sand's own albedo)
+    a = mix(a, vec3(0.64, 0.57, 0.46), v_c.y * 0.5);                      // pale quartz
+    a = mix(a, vec3(0.32, 0.20, 0.11), v_c.z);                            // rust-brown, never grey
     float n = texture(noise_b, wpos.xz * 2.5 + v_c.w * 9.0).r;
     a *= 0.72 + 0.42 * n;
     a *= mix(0.6, 1.0, smoothstep(-0.6, 0.6, v_n.y));
