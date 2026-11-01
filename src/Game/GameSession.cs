@@ -211,6 +211,7 @@ public partial class GameSession : Node3D
         }
         World?.ApplyQuality();
         Ants?.ApplyQuality();
+        Interior?.ApplyQuality();
     }
 
     // ------------------------------------------------------------- api for UI/input

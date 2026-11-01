@@ -956,9 +956,9 @@ void fragment() {
     float g2 = tri(noise_b, wpos, an, 1.6, 0.4);     // grain
     float g3 = detail > 0 ? tri(noise_b, wpos, an, 0.9, 0.7) : 0.5;  // pebbles
     // the three layers, their boundaries wandering with the mottling
-    vec3 top = vec3(0.34, 0.22, 0.13);
-    vec3 loam = vec3(0.74, 0.50, 0.29);
-    vec3 sand = vec3(0.90, 0.78, 0.58);
+    vec3 top = vec3(0.17, 0.105, 0.06);
+    vec3 loam = vec3(0.38, 0.25, 0.14);
+    vec3 sand = vec3(0.38, 0.31, 0.22);
     float t1 = smoothstep(0.6, 1.5, depth + (g - 0.5) * 1.0);
     float t2 = smoothstep(3.1, 4.3, depth + (g - 0.5) * 1.4);
     vec3 col = mix(mix(top, loam, t1), sand, t2);
@@ -977,7 +977,7 @@ void fragment() {
     float scal = 0.5 + 0.5 * sin(dot(wpos, vec3(5.0, 19.0, 4.0)) + g * 6.0 + g2 * 2.0);
     float claw = grooves * (1.0 - t2 * 0.5) * float(detail > 0);
     col *= 1.0 - claw * 0.14 * scal;
-    col *= 0.78 + 0.44 * g2;
+    col *= 0.72 + 0.44 * g2;
     if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
     ALBEDO = col * shade;
     ROUGHNESS = 0.96 - t2 * 0.08;
@@ -985,7 +985,7 @@ void fragment() {
     vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
     NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
-    EMISSION = col * vec3(0.62, 0.46, 0.30) * bounce * 0.55;
+    EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
 }
 ";
 
@@ -995,13 +995,13 @@ void fragment() {
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
 uniform float strength = 0.0;
-uniform vec3 color : source_color = vec3(1.0, 0.86, 0.6);
+uniform vec3 color : source_color = vec3(1.0, 0.74, 0.4);
 varying float v_along;
 void vertex() { v_along = UV.y; }
 void fragment() {
     float edge = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 1.6);
     float fall = (1.0 - v_along) * (1.0 - v_along);
-    ALBEDO = color * strength * fall * (0.05 + 0.22 * edge);
+    ALBEDO = color * strength * fall * (0.006 + 0.045 * edge);
     ALPHA = strength;
 }
 ";

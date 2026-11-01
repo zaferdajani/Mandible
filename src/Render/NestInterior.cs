@@ -3,9 +3,10 @@ using Godot;
 
 namespace Mandible;
 
-/// What lies under each mound: sloping galleries from the entrance to rooms at their own depths,
-/// the rooms' contents (eggs, stores, royal jelly, trophies), lights, and the status over the
-/// entrance while workers dig. Seen through the glass earth (N) or whenever the camera is low enough.
+/// What lies under each mound: sloping galleries from the entrance to rooms at their own depths, the rooms'
+/// contents (eggs and larvae, stores, royal jelly, grit, shed husks, hung wings, silk), the sunlight falling
+/// in, and the status over the entrance while workers dig. Seen through the glass earth (N) or whenever the
+/// camera is low enough. Everything here is rendering only.
 public sealed class NestInterior
 {
     readonly GameSession _g;
@@ -14,17 +15,25 @@ public sealed class NestInterior
     readonly Dictionary<(int team, int id), Room> _rooms = new();
     readonly Label3D[] _status = new Label3D[2];
     readonly MeshInstance3D[] _plug = new MeshInstance3D[2];
-    readonly StandardMaterial3D _wall, _floor, _earth;
+    readonly ShaderMaterial[] _wall = new ShaderMaterial[2], _cavity = new ShaderMaterial[2], _floor = new ShaderMaterial[2], _earth = new ShaderMaterial[2];
+    readonly List<ShaderMaterial> _soils = new(), _shafts = new();
+    readonly List<MeshInstance3D> _shaftNodes = new();
+    readonly List<MultiMeshInstance3D> _rootNodes = new();
     float _refresh;
+    int _tierStamp = -1;
+
+    /// The way the sun falls (world space): the shafts of light below ground follow it.
+    static readonly Vector3 LightDir = (Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward).Normalized();
 
     sealed class Room
     {
         public NestChamber Ch;
         public int Team;
         public Node3D Node, Contents;
-        public MeshInstance3D Shell, Floor, Tunnel;
+        public MeshInstance3D Shell, Floor, Tunnel, Shaft;
+        public MultiMeshInstance3D Roots;
         public Label3D Label;
-        public int ContentCount = -1, Tier;
+        public int ContentCount = -1, Tier, TierStamp = -1;
         public float ShownProgress = -1;
     }
 
@@ -33,30 +42,25 @@ public sealed class NestInterior
         _g = g;
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
-        // real earth, lit by the one sun that comes in through the opened ground: the cut face of the soil, the
-        // damp walls of the cavities and their trodden floors all carry the yard's own grain (the noise is grey,
-        // so the base colours are set brighter than they read)
-        var grain = g.World.NoiseB;
-        // every underground surface is the ground's own dry-soil colour in shades: floors as light as the surface,
-        // gallery walls darker, the deep earth darkest (the grey noise halves them, so the bases are doubled)
-        var soil = new Color(0.84f, 0.63f, 0.44f);
-        // the pit lies in the surface's own shadow for most of the day, so each surface carries a little warm bounce
-        // light (emission) the way sunlit sand throws light into a hole; the sun still shapes whatever it reaches
-        StandardMaterial3D Soil(float shade, float scale, BaseMaterial3D.CullModeEnum cull, float bounce, float rough = 1f) => new()
-        {
-            AlbedoColor = soil * shade, Roughness = rough, CullMode = cull, AlbedoTexture = grain, Uv1Triplanar = true, Uv1Scale = Vector3.One * scale,
-            EmissionEnabled = true, Emission = new Color(0.42f, 0.30f, 0.19f) * shade * bounce,
-        };
-        _wall = Soil(0.78f, 0.6f, BaseMaterial3D.CullModeEnum.Disabled, 0.6f);
-        _cavity = Soil(0.7f, 1.4f, BaseMaterial3D.CullModeEnum.Back, 0.9f); // galleries never see the sun: mostly bounce
-        _floor = Soil(0.98f, 1.8f, BaseMaterial3D.CullModeEnum.Back, 0.3f, 0.95f);
-        _earth = Soil(0.7f, 0.12f, BaseMaterial3D.CullModeEnum.Disabled, 0.7f); // the deep earth sees the least sun: the most bounce
         for (int team = 0; team < 2; team++) BuildNest(team);
+        ApplyQuality();
     }
 
-    readonly StandardMaterial3D _cavity;
-
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
+
+    /// One shared Earth shader per culling mode; a material per surface role, tuned by how much sun it sees.
+    ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back)
+    {
+        var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", back ? "cull_back" : "cull_disabled")) };
+        m.SetShaderParameter("noise_b", _g.World.NoiseB);
+        m.SetShaderParameter("normal_c", _g.World.NormalC);
+        m.SetShaderParameter("ground_y", gy);
+        m.SetShaderParameter("shade", shade);
+        m.SetShaderParameter("bounce", bounce);
+        m.SetShaderParameter("grooves", grooves);
+        _soils.Add(m);
+        return m;
+    }
 
     void BuildNest(int team)
     {
@@ -65,20 +69,20 @@ public sealed class NestInterior
         var n = new Node3D { Name = $"Nest{team}", Position = new Vector3(nest.X, gy, nest.Y) };
         _root.AddChild(n);
         _nest[team] = n;
-        // the dark earth that fills the view through the glass: a bowl of soil below everything
+        _earth[team] = Soil(gy, 0.8f, 0.6f, 0.6f, false);   // the pit walls: three layers of soil, mostly in shadow
+        _wall[team] = Soil(gy, 1.0f, 0.7f, 1.0f, false);    // the shaft mouth
+        _cavity[team] = Soil(gy, 0.95f, 0.9f, 1.0f, true);  // galleries and room walls, seen from inside
+        _floor[team] = Soil(gy, 0.6f, 0.3f, 0.0f, false);    // trodden floors (double-sided: the disc's winding must never cull it, or the bowl shows through)
+        // the earth that fills the view through the glass: a shallow bowl of soil below everything, its floor in the sun
         float r = Sim.NestReachMax + 12f;
-        // shallow, like the nest itself now spreads: its floor stays in the sun, so the opened ground reads as a dug pit
-        n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 7.5f, r), MaterialOverride = _earth, Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        n.AddChild(new MeshInstance3D { Mesh = RoughBowl(), Scale = new Vector3(r, 7.5f, r), MaterialOverride = _earth[team], Position = new Vector3(0, -0.4f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         // the ragged mouth of the shaft under the entrance (its inside faces show; the lip is uneven)
-        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = _wall, Position = new Vector3(0, 0, 0) });
+        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = _wall[team], Position = new Vector3(0, 0, 0) });
         // the plug of soil the founders dig away (sinks and shrinks with progress)
-        _plug[team] = new MeshInstance3D
-        {
-            Mesh = RoughLump(), Scale = new Vector3(1.25f, 0.3f, 1.25f),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.84f, 0.63f, 0.44f) * 0.9f, Roughness = 1, AlbedoTexture = _g.World.NoiseB, Uv1Triplanar = true, Uv1Scale = new Vector3(1.5f, 1.5f, 1.5f) },
-            Position = new Vector3(0, 0.25f, 0),
-        };
+        _plug[team] = new MeshInstance3D { Mesh = RoughLump(), Scale = new Vector3(1.25f, 0.3f, 1.25f), MaterialOverride = Soil(gy + 1.2f, 1.0f, 0.3f, 0.5f, false), Position = new Vector3(0, 0.25f, 0) };
         n.AddChild(_plug[team]);
+        // the sun falling down the shaft
+        n.AddChild(MakeShaft(team, new Vector3(0, 0.3f, 0), 0.9f, 1.8f, 6f));
         // status over the entrance
         _status[team] = new Label3D
         {
@@ -119,10 +123,48 @@ public sealed class NestInterior
         }
     }
 
+    /// A cone of sunlight from `top` along the sun's direction, `r0` wide at the top, `r1` at the bottom.
+    MeshInstance3D MakeShaft(int team, Vector3 top, float r0, float r1, float len, float gain = 1f)
+    {
+        var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Shaft) };
+        m.SetShaderParameter("strength", 0f);
+        m.SetShaderParameter("color", new Color(1f, 0.86f, 0.6f) * gain);
+        if (team == Local.Me) _shafts.Add(m); // the enemy's nest is never opened
+        var mi = new MeshInstance3D { Mesh = ShaftMesh(), MaterialOverride = m, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, SortingOffset = 40 };
+        PlaceShaft(mi, top, r0, r1, len);
+        _shaftNodes.Add(mi);
+        return mi;
+    }
+
+    static void PlaceShaft(MeshInstance3D mi, Vector3 top, float r0, float r1, float len)
+    {
+        var axis = LightDir;
+        var up = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.98f ? Vector3.Right : Vector3.Up;
+        // the unit shaft runs along +Y from y = 0 (top, radius 1) to y = 1 (bottom, radius 2)
+        mi.Basis = Basis.LookingAt(axis, up) * new Basis(Vector3.Right, Mathf.Pi / 2) * Basis.FromScale(new Vector3(r0, len, r0));
+        mi.Position = top;
+    }
+
     ShaderMaterial _glassMat;
 
-    /// How open the earth is (0..1), driven by the session's Glass Earth fade.
-    public void SetGlass(float strength) => _glassMat?.SetShaderParameter("strength", OS.GetEnvironment("MANDIBLE_NOPANE") != "" ? 0f : strength);
+    /// How open the earth is (0..1), driven by the session's Glass Earth fade. The sun shafts come with the glass.
+    public void SetGlass(float strength)
+    {
+        if (OS.GetEnvironment("MANDIBLE_NOPANE") != "") strength = 0;
+        _glassMat?.SetShaderParameter("strength", strength);
+        float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength : 0f;
+        foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
+    }
+
+    /// Rendering-only knobs that follow the graphics tier: soil detail, the light shafts, roots and prop counts.
+    public void ApplyQuality()
+    {
+        int d = Settings.TerrainDetail;
+        foreach (var m in _soils) m.SetShaderParameter("detail", d);
+        bool rich = Settings.Gfx >= Settings.Quality.Medium;
+        foreach (var r in _rootNodes) r.Visible = rich;
+        _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
+    }
 
     /// The tunnel network as the shaders see it: one capsule per gallery (parent node to room) and the room's own disc.
     /// The same packed array feeds the terrain cut and the pane, so both open exactly over the galleries.
@@ -165,23 +207,33 @@ public sealed class NestInterior
         return (_net, n);
     }
 
+    // ------------------------------------------------------------------ shared meshes
     // Ants do not dig with lathes: every opening is lumpy. Rough meshes are built once and shared.
     static readonly FastNoiseLite Lump = new() { Seed = 9, Frequency = 1.9f, NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth };
-    static ArrayMesh _roughRoom, _roughTube, _roughMouth, _roughFloor;
+    static ArrayMesh _roughRoom, _roughVault, _roughTube, _roughMouth, _roughFloor, _roughLump, _roughBowl, _shaft, _roots;
+    static ArrayMesh _egg, _larva, _cocoon, _seed, _drop, _grit, _thread, _husk, _pulp;
+
+    static float Lumpy(Vector3 u) => 1f + 0.16f * Lump.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.06f * Lump.GetNoise3D(u.X * 9 + 5, u.Y * 9, u.Z * 9);
 
     /// A unit ellipsoid cavity with uneven walls (scaled per room), seen from inside: the ceiling nearest the
     /// camera is culled away, so from above you look down onto the lit floor and the far wall of the hollow.
-    static ArrayMesh RoughRoom() => _roughRoom ??= Build(k =>
+    static ArrayMesh RoughRoom() => _roughRoom ??= Build(k => { k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero, Lumpy); InsideOut(k); }, false);
+
+    /// The royal chamber: a broad vault, flatter and wider than the round rooms, with a higher crown.
+    static ArrayMesh RoughVault() => _roughVault ??= Build(k =>
     {
-        k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero,
-            u => 1f + 0.16f * Lump.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.06f * Lump.GetNoise3D(u.X * 9 + 5, u.Y * 9, u.Z * 9));
+        k.Ellipsoid(Vector3.Zero, Basis.Identity, 32, 15, Colors.White, Vector2.Zero, u =>
+        {
+            float d = Lumpy(u);
+            // the ceiling rises in a dome, the floor flattens out
+            if (u.Y > 0) d *= 1f + 0.25f * u.Y * u.Y; else d *= 1f - 0.35f * u.Y * u.Y;
+            return d;
+        });
         InsideOut(k);
     }, false);
 
     /// The same lumpy ellipsoid, solid: the plug of soil the founders dig away.
-    static ArrayMesh _roughLump;
-    static ArrayMesh RoughLump() => _roughLump ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero,
-        u => 1f + 0.16f * Lump.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.06f * Lump.GetNoise3D(u.X * 9 + 5, u.Y * 9, u.Z * 9)));
+    static ArrayMesh RoughLump() => _roughLump ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.Identity, 26, 13, Colors.White, Vector2.Zero, Lumpy));
 
     /// Flips a closed mesh so its inside is what is drawn and lit.
     static void InsideOut(MeshKit k)
@@ -192,11 +244,7 @@ public sealed class NestInterior
     }
 
     /// A unit-length tube along +Y (radius 1) whose walls bulge and pinch like a dug gallery, drawn from inside.
-    static ArrayMesh RoughTube() => _roughTube ??= Build(k =>
-    {
-        TubeShell(k);
-        InsideOut(k);
-    }, false);
+    static ArrayMesh RoughTube() => _roughTube ??= Build(k => { TubeShell(k); InsideOut(k); }, false);
 
     static void TubeShell(MeshKit k)
     {
@@ -242,9 +290,8 @@ public sealed class NestInterior
             for (int s = 0; s < sides; s++) { int a = start + r * row + s; k.Quad(a, a + 1, a + row + 1, a + row); }
     });
 
-    /// The dark earth under a mound: a rough bowl from the rim (y = 0) down to y = -1, radius 1 at the rim
-    /// and narrowing with depth. Only below ground, so the sky never turns to soil.
-    static ArrayMesh _roughBowl;
+    /// The earth under a mound: a rough bowl from the rim (y = 0) down to y = -1, radius 1 at the rim and
+    /// narrowing with depth. Only below ground, so the sky never turns to soil.
     static ArrayMesh RoughBowl() => _roughBowl ??= Build(k =>
     {
         const int sides = 28, rings = 8;
@@ -265,7 +312,6 @@ public sealed class NestInterior
         int row = sides + 1;
         for (int r = 0; r < rings; r++)
             for (int s = 0; s < sides; s++) { int a = start + r * row + s; k.Quad(a, a + 1, a + row + 1, a + row); }
-        // the bottom
         int centre = k.Add(new Vector3(0, -1, 0), Vector3.Up, Colors.White, new Vector2(0.5f, 0.5f), Vector2.Zero);
         int last = start + rings * row;
         for (int s = 0; s < sides; s++) k.Tri(centre, last + s, last + s + 1);
@@ -287,6 +333,62 @@ public sealed class NestInterior
         for (int s = 0; s < sides; s++) k.Tri(centre, start + s + 1, start + s);
     });
 
+    /// A unit cone of light along +Y: radius 1 at y = 0 (UV.y 0), radius 2 at y = 1 (UV.y 1), open at both ends.
+    static ArrayMesh ShaftMesh() => _shaft ??= Build(k =>
+    {
+        const int sides = 20;
+        int start = k.V.Count;
+        for (int i = 0; i <= sides; i++)
+        {
+            float t = (float)i / sides * Mathf.Tau;
+            var dir = new Vector3(Mathf.Cos(t), 0, Mathf.Sin(t));
+            k.Add(dir, dir, Colors.White, new Vector2((float)i / sides, 0), Vector2.Zero);
+            k.Add(dir * 2f + Vector3.Up, dir, Colors.White, new Vector2((float)i / sides, 1), Vector2.Zero);
+        }
+        for (int i = 0; i < sides; i++) { int a = start + i * 2; k.Quad(a, a + 2, a + 3, a + 1); }
+    }, false);
+
+    /// A few root fibres crossing a gallery (unit radius, y about 0): the diggers tunnelled around them.
+    static ArrayMesh RootsMesh() => _roots ??= Build(k =>
+    {
+        var rng = new Rng(77);
+        var c = new Color(1, 1, 1);
+        for (int i = 0; i < 2; i++)
+        {
+            float a = rng.R(0, Mathf.Tau), y = rng.R(-0.2f, 0.45f);
+            var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            var p0 = -d * 0.95f + new Vector3(0, y, 0);
+            var p1 = d * 0.95f + new Vector3(0, y + rng.R(-0.2f, 0.2f), 0);
+            var mid = (p0 + p1) * 0.5f + new Vector3(0, rng.R(-0.15f, 0.1f), 0) + d.Cross(Vector3.Up) * rng.R(-0.2f, 0.2f);
+            k.Tube(p0, mid, 0.04f, 0.03f, 5, c, c, Vector2.Zero, false);
+            k.Tube(mid, p1, 0.03f, 0.022f, 5, c, c, Vector2.Zero, false);
+            // a rootlet branching off
+            k.Tube(mid, mid + new Vector3(-d.Z, -0.35f, d.X) * 0.5f, 0.02f, 0.008f, 4, c, c, Vector2.Zero);
+        }
+    });
+
+    // Props. Small shared meshes; every room scatters them in a MultiMesh of its own.
+    static ArrayMesh Egg() => _egg ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.11f, 0.15f, 0.11f)), 10, 6, Colors.White, Vector2.Zero));
+    static ArrayMesh Larva() => _larva ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.12f, 0.11f, 0.26f)), 12, 7, Colors.White, Vector2.Zero,
+        u => 1f + 0.08f * Mathf.Sin(u.Z * 14f) * (1 - u.Y * u.Y) - 0.1f * Mathf.Max(0, u.Z) * u.Y)); // segmented, curled a little
+    static ArrayMesh Cocoon() => _cocoon ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.15f, 0.14f, 0.3f)), 12, 7, Colors.White, Vector2.Zero,
+        u => 1f + 0.03f * Lump.GetNoise3D(u.X * 20, u.Y * 20, u.Z * 20)));
+    static ArrayMesh Seed() => _seed ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.14f, 0.1f, 0.24f)), 12, 7, new Color(1, 1, 1), Vector2.Zero, u => 1 - Mathf.Max(0, u.Z) * 0.3f));
+    static ArrayMesh Drop() => _drop ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.17f, 0.22f, 0.17f)), 12, 7, Colors.White, Vector2.Zero, u => 1f - 0.25f * Mathf.Max(0, u.Y) * u.Y));
+    static ArrayMesh Grit() => _grit ??= Build(k => k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(0.11f, 0.07f, 0.09f)), 8, 5, Colors.White, Vector2.Zero, u => 1 + 0.3f * Lump.GetNoise3D(u.X * 4, u.Y * 4, u.Z * 4)));
+    static ArrayMesh Pulp() => _pulp ??= Build(k =>
+    {
+        var rng = new Rng(31);
+        for (int i = 0; i < 9; i++)
+        {
+            var o = rng.InDisk(0.22f);
+            k.Ellipsoid(new Vector3(o.X, rng.R(0.08f, 0.3f), o.Y), Basis.FromScale(Vector3.One * rng.R(0.1f, 0.15f)), 10, 6, new Color(rng.R(0.7f, 1f), 0, 0, 1), Vector2.Zero);
+        }
+    });
+    static ArrayMesh Thread() => _thread ??= Build(k => k.Tube(new Vector3(0, 0, -0.5f), new Vector3(0, 0, 0.5f), 0.018f, 0.018f, 5, Colors.White, Colors.White, Vector2.Zero, false));
+    /// A shed exoskeleton: the worker's own shape, drawn hollow and pale.
+    static ArrayMesh Husk() => _husk ??= AntMesh.Build(AntType.Worker);
+
     static ArrayMesh Build(System.Action<MeshKit> f, bool recalc = true)
     {
         var k = new MeshKit();
@@ -295,9 +397,24 @@ public sealed class NestInterior
         return k.Commit();
     }
 
+    // prop materials, shared
+    static StandardMaterial3D _mEgg, _mLarva, _mCocoon, _mSeed, _mDrop, _mGrit, _mQuartz, _mThread, _mHusk, _mJelly;
+    static StandardMaterial3D MEgg => _mEgg ??= new() { AlbedoColor = new Color(0.97f, 0.95f, 0.88f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.6f };
+    static StandardMaterial3D MLarva => _mLarva ??= new() { AlbedoColor = new Color(0.95f, 0.88f, 0.72f), Roughness = 0.5f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.8f };
+    static StandardMaterial3D MCocoon => _mCocoon ??= new() { AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
+    static StandardMaterial3D MSeed => _mSeed ??= new() { AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
+    static StandardMaterial3D MDrop => _mDrop ??= new() { AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
+    static StandardMaterial3D MGrit => _mGrit ??= new() { AlbedoColor = new Color(0.16f, 0.13f, 0.11f), Roughness = 0.75f, Metallic = 0.25f };
+    static StandardMaterial3D MQuartz => _mQuartz ??= new() { AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
+    static StandardMaterial3D MThread => _mThread ??= new() { AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
+    static StandardMaterial3D MHusk => _mHusk ??= new() { AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
+    static StandardMaterial3D _mRoot;
+    static StandardMaterial3D MRoot => _mRoot ??= new() { AlbedoColor = new Color(0.66f, 0.52f, 0.34f), Roughness = 0.95f };
+    static StandardMaterial3D MJelly => _mJelly ??= new() { AlbedoColor = new Color(0.95f, 0.7f, 0.22f), Roughness = 0.05f, EmissionEnabled = true, Emission = new Color(0.3f, 0.18f, 0.03f) };
+
     static (float w, float h, float d) RoomSize(NestChamber ch) => ch.Kind switch
     {
-        ChamberKind.Royal => (3.4f + 0.3f * ch.Tier, 1.5f + 0.1f * ch.Tier, 2.8f + 0.2f * ch.Tier),
+        ChamberKind.Royal => (3.8f + 0.3f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.0f + 0.2f * ch.Tier),
         ChamberKind.Brood => (2.6f, 1.2f, 2.1f),
         ChamberKind.Storage => (2.8f, 1.4f, 2.3f),
         _ => (2.3f + 0.2f * ch.Tier, 1.3f, 2.0f + 0.15f * ch.Tier),
@@ -308,9 +425,9 @@ public sealed class NestInterior
         var room = new Room { Ch = ch, Team = team, Node = new Node3D { Name = $"Room_{ch.Kind}_{ch.Id}" } };
         _nest[team].AddChild(room.Node);
         // the cavities face inward, with back faces culled: the ceiling between the camera and the room is not drawn
-        room.Shell = new MeshInstance3D { Mesh = RoughRoom(), MaterialOverride = _cavity, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
-        room.Floor = new MeshInstance3D { Mesh = RoughFloor(), MaterialOverride = _floor, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
-        room.Tunnel = new MeshInstance3D { Mesh = RoughTube(), MaterialOverride = _cavity, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        room.Shell = new MeshInstance3D { Mesh = ch.Kind == ChamberKind.Royal ? RoughVault() : RoughRoom(), MaterialOverride = _cavity[team], CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        room.Floor = new MeshInstance3D { Mesh = RoughFloor(), MaterialOverride = _floor[team], CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        room.Tunnel = new MeshInstance3D { Mesh = RoughTube(), MaterialOverride = _cavity[team], CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         room.Contents = new Node3D();
         room.Label = new Label3D
         {
@@ -322,6 +439,14 @@ public sealed class NestInterior
         room.Node.AddChild(room.Contents);
         room.Node.AddChild(room.Label);
         _nest[team].AddChild(room.Tunnel);
+        // root fibres the diggers went round, three to a gallery
+        var rm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = RootsMesh(), InstanceCount = 2 };
+        room.Roots = new MultiMeshInstance3D { Multimesh = rm, MaterialOverride = MRoot, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Settings.Gfx >= Settings.Quality.Medium };
+        _nest[team].AddChild(room.Roots);
+        _rootNodes.Add(room.Roots);
+        // the sun comes into every opened room from above: a soft shaft (the wing chamber's is the brightest)
+        room.Shaft = MakeShaft(team, Vector3.Zero, 0.6f, 1.2f, 2f, ch.Kind == ChamberKind.Wings ? 2.2f : 1f);
+        room.Node.AddChild(room.Shaft);
         // no lamps below ground: the one sun lights the rooms through the glass, so every shadow agrees
         return room;
     }
@@ -338,7 +463,8 @@ public sealed class NestInterior
         room.Shell.Position = new Vector3(0, h * p * 0.45f, 0);
         room.Floor.Scale = new Vector3(w * p * 0.92f, 1, d * p * 0.92f);
         room.Floor.Position = new Vector3(0, 0.02f, 0);
-        // the gallery from the node it was dug from (the entrance shaft or a parent room) to this room's mouth
+        // the gallery from the node it was dug from (the entrance shaft or a parent room) to this room's mouth,
+        // about one and a half ant-widths across
         var chambers = _g.Sim.Col[room.Team].Chambers;
         var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent] : null;
         var from = parent == null ? new Vector3(0, -0.9f, 0) : new Vector3(parent.Offset.X, -parent.Depth * Mathf.Max(0.18f, parent.Progress) + 0.6f, parent.Offset.Y);
@@ -347,64 +473,126 @@ public sealed class NestInterior
         var to = centre + new Vector3(0, 0.6f, 0) - dir * (w * p * 0.3f); // ends inside the room's wall
         var mid = (from + to) * 0.5f;
         float len = from.DistanceTo(to);
+        const float gal = 0.68f;
         room.Tunnel.Position = mid;
-        room.Tunnel.Scale = new Vector3(0.8f, len, 0.8f);
+        room.Tunnel.Scale = new Vector3(gal, len, gal);
         var axis = (to - from).Normalized();
         var up = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.98f ? Vector3.Right : Vector3.Up;
-        room.Tunnel.Basis = Basis.LookingAt(axis, up) * new Basis(Vector3.Right, Mathf.Pi / 2);
+        var tb = Basis.LookingAt(axis, up) * new Basis(Vector3.Right, Mathf.Pi / 2);
+        room.Tunnel.Basis = tb;
+        room.Roots.Visible = Settings.Gfx >= Settings.Quality.Medium && len > 3f;
+        for (int i = 0; i < 2; i++)
+        {
+            var at = from + (to - from) * (0.35f + 0.3f * i);
+            room.Roots.Multimesh.SetInstanceTransform(i, new Transform3D(tb * new Basis(Vector3.Up, 1.3f * i + ch.Id) * Basis.FromScale(Vector3.One * gal), at));
+        }
+        // the shaft of light hangs from the room's crown
+        PlaceShaft(room.Shaft, new Vector3(0, h * p * 0.95f, 0), 0.5f * w * p * 0.5f, w * p * 0.6f, h * p * 1.4f);
         room.Label.Position = new Vector3(0, h + 0.9f + 0.45f * (ch.Id % 3), 0); // staggered so neighbours' names do not overlap
     }
 
+    /// Scatters `count` copies of a prop in one MultiMesh under `parent`.
+    static void Scatter(Node parent, Mesh mesh, Material mat, int count, System.Func<int, Transform3D> place)
+    {
+        if (count <= 0) return;
+        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = mesh, InstanceCount = count };
+        for (int i = 0; i < count; i++) mm.SetInstanceTransform(i, place(i));
+        parent.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+    }
+
+    /// What each room holds, so a glance says what it is for. Counts follow the colony (brood queued, stores
+    /// filled, tier) and the graphics tier.
     void FillRoom(int team, Room room)
     {
         var ch = room.Ch;
         var sim = _g.Sim;
         var col = sim.Col[team];
+        float fill = ch.Kind == ChamberKind.Storage ? Mathf.Clamp(col.Food / Mathf.Max(1, col.FoodCap), 0, 1) : 0;
         int count = ch.Kind switch
         {
-            ChamberKind.Brood => ch.Built ? 3 + System.Math.Min(9, col.Queue.Count * 3) : 0,
-            ChamberKind.Storage => ch.Built ? (int)Mathf.Clamp(col.Food / col.FoodCap * 12, 0, 12) : 0,
-            ChamberKind.Royal => ch.Built ? 2 + 2 * ch.Tier : 0,
+            ChamberKind.Brood => ch.Built ? 6 + System.Math.Min(18, col.Queue.Count * 4) : 0,
+            ChamberKind.Storage => ch.Built ? (int)(fill * 14) : 0,
+            ChamberKind.Royal => ch.Built ? 12 + 5 * ch.Tier : 0,
             _ => ch.Built ? 4 + 2 * ch.Tier : 0,
         };
-        if (count == room.ContentCount && ch.Tier == room.Tier) return;
+        if (count == room.ContentCount && ch.Tier == room.Tier && room.TierStamp == _tierStamp) return;
         room.ContentCount = count;
         room.Tier = ch.Tier;
+        room.TierStamp = _tierStamp;
         foreach (var c in room.Contents.GetChildren()) c.QueueFree();
+        if (count == 0) return;
+        float dens = Settings.Gfx switch { Settings.Quality.Low => 0.5f, Settings.Quality.Medium => 0.8f, Settings.Quality.High => 1f, _ => 1.3f };
+        int N(float n) => Mathf.Max(1, Mathf.RoundToInt(n * dens));
         var rng = new Rng((uint)(team * 131 + ch.Id * 17 + 5));
-        var (w, _, d) = RoomSize(ch);
-        for (int i = 0; i < count; i++)
+        var (w, h, d) = RoomSize(ch);
+        var node = room.Contents;
+        // a spot on the floor, biased toward the far half of the room (the near half is where the ants come in)
+        Vector3 Floor(float spread = 0.42f, float lift = 0f) { var o = rng.InDisk(1f); return new Vector3(o.X * w * spread, lift, o.Y * d * spread); }
+        Basis Yaw(float s = 1f) => new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * Basis.FromScale(Vector3.One * s);
+        // a spot on the room's wall or ceiling, for things that cling
+        Vector3 Wall(float minY)
         {
-            Mesh mesh; Material mat; float s;
-            switch (ch.Kind)
-            {
-                case ChamberKind.Brood: // eggs and larvae
-                    mesh = new SphereMesh { Radius = 0.14f, Height = 0.42f, RadialSegments = 10, Rings = 6 };
-                    mat = new StandardMaterial3D { AlbedoColor = new Color(0.96f, 0.94f, 0.85f), Roughness = 0.35f }; s = rng.R(0.8f, 1.2f); break;
-                case ChamberKind.Storage: // seeds and crumbs
-                    mesh = new SphereMesh { Radius = 0.22f, Height = 0.36f, RadialSegments = 10, Rings = 6 };
-                    mat = new StandardMaterial3D { AlbedoColor = i % 3 == 0 ? new Color(0.85f, 0.7f, 0.45f) : new Color(0.62f, 0.46f, 0.28f), Roughness = 0.8f }; s = rng.R(0.8f, 1.3f); break;
-                case ChamberKind.Royal: // royal jelly
-                    mesh = new SphereMesh { Radius = 0.26f, Height = 0.4f, RadialSegments = 12, Rings = 6 };
-                    mat = new StandardMaterial3D { AlbedoColor = new Color(0.95f, 0.7f, 0.22f), Roughness = 0.05f, EmissionEnabled = true, Emission = new Color(0.3f, 0.18f, 0.03f) }; s = rng.R(0.8f, 1.2f); break;
-                case ChamberKind.Forge:
-                    mesh = new CapsuleMesh { Radius = 0.06f, Height = 0.7f, RadialSegments = 8, Rings = 4 };
-                    mat = new StandardMaterial3D { AlbedoColor = new Color(0.42f, 0.14f, 0.05f), Roughness = 0.2f, Metallic = 0.2f }; s = rng.R(0.8f, 1.3f); break;
-                case ChamberKind.Armory:
-                    mesh = new SphereMesh { Radius = 0.3f, Height = 0.16f, RadialSegments = 12, Rings = 5 };
-                    mat = new StandardMaterial3D { AlbedoColor = new Color(0.6f, 0.38f, 0.12f), Roughness = 0.15f }; s = rng.R(0.8f, 1.2f); break;
-                case ChamberKind.Wings:
-                    mesh = AntMesh.Wings(AntType.Flyer);
-                    mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) }; s = 1.4f; break;
-                default:
-                    mesh = AntMesh.Silk();
-                    mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Silk) }; s = 1.6f; break;
-            }
             var o = rng.InDisk(1f);
-            var pos = new Vector3(o.X * w * 0.4f, 0.1f, o.Y * d * 0.4f);
-            var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, ch.Kind == ChamberKind.Forge ? Mathf.Pi / 2 : 0) * Basis.FromScale(Vector3.One * s);
-            room.Contents.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = mat, Transform = new Transform3D(basis, pos), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+            var u = new Vector3(o.X, rng.R(minY, 1f), o.Y).Normalized();
+            return new Vector3(u.X * w * 0.9f, h * 0.45f + u.Y * h * 0.9f, u.Z * d * 0.9f);
         }
+        switch (ch.Kind)
+        {
+            case ChamberKind.Brood:
+                // eggs in a heap, larvae beside them, cocoons along the wall
+                Scatter(node, Egg(), MEgg, N(count), _ => new Transform3D(Yaw(rng.R(0.85f, 1.15f)), Floor(0.3f, 0.13f)));
+                Scatter(node, Larva(), MLarva, N(count * 0.4f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.2f)), Floor(0.4f, 0.1f)));
+                Scatter(node, Cocoon(), MCocoon, N(count * 0.3f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.1f)), Floor(0.46f, 0.13f)));
+                break;
+            case ChamberKind.Storage:
+                // seeds heaped on the floor, berry pulp beside them, honeydew drops glistening in the walls
+                Scatter(node, Seed(), MSeed, N(count), _ => new Transform3D(Yaw(rng.R(0.9f, 1.3f)), Floor(0.4f, 0.09f)));
+                if (fill > 0.35f) Scatter(node, Pulp(), FoodMat(1), 1, _ => new Transform3D(Yaw(1.3f), Floor(0.35f)));
+                Scatter(node, Drop(), MDrop, N(3 + fill * 7), _ => new Transform3D(Yaw(rng.R(0.8f, 1.2f)), Wall(0.15f)));
+                break;
+            case ChamberKind.Royal:
+                // the queen rests on a bed of eggs; royal jelly glows beside her
+                Scatter(node, Egg(), MEgg, N(count), _ => new Transform3D(Yaw(rng.R(0.85f, 1.15f)), Floor(0.34f, 0.13f)));
+                Scatter(node, Larva(), MLarva, N(count * 0.25f), _ => new Transform3D(Yaw(), Floor(0.42f, 0.1f)));
+                Scatter(node, Drop(), MJelly, N(2 + 2 * ch.Tier), _ => new Transform3D(Yaw(rng.R(1.1f, 1.5f)), Floor(0.44f, 0.2f)));
+                break;
+            case ChamberKind.Forge:
+                // a heap of dark grit, a few quartz grains glinting in it
+                Scatter(node, Grit(), MGrit, N(28 + 10 * ch.Tier), _ => { var o = rng.InDisk(1f) * rng.F(); return new Transform3D(Yaw(rng.R(0.8f, 1.5f)), new Vector3(o.X * w * 0.3f, 0.07f + (1 - o.Length()) * 0.28f, o.Y * d * 0.3f)); });
+                Scatter(node, Grit(), MQuartz, N(3 + ch.Tier), _ => new Transform3D(Yaw(rng.R(0.9f, 1.3f)), Floor(0.3f, 0.2f)));
+                break;
+            case ChamberKind.Armory:
+                // shed exoskeletons sorted along the walls, pale and hollow
+                Scatter(node, Husk(), MHusk, N(count), _ =>
+                {
+                    bool over = rng.F() < 0.4f;
+                    var b = Yaw(rng.R(0.8f, 1.05f)) * new Basis(Vector3.Forward, over ? Mathf.Pi : rng.R(-0.5f, 0.5f));
+                    return new Transform3D(b, Floor(0.46f, over ? 0.3f : 0.02f));
+                });
+                break;
+            case ChamberKind.Wings:
+                // wings hung from the ceiling to dry, in pairs
+                Scatter(node, AntMesh.Wings(AntType.Flyer), new ShaderMaterial { Shader = Shaders.Get(Shaders.Wing) }, N(count), _ => new Transform3D(Yaw(1.4f) * new Basis(Vector3.Right, Mathf.Pi / 2), Wall(0.55f) + Vector3.Down * 0.25f));
+                break;
+            default:
+                // silk cutters: threads strung across the room, cocoons waiting to be sheared
+                Scatter(node, Thread(), MThread, N(count * 2), _ =>
+                {
+                    var a = Wall(-0.1f); var b = Wall(-0.1f);
+                    var mid = (a + b) * 0.5f; var ax = b - a; float len = ax.Length();
+                    if (len < 0.1f) return new Transform3D(Basis.Identity, mid);
+                    return new Transform3D(Basis.LookingAt(ax / len, Mathf.Abs(ax.Normalized().Y) > 0.98f ? Vector3.Right : Vector3.Up) * Basis.FromScale(new Vector3(1, 1, len)), mid);
+                });
+                Scatter(node, Cocoon(), MCocoon, N(count * 0.8f), _ => new Transform3D(Yaw(rng.R(0.9f, 1.2f)), Floor(0.42f, 0.13f)));
+                break;
+        }
+    }
+
+    static readonly Dictionary<int, ShaderMaterial> _food = new();
+    static ShaderMaterial FoodMat(int kind)
+    {
+        if (!_food.TryGetValue(kind, out var m)) { _food[kind] = m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Food) }; m.SetShaderParameter("kind", kind); }
+        return m;
     }
 
     public void Update(FogOfWar fog, bool nestView, float alpha)
