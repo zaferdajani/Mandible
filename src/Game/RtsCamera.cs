@@ -125,10 +125,11 @@ public partial class RtsCamera : Node3D
         Cam.GlobalTransform = new Transform3D(Basis.Identity, pos).LookingAt(Focus, Vector3.Up);
         // tilt-shift: sharp band at the focus, soft foreground and background
         float d = pos.DistanceTo(Focus);
-        Attr.DofBlurFarDistance = d * 1.18f;
-        Attr.DofBlurFarTransition = d * 0.9f;
-        Attr.DofBlurNearDistance = d * 0.62f;
-        Attr.DofBlurNearTransition = d * 0.35f;
+        // with the earth opened the pit floor lies well beyond the focus: keep it sharp, or it reads as haze
+        Attr.DofBlurFarDistance = d * (NestView ? 1.8f : 1.18f);
+        Attr.DofBlurFarTransition = d * (NestView ? 1.2f : 0.9f);
+        Attr.DofBlurNearDistance = d * (NestView ? 0.3f : 0.62f); // and the shaft walls near the camera stay sharp too
+        Attr.DofBlurNearTransition = d * (NestView ? 0.15f : 0.35f);
         Attr.DofBlurAmount = Mathf.Lerp(0.09f, 0.035f, t);
         Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low;
     }

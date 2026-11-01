@@ -134,14 +134,14 @@ public partial class GameSession : Node3D
             {
                 SkyMaterial = new ProceduralSkyMaterial
                 {
-                    SkyTopColor = new Color(0.30f, 0.50f, 0.80f), SkyHorizonColor = new Color(0.76f, 0.80f, 0.82f),
-                    GroundHorizonColor = new Color(0.52f, 0.46f, 0.37f), GroundBottomColor = new Color(0.2f, 0.16f, 0.12f),
+                    SkyTopColor = new Color(0.30f, 0.50f, 0.80f), SkyHorizonColor = new Color(0.82f, 0.79f, 0.72f), // a warm, dusty horizon: the sky fill must not turn the sand blue
+                    GroundHorizonColor = new Color(0.56f, 0.47f, 0.36f), GroundBottomColor = new Color(0.2f, 0.16f, 0.12f),
                     SunAngleMax = 30, SunCurve = 0.12f, SkyEnergyMultiplier = 1.0f,
                 },
             },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightSkyContribution = 1.0f,
-            AmbientLightEnergy = 0.42f,
+            AmbientLightSkyContribution = 0.6f, AmbientLightColor = new Color(0.78f, 0.68f, 0.56f), // sky fill blended with warm bounce off the sand, so shadows never go blue
+            AmbientLightEnergy = 0.45f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Aces,
             TonemapExposure = 1.05f,

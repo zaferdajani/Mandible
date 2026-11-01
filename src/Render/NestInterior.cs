@@ -47,10 +47,10 @@ public sealed class NestInterior
             AlbedoColor = soil * shade, Roughness = rough, CullMode = cull, AlbedoTexture = grain, Uv1Triplanar = true, Uv1Scale = Vector3.One * scale,
             EmissionEnabled = true, Emission = new Color(0.42f, 0.30f, 0.19f) * shade * bounce,
         };
-        _wall = Soil(0.78f, 0.6f, BaseMaterial3D.CullModeEnum.Disabled, 0.35f);
-        _cavity = Soil(0.6f, 1.4f, BaseMaterial3D.CullModeEnum.Back, 0.35f);
+        _wall = Soil(0.78f, 0.6f, BaseMaterial3D.CullModeEnum.Disabled, 0.6f);
+        _cavity = Soil(0.7f, 1.4f, BaseMaterial3D.CullModeEnum.Back, 0.9f); // galleries never see the sun: mostly bounce
         _floor = Soil(0.98f, 1.8f, BaseMaterial3D.CullModeEnum.Back, 0.3f, 0.95f);
-        _earth = Soil(0.7f, 0.12f, BaseMaterial3D.CullModeEnum.Disabled, 0.6f); // the deep earth sees the least sun: the most bounce
+        _earth = Soil(0.7f, 0.12f, BaseMaterial3D.CullModeEnum.Disabled, 0.7f); // the deep earth sees the least sun: the most bounce
         for (int team = 0; team < 2; team++) BuildNest(team);
     }
 
