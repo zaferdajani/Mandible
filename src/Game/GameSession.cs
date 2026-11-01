@@ -511,7 +511,7 @@ public partial class GameSession : Node3D
             foreach (var m in World.FowMaterials)
             {
                 m.SetShaderParameter("xray_on", _glass);
-                if (_glass > 0) { m.SetShaderParameter("xray_center", nest); m.SetShaderParameter("net", net); m.SetShaderParameter("net_count", count); }
+                if (_glass > 0) { m.SetShaderParameter("xray_center", nest); m.SetShaderParameter("net_ground_y", World.HF.Sample(nest.X, nest.Y)); m.SetShaderParameter("net", net); m.SetShaderParameter("net_count", count); }
             }
             // the yard's soil is drawn translucent only while the earth is open: opaque (and cheap) the rest of the time
             World.TerrainMaterial.Shader = Shaders.Get(_glass > 0 ? Shaders.TerrainRoof : Shaders.Terrain);
