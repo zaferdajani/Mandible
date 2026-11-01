@@ -68,6 +68,8 @@ public partial class Main : Node
         ApplyOrientation();
         Audio = new AudioDirector();
         AddChild(Audio);
+        foreach (var a in args)
+            if (a.StartsWith("--nesttest=")) { _ = NestRenderTest.Run(this, a.Substring(11)); return; }
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);

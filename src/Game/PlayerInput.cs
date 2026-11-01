@@ -47,18 +47,7 @@ public partial class PlayerInput : Node
     }
 
     /// The chamber under a screen point (by its dug footprint), or -1.
-    int PickRoom(Vector2 screen)
-    {
-        if (!Game.NestView || !Cam.ScreenToGround(screen, out var g)) return -1;
-        var p = new Vector2(g.X, g.Z);
-        int best = -1; float bestD = float.MaxValue;
-        foreach (var ch in Sim.Col[Local.Me].Chambers)
-        {
-            float d = Sim.ChamberPos(Local.Me, ch).DistanceTo(p) - (ch.Radius + 0.9f);
-            if (d < 0 && d < bestD) { bestD = d; best = ch.Id; }
-        }
-        return best;
-    }
+    int PickRoom(Vector2 screen) => Game.NestView ? Game.Interior.PickRoom(screen) : -1;
 
     /// The placement cue: a ring the size of a room under the cursor, green where it may be dug and red where
     /// not, and a small gold ring on the node its gallery would start from.
@@ -410,8 +399,11 @@ public partial class PlayerInput : Node
     bool OnScreen(int id, out Vector2 sp)
     {
         ref var a = ref Sim.Ants[id];
-        var wp = new Vector3(a.Pos.X, a.Height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         sp = Vector2.Zero;
+        if (a.Layer > 0 && (!Game.NestView || a.Layer != Sim.NestLayer(Local.Me))) return false;
+        var nest = a.Layer > 0 ? Game.World.Nests[a.Layer - 1].Pos : Vector2.Zero;
+        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.Depth : a.Height;
+        var wp = new Vector3(a.Pos.X, height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         if (Cam.Cam.IsPositionBehind(wp)) return false;
         sp = Cam.Cam.UnprojectPosition(wp);
         return true;
@@ -447,6 +439,14 @@ public partial class PlayerInput : Node
 
     void ClickSelect(Vector2 screen, bool shift, bool ctrl)
     {
+        // Build mode selects the visible room even when its queen/props occupy the centre.
+        if (Game.NestView && Cam.ScreenToGround(screen, out var surface))
+        {
+            if (new Vector2(surface.X, surface.Z).DistanceTo(Game.World.Nests[Local.Me].Pos) < 1.5f)
+            { ToggleBuild(); return; }
+            int room = PickRoom(screen);
+            if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
+        }
         int id = Pick(screen, true);
         if (id >= 0 && Sim.Ants[id].Type == AntType.Queen) { SelectNest(false); return; }
         if (id >= 0)
