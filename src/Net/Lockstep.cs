@@ -13,7 +13,7 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-5";
+    const string Version = "mandible-mp-6";
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }
