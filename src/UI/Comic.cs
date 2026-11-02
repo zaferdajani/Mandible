@@ -47,7 +47,7 @@ public static class Comic
         },
         [7] = new[]
         {
-            new Panel { File = "b-cinder", Caption = "Then the red ants came: hundreds of them, walking the black colony's own trails." },
+            new Panel { File = "b-arrival", Caption = "Then the red ants came: hundreds of them, walking the black colony's own trails." },
             new Panel { File = "b-vetch", Caption = "In the bug country a scout found glass, and beside it, alive, old Vetch." },
         },
         [10] = new[]

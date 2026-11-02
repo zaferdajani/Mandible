@@ -45,6 +45,6 @@ The chapter order changed so the red colony arrives only in Act II (`docs/level-
 | File | Chapter | Needs |
 | --- | --- | --- |
 | `b-rain` | 2 · Sweet Rain | Its caption now adds a strange scent trail across the alley, the first hint of the red ants. The still can stay or gain the trail. |
-| `b-log` | 3 · The Hollow Log | The still shows a hornet, but wasps are not met until Chapter 7. It needs beetles and a wolf spider at a rotting log. |
-| `b-arrival` (new, now reusing `b-cinder`) | 4 · The Matron's Road | The cliffhanger: hundreds of red ants walking the black colony's own trails. |
-| `b-cinder` | 6 · Queen Cinder | No change, but it is reused for Chapter 4 until `b-arrival` exists. |
+| `b-log` | 3 · The Hollow Log | Done 2026-11-03 (art pipeline): two ground beetles and a wolf spider at the rotting mossy log, a black worker and soldier watching. No hornet. `gpt_image_2_5`, high, 2k. |
+| `b-arrival` | 4 · The Matron's Road | Done 2026-11-03 (art pipeline): a dense column of red ants on the black colony's own sandy trail, one black worker watching from a stone. `gpt_image_2_5`, high, 2k. |
+| `b-cinder` | 6 · Queen Cinder | No change. Chapter 4 now uses `b-arrival`. |

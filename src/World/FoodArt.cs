@@ -74,7 +74,7 @@ public static class FoodArt
             bool chunk = i == 0;
             float across = chunk ? size * 1.4f : size * Mathf.Lerp(0.18f, 0.5f, Mathf.Pow(rng.F(), 1.8f));
             float s = across / p.Footprint;
-            var m = Cut(p, rng, chunk ? 2 : 3, chunk ? 0.1f : -0.15f, chunk ? 0.45f : 0.2f, 0);
+            var m = Cut(p, rng, chunk ? 2 : 3, chunk ? 0.1f : 0.08f, chunk ? 0.45f : 0.4f, 0); // every crumb keeps most of itself
             // crumbs fan out from the chunk, most close by, a few further
             var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.6f + Mathf.Pow(rng.F(), 1.5f) * 1.4f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
@@ -114,8 +114,7 @@ public static class FoodArt
         // the sticky drop the crystals sit in
         var syrup = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.36f, 0.16f, 0.02f), Roughness = 0.03f, MetallicSpecular = 1f,
-            ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.0f,
+            AlbedoColor = new Color(0.55f, 0.27f, 0.04f), Roughness = 0.12f, MetallicSpecular = 0.55f,
             BacklightEnabled = true, Backlight = new Color(0.45f, 0.2f, 0.02f),
         };
         var drop = new MeshInstance3D { Mesh = DropMesh(rng, size * 0.9f, 0.1f), MaterialOverride = syrup };
