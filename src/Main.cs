@@ -80,6 +80,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--level-capture=")) _ = LevelValidation.Capture(this, a["--level-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--map-capture=")) _ = LevelValidation.MapCapture(this, a["--map-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--tube-capture=")) _ = LevelValidation.TubeCapture(this, a["--tube-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);

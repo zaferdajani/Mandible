@@ -267,6 +267,31 @@ public static class LevelValidation
         GD.Print("[campaign-test] PASS level gates, the watch-post shield and star perks (Matron, early gunners and flyers, veteran brood)");
     }
 
+    /// `--tube-capture=<dir>`: level 1's broken tube from the opening camera, close up and from the alley.
+    public static async System.Threading.Tasks.Task TubeCapture(Main app, string directory)
+    {
+        try
+        {
+            DirAccess.MakeDirRecursiveAbsolute(directory);
+            async System.Threading.Tasks.Task Shot(string name, float s)
+            {
+                await app.ToSignal(app.GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
+                await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var im = app.GetViewport().GetTexture().GetImage();
+                im.SavePng(directory.PathJoin(name + ".png"));
+                GD.Print("[tube-capture] " + name);
+            }
+            app.StartEpisode(1); var g = app.Session;
+            g.Hud.CloseBriefing(); g.SetPaused(true);
+            await Shot("opening", 3);
+            g.Camera.SetYaw(0.5f, true); g.Camera.JumpTo(new Vector2(44, 255), 18); await Shot("mouth-close", 2);
+            g.Camera.SetYaw(-0.9f, true); g.Camera.JumpTo(new Vector2(38, 255), 24); await Shot("tube-side", 2);
+            g.Camera.SetYaw(2.6f, true); g.Camera.JumpTo(new Vector2(46, 258), 30); await Shot("from-alley", 2);
+            app.GetTree().Quit();
+        }
+        catch (Exception e) { GD.PushError("[tube-capture] FAIL " + e); app.GetTree().Quit(1); }
+    }
+
     /// `--map-capture=<dir>`: the colony map alone, part-way through the campaign and with its banner picker open.
     public static async System.Threading.Tasks.Task MapCapture(Main app, string directory)
     {
