@@ -715,7 +715,7 @@ public partial class GameSession : Node3D
                 if (f.Node.Visible) { f.Node.Visible = false; Effects.Burst(World.HF.Point(f.Pos, 0.5f), 10, 2, 3, 0.5f, 0.8f); }
                 continue;
             }
-            f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
+            if (!FoodArt.Update(f)) f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
         }
     }
 

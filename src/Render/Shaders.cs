@@ -607,6 +607,101 @@ void fragment() {
 }
 ";
 
+    /// Food cut from a scan: up to three planes slice the piece and the faces they open are drawn as its inside
+    /// (bread crumb, apple flesh, seed kernel). `bite` (0..1, how much has been eaten) pushes the cuts inward.
+    /// outside: 0 the scan's own photo, 1 a striped sunflower seed shell, 2 a husked grass grain.
+    public const string FoodCut = @"
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, hint_default_white;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform vec4 cut0 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform vec4 cut1 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform vec4 cut2 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform float bite = 0.0;
+uniform float bite_depth = 0.0;
+uniform int inside = 0;
+uniform int outside = 0;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+float plane(vec4 c) { return c.w > 1e5 ? -1e6 : dot(c.xyz, lp) - (c.w - bite * bite_depth); }
+void fragment() {
+    float d0 = plane(cut0), d1 = plane(cut1), d2 = plane(cut2);
+    if (d0 > 0.0 || d1 > 0.0 || d2 > 0.0) discard;
+    float n1 = texture(noise_b, lp.xz * 9.0 + lp.y * 3.1).g;
+    float n2 = texture(noise_b, lp.zy * 23.0 + 0.41).g;
+    if (FRONT_FACING) {
+        if (outside == 0) {
+            ALBEDO = texture(albedo_tex, UV).rgb;
+            NORMAL_MAP = texture(normal_tex, UV).rgb;
+            ROUGHNESS = 0.7;
+        } else if (outside == 1) {
+            // sunflower seed: black and cream stripes running its length, glossy shell
+            float a = atan(lp.x, lp.y);
+            // dark grey-black shell with thin pale stripes, as a sunflower seed has
+            float stripe = smoothstep(0.82, 0.95, abs(sin(a * 5.0 + n1 * 1.2)));
+            ALBEDO = mix(vec3(0.07, 0.065, 0.06), vec3(0.62, 0.58, 0.5), stripe * 0.75) * (0.85 + 0.25 * n2);
+            ROUGHNESS = 0.35; CLEARCOAT = 0.4; CLEARCOAT_ROUGHNESS = 0.3;
+        } else {
+            ALBEDO = mix(vec3(0.55, 0.4, 0.2), vec3(0.78, 0.64, 0.4), n1) * (0.85 + 0.2 * n2);
+            ROUGHNESS = 0.6;
+        }
+    } else {
+        // the opened face: lit as the flat plane it is
+        vec3 n = d0 >= d1 && d0 >= d2 ? cut0.xyz : d1 >= d2 ? cut1.xyz : cut2.xyz;
+        NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(n, 0.0))).xyz);
+        if (inside == 0) {
+            // bread: soft cream crumb full of gas pockets
+            float pore = smoothstep(0.55, 0.7, n2) + smoothstep(0.62, 0.75, n1) * 0.6;
+            ALBEDO = vec3(0.86, 0.74, 0.52) * (1.0 - 0.45 * clamp(pore, 0.0, 1.0)) * (0.9 + 0.15 * n1);
+            ROUGHNESS = 0.95;
+        } else if (inside == 1) {
+            // apple flesh, browning where it has been open longest
+            ALBEDO = mix(vec3(0.95, 0.88, 0.64), vec3(0.72, 0.5, 0.24), clamp(0.25 + bite * 0.6 + (n1 - 0.5) * 0.4, 0.0, 1.0));
+            ROUGHNESS = 0.45; SPECULAR = 0.6;
+        } else if (inside == 2) {
+            // berry pulp: wet, translucent, deep red
+            ALBEDO = mix(vec3(0.45, 0.04, 0.05), vec3(0.85, 0.75, 0.68), smoothstep(0.6, 0.8, n2) * 0.4);
+            ROUGHNESS = 0.15; SPECULAR = 0.7;
+        } else {
+            ALBEDO = vec3(0.88, 0.84, 0.72) * (0.9 + 0.15 * n1);
+            ROUGHNESS = 0.6;
+        }
+    }
+}
+";
+
+    /// A currant: glossy, translucent red skin with the dried calyx at its crown; `burst` splits it open.
+    public const string Currant = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float tone = 1.0;
+uniform float burst = 0.0;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+void fragment() {
+    float n = texture(noise_b, lp.xz * 1.7 + lp.y).r;
+    vec3 skin = mix(vec3(0.22, 0.015, 0.025), vec3(0.5, 0.05, 0.06), tone * (0.7 + 0.4 * n));
+    // faint pale veins under the skin, as currants have
+    float a = atan(lp.x, lp.z);
+    skin = mix(skin, skin * 1.6 + vec3(0.06, 0.0, 0.0), smoothstep(0.96, 1.0, abs(sin(a * 5.0))) * 0.35 * (1.0 - abs(lp.y)));
+    // the dried calyx: a dark star at the crown
+    float crown = smoothstep(0.955, 0.985, lp.y) * (0.6 + 0.4 * smoothstep(0.2, 0.6, abs(sin(a * 2.5))));
+    vec3 col = mix(skin, vec3(0.12, 0.07, 0.03), clamp(crown, 0.0, 1.0));
+    // a burst berry: a split down one side, wet dark pulp showing
+    float split = burst * smoothstep(0.08, 0.0, abs(lp.x - 0.15 * sin(lp.y * 6.0))) * step(0.0, lp.z);
+    col = mix(col, vec3(0.2, 0.0, 0.02), split);
+    ALBEDO = col;
+    ROUGHNESS = 0.12 + 0.1 * n;
+    SPECULAR = 0.6;
+    CLEARCOAT = 0.35;
+    CLEARCOAT_ROUGHNESS = 0.15;
+    BACKLIGHT = vec3(0.45, 0.04, 0.03) * (1.0 - crown);
+    RIM = 0.2;
+}
+";
+
     public static readonly string Leaf = @"
 shader_type spatial;
 render_mode cull_disabled;
@@ -625,8 +720,8 @@ void fragment() {
     vec4 photo = texture(leaf_tex, t);
     if (photo.a < 0.5) discard;
     float lum = dot(photo.rgb, vec3(0.3, 0.59, 0.11));
-    vec3 yellow = vec3(1.75, 1.18, 0.34) * lum;
-    vec3 brown = vec3(1.15, 0.58, 0.22) * lum;
+    vec3 yellow = vec3(1.75, 1.18, 0.34) * lum * 0.6;
+    vec3 brown = vec3(1.15, 0.58, 0.22) * lum * 0.55;
     vec3 col = age < 0.45 ? mix(photo.rgb, yellow, age / 0.45) : mix(yellow, brown, (age - 0.45) / 0.55);
     // decay works in from the edges and in blotches
     float n = texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r;
@@ -1092,7 +1187,7 @@ void fragment() {
         vec3 ty = texture(soil_albedo, wpos.xz * 0.17).rgb;
         vec3 tz = texture(soil_albedo, wpos.xy * 0.17).rgb;
         col = tx * weights.x + ty * weights.y + tz * weights.z;
-        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.58) * vec3(0.55,0.53,0.50);
+        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.8) * vec3(0.92,0.84,0.76);
         col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
         col *= 0.87 + 0.20 * g;
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));

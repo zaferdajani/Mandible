@@ -54,7 +54,7 @@ public sealed partial class NestInterior
         m.SetShaderParameter("cavity_surface", cavity);
         m.SetShaderParameter("noise_b", _g.World.NoiseB);
         m.SetShaderParameter("normal_c", _g.World.NormalC);
-        m.SetShaderParameter("soil_albedo", GD.Load<Texture2D>("res://assets/materials/nest-soil-albedo.png"));
+        m.SetShaderParameter("soil_albedo", NatureAssets.Texture("ground/red_mud_stones_diff")); // photographed clay with embedded stones (CC0)
         m.SetShaderParameter("ground_y", gy);
         m.SetShaderParameter("shade", shade);
         m.SetShaderParameter("bounce", bounce);

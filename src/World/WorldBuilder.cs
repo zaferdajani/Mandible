@@ -16,6 +16,7 @@ public static partial class WorldBuilder
     public static World Build(Node3D parent, uint seed, bool horizontal = false, bool firstNest = false)
     {
         var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest };
+        FoodArt.Reset();
         parent.AddChild(w.Root);
         var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
         var deco = new Rng(seed ^ 0x5EEDu);      // decoration only: leaves, twigs, grass, litter
@@ -817,103 +818,26 @@ public static partial class WorldBuilder
             }
     }
 
-    static readonly Dictionary<World, List<ArrayMesh>> _crumbCache = new();
+    static readonly HashSet<World> _crumbDraws = new();
 
+    /// A food source and its pile (FoodArt): crumbs, seeds, sugar or berries made of real pieces.
     public static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size)
     {
-        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
-        // mid-game crumb showers reuse a few pre-built crumb shapes, scaled, to avoid hitches
+        int id = w.NextFoodId++;
+        var f = new FoodSource { Id = id, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
+        float blockR = kind switch { FoodKind.Berry => size * 0.95f, FoodKind.Sugar => size * 0.6f, FoodKind.Seed => size * 0.5f, _ => size * 0.85f };
+        // the pile is decoration with its own stream; the gameplay rng (and the sim's, for mid-game crumb showers)
+        // takes exactly the draws the old single-mesh food took, so every later placement and the sim stay as they were
+        var art = new Rng((uint)(f.Id * 7919 + 17) ^ (uint)(p.X * 131 + p.Y * 17));
+        int draws = 3 + (kind == FoodKind.Berry ? 61 : 0);
         if (kind == FoodKind.Crumb && w.Food.Count > 40)
         {
-            if (!_crumbCache.TryGetValue(w, out var cache))
-            {
-                cache = new List<ArrayMesh>();
-                for (int i = 0; i < 6; i++)
-                {
-                    var tmp = Spawn(w, rng, FoodKind.Crumb, new Vector2(-100, -100), 0, 1f, true);
-                    cache.Add((ArrayMesh)((MeshInstance3D)tmp.Node).Mesh);
-                    tmp.Node.Free();
-                }
-                _crumbCache[w] = cache;
-            }
-            var cm = Mat(w, Shaders.Food);
-            cm.SetShaderParameter("kind", 0);
-            var node = new MeshInstance3D { Mesh = cache[rng.I(0, cache.Count)], MaterialOverride = cm };
-            float yy = w.HF.Sample(p.X, p.Y) + size * 0.7f * 0.75f * 0.9f;
-            node.Transform = new Transform3D(new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * Basis.FromScale(Vector3.One * size), new Vector3(p.X, yy, p.Y));
-            w.Root.AddChild(node);
-            f.Node = node;
-            f.BaseScale = Vector3.One * size;
-            f.Block = new Obstacle { P = p, R = size * 0.85f, BaseR = size * 0.85f };
-            w.AddObstacle(f.Block);
-            w.Food.Add(f);
-            return f;
+            draws = 2;
+            if (_crumbDraws.Add(w)) { draws += 6; w.NextFoodId += 6; } // the old crumb cache built six templates, each taking an id
         }
-        return Spawn(w, rng, kind, p, amount, size, false);
-    }
-
-    static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size, bool templateOnly)
-    {
-        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
-        var k = new MeshKit();
-        var nz = new FastNoiseLite { Seed = rng.I(1, 9999), Frequency = 1.3f };
-        Vector3 radii;
-        Func<Vector3, float> disp;
-        float sink = 0.25f;
-        switch (kind)
-        {
-            case FoodKind.Berry:
-                radii = new Vector3(size, size * 0.85f, size * 1.1f);
-                disp = u => (1 + 0.04f * nz.GetNoise3D(u.X * 4, u.Y * 4, u.Z * 4)) * (u.Y < -0.4f ? 0.85f : 1f) * (1 - Mathf.Max(0, u.Z) * 0.25f * Mathf.Max(0, -u.Y));
-                break;
-            case FoodKind.Sugar:
-                radii = Vector3.One * size * 0.62f;
-                disp = u => SuperEllipse(u, 7f) * (1 + 0.02f * nz.GetNoise3D(u.X * 9, u.Y * 9, u.Z * 9));
-                sink = 0.05f;
-                break;
-            case FoodKind.Seed:
-                radii = new Vector3(size * 0.38f, size * 0.24f, size * 0.85f);
-                disp = u => 1 - Mathf.Max(0, u.Z) * 0.35f;
-                sink = 0.3f;
-                break;
-            default:
-                radii = new Vector3(size, size * 0.7f, size * 0.9f);
-                disp = u => SuperEllipse(u, 2.6f) * (1 + 0.16f * nz.GetNoise3D(u.X, u.Y, u.Z));
-                break;
-        }
-        float blockR = kind switch { FoodKind.Berry => size * 0.95f, FoodKind.Sugar => size * 0.6f, FoodKind.Seed => size * 0.5f, _ => size * 0.85f };
-        if (kind == FoodKind.Berry)
-        {
-            // raspberry: a core plus a shell of glossy drupelets
-            k.Ellipsoid(Vector3.Zero, Basis.FromScale(radii * 0.86f), 18, 12, new Color(0.35f, 0, 0, 1), Vector2.Zero);
-            int count = 70;
-            for (int i = 0; i < count; i++)
-            {
-                float yy = 1 - 2 * (i + 0.5f) / count;
-                if (yy < -0.75f) continue;
-                float rr = Mathf.Sqrt(1 - yy * yy), th = i * 2.39996f;
-                var dir = new Vector3(Mathf.Cos(th) * rr, yy, Mathf.Sin(th) * rr);
-                var c = dir * radii * 0.9f;
-                var up = dir.Normalized();
-                var side = up.Cross(Mathf.Abs(up.Y) > 0.9f ? Vector3.Right : Vector3.Up).Normalized();
-                var b = new Basis(side, up, side.Cross(up)) * Basis.FromScale(new Vector3(0.24f, 0.2f, 0.24f) * size);
-                float tone = rng.R(0.75f, 1f);
-                k.Ellipsoid(c, b, 16, 11, new Color(tone, 0, 0, 1), Vector2.Zero);
-            }
-        }
-        else
-        {
-            k.Ellipsoid(Vector3.Zero, Basis.FromScale(radii), 24, 16, new Color(1, 1, 1), Vector2.Zero, disp);
-            k.RecalcNormals();
-        }
-        var m = Mat(w, Shaders.Food);
-        m.SetShaderParameter("kind", kind == FoodKind.Corpse ? 0 : (int)kind);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = m };
-        if (templateOnly) { f.Node = mi; return f; }
-        var y = w.HF.Sample(p.X, p.Y) + radii.Y * (1 - sink) * 0.9f;
-        mi.Transform = new Transform3D(new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.15f, 0.15f)), new Vector3(p.X, y, p.Y));
-        w.Root.AddChild(mi);
-        f.Node = mi;
+        for (int i = 0; i < draws; i++) rng.F();
+        f.Node = FoodArt.Build(w, art, f);
+        w.Root.AddChild(f.Node);
         f.BaseScale = Vector3.One;
         f.Block = new Obstacle { P = p, R = blockR, BaseR = blockR };
         w.AddObstacle(f.Block);
