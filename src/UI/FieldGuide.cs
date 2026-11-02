@@ -393,7 +393,7 @@ public partial class HeroPicker : ColorRect
             p.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.07f, 0.055f, 0.04f, 1f), new Color(UiTheme.Gold, 0.6f), 2, 10, 14));
             var col = new VBoxContainer();
             col.AddThemeConstantOverride("separation", 8);
-            col.AddChild(new AntPortrait { Type = type, Team = Team, CustomMinimumSize = new Vector2(0, 330) });
+            col.AddChild(HeroArt.Frame(type, Team, HeroArt.Framing.Card, new Vector2(0, 330)));
             var name = UiTheme.Text(Config.Of(type).Name.ToUpper(), 24, UiTheme.Title, UiTheme.Gold);
             name.HorizontalAlignment = HorizontalAlignment.Center;
             col.AddChild(name);
@@ -559,7 +559,7 @@ public partial class FieldGuide : ColorRect
         p.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.1f, 0.08f, 0.06f, 0.92f), new Color(UiTheme.Bronze, 0.7f), 1, 8, 10));
         var h = new HBoxContainer();
         h.AddThemeConstantOverride("separation", 10);
-        h.AddChild(new AntPortrait { Type = t, Team = team, CustomMinimumSize = new Vector2(150, 150) });
+        h.AddChild(Config.IsHero(t) ? HeroArt.Frame(t, team, HeroArt.Framing.Bust, new Vector2(150, 184)) : new AntPortrait { Type = t, Team = team, CustomMinimumSize = new Vector2(150, 150) });
         var v = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         v.AddChild(UiTheme.Text(Config.Of(t).Name.ToUpper(), 18, UiTheme.Title, Config.IsHero(t) ? UiTheme.Gold : UiTheme.Ink));
         var l = UiTheme.Text(text, 13, null, UiTheme.Ink);

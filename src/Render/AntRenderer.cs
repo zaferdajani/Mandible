@@ -115,6 +115,8 @@ public sealed class AntRenderer
     readonly Batch[,] _dead = new Batch[3, 13];
     readonly Batch[] _cargo = new Batch[5];
     readonly Batch _rings, _bars;
+    readonly Batch _auraGround, _auraHalo;
+    readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
     internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
     public bool ShowAllBars;
@@ -198,6 +200,11 @@ public sealed class AntRenderer
         var ringMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Ring) };
         ringMat.SetShaderParameter("color", new Color(0.55f, 1.0f, 0.45f, 0.95f));
         _rings = new Batch(root, new PlaneMesh { Size = Vector2.One }, ringMat, false, "Rings");
+        var auraShader = Shaders.Get(Shaders.Aura);
+        _auraGround = new Batch(root, new PlaneMesh { Size = Vector2.One }, new ShaderMaterial { Shader = auraShader }, false, "HeroAuraGround");
+        var haloMat = new ShaderMaterial { Shader = auraShader };
+        haloMat.SetShaderParameter("billboard", 1f);
+        _auraHalo = new Batch(root, new QuadMesh { Size = Vector2.One }, haloMat, false, "HeroAuraHalo");
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
@@ -263,7 +270,7 @@ public sealed class AntRenderer
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         foreach (var cargo in _cargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _pips.Begin();
+        _rings.Begin(); _bars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
@@ -318,6 +325,7 @@ public sealed class AntRenderer
                 // load clamped in its jaws on slopes, in tunnels and while turning.
                 _cargo[(int)a.CarryKind].Add(b, o, data);
             }
+            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, st.Size, camPos, rdt);
             if (a.Selected)
                 _rings.Add(Basis.FromScale(Vector3.One * st.Size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
             bool wild = a.Team == Config.Wild;
@@ -432,9 +440,43 @@ public sealed class AntRenderer
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
         foreach (var cargo in _cargo) cargo.End();
-        _rings.End(); _bars.End(); _pips.End();
+        _rings.End(); _bars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
+    }
+
+    /// Each level a hero gains shifts its aura one step along this ramp, from a pale gold recruit to a radiant legend.
+    public static readonly Color[] AuraLevel =
+    {
+        new(0.95f, 0.84f, 0.55f), new(1f, 0.7f, 0.25f), new(1f, 0.5f, 0.14f), new(0.98f, 0.27f, 0.13f), new(0.92f, 0.16f, 0.42f),
+        new(0.74f, 0.22f, 0.9f), new(0.46f, 0.32f, 1f), new(0.22f, 0.56f, 1f), new(0.2f, 0.92f, 0.86f), new(1f, 0.96f, 0.82f),
+    };
+    /// The colour of each hero's special, which the aura blends toward when it is cast.
+    public static Color AuraAbility(AntType t) => t switch
+    {
+        AntType.Warlord => new Color(1f, 0.34f, 0.08f), AntType.Matron => new Color(0.45f, 1f, 0.15f), _ => new Color(0.55f, 0.82f, 1f),
+    };
+
+    /// A faint aura under and around a hero, in its level's colour. It breathes while the special is ready, and
+    /// flares toward the special's colour when the hero casts (the cooldown jumping back up).
+    void HeroAura(int i, in Ant a, Vector3 o, Vector3 ground, Vector3 up, float size, Vector3 camPos, float rdt)
+    {
+        _aura.TryGetValue(i, out var s);
+        if (a.AbilityCd > s.cd + 1f) s.flare = 1f;
+        s.flare = Mathf.Max(0, s.flare - rdt * 0.7f);
+        s.cd = a.AbilityCd;
+        _aura[i] = s;
+        float flare = s.flare * s.flare * (3 - 2 * s.flare); // smooth fade out
+        float ready = a.AbilityCd <= 0 ? 0.5f + 0.5f * Mathf.Sin(_now * 2.6f + i) : 0f;
+        var col = AuraLevel[Mathf.Clamp(a.Level, 1, AuraLevel.Length) - 1].Lerp(AuraAbility(a.Type), flare * 0.75f);
+        float level01 = (Mathf.Clamp(a.Level, 1, Config.HeroMaxLevel) - 1f) / (Config.HeroMaxLevel - 1f);
+        float strength = 0.24f + 0.14f * level01 + 0.1f * ready + 0.85f * flare;
+        // the pool of light stays on the soil even under a flier
+        _auraGround.Add(Orient(up, 0, size * (1.55f + 0.3f * level01 + 1.2f * flare)), ground, new Color(col.R, col.G, col.B, strength * 0.8f));
+        // the halo sits just behind the body, so it rims the silhouette rather than washing over it
+        var away = (o - camPos).Normalized();
+        _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.7f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
+            new Color(col.R, col.G, col.B, strength * 0.75f));
     }
 
     /// Decides where this ant looks and what it is doing with its face this frame, from read-only sim state,
