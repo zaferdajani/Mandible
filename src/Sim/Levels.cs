@@ -27,10 +27,12 @@ public sealed class LevelInfo
 }
 
 /// The level sequence: one story in four acts of three levels, Episodes 1-4 re-slotted among the new levels.
+/// Act I has no rival colony (the red ants are only hinted at); they arrive as an opponent at the start of Act II
+/// and the first queen-kill chapter follows. What each chapter introduces: Reveal (CampaignReveal.cs).
 public static class Levels
 {
     public const int Count = 12;
-    public static readonly int[] Order = { 1, 5, 2, 6, 3, 7, 10, 8, 9, 4, 11, 12 };
+    public static readonly int[] Order = { 1, 5, 6, 7, 2, 3, 10, 8, 9, 4, 11, 12 };
     /// The four acts of the colony's story (LevelInfo.Season is the act).
     public static readonly string[] Seasons = { "Act I", "Act II", "Act III", "Act IV" };
     public static readonly string[] SeasonThemes = { "The Broken Tube", "Red Neighbours", "Hard Times", "The Ember Empress" };
@@ -43,34 +45,34 @@ public static class Levels
 
     static readonly LevelInfo[] _all =
     {
-        new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "The basics: lead, found, build, hatch", Rival = RivalKind.None,
+        new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "Workers, founding and the nest", Rival = RivalKind.None,
             Blurb = "The tube is broken. Lead the Glass Queen down the grass alley and found her nest.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 3f, "Lose no more than 3 ants") } },
-        new() { Id = 2, Season = 0, Name = "The Foraging Season", Novelty = "The aphid herd, a lair raid, the first queen", Rival = RivalKind.Young, RivalFood = 0.35f,
-            Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, Cinder's daughter.",
+        new() { Id = 2, Season = 1, Name = "The Foraging Season", Novelty = "The first queen kill: Ashling", Rival = RivalKind.Young, RivalFood = 0.35f,
+            Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, the red raiders' queen.",
             Stars = new[] { (StarGoal.Time, 1080f, Under(18)), (StarGoal.AllSteps, 0f, "Finish every step before the queen falls") } },
-        new() { Id = 3, Season = 1, Name = "Queen Cinder", Novelty = "Scouting, research and an outpost", Rival = RivalKind.Grown, RivalFood = 0.6f,
+        new() { Id = 3, Season = 1, Name = "Queen Cinder", Novelty = "Research, scouting and an outpost", Rival = RivalKind.Grown, RivalFood = 0.6f,
             Blurb = "Scout Queen Cinder's mound, hold your own, break her outpost and end her.",
             Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
-        new() { Id = 4, Season = 3, Name = "The Nuptial Flight", Novelty = "Heroes, the Old Stag and a deadline", Rival = RivalKind.Grown,
+        new() { Id = 4, Season = 3, Name = "The Nuptial Flight", Novelty = "The Old Stag and a deadline", Rival = RivalKind.Grown,
             Blurb = "Raise a hero, win over the Old Stag and end the red line before the flight.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Stag, 0f, "The Old Stag survives to the end") } },
-        new() { Id = 5, Season = 0, Name = "Sweet Rain", Novelty = "Food effects and a storm deadline", Rival = RivalKind.None, Seed = 20261105,
-            Blurb = "Taste honeydew, haul protein and fill the galleries before the storm.",
+        new() { Id = 5, Season = 0, Name = "Sweet Rain", Novelty = "Soldiers, food effects and a storm", Rival = RivalKind.None, Seed = 20261105,
+            Blurb = "Raise Burr a squad, taste honeydew, haul protein and fill the galleries before the storm.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.AllFood, 0f, "Carry home seeds, fruit, honeydew and protein") } },
-        new() { Id = 6, Season = 1, Name = "The Hollow Log", Novelty = "Defence: wasps, spiders and a hornet captain", Rival = RivalKind.None, Seed = 20261106,
+        new() { Id = 6, Season = 0, Name = "The Hollow Log", Novelty = "Majors, spiders and raids", Rival = RivalKind.None, Seed = 20261106,
             Blurb = "Raise majors and hold the nest against five raids from the hollow log.",
             Stars = new[] { (StarGoal.Lost, 30f, "Lose no more than 30 ants"), (StarGoal.QueenHp, 0.7f, "Your queen never drops below 70%") } },
-        new() { Id = 7, Season = 1, Name = "The Matron's Road", Novelty = "Escort: an Acid Matron hero", Rival = RivalKind.Young, Seed = 20261107, RivalFood = 0.4f,
-            Blurb = "Vetch, the tube's Acid Matron, is alive. Bring her home through bug country, then strike.",
-            Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Escort, 0f, "The Matron lives to the end") } },
+        new() { Id = 7, Season = 1, Name = "The Matron's Road", Novelty = "The red colony and an escort", Rival = RivalKind.Young, Seed = 20261107, RivalFood = 0.4f,
+            Blurb = "Red ants walk your trails. Bring Vetch, the tube's Acid Matron, home through their ground and break their raid.",
+            Stars = new[] { (StarGoal.Time, 900f, Under(15)), (StarGoal.Escort, 0f, "Vetch lives to the end") } },
         new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "Economy puzzle: the lairs are the larder", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
             Blurb = "The yard is bare. Hunt the bug lairs for their feasts and outlast the red colony.",
             Stars = new[] { (StarGoal.Time, 1560f, Under(26)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
         new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Flying ants, acid gunners, watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
             Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
-        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "A boss with her own nest who raids you", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
+        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Heroes, wasps and a boss who raids", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
             Blurb = "The Hornet Mother raids from her paper nest. Raise Burr as a Warlord and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
         new() { Id = 11, Season = 3, Name = "The Long March", Novelty = "Time pressure: eight minutes, one army", Rival = RivalKind.Awake, Seed = 20261111,
@@ -92,42 +94,42 @@ public static class Levels
         1 => new[]
         {
             "The Giant never noticed. His collecting tube slipped from the backpack, struck the stones by the path and burst.",
-            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers. Clear the grass alley, lead her to the clearing rich in seeds and dig her a home.",
+            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers. A ground beetle blocks the grass alley: clear it, lead her to the clearing rich in seeds and dig her a home.",
         },
         5 => new[]
         {
             "Warm rain has passed over the woods. Honeydew glistens on the clover, berries have split open and beetles doze in the wet grass.",
-            "The Glass Queen needs a full larder before the next storm. Learn what every food gives the colony, and fill the galleries before the sky breaks again.",
-        },
-        2 => new[]
-        {
-            "Red fire ants have dug in across the clearing. Their young queen, Ashling, is a daughter of the great Queen Cinder, and her foragers already walk your trails.",
-            "Dig a store, win the aphid herd from the beetle that grazes beside it and drive off the lair bugs. Then march down Ashling's shaft before her colony grows.",
+            "Burr wants a squad of his own, and the Glass Queen needs a full larder before the next storm. Hatch soldiers, learn what every food gives the colony, and fill the galleries before the sky breaks again.",
         },
         6 => new[]
         {
-            "Wasps and spiders nest in a rotting log at the edge of the clearing, and they have smelled the Glass Queen's brood.",
-            "Raise majors, keep Burr's soldiers close to home and break every raid. The last raid is led by a hornet captain, one of the Hornet Mother's own daughters.",
+            "Beetles and spiders nest in a rotting log at the edge of the clearing, and they have smelled the Glass Queen's brood.",
+            "The queen is a Matriarch now: her majors can crush what soldiers cannot. Raise them, keep Burr's soldiers close to home and break every raid. The last is led by the log's old wolf spider.",
+        },
+        7 => new[]
+        {
+            "They came the morning after the log fell quiet: red ants, hundreds of them, walking the black colony's own trails as if they had always owned them.",
+            "And a scout came home running with other news: Vetch is alive. The tube's old Acid Matron was thrown clear when the glass broke and has hidden in bug country ever since, wounded. Her road home crosses red ground. Bring her home, and break the raid the red ants send after her.",
+        },
+        2 => new[]
+        {
+            "The red raiders came from a young mound across the clearing. Their queen, Ashling, is a daughter of the great Queen Cinder, and her foragers already strip your trails.",
+            "Dig a store, win the aphid herd from the beetle that grazes beside it and drive off the lair bugs. Then march down Ashling's shaft before her colony grows. For the first time, the colony goes for a queen.",
         },
         3 => new[]
         {
             "Queen Cinder has come for her daughter's killers. Her red mound rises across the clearing, her foragers strip your trails and her guards hold the middle ground.",
-            "Send a scout, hold the nest when she answers, grow stronger and break her outpost. Then go down her shaft and end Queen Cinder.",
-        },
-        7 => new[]
-        {
-            "A scout came home running: Vetch is alive. The tube's old Acid Matron was thrown clear when the glass broke, and she has hidden in bug country ever since, wounded.",
-            "Find her and bring her home. Keep her alive: with her acid beside Burr's soldiers, the young red queen who settled in Cinder's ruins will not last long.",
+            "The Glass Queen's chambers can do more now: royal jelly, a Mandible Forge, a Chitin Armory. Send a scout, hold the nest when Cinder answers, grow stronger and break her outpost. Then go down her shaft and end her.",
         },
         10 => new[]
         {
-            "The Hornet Mother has found you. From her paper nest in the woods she sends her daughters at every colony she can smell, and yours is the closest.",
-            "Survive her first raid, then raise old Burr as a Warlord to lead the army. Take the fight to her nest; with her gone, the red colony across the clearing stands alone.",
+            "Something with wings has found you. From a paper nest in the woods the Hornet Mother sends her daughters at every colony she can smell, and yours is the closest.",
+            "Survive her first raid, then raise old Burr as a Warlord to lead the army: the colony's first hero. Take the fight to her nest; with her gone, the red colony across the clearing stands alone.",
         },
         8 => new[]
         {
             "No rain for weeks. The seed caches are gone and the berries have dried to husks. The only feasts left in the woods are the bugs themselves.",
-            "Hunt the lairs: every beetle and spider Burr's army brings down is a meal for the workers to haul home. The red colony is starving too. Outlast it, then end its queen.",
+            "Hunt the lairs: every beetle, spider and wasp Burr's army brings down is a meal for the workers to haul home. The red colony is starving too. Outlast it, then end its queen.",
         },
         9 => new[]
         {
@@ -154,12 +156,12 @@ public static class Levels
 
     public static string Outro(int id) => id switch
     {
-        1 => "The first nest is dug and the first brood is hatching. Burr counts his soldiers and looks east, where red ants have been seen.",
-        5 => "The storm breaks over a full larder. Deep in the dry galleries the brood grows fat, and Burr's scouts bring news of red ants nearby.",
+        1 => "The first nest is dug and the first brood is hatching. At dusk Burr finds a scent trail crossing the alley, sharp as smoke. No ant of the tube has smelled it before.",
+        5 => "The storm breaks over a full larder. In the wet grass Burr's new squad finds a dead ant none of them knows: red, with a sting in its tail.",
+        6 => "The wolf spider is dead and the log is quiet. On its far end, red ants stand in a silent line, watching the black colony count its dead. Then they turn and walk away, toward your trails.",
+        7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed, and the red raid lies broken in the grass. But the raiders' young queen is still alive across the clearing.",
         2 => "Ashling is dead and her nest lies empty. Somewhere in the woods, Queen Cinder has heard of the black ants from the glass.",
-        6 => "The hornet captain is dead and the log is quiet. But a daughter that size means a mother somewhere bigger still.",
         3 => "Queen Cinder is dead. Among her guards your soldiers find a mark they do not know: the sign of the Ember Empress, Cinder's mother.",
-        7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed. The two oldest survivors of the tube are together again.",
         10 => "The paper nest is torn open and the Hornet Mother is dead. Burr wears her sting scar with pride.",
         8 => "The red queen starved and fell. When the rain came back, it found only the Glass Queen's colony to feed.",
         9 => "The watch posts are ash and another red queen is dead. Your winged ants have seen the Empress's great mound beyond the woods.",
@@ -184,12 +186,12 @@ public static class Levels
     {
         new() { Stars = 3, Name = "Clover emblem", Kind = "Emblem", Text = "A four-leaf clover for your colony's banner.", Emblem = 1 },
         new() { Stars = 6, Name = "Ember colony colour", Kind = "Colour", Text = "Your ants' crests and your banner glow ember red.", Colour = 1 },
-        new() { Stars = 9, Name = "Acid Matron", Kind = "Hero", Text = "Raise the Acid Matron in any level that opens heroes.", Perk = Perk.Matron },
+        new() { Stars = 9, Name = "Acid Matron", Kind = "Hero", Text = "Raise the Acid Matron from Level 7 on, beside Burr.", Perk = Perk.Matron },
         new() { Stars = 12, Name = "Raspberry emblem", Kind = "Emblem", Text = "The great raspberry, for the colony that took it.", Emblem = 2 },
-        new() { Stars = 15, Name = "Early acid gunners", Kind = "Caste", Text = "Acid gunners (and the Empress research they need) from Level 5 on.", Perk = Perk.Gunner },
+        new() { Stars = 15, Name = "Early acid gunners", Kind = "Caste", Text = "Acid gunners (and the Empress research they need) from Level 7 on.", Perk = Perk.Gunner },
         new() { Stars = 18, Name = "Saffron colony colour", Kind = "Colour", Text = "Crests and banner in warm saffron.", Colour = 2 },
-        new() { Stars = 21, Name = "Sky Marshal", Kind = "Hero", Text = "Raise the Sky Marshal in any level that opens heroes.", Perk = Perk.Marshal },
-        new() { Stars = 24, Name = "Early flying ants", Kind = "Caste", Text = "Flying ants (and the wings research) from Level 5 on.", Perk = Perk.Flyer },
+        new() { Stars = 21, Name = "Sky Marshal", Kind = "Hero", Text = "Raise the Sky Marshal from Level 7 on, beside Burr.", Perk = Perk.Marshal },
+        new() { Stars = 24, Name = "Early flying ants", Kind = "Caste", Text = "Flying ants (and the wings research) from Level 7 on.", Perk = Perk.Flyer },
         new() { Stars = 27, Name = "Stag Crest emblem", Kind = "Emblem", Text = "The Old Stag's antlers, borne by the colony it fights for.", Emblem = 3 },
         new() { Stars = 30, Name = "Rosewood colony colour", Kind = "Colour", Text = "Crests and banner in deep rosewood.", Colour = 3 },
         new() { Stars = 33, Name = "Veteran brood", Kind = "Perk", Text = "Every level from Level 2 on starts with an extra veteran squad.", Perk = Perk.Veteran },
@@ -217,12 +219,12 @@ public static class Levels
 public sealed partial class Expedition
 {
     // ---------------------------------------------------------------- levels 5-12: generic objectives
-    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen }
+    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen, Raise }
 
     public sealed class Objective
     {
         public Obj Kind;
-        public int A, B;             // Dig: chamber kind, count · Hatch: ant type, count · Research: upgrade, tier · Group: group · Waves: waves · Taste: food kind
+        public int A, B;             // Dig: chamber kind, count · Hatch: ant type, count · Raise: soldiers hatched in this level · Research: upgrade, tier · Group: group · Waves: waves · Taste: food kind
         public float Amount;         // Gather
         public string Title, Text;   // Text may use {0} (have) and {1} (need)
         public string Done;          // an alternative text once the objective needs no more than waiting
@@ -262,7 +264,7 @@ public sealed partial class Expedition
 
     public string Stake(float time)
     {
-        string s = Info.Rival == RivalKind.None ? "Lose if your queen dies"
+        string s = Info.Rival == RivalKind.None || !EndsWithQueen ? "Lose if your queen dies"
             : Step < Steps - 1 ? "Every step leads to the red queen; kill her any time to win. Lose if your queen dies"
             : "Lose if your queen dies";
         if (EscortId >= 0 && !Complete) s += $" or the {EscortName} falls";
@@ -275,7 +277,10 @@ public sealed partial class Expedition
         return s + ".";
     }
 
-    string LevelGoal => Info.Rival switch
+    /// Won by killing the red queen (any time); otherwise by the level's own last objective.
+    public bool EndsWithQueen => IsLevel ? Objectives.Count > 0 && Objectives[^1].Kind == Obj.KillQueen : Episode != 1;
+
+    string LevelGoal => Episode == 7 ? "Bring Vetch home and break the red raid." : Info.Rival switch
     {
         RivalKind.None => Episode == 5 ? "Fill the galleries before the storm." : "Break every raid from the hollow log.",
         RivalKind.Empress => "Kill the Ember Empress in her royal chamber.",
@@ -294,56 +299,6 @@ public sealed partial class Expedition
             return string.Format(text, Have, Need);
         }
     }
-
-    /// What this level lets the player hatch. Star perks add castes and heroes on top of the story's.
-    bool LevelAllowsProd(ProdKind k)
-    {
-        int n = Info.Number;
-        if (k is ProdKind.Matron) return n >= 9 && Perks.HasFlag(Perk.Matron) && Episode != 7;
-        if (k is ProdKind.Marshal) return n >= 9 && Perks.HasFlag(Perk.Marshal);
-        if (k is ProdKind.Gunner && n >= 5 && Perks.HasFlag(Perk.Gunner)) return true;
-        if (k is ProdKind.Flyer && n >= 5 && Perks.HasFlag(Perk.Flyer)) return true;
-        return Episode switch
-        {
-            5 => k is ProdKind.Worker or ProdKind.Soldier,
-            6 or 7 or 8 => k is ProdKind.Worker or ProdKind.Soldier or ProdKind.Major,
-            9 => k is ProdKind.Worker or ProdKind.Soldier or ProdKind.Major or ProdKind.Flyer or ProdKind.Gunner,
-            _ => true,
-        };
-    }
-
-    bool LevelAllowsChamber(ChamberKind k) => Episode switch
-    {
-        5 or 6 => k is ChamberKind.Brood or ChamberKind.Storage,
-        7 or 8 => k is ChamberKind.Brood or ChamberKind.Storage or ChamberKind.Royal or ChamberKind.Forge or ChamberKind.Armory,
-        _ => true,
-    };
-
-    bool LevelAllowsResearch(Upgrade u, int tier)
-    {
-        if (Info.Number >= 5 && Perks.HasFlag(Perk.Gunner) && u == Upgrade.Queen && tier <= 3) return true;
-        if (Info.Number >= 5 && Perks.HasFlag(Perk.Flyer) && u == Upgrade.Wings) return true;
-        return Episode switch
-        {
-            5 or 6 => false,
-            7 or 8 => u == Upgrade.Queen ? tier <= 2 : u is Upgrade.Mandibles or Upgrade.Chitin && tier <= 1,
-            9 => u == Upgrade.Queen ? tier <= 3 : u is Upgrade.Wings || u is Upgrade.Mandibles or Upgrade.Chitin && tier <= 2,
-            _ => true,
-        };
-    }
-
-    /// Perks that reach into an episode's own gates (Episodes 3 and 4 keep their story castes; stars only add).
-    public bool PerkAllowsProd(ProdKind k) => k switch
-    {
-        ProdKind.Matron => Episode == 4 && Perks.HasFlag(Perk.Matron),
-        ProdKind.Marshal => Episode == 4 && Perks.HasFlag(Perk.Marshal),
-        ProdKind.Gunner => Info.Number >= 5 && Perks.HasFlag(Perk.Gunner),
-        ProdKind.Flyer => Info.Number >= 5 && Perks.HasFlag(Perk.Flyer),
-        _ => false,
-    };
-
-    public bool PerkAllowsResearch(Upgrade u, int tier) =>
-        Info.Number >= 5 && (Perks.HasFlag(Perk.Gunner) && u == Upgrade.Queen && tier <= 3 || Perks.HasFlag(Perk.Flyer) && u == Upgrade.Wings);
 }
 
 public sealed partial class Sim
@@ -396,11 +351,14 @@ public sealed partial class Sim
                     var at = OpenGround(home + toFoe * 34 - side * 16);
                     int g = AddGroup("Beetle pair", at);
                     for (int i = 0; i < 2; i++) GroupBug(g, AntType.Beetle, at + side * (i * 3 - 1.5f), 1);
+                    // drowsy: they hold their ground until the colony comes for them, so Chapter 2 stays a breather
+                    foreach (var (bug, _) in m.Groups[g]) Ants[bug].State = AntState.Hold;
                 }
                 m.Deadline = 900; m.DeadlineName = "the storm breaks"; m.DeadlineLoss = "The storm flooded the yard before the galleries were full. The colony starved through the wet weeks.";
+                Add(Expedition.Obj.Raise, "Raise a squad", "Soldiers can hatch now. Burr wants a squad of his own: press X (or the Soldier card) and the incubator hatches six. Hatched: {0}/{1}.", b: Config.SquadSize(AntType.Soldier));
                 Add(Expedition.Obj.Dig, "Dig a second store", "Open the Chambers tab (N), choose Storage and click beside a connected room. Every store holds 400 more food.", a: (int)ChamberKind.Storage, b: 2);
                 Add(Expedition.Obj.Taste, "Taste the honeydew", "Send workers to a honeydew drop (right-click it with workers selected). While honeydew keeps arriving, your workers run 15% faster.", a: (int)FoodKind.Sugar);
-                Add(Expedition.Obj.Taste, "Bring home protein", "Kill the drowsy beetles in the wet grass (F2, then right-click them). Workers haul the carcasses home: protein makes the queen lay 30% faster.", a: (int)FoodKind.Corpse);
+                Add(Expedition.Obj.Taste, "Bring home protein", "Send Burr's soldiers at the drowsy beetles in the wet grass (F2, then right-click them). Workers haul the carcasses home: protein makes the queen lay 30% faster.", a: (int)FoodKind.Corpse);
                 Add(Expedition.Obj.Gather, "Fill the galleries", "Hatch workers (Z) and keep them foraging. Fruit heals your ants, seeds are heavy but rich. Gathered: {0}/{1}.", amount: 1600);
                 break;
             case 6: // The Hollow Log: defence
@@ -415,15 +373,15 @@ public sealed partial class Sim
                 ClearAround(m.WaveFrom, 22);
                 ClearCorridor(home, m.WaveFrom, -1);
                 AddGroup("Hollow log", m.WaveFrom);
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 1, 3), (AntType.Beetle, 1, 2) } });
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Wasp, 1, 4) } });
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 3), (AntType.Wasp, 1, 3), (AntType.Beetle, 2, 1) } });
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Wasp, 2, 4), (AntType.Spider, 2, 2) } });
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Wasp, 5, 1), (AntType.Wasp, 2, 3) }, Boss = 0 });
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Beetle, 1, 2), (AntType.Spider, 1, 2) } });
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 1, 4) } });
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 3), (AntType.Beetle, 2, 2) } });
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Beetle, 2, 2), (AntType.Spider, 2, 3) } });
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 5, 1), (AntType.Spider, 2, 3) }, Boss = 0 });
                 m.WaveAt = 75; m.WaveGap = 80;
-                Add(Expedition.Obj.Hatch, "Raise majors", "The queen is a Matriarch: majors can hatch (C). Raise three more before the raids grow. Majors: {0}/{1}.", a: (int)AntType.Major, b: 6);
-                Add(Expedition.Obj.Waves, "Hold the nest", "Raiders dive straight down your shaft for the queen. Keep your army by the mound and attack-move onto them. Raids beaten: {0}/{1}.", b: 4);
-                Add(Expedition.Obj.Waves, "Slay the hornet captain", "A hornet captain, the Hornet Mother's own daughter, leads the last raid: she stings hard and flies off between strikes. Surround her. Raiders left: {0}.", b: 5);
+                Add(Expedition.Obj.Hatch, "Raise majors", "Majors can hatch now (C): the Matriarch's giant workers, slow and costly, with jaws that crush beetle shell. Raise three more before the raids grow. Majors: {0}/{1}.", a: (int)AntType.Major, b: 6);
+                Add(Expedition.Obj.Waves, "Hold the nest", "Raiders dive straight down your shaft for the queen. Keep your army by the mound and attack-move onto them. Spiders spit silk: keep moving, and kill them before they pounce. Raids beaten: {0}/{1}.", b: 4);
+                Add(Expedition.Obj.Waves, "Slay the old wolf spider", "The log's old wolf spider leads the last raid: she roots ants in silk and pounces on whatever she has caught. Surround her with majors. Raiders left: {0}.", b: 5);
                 break;
             case 7: // The Matron's Road: escort
                 SettleColony(0, brood: 2, stores: 1);
@@ -444,6 +402,8 @@ public sealed partial class Sim
                     ref var a = ref Ants[mat];
                     a.State = AntState.Hold; a.Hp = a.MaxHp * 0.45f;
                     m.EscortId = mat; m.EscortSerial = a.Serial; m.EscortName = "Acid Matron";
+                    // red foragers already walk her road home: the first red ants the colony fights
+                    Muster(1, AntType.Soldier, 4, home.Lerp(at, 0.35f) - side * 5);
                     // two ambushes on her road home
                     var mid = home.Lerp(at, 0.55f) + side * 6;
                     int g1 = AddGroup("Spider ambush", mid);
@@ -452,9 +412,12 @@ public sealed partial class Sim
                     int g2 = AddGroup("Beetle ambush", near);
                     for (int i = 0; i < 2; i++) GroupBug(g2, AntType.Beetle, near + side * (i * 3 - 1.5f), 2);
                 }
-                Add(Expedition.Obj.Reach, "Find the Matron", "She waits on the far flank of the yard, wounded. Send a squad to her (F2, right-click near her). Distance: {0}.");
+                m.WaveFrom = foe + (home - foe).Normalized() * 12;
+                m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 10) } });
+                m.WaveAt = 330; m.WaveGap = 0;
+                Add(Expedition.Obj.Reach, "Find Vetch", "She waits on the far flank of the yard, wounded. Red foragers walk the road to her: these are fire ants, and their soldiers sting. Send a squad (F2, right-click near her). Distance: {0}.");
                 Add(Expedition.Obj.Escort, "Bring her home", "She walks home whenever no enemy is near her. Clear the road ahead and keep her alive. Distance to the mound: {0}.");
-                Add(Expedition.Obj.KillQueen, "Kill the red queen", "Lead the Matron and your army down the red shaft: her acid burst melts packed defenders. The queen waits in her royal chamber.");
+                Add(Expedition.Obj.Waves, "Break the red raid", "The red colony has sent a raid after her, straight for your shaft. Bring the army home and break it. Vetch's acid burst melts packed attackers. Raiders left: {0}.", b: 1);
                 break;
             case 8: // The Dry Spell: the lairs are the larder
                 SettleColony(0, brood: 2, stores: 1);
@@ -731,8 +694,8 @@ public sealed partial class Sim
             { ref var e = ref Ants[m.EscortId]; e.Hp = e.MaxHp; e.State = AntState.Idle; } // home: the nurses heal her
             UpdateLevel();
         }
-        // a level without a rival is won by its last objective
-        if (m.Info.Rival == RivalKind.None && m.Complete && Winner < 0) Winner = Config.Player;
+        // a level that does not end with the red queen is won by its last objective
+        if (!m.EndsWithQueen && m.Complete && Winner < 0) Winner = Config.Player;
     }
 
     bool Threat(Vector2 p, float r)
@@ -755,6 +718,7 @@ public sealed partial class Sim
             Expedition.Obj.Gather => c.Gathered - m.GatherBase >= o.Amount,
             Expedition.Obj.Taste => c.GatheredBy[o.A] > m.KindBase[o.A],
             Expedition.Obj.Hatch => c.Count[o.A] >= o.B,
+            Expedition.Obj.Raise => m.SoldiersHatched >= o.B,
             Expedition.Obj.Research => c.T((Upgrade)o.A) >= o.B,
             Expedition.Obj.Hero => c.Count[(int)AntType.Warlord] + c.Count[(int)AntType.Matron] + c.Count[(int)AntType.Marshal] > 0,
             Expedition.Obj.Reach => m.Have <= (m.EscortId >= 0 ? 10 : 16),
@@ -783,6 +747,7 @@ public sealed partial class Sim
         {
             case Expedition.Obj.Gather: m.Have = (int)(c.Gathered - m.GatherBase); m.Need = (int)o.Amount; break;
             case Expedition.Obj.Hatch: m.Have = c.Count[o.A]; m.Need = o.B; break;
+            case Expedition.Obj.Raise: m.Have = m.SoldiersHatched; m.Need = o.B; break;
             case Expedition.Obj.Taste:
                 m.MarkerPos = NearestFood((FoodKind)o.A, home, m.Groups.Count > 0 ? m.GroupPos[0] : home);
                 break;

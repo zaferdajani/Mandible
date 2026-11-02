@@ -15,7 +15,7 @@ public static class CampaignProgress
     static readonly bool[] _story = new bool[Levels.Count + 1];
     static readonly string[] _roster = new string[Levels.Count + 1];   // the colony as it enters each chapter
     static int _colour, _emblem;
-    static bool _loaded;
+    static bool _loaded, _openModes;
 
     /// Tests point the store at a scratch file so a player's real progress is never touched.
     public static void UsePath(string path) { _path = path; _loaded = false; }
@@ -27,6 +27,18 @@ public static class CampaignProgress
         int n = Levels.NumberOf(id);
         return n == 1 || n > 1 && Completed(Levels.IdAt(n - 1));
     }
+    /// The furthest chapter this save has opened.
+    public static int Frontier { get { int n = 1; for (int k = 2; k <= Levels.Count; k++) if (Unlocked(Levels.IdAt(k))) n = k; return n; } }
+
+    /// Whether the player has met a caste or bug, for the Field Guide: the campaign reveals them a chapter at a time
+    /// (Reveal); a Skirmish or Lane War game shows them all.
+    public static bool Met(AntType t) { Ensure(); return _openModes || Reveal.Creature(t) <= Frontier; }
+
+    /// The red fire ants as a colony: met at the start of Act II, or in any Skirmish or Lane War.
+    public static bool MetRedColony { get { Ensure(); return _openModes || Frontier >= Reveal.RedColony; } }
+
+    public static void MetEverything() { Ensure(); if (_openModes) return; _openModes = true; Save(); }
+
     /// The level's stars as bits: 1 the win, 2 and 4 its optional goals.
     public static int StarBits(int id) { Ensure(); return Valid(id) ? _stars[id] : 0; }
     public static int StarCount(int id) { int b = StarBits(id), n = 0; for (int i = 0; i < 3; i++) if ((b & 1 << i) != 0) n++; return n; }
@@ -111,7 +123,7 @@ public static class CampaignProgress
     public static void Reset()
     {
         System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story); System.Array.Clear(_roster);
-        _colour = _emblem = 0;
+        _colour = _emblem = 0; _openModes = false;
         _loaded = true;
         Save();
     }
@@ -122,7 +134,7 @@ public static class CampaignProgress
     {
         _loaded = true;
         System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story); System.Array.Clear(_roster);
-        _colour = _emblem = 0;
+        _colour = _emblem = 0; _openModes = false;
         var cfg = new ConfigFile();
         if (cfg.Load(_path) != Error.Ok) return;
         for (int id = 1; id <= Levels.Count; id++)
@@ -137,6 +149,7 @@ public static class CampaignProgress
         }
         _colour = (int)cfg.GetValue("colony", "colour", 0);
         _emblem = (int)cfg.GetValue("colony", "emblem", 0);
+        _openModes = (bool)cfg.GetValue("guide", "open_modes", false);
         if (!ColourOpen(_colour)) _colour = 0;
         if (!EmblemOpen(_emblem)) _emblem = 0;
     }
@@ -154,6 +167,7 @@ public static class CampaignProgress
         }
         cfg.SetValue("colony", "colour", _colour);
         cfg.SetValue("colony", "emblem", _emblem);
+        if (_openModes) cfg.SetValue("guide", "open_modes", true);
         cfg.Save(_path);
     }
 }

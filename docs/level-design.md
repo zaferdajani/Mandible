@@ -118,26 +118,55 @@ copied: no level, name, character or text from any of these games appears in Man
 
 The owner's premise holds the levels together. A collector carries a glass tube of black garden ants in his backpack: a queen (the **Glass Queen**), her eldest soldier **Burr** and his soldiers, a handful of workers, and the old Acid Matron **Vetch**. The tube falls out on a woodland path and breaks, and the queen leads her colony into the woods. Every level is a chapter of their survival.
 
-The rival is the red fire ants' royal line: the young queen **Ashling**, then her mother **Queen Cinder**, then Cinder's mother, the **Ember Empress**. The rival queen kills are the climaxes. The **Hornet Mother** is a recurring menace: her daughter leads the Hollow Log raid before she comes herself. Burr becomes the colony's Warlord, and Vetch is found again on the Matron's Road. Story text lives in `Levels.Intro`/`Outro`; the story panels before each level are in `src/UI/Comic.cs` and `docs/story-art.md`.
+The rival is the red fire ants' royal line: the young queen **Ashling**, then her mother **Queen Cinder**, then Cinder's mother, the **Ember Empress**. They do not appear as an opponent until Act II. Act I is survival after the tube, and the red ants are only hinted at: a strange scent trail, a dead red ant in the grass, a silent line of red ants watching from the hollow log. Their arrival at the start of Act II is the campaign's first cliffhanger. The rival queen kills are the climaxes, and the first comes only in Chapter 5. The **Hornet Mother** is a recurring menace who comes herself in Act III. Burr becomes the colony's first hero, its Warlord, in the middle of the campaign, and Vetch is found again on the Matron's Road. Story text lives in `Levels.Intro`/`Outro`; the story panels before each level are in `src/UI/Comic.cs` and `docs/story-art.md`.
 
 "Ep" marks a re-slotted PR #6 episode. The internal scenario ids stay 1-4 so their code does not move, and new levels use ids 5-12. The order on the map is the table below (`Levels.Order`).
 
 | # | Act | Level | Novelty | Rival | Win | Star goals (2nd, 3rd) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | I · The Broken Tube | **The First Nest** (Ep 1) | the basics, out of the broken tube | - | found the nest | under 9:00 · lose no more than 3 ants |
-| 2 | I | **Sweet Rain** | food effects, storm deadline | - | fill the galleries before the storm | under 9:00 · carry home all four kinds of food |
-| 3 | I | **The Foraging Season** (Ep 2) | aphid herd, lair raid, first queen kill | Ashling | kill Ashling | under 18:00 · every step before she falls |
-| 4 | II · Red Neighbours | **The Hollow Log** | defence: wasps, spiders, a hornet captain | - | break every raid | lose no more than 30 ants · queen never below 70% |
-| 5 | II | **Queen Cinder** (Ep 3) | scouting, research, outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
-| 6 | II | **The Matron's Road** | escort Vetch home | young | kill the red queen | under 20:00 · Vetch lives to the end |
-| 7 | III · Hard Times | **The Hornet Mother** | a boss with her own nest; Burr becomes a Warlord | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
+| 1 | I · The Broken Tube | **The First Nest** (Ep 1) | workers, founding, the nest; a ground beetle blocks the alley | - | found the nest and hatch the first workers | under 9:00 · lose no more than 3 ants |
+| 2 | I | **Sweet Rain** | soldiers, food effects, storm deadline | - (a dead red ant: the first hint) | fill the galleries before the storm | under 9:00 · carry home all four kinds of food |
+| 3 | I | **The Hollow Log** | majors, spiders, raids led by an old wolf spider | - (red ants watch: the cliffhanger) | break every raid | lose no more than 30 ants · queen never below 70% |
+| 4 | II · Red Neighbours | **The Matron's Road** | the red colony arrives; escort Vetch home | young | bring Vetch home and break the red raid | under 15:00 · Vetch lives to the end |
+| 5 | II | **The Foraging Season** (Ep 2) | the aphid herd, a lair raid, the first queen kill | Ashling | kill Ashling | under 18:00 · every step before she falls |
+| 6 | II | **Queen Cinder** (Ep 3) | research, scouting, an outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
+| 7 | III · Hard Times | **The Hornet Mother** | heroes (Burr becomes the Warlord), wasps, a boss with her own nest | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
 | 8 | III | **The Dry Spell** | economy puzzle: the lairs are the larder | grown | kill the red queen | under 26:00 · clear all three lairs first |
 | 9 | III | **Wings and Acid** | flyers, gunners, watch posts shield the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
-| 10 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | heroes, the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
+| 10 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
 | 11 | IV | **The Long March** | time pressure: eight minutes, one army | awake | kill the mound's queen before the seal | under 4:00 · lose no more than 60 ants |
 | 12 | IV | **The Ember Empress** | the finale: every tool against an awake Empress | awake, shielded | kill the Ember Empress | under 25:00 · queen never below 50% |
 
-The curve: 1 (gentle) → 2 (breather) → 3 (first peak) → 4 (defence) → 5 (peak) → 6 (escort) → 7 (boss) → 8 (puzzle) → 9 (new castes) → 10 (peak) → 11 (blitz) → 12 (finale).
+The curve: 1 (gentle) → 2 (breather) → 3 (defence) → 4 (the red arrival, escort) → 5 (first queen kill) → 6 (peak) → 7 (boss, first hero) → 8 (puzzle) → 9 (new castes) → 10 (peak) → 11 (blitz) → 12 (finale).
+
+### Build the game up gradually
+
+The owner's rule: *build the game experience gradually without exposing all units and skills and enemies.* Every caste, hero, research rank, chamber, wild enemy and system has the one chapter that introduces it (`Reveal` in `src/Sim/CampaignReveal.cs`). Before that chapter it does not exist for the player:
+
+- the sim refuses it (hatching, digging, research);
+- the HUD leaves it out. Locked castes, chambers and research cards are not shown greyed: they are absent, and the Research and Heroes tabs appear only once something in them is revealed;
+- the field manual (F1) names only what has been introduced;
+- the yard holds no wild bug the player has not met yet;
+- the Field Guide lists only the castes and bugs the player has met (by the save's furthest chapter, or everything after any Skirmish or Lane War game), and shows the red fire ants' colony card only from Act II.
+
+Each chapter's briefing lists what it introduces, and that chapter's objectives teach it with the guidance arrows. Skirmish and Lane War keep everything available.
+
+| Chapter | Castes and heroes | Chambers and research | Enemies | Systems |
+| --- | --- | --- | --- | --- |
+| 1 | workers | royal chamber, incubator, store | ground beetle | founding, Glass Earth, brood and stores |
+| 2 | soldiers | | | food effects |
+| 3 | majors | | spiders | raids down the shaft |
+| 4 | Vetch (escort) | | the red colony | escort |
+| 5 | | | | the queen kill |
+| 6 | | royal jelly (Matriarch), Mandible Forge and Chitin Armory rank 1 | | research |
+| 7 | the first hero raised: Burr as Warlord | | wasps, the Hornet Mother | heroes |
+| 8 | | Silk Cutters | | lairs as larders |
+| 9 | flying ants, acid gunners | wings, Empress, Forge and Armory rank 2 | | wings |
+| 10 | | every remaining rank | the Old Stag | |
+
+Star perks never break the rule early: the Acid Matron, the Sky Marshal, early gunners and early flyers open no sooner than Act III (Chapter 7). The opening chapter's hunt for small prey and its remains belongs to the organic-matter system and comes in with it.
+
+`--campaign-test` checks the whole schedule. In every chapter, nothing is on offer before the chapter that introduces it and everything introduced by then is. The HUD's research cards and tabs follow the same schedule, no unmet wild bug is on the yard, the red colony is absent through Act I, and no chapter before Ashling's is won by a queen kill.
 
 ### One persistent colony
 
@@ -163,12 +192,12 @@ The level map is a cut through the Glass Queen's nest. Level 1 is the first cham
 | --- | --- | --- |
 | 3 | Clover emblem | cosmetic |
 | 6 | Ember colony colour | cosmetic |
-| 9 | Acid Matron can be raised in any level that opens heroes | hero |
+| 9 | Acid Matron can be raised from Level 7 on | hero |
 | 12 | Raspberry emblem | cosmetic |
-| 15 | Acid gunners from Level 5 on (the story opens them at Level 8) | caste |
+| 15 | Acid gunners from Level 7 on (the story opens them at Level 9) | caste |
 | 18 | Saffron colony colour | cosmetic |
-| 21 | Sky Marshal can be raised in any level that opens heroes | hero |
-| 24 | Flying ants from Level 5 on | caste |
+| 21 | Sky Marshal can be raised from Level 7 on | hero |
+| 24 | Flying ants from Level 7 on | caste |
 | 27 | Stag Crest emblem | cosmetic |
 | 30 | Rosewood colony colour | cosmetic |
 | 33 | Veteran brood: every level starts with an extra veteran squad | perk |

@@ -34,13 +34,25 @@ public static class LevelValidation
         _worlds.Clear();
     }
 
+    static string WildNear(Sim s, Vector2 home)
+    {
+        var parts = new List<string>();
+        for (int i = 0; i < s.High; i++)
+            if (s.Ants[i].Alive && s.Ants[i].Team == Config.Wild && s.Ants[i].Pos.DistanceTo(home) < 60) parts.Add($"{s.Ants[i].Type}{s.Ants[i].Level}@{s.Ants[i].Pos.DistanceTo(home):0}");
+        return " wild[" + string.Join(" ", parts) + "]";
+    }
+
+    /// A named veteran the scripted player keeps out of the fighting, as a careful player would (null: none).
+    public static string Spare;
+
     static List<int> Army(Sim s)
     {
         var ids = new List<int>();
+        int spared = Spare != null ? Find(s, Spare) : -1;
         for (int i = 0; i < s.High; i++)
         {
             ref var a = ref s.Ants[i];
-            if (a.Alive && a.Team == 0 && (Config.IsWarrior(a.Type) || a.Type == AntType.StagBeetle) && !a.Guardian && i != s.Mission.EscortId) ids.Add(i);
+            if (a.Alive && a.Team == 0 && (Config.IsWarrior(a.Type) || a.Type == AntType.StagBeetle) && !a.Guardian && i != s.Mission.EscortId && i != spared) ids.Add(i);
         }
         return ids;
     }
@@ -82,6 +94,7 @@ public static class LevelValidation
             if (!c.Researching && s.CanResearch(0, (Upgrade)o.A) == ResearchResult.Ok) s.StartResearch(0, (Upgrade)o.A);
             if (!c.Researching) return;
         }
+        if (o.Kind == Expedition.Obj.Raise && !c.Queue.Exists(q => q.Kind == ProdKind.Soldier) && s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Ok) s.Enqueue(0, ProdKind.Soldier);
         if (o.Kind == Expedition.Obj.Hatch)
         {
             var k = (AntType)o.A switch { AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, _ => ProdKind.Soldier };
@@ -169,7 +182,7 @@ public static class LevelValidation
             }
         tick:
             if (t % 900 == 0 && OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") != "")
-                GD.Print($"[level-trace] L{Levels.NumberOf(id)} t {s.Time:0} step {m.Step} {m.Title} {m.Have}/{m.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} gathered {s.Col[0].Gathered - m.GatherBase:0} lost {s.Col[0].Lost} queen {s.Ants[s.Col[0].QueenId].Hp:0} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} rq {(s.Col[1].Alive ? s.Ants[s.Col[1].QueenId].Hp : 0):0} waves {m.WaveNext}");
+                GD.Print($"[level-trace] L{Levels.NumberOf(id)} t {s.Time:0} step {m.Step} {m.Title} {m.Have}/{m.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} gathered {s.Col[0].Gathered - m.GatherBase:0} lost {s.Col[0].Lost} queen {s.Ants[s.Col[0].QueenId].Hp:0} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} rq {(s.Col[1].Alive ? s.Ants[s.Col[1].QueenId].Hp : 0):0} waves {m.WaveNext} sol {s.Col[0].Count[1]} hatchedS {m.SoldiersHatched} q {s.Col[0].Queue.Count}" + (Spare != null ? $" {Spare} {(Find(s, Spare) is int sp and >= 0 ? $"hp {s.Ants[sp].Hp:0} at {s.Ants[sp].Pos.DistanceTo(home):0} {s.Ants[sp].State}" : "gone")}" : "") + (OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") == "bugs" ? WildNear(s, home) : ""));
             rival?.Tick(1f / 30);
             s.Tick(1f / 30);
             Check(s.Winner != 1, $"Level {Levels.NumberOf(id)} ({Levels.Info(id).Name}) lost: {m.LossReason}; step {m.Step} ({m.Title}) {m.Have}/{m.Need}; t {s.Time:0}s");
@@ -177,7 +190,7 @@ public static class LevelValidation
         Check(s.Winner == 0, $"Level {Levels.NumberOf(id)} ({Levels.Info(id).Name}) timed out on step {m.Step} ({m.Title}) {m.Have}/{m.Need}; t {s.Time:0}s; army {Army(s).Count}; food {s.Col[0].Food:0}");
         for (int i = 0; i < 2; i++) s.Tick(1f / 30); // the win settles: steps and the end are recorded
         Check(m.Complete, $"Level {Levels.NumberOf(id)} won without completing");
-        if (m.Info.Rival != RivalKind.None) Check(!s.Col[1].Alive, $"Level {Levels.NumberOf(id)} won without killing the red queen");
+        if (m.EndsWithQueen) Check(!s.Col[1].Alive, $"Level {Levels.NumberOf(id)} won without killing the red queen");
         stars = s.Stars();
         LastHarvest = s.HarvestRoster(Levels.NumberOf(id));
         Check((stars & 1) == 1, "A won level earned no star");
@@ -244,7 +257,9 @@ public static class LevelValidation
         Check(s.ChamberCount(0, ChamberKind.Brood, true) >= afterChapter1.Chambers.FindAll(k => k == ChamberKind.Brood).Count, "Chapter 2's nest lost Chapter 1's brood chambers");
         Close();
         Carry = entering2;
+        Spare = "Burr"; // the careful player keeps the old soldier home through the beetle hunt
         Play(app, ch2, out _);
+        Spare = null;
         var after2 = LastHarvest;
         var burr = after2.Veterans.Find(v => v.Name == "Burr");
         Check(burr != null && burr.Joined == 1, "Burr did not survive two chapters");
@@ -317,7 +332,7 @@ public static class LevelValidation
         Check(s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked && s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked && !s.Col[1].Alive, "Sweet Rain gates or rival wrong");
         Close();
         s = Open(app, 9, out _);
-        Check(s.QueenShielded(1) && s.CanResearch(0, Upgrade.Wings) == ResearchResult.Ok && s.CanEnqueue(0, ProdKind.Warlord) == QueueResult.Locked, "Wings and Acid: shield or gates wrong");
+        Check(s.QueenShielded(1) && s.CanResearch(0, Upgrade.Wings) == ResearchResult.Ok, "Wings and Acid: shield or gates wrong");
         Close();
         s = Open(app, 4, out _);
         Check(s.CanEnqueue(0, ProdKind.Matron) == QueueResult.Locked, "The Acid Matron was open without her stars");
@@ -325,18 +340,73 @@ public static class LevelValidation
         s = Open(app, 4, out _, Perk.Matron | Perk.Veteran);
         Check(s.Mission.AllowsProd(ProdKind.Matron) && !s.Mission.AllowsProd(ProdKind.Marshal), "The Acid Matron perk did not open her (alone)");
         Close();
-        s = Open(app, 3, out _, Perk.Gunner | Perk.Flyer);
-        Check(s.Mission.AllowsResearch(Upgrade.Wings, 1) && s.Mission.AllowsProd(ProdKind.Flyer) && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Level 5");
+        s = Open(app, 3, out _, Perk.Gunner | Perk.Flyer | Perk.Matron);
+        Check(!s.Mission.AllowsProd(ProdKind.Gunner) && !s.Mission.AllowsProd(ProdKind.Flyer) && !s.Mission.AllowsProd(ProdKind.Matron) && !s.Mission.AllowsResearch(Upgrade.Wings, 1), "Star perks opened castes before Act III");
         int soldiers = s.Col[0].Count[(int)AntType.Soldier];
+        Close();
+        s = Open(app, 10, out _, Perk.Gunner | Perk.Flyer);
+        Check(s.Mission.AllowsResearch(Upgrade.Wings, 1) && s.Mission.AllowsProd(ProdKind.Flyer) && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Level 7");
         Close();
         s = Open(app, 3, out _);
         Check(soldiers == s.Col[0].Count[(int)AntType.Soldier], "Perks changed the soldiers without the veteran perk");
-        Check(!s.Mission.AllowsProd(ProdKind.Gunner), "Gunners open at Level 5 without stars");
+        Close();
+        s = Open(app, 10, out _);
+        Check(!s.Mission.AllowsProd(ProdKind.Gunner), "Gunners open at Level 7 without stars");
         Close();
         s = Open(app, 3, out _, Perk.Veteran);
         Check(s.Col[0].Count[(int)AntType.Soldier] == soldiers + 6, "The veteran brood perk did not add its squad");
         Close();
         GD.Print("[campaign-test] PASS level gates, the watch-post shield and star perks (Matron, early gunners and flyers, veteran brood)");
+        Reveals(app);
+    }
+
+    /// The gradual reveal: in every chapter nothing is on offer before the chapter that introduces it, everything
+    /// introduced by then is, the HUD shows exactly that, no wild bug the player has not met is on the yard, the red
+    /// colony stays away through Act I and no chapter before Ashling's is won by a queen kill.
+    public static void Reveals(Main app)
+    {
+        var introduced = new System.Collections.Generic.List<string>();
+        for (int n = 2; n <= Levels.Count; n++) // Chapter 1 (the broken tube) is checked by the episode-one run
+        {
+            int id = Levels.IdAt(n);
+            var s = Open(app, id, out _);
+            var m = s.Mission;
+            Check(m.Chapter == n, $"Chapter {n} reports itself as {m.Chapter}");
+            foreach (ProdKind k in Enum.GetValues(typeof(ProdKind)))
+            {
+                bool open = Reveal.Prod(k) <= n;
+                Check(m.AllowsProd(k) == open, $"Chapter {n}: {k} is {(open ? "hidden" : "on offer")} (introduced in {Reveal.Prod(k)})");
+                if (!open) Check(s.CanEnqueue(0, k) == QueueResult.Locked, $"Chapter {n}: {k} could be hatched before its reveal");
+            }
+            foreach (ChamberKind k in Enum.GetValues(typeof(ChamberKind)))
+            {
+                bool open = Reveal.Chamber(k) <= n;
+                Check(m.AllowsChamber(k) == open, $"Chapter {n}: the {k} chamber is {(open ? "hidden" : "on offer")}");
+                if (!open) Check(s.CanDig(0, k) != Sim.DigResult.Ok, $"Chapter {n}: the {k} chamber could be dug before its reveal");
+            }
+            foreach (Upgrade u in Enum.GetValues(typeof(Upgrade)))
+                for (int t = 1; t <= Config.MaxTier(u); t++)
+                {
+                    bool open = Reveal.Research(u, t) <= n;
+                    Check(m.AllowsResearch(u, t) == open, $"Chapter {n}: {u} rank {t} is {(open ? "hidden" : "on offer")}");
+                    if (!open && s.Col[0].T(u) == t - 1) Check(s.CanResearch(0, u) == ResearchResult.Locked, $"Chapter {n}: {u} rank {t} could be researched before its reveal");
+                }
+            foreach (Upgrade u in Enum.GetValues(typeof(Upgrade)))
+                Check(m.ShowsResearch(u) == (Reveal.Research(u, u == Upgrade.Queen ? 2 : 1) <= n), $"Chapter {n}: the {u} research card is {(m.ShowsResearch(u) ? "shown" : "hidden")} on the HUD");
+            Check(m.ShowsAnyResearch == (n >= 6), $"Chapter {n}: the Research tab is {(m.ShowsAnyResearch ? "shown" : "hidden")}");
+            Check(m.ShowsHeroes == (n >= Reveal.Prod(ProdKind.Warlord)), $"Chapter {n}: the Heroes tab is {(m.ShowsHeroes ? "shown" : "hidden")}");
+            for (int i = 0; i < s.High; i++)
+            {
+                ref var a = ref s.Ants[i];
+                if (!a.Alive || a.Team == 1) continue;
+                Check(Reveal.Creature(a.Type) <= n, $"Chapter {n}: a {a.Type} is on the field before its reveal in Chapter {Reveal.Creature(a.Type)}");
+            }
+            Check(s.Col[1].Alive == (n >= Reveal.RedColony), $"Chapter {n}: the red colony is {(s.Col[1].Alive ? "present" : "absent")}");
+            Check(m.EndsWithQueen == (n >= Reveal.FirstQueenKill && Levels.Info(id).Rival != RivalKind.None), $"Chapter {n}: {(m.EndsWithQueen ? "won" : "not won")} by a queen kill");
+            foreach (var (name, _) in Reveal.NewIn(n)) introduced.Add(name);
+            Close();
+        }
+        GD.Print($"[campaign-test] PASS gradual reveal: every caste, hero, chamber, research rank and wild bug appears only from its chapter; red colony from Chapter {Reveal.RedColony}, first queen kill in Chapter {Reveal.FirstQueenKill}; {introduced.Count} lessons introduced after Chapter 1");
     }
 
     /// `--tube-capture=<dir>`: level 1's broken tube from the opening camera, close up and from the alley.

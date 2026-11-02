@@ -55,27 +55,7 @@ public sealed partial class Expedition
         _ => "Kill the red queen in her royal chamber.",
     };
 
-    /// The brood the player may hatch in this episode; later castes unlock as the campaign goes on.
-    public bool AllowsProd(ProdKind k) => IsLevel ? LevelAllowsProd(k) : PerkAllowsProd(k) || Episode switch
-    {
-        1 or 2 => k is ProdKind.Worker or ProdKind.Soldier,
-        3 => k is ProdKind.Worker or ProdKind.Soldier or ProdKind.Major,
-        _ => k is not (ProdKind.Matron or ProdKind.Marshal), // the other heroes are bought with stars (Levels.Unlocks)
-    };
-
-    public bool AllowsChamber(ChamberKind k) => IsLevel ? LevelAllowsChamber(k) : Episode switch
-    {
-        1 or 2 => k is ChamberKind.Brood or ChamberKind.Storage,
-        3 => k is ChamberKind.Brood or ChamberKind.Storage or ChamberKind.Royal or ChamberKind.Forge or ChamberKind.Armory,
-        _ => true,
-    };
-
-    public bool AllowsResearch(Upgrade u, int nextTier) => IsLevel ? LevelAllowsResearch(u, nextTier) : PerkAllowsResearch(u, nextTier) || Episode switch
-    {
-        1 or 2 => false,
-        3 => u == Upgrade.Queen ? nextTier <= 2 : u is Upgrade.Mandibles or Upgrade.Chitin && nextTier <= 1,
-        _ => true,
-    };
+    // what the player may hatch, dig and research: Reveal (CampaignReveal.cs), one chapter at a time
 
     public string StepTitle(int i) => IsLevel ? LevelStepTitle(i) : (Episode, i) switch
     {
@@ -200,6 +180,7 @@ public sealed partial class Sim
             m.FlightAt = Expedition.FlightTime;
             m.RaidWaves = 4; m.RaidGap = 240; m.RaidAt = 480;
         }
+        HideUnrevealedWildlife();
         foreach (var c in Col) { c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop; }
         m.GatherBase = player.Gathered;
         UpdateCampaign();

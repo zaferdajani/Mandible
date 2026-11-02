@@ -31,15 +31,15 @@ public static class Comic
         },
         [5] = new[]
         {
-            new Panel { File = "b-rain", Caption = "Rain came to the woods, and with it sweet honeydew." },
+            new Panel { File = "b-rain", Caption = "Rain came to the woods, and with it sweet honeydew. Across the alley ran a scent trail no ant of the tube had smelled before." },
         },
         [2] = new[]
         {
-            new Panel { File = "b-scout", Caption = "From a pebble at the edge of the clearing, a red scout watched the black ants work." },
+            new Panel { File = "b-scout", Caption = "From a pebble at the edge of the clearing, a red scout watched the black ants work. Ashling's mound was close." },
         },
         [6] = new[]
         {
-            new Panel { File = "b-log", Caption = "Ashling was gone. But something with wings had been watching too." },
+            new Panel { File = "b-log", Caption = "In a rotting log at the clearing's edge, beetles and spiders had smelled the brood." },
         },
         [3] = new[]
         {
@@ -47,11 +47,12 @@ public static class Comic
         },
         [7] = new[]
         {
+            new Panel { File = "b-cinder", Caption = "Then the red ants came: hundreds of them, walking the black colony's own trails." },
             new Panel { File = "b-vetch", Caption = "In the bug country a scout found glass, and beside it, alive, old Vetch." },
         },
         [10] = new[]
         {
-            new Panel { File = "b-hornet", Caption = "High in the woods hung a nest of paper, and in it the Hornet Mother." },
+            new Panel { File = "b-hornet", Caption = "High in the woods hung a nest of paper, and in it something with wings: the Hornet Mother." },
         },
         [8] = new[]
         {

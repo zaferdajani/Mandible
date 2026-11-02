@@ -62,7 +62,7 @@ public sealed partial class Expedition
     public ColonyRoster Roster;
     public readonly Dictionary<int, (int serial, Veteran vet)> Tracked = new();
     public readonly List<Veteran> Fallen = new();
-    public int Reinforcements, Chapter;
+    public int Reinforcements;
 }
 
 public sealed partial class Sim
@@ -82,7 +82,6 @@ public sealed partial class Sim
     {
         var m = Mission;
         if (m == null) return;
-        m.Chapter = chapter;
         var home = W.Nests[0].Pos;
         if (roster == null)
         {

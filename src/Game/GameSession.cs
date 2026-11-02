@@ -57,6 +57,7 @@ public partial class GameSession : Node3D
         long tWorld = sw.ElapsedMilliseconds;
         Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
         if (Skirmish) Sim.BeginSkirmish();
+        if (!Campaign) CampaignProgress.MetEverything(); // a Skirmish or Lane War shows every caste and bug
         if (Episode > 1) Sim.BeginEpisode(Episode);
         if (Campaign) { Sim.ApplyRoster(CampaignProgress.RosterFor(Episode), Levels.NumberOf(Episode)); Sim.ApplyPerks(CampaignProgress.Perks); }
         foreach (var f in World.Food) if (!f.Alive && f.Node != null) f.Node.Visible = false; // the Dry Spell's dried-up food

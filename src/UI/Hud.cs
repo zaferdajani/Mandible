@@ -15,6 +15,7 @@ public partial class Hud : CanvasLayer
     readonly Control[] _prodLock = new Control[9];
     readonly Label[] _heroStatus = new Label[9];
     readonly Button[] _res = new Button[5];
+    PanelContainer _heroPanel;
     readonly Label[] _resTier = new Label[5], _resCost = new Label[5];
     ProgressBar _resBar;
     Label _netLabel, _waiting;
@@ -391,6 +392,7 @@ public partial class Hud : CanvasLayer
 
         // royal chamber: one of each hero
         var hp = new PanelContainer();
+        _heroPanel = hp;
         UiTheme.Place(hp, 1, 1, 1, 1, -452, -566, -12, -450);
         var hv = new VBoxContainer();
         hv.AddThemeConstantOverride("separation", 5);
@@ -589,21 +591,45 @@ public partial class Hud : CanvasLayer
         _root.AddChild(p);
     }
 
+    // The field manual names only what the campaign has introduced so far (Reveal); other modes list everything.
+    string ManualLine(string head, string tail, params (ProdKind kind, string text)[] items)
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (kind, text) in items) if (Game.Sim.Mission is not { } m || m.AllowsProd(kind)) shown.Add(text);
+        return shown.Count == 0 ? "" : head + string.Join("  ·  ", shown) + tail;
+    }
+
+    string ResearchLine()
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (u, text) in new[] { (Upgrade.Queen, "Q royal jelly (queen level)"), (Upgrade.Wings, "W wings"), (Upgrade.Mandibles, "E mandible forge"), (Upgrade.Chitin, "R chitin"), (Upgrade.SilkCutters, "T silk cutters") })
+            if (Game.Sim.Mission is not { } m || m.ShowsResearch(u)) shown.Add(text);
+        return shown.Count == 0 ? "" : "Chambers:  " + string.Join("  ·  ", shown);
+    }
+
+    string BugLine()
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (t, text) in new[] { (AntType.Beetle, "beetles sweep"), (AntType.Spider, "spiders shoot webs"), (AntType.Wasp, "wasps dive and sting") })
+            if (Game.Sim.Mission is not { } m || Reveal.Creature(t) <= m.Chapter) shown.Add(text);
+        return $"Wild bugs guard rich food: {string.Join(", ", shown)}. Their carcasses are feasts.";
+    }
+
     void BuildHelp()
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            Game.TutorialMode ? "Level 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Level {Levels.NumberOf(Game.Episode)}: follow the steps on the objective card. {Game.Sim.Mission.Goal} Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
+            Game.TutorialMode ? "Level 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers." : Game.Campaign ? $"Level {Levels.NumberOf(Game.Episode)}: follow the steps on the objective card. {Game.Sim.Mission.Goal} Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
             "Left-click / drag  select ants   ·   Shift adds   ·   Double-click selects all of that kind on screen",
             "Right-click  move / attack / gather (workers on food)   ·   A + click  attack-move",
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
-            "Brood:  Z worker  ·  X soldier  ·  C major  ·  V chamber  ·  F flying ant  ·  D acid gunner",
-            "Chambers:  Q royal jelly (queen level)  ·  W wings  ·  E mandible forge  ·  R chitin  ·  T silk cutters",
-            "Heroes:  Y Warlord  ·  U Acid Matron  ·  I Sky Marshal. They level to 10 and cast specials on their own.",
-            "Wild bugs guard rich food. Beetles sweep, spiders shoot webs, wasps dive and sting. Their carcasses are feasts.",
+            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F flying ant"), (ProdKind.Gunner, "D acid gunner")),
+            ResearchLine(),
+            ManualLine("Heroes:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
+            BugLine(),
             "Click the nest, then right-click the ground to set a rally point.",
             "Arrows / screen edge pan   ·   Mouse wheel zoom   ·   Middle-drag rotate   ·   Space jump to last alert",
             "Warriors hatch in squads that rank up together. B sends squads home to heal and refill their fallen.",
@@ -695,6 +721,16 @@ public partial class Hud : CanvasLayer
         var tag = UiTheme.Text($"NEW  ·  {info.Novelty.ToUpperInvariant()}", 14, UiTheme.Bold, new Color(1f, 0.85f, 0.5f));
         tag.HorizontalAlignment = HorizontalAlignment.Center;
         body.AddChild(tag); body.MoveChild(tag, 1);
+        // what this chapter introduces, one lesson at a time (Reveal)
+        var lessons = new List<string>();
+        foreach (var (name, text) in Reveal.NewIn(info.Number)) lessons.Add($"{name}: {text}");
+        if (lessons.Count > 0)
+        {
+            var news = UiTheme.Text(string.Join("\n", lessons), 14, UiTheme.Bold, UiTheme.Ink);
+            news.HorizontalAlignment = HorizontalAlignment.Center; news.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            news.CustomMinimumSize = new Vector2(760, 0);
+            body.AddChild(news); body.MoveChild(news, 2);
+        }
         int bits = CampaignProgress.StarBits(episode);
         var stars = new StarList { Size_ = 13, FontSize = 16, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
         stars.Set(new[] { ((bits & 1) != 0, Levels.StarText(episode, 0)), ((bits & 2) != 0, Levels.StarText(episode, 1)), ((bits & 4) != 0, Levels.StarText(episode, 2)) });
@@ -869,8 +905,11 @@ public partial class Hud : CanvasLayer
                 _heroStatus[i].AddThemeColorOverride("font_color", alive ? new Color(0.6f, 1f, 0.5f) : UiTheme.Ink);
             }
             _prod[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, unlocked ? 0.45f : 0.3f);
+            // the campaign leaves out what it has not introduced yet (never shown greyed)
+            if (sim.Mission is { } story && k != ProdKind.Chamber && !story.AllowsProd(k)) _prod[i].Visible = false;
             _prodLock[i].Visible = !unlocked;
         }
+        if (sim.Mission is { ShowsHeroes: false }) _heroPanel.Visible = false;
         for (int i = 0; i < 5; i++)
         {
             var u = (Upgrade)i;
@@ -880,6 +919,7 @@ public partial class Hud : CanvasLayer
             bool active = c.Researching && c.ResearchKind == u;
             _res[i].Modulate = active ? new Color(1.2f, 1.1f, 0.8f) : r == ResearchResult.Ok ? Colors.White : new Color(1, 1, 1, maxed ? 0.55f : 0.35f);
             _res[i].TooltipText = ResearchTooltip(c, u);
+            if (sim.Mission is { } story && !story.ShowsResearch(u)) _res[i].Visible = false;
             _resTier[i].Text = Config.MaxTier(u) > 1 ? $"{c.T(u)}/{Config.MaxTier(u)}" : (c.T(u) > 0 ? "done" : "");
             _resCost[i].Text = maxed ? "" : ((int)Config.ResearchCost(u, next)).ToString();
         }

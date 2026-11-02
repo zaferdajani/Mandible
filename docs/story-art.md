@@ -37,3 +37,14 @@ Every prompt begins with "Cinematic photoreal (macro) still from a premium 3D st
 | `e-home` | Epilogue | The black queen lays eggs beside a kept glass shard; the warlord and acid matron stand watch. |
 
 To replace a panel, generate it at 3:2 with the same references and a prompt in the same voice. Save it as a 1600 × 1063 JPEG under the same file name and run the Godot import step (`godot --headless --audio-driver Dummy --path . --import`).
+
+## Panels the gradual-reveal order needs (for the art pipeline)
+
+The chapter order changed so the red colony arrives only in Act II (`docs/level-design.md`, "Build the game up gradually"). The captions in `src/UI/Comic.cs` already tell the new story, but some stills no longer match them. These panels go through the art pipeline (approved targets, independent review) and are not regenerated here:
+
+| File | Chapter | Needs |
+| --- | --- | --- |
+| `b-rain` | 2 · Sweet Rain | Its caption now adds a strange scent trail across the alley, the first hint of the red ants. The still can stay or gain the trail. |
+| `b-log` | 3 · The Hollow Log | The still shows a hornet, but wasps are not met until Chapter 7. It needs beetles and a wolf spider at a rotting log. |
+| `b-arrival` (new, now reusing `b-cinder`) | 4 · The Matron's Road | The cliffhanger: hundreds of red ants walking the black colony's own trails. |
+| `b-cinder` | 6 · Queen Cinder | No change, but it is reused for Chapter 4 until `b-arrival` exists. |

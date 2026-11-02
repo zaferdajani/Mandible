@@ -51,10 +51,13 @@ public static class ColonyValidation
             Check(!s.OrderEntrance(0, Units(s, AntType.Worker)), "Entrance allowed before reaching clearing");
             for (int i = 0; i < 900; i++) s.Tick(1f / 30);
             Check(!c.Founded && s.Winner < 0, "Mission auto-founded or won without the player's orders");
-            Check(s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked && s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked, "Episode technology gate failed");
+            Check(s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked && s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked && s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Locked, "Episode technology gate failed");
+            Check(!s.Col[1].Alive && s.Mission.Chapter == 1 && !s.Mission.ShowsHeroes, "Chapter 1 has a red colony or heroes");
+            for (int i = 0; i < s.High; i++)
+                if (s.Ants[i].Alive) Check(s.Ants[i].Team != 1 && Reveal.Creature(s.Ants[i].Type) <= 1, $"Chapter 1 has a {s.Ants[i].Type} on the field before its reveal");
             var army = Units(s, AntType.Soldier);
             s.CmdMove(army, Expedition.Ambush, true);
-            Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "attackers clear the enemy patrol");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "Burr's soldiers clear the beetle from the alley");
             s.CmdMove(Units(s, AntType.Soldier), Expedition.Clearing + new Vector2(8, 0), false);
             Until(s, () => s.Mission.Stage == ExpeditionStage.DigEntrance, 150, "queen and workers reach the food clearing");
             Check(!s.OrderEntrance(0, Units(s, AntType.Soldier)), "Soldiers could order the founding dig");
@@ -75,11 +78,8 @@ public static class ColonyValidation
                 Until(s, () => s.CanEnqueue(0, ProdKind.Worker) == QueueResult.Ok, 120, "economy can pay for a worker");
                 Check(s.Enqueue(0, ProdKind.Worker) == QueueResult.Ok, "Worker queue rejected");
             }
-            Until(s, () => s.Mission.Stage == ExpeditionStage.RaiseSoldiers, 180, "four workers hatch inside the incubator");
-            Until(s, () => s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Ok, 240, "foragers fund a fighting squad");
+            Until(s, () => s.Winner == 0, 180, "four workers hatch and complete episode one");
             Check(c.Gathered > 0, "No actual food was gathered");
-            Check(s.Enqueue(0, ProdKind.Soldier) == QueueResult.Ok, "Soldier queue rejected");
-            Until(s, () => s.Winner == 0, 180, "six soldiers hatch and complete episode one");
             Check(s.Mission.Stage == ExpeditionStage.Complete, "Wrong victory condition");
             capacity = c.PopCap;
             var expansionSpot = s.DefaultSpot(0, ChamberKind.Brood);
