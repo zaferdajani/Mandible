@@ -183,25 +183,36 @@ public static class ColonyValidation
         return false;
     }
 
+    /// The win in every episode with a rival: down the red shaft for the queen. A strike force gathers at home,
+    /// then every new squad streams after it until she dies (she mends between fights, so pauses waste the push).
+    static bool Assault(Sim s, List<int> army, ref bool marching, int gather)
+    {
+        marching = marching ? army.Count >= 1 : army.Count >= gather;
+        if (marching) s.CmdMove(army, s.W.Nests[1].Pos, true);
+        return marching;
+    }
+
     static float Episode2(Main app)
     {
         var s = Open(app, 2, out var rival); var m = s.Mission; var c = s.Col[0];
         var home = s.W.Nests[0].Pos;
         Check(s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked && s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked, "Episode 2 gates failed");
-        Check(!s.Col[1].Alive && s.ChamberCount(0, ChamberKind.Storage, false) == 0 && s.HerdHere && m.GuardsLeft == 1, "Episode 2 opening state wrong");
+        Check(s.Col[1].Alive && s.Col[1].Founded && s.ChamberCount(0, ChamberKind.Storage, false) == 0 && s.HerdHere && m.GuardsLeft == 1, "Episode 2 opening state wrong");
         int phase = 0;
-        Play(s, rival, () => s.Winner == 0, 1200, "store, herd, harvest and the lair raid", () =>
+        bool marching = false;
+        Play(s, rival, () => s.Winner == 0, 1500, "store, herd, harvest, the lair raid and the young red queen", () =>
         {
             if (s.ChamberCount(0, ChamberKind.Storage, false) == 0 && s.CanDig(0, ChamberKind.Storage) == Sim.DigResult.Ok) s.Dig(0, ChamberKind.Storage, s.DefaultSpot(0, ChamberKind.Storage));
             Hatch(s, ProdKind.Worker, 26);
-            Hatch(s, ProdKind.Soldier, m.Step >= 2 ? 30 : 12);
+            Hatch(s, ProdKind.Soldier, m.Step >= 2 ? 40 : 12);
             var army = Army(s);
             if (Repel(s, army, 70)) return;
+            if (m.Step == 4) { if (!Assault(s, army, ref marching, 24)) s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false); return; }
             if (phase == 0 && m.GuardsLeft > 0) { if (army.Count >= 6) s.CmdMove(army, s.Pasture, true); }
             else if (phase == 0) { s.CmdMove(army, s.Pasture + new Vector2(1, 0), false); phase = 2; }
             else if (phase == 2 && m.Step == 3 && m.RaidsSent == 0 && m.Have < 15) { s.CmdMove(army, home.Lerp(m.Lair, 0.12f), false); phase = 3; }
         });
-        Check(m.Complete && s.HerdTeam == 0 && c.Gathered - m.GatherBase >= Expedition.GatherGoal && m.RaidsSent == 1 && m.RaidersLeft == 0, "Episode 2 won without its objectives");
+        Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && s.HerdTeam == 0 && c.Gathered - m.GatherBase >= Expedition.GatherGoal && m.RaidsSent == 1 && m.RaidersLeft == 0, "Episode 2 won without killing the queen or its steps");
         float t = s.Time; Close(); return t;
     }
 
@@ -212,29 +223,27 @@ public static class ColonyValidation
         Check(s.CanEnqueue(0, ProdKind.Gunner) == QueueResult.Locked && s.CanResearch(0, Upgrade.Wings) == ResearchResult.Locked && s.CanResearch(0, Upgrade.Queen) != ResearchResult.Locked, "Episode 3 gates failed");
         Check(m.PostLeft == 3 && s.Col[1].Alive, "Episode 3 rival or outpost missing");
         int scout = -1, scoutSerial = 0;
-        Play(s, rival, () => s.Winner == 0, 1500, "scouting, two raids, research and the outpost", () =>
+        bool marching = false;
+        Play(s, rival, () => s.Winner == 0, 1700, "scouting, two raids, research, the outpost and the red queen", () =>
         {
             Hatch(s, ProdKind.Worker, 32);
             if (!c.Researching && c.T(Upgrade.Queen) < 2 && c.Food >= 220) s.StartResearch(0, Upgrade.Queen);
             Hatch(s, ProdKind.Major, 6);
             Hatch(s, ProdKind.Soldier, 48);
             var army = Army(s);
-            // a squad walks (without stopping to fight) until the red thatch is in sight
-            // around the great raspberry's lair in the middle, by a waypoint on the flank
-            var flank = (home + foe) * 0.5f + new Vector2(-1, -1).Normalized() * 62;
+            // a squad walks the foragers' highway (without stopping to fight) until the red thatch is in sight
             if (m.Step == 0 && !s.Valid(scout, scoutSerial) && army.Count > 0 && s.SquadOf(army[0]) is { } squad)
             {
                 scout = squad.Members[0]; scoutSerial = s.Ants[scout].Serial;
-                s.CmdMove(new List<int>(squad.Members), flank, false);
+                s.CmdMove(new List<int>(squad.Members), foe + (home - foe).Normalized() * 30, false);
             }
-            else if (m.Step == 0 && s.Valid(scout, scoutSerial) && s.Ants[scout].Pos.DistanceTo(flank) < 6 && s.SquadOf(scout) is { } going)
-                s.CmdMove(new List<int>(going.Members), foe + (flank - foe).Normalized() * 30, false);
             if (m.Step == 0 && s.Valid(scout, scoutSerial)) army.RemoveAll(id => s.SquadOf(id)?.Members.Contains(scout) == true);
             if (Repel(s, army, 80)) return;
+            if (m.Step == 4 && Assault(s, army, ref marching, 36)) return;
             if (m.Step == 3 && army.Count >= 30) s.CmdMove(army, m.PostPos, true);
             else s.CmdMove(army, home + (foe - home).Normalized() * 10, false);
         });
-        Check(m.Complete && m.PostLeft == 0 && m.RaidsSent == 2 && c.T(Upgrade.Queen) >= 2, "Episode 3 won without its objectives");
+        Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && m.PostLeft == 0 && m.RaidsSent == 2 && c.T(Upgrade.Queen) >= 2, "Episode 3 won without killing the queen or its steps");
         float t = s.Time; Close(); return t;
     }
 
@@ -246,7 +255,7 @@ public static class ColonyValidation
         Check(s.CanEnqueue(0, ProdKind.Warlord) == QueueResult.Ok, "Episode 4 cannot raise a hero");
         bool marching = false;
         int lastStep = 0;
-        Play(s, rival, () => s.Winner == 0, 1700, "hero, Old Stag, guardians and the red queen", () =>
+        Play(s, rival, () => s.Winner == 0, 1700, "hero, Old Stag, guardians and the red queen in her chamber", () =>
         {
             Hatch(s, ProdKind.Warlord, 1);
             Hatch(s, ProdKind.Worker, 40);

@@ -19,8 +19,8 @@ public static class CampaignEpisodes
     public static string Blurb(int ep) => ep switch
     {
         1 => "Escort a young queen down the grass alley and found her nest.",
-        2 => "Dig a store, win the aphid herd and drive off a lair raid.",
-        3 => "Scout the red mound, hold your own, grow stronger, break their outpost.",
+        2 => "Dig a store, win the aphid herd, drive off a lair raid, kill a young red queen.",
+        3 => "Scout the red mound, hold your own, break their outpost, kill their queen.",
         _ => "Raise a hero, win over the Old Stag and end the red line before the flight.",
     };
 
@@ -29,17 +29,18 @@ public static class CampaignEpisodes
         1 => new[]
         {
             "A young queen and her escort leave the old colony beneath the hedge. Past the grass alley lies a clearing rich in seeds.",
-            "Clear the path, settle her underground and raise the first brood.",
+            "Clear the path, settle her underground and raise the first brood. Somewhere across the yard a red queen is doing the same: one day your army will have to end her.",
         },
         2 => new[]
         {
             "The spring rain has passed and the yard is waking. Your nest is young: one royal chamber, one incubator and nowhere to keep a harvest.",
             "Dig a store, take the aphid herd on the clover stem from the ground beetle that grazes beside it, and fill your galleries before the lair bugs notice how fat you have grown.",
+            "Across the yard a young red queen has just dug in. Grow strong enough to march down her shaft and end her before her colony grows.",
         },
         3 => new[]
         {
             "Across the yard a colony of red fire ants has raised its thatch. Their foragers walk your trails, and an outpost of mound guards watches the middle ground.",
-            "Send a scout to see what you face, hold your mound when they answer, grow stronger in the forge or with royal jelly, then tear their outpost down.",
+            "Send a scout to see what you face, hold your mound when they answer, grow stronger in the forge or with royal jelly and tear their outpost down. Then go down their shaft and kill the red queen.",
         },
         _ => new[]
         {
@@ -50,9 +51,9 @@ public static class CampaignEpisodes
 
     public static string Outro(int ep) => ep switch
     {
-        1 => "Your incubator, store, workers and first fighting squad are ready.",
-        2 => "The raiders lie in pieces at the shaft and the stores are full. Word of a well-fed mound travels fast in the grass: the red fire ants have noticed you.",
-        3 => "Their outpost is rubble and the middle ground is yours. But the fire ants are raising winged princesses for the warm evening to come.",
+        1 => "Your incubator, store, workers and first fighting squad are ready. Far across the yard, a red queen has dug in too.",
+        2 => "The young red queen is dead and her nest lies empty. But a far larger red colony has noticed you.",
+        3 => "The red queen is dead and the middle ground is yours. But her sister colony across the garden is raising winged princesses for the warm evening to come.",
         _ => "The red queen is dead and her princesses never flew. The garden beneath the grass belongs to your colony.",
     };
 }
@@ -78,12 +79,22 @@ public sealed partial class Expedition
     public const float GatherGoal = 800f;      // carried home by foragers (honeydew does not count)
     public const float FlightTime = 1800f;     // the finale's nuptial flight leaves after 30 minutes
     public const float ScoutRange = 45f;       // close enough to the red thatch to count its guards
-    public const float CorridorClear = 26f;    // the finale's middle path: no wild lairs this close to the line between the mounds
+    public const float CorridorClear = 26f;    // the foragers' highway: no wild lairs this close to the line between the mounds
 
     public bool Confined => Episode == 1;
     public bool ShieldsRival => Episode == 4;
-    public int Steps => Episode == 1 ? 0 : 4;
+    public int Steps => Episode switch { 1 => 0, 4 => 4, _ => 5 };
+    /// Steps finished when the red queen fell (the rest became optional the moment she died).
+    public int StepsDone;
     public bool Complete => Episode == 1 ? Stage == ExpeditionStage.Complete : Step >= Steps;
+
+    /// The episode's main victory, always on show: every step leads here.
+    public string Goal => Episode switch
+    {
+        1 => "Found the nest. One day its army will march on the red queen.",
+        2 => "Kill the young red queen in her royal chamber.",
+        _ => "Kill the red queen in her royal chamber.",
+    };
 
     /// The brood the player may hatch in this episode; later castes unlock as the campaign goes on.
     public bool AllowsProd(ProdKind k) => Episode switch
@@ -113,14 +124,16 @@ public sealed partial class Expedition
         (2, 1) => "Win the aphid herd",
         (2, 2) => "Fill the galleries",
         (2, 3) => "Survive the lair raid",
+        (2, 4) => "Kill the young red queen",
         (3, 0) => "Scout the red mound",
         (3, 1) => "Hold your mound",
         (3, 2) => "Grow stronger",
         (3, 3) => "Break the outpost",
+        (3, 4) => "Kill the red queen",
         (4, 0) => "Raise a hero",
         (4, 1) => "Rouse the Old Stag",
         (4, 2) => "Break the mound guardians",
-        (4, 3) => "End the red line",
+        (4, 3) => "Kill the red queen",
         _ => "Episode complete",
     };
 
@@ -134,14 +147,15 @@ public sealed partial class Expedition
         (2, 3) => RaidsSent == 0
             ? $"Bugs are stirring in a lair to the east. Hatch soldiers (X) and gather them at the mound. They arrive in {Have}s."
             : $"The raiders are breaking for the shaft and your queen. Attack-move your army onto them. Raiders left: {Have}/{Need}.",
-        (3, 0) => $"Send a squad toward the red thatch in the far corner until it sees their mound. Go around the great raspberry in the middle: the stag lord and his beetles guard it. Distance: {Have}.",
+        (3, 0) => $"Send a squad down the foragers' highway toward the red thatch in the far corner until it sees their mound. Distance: {Have}.",
         (3, 1) => $"The fire ants answer with raids that go down your shaft for the queen. Keep your soldiers home and destroy every raider. Waves beaten: {Have}/{Need}.",
         (3, 2) => "Open the Research tab: feed the queen royal jelly to make her a Matriarch (majors unlock), or dig a Mandible Forge or a Chitin Armory.",
         (3, 3) => $"Mound guards grown into the ground hold the middle. They never move but hit hard and mend when left alone: strike with everything. Guards left: {Have}.",
+        (2, 4) or (3, 4) => "Gather your army, attack-move onto the red mound and send everyone down the shaft: the queen waits in her royal chamber. She is huge and mends between fights, so keep fresh squads coming.",
         (4, 0) => "Open the Heroes tab and raise the Warlord (Y). Heroes level up quickly and fight with special moves.",
         (4, 1) => $"The Old Stag prowls by the great raspberry in the middle. Beat it with your whole army and it joins your colony. Its strength: {Have}%.",
         (4, 2) => $"While the guardians at the red entrance stand, their queen cannot be harmed. Lead the Old Stag and your army at them: its bite shatters mound guards. Left: {Have}.",
-        (4, 3) => "The way is open. Send everything down the red shaft and kill their queen before the princesses fly.",
+        (4, 3) => "The way is open. Send everything down the red shaft and kill the queen in her royal chamber before the princesses fly.",
         _ => "Episode complete.",
     };
 }
@@ -160,7 +174,7 @@ public sealed partial class Sim
         var player = Col[0];
         if (episode == 2)
         {
-            RemoveRival();
+            ClearCorridor(home, foe, -1); // first: the herd's own beetle grazes beside the highway
             SettleColony(0, brood: 1, stores: 0);
             player.Food = 200;
             Muster(0, AntType.Worker, 2, home);
@@ -175,6 +189,10 @@ public sealed partial class Sim
             }
             m.Lair = OpenGround(home + toFoe * 100 - side * 40);
             m.RaidWaves = 1;
+            // a young red queen has just dug in across the yard: a few workers and one squad
+            SettleColony(1, brood: 1, stores: 0);
+            Col[1].Food = 100;
+            Muster(1, AntType.Soldier, 6, foe - toFoe * 9);
         }
         else if (episode == 3)
         {
@@ -191,6 +209,7 @@ public sealed partial class Sim
             m.Post.Add(Track(SpawnGuardian(1, m.PostPos + toFoe * 3.2f + side * 2.5f, AntType.Gunner)));
             m.Post.Add(Track(SpawnGuardian(1, m.PostPos + toFoe * 3.2f - side * 2.5f, AntType.Gunner)));
             m.RaidWaves = 2; m.RaidGap = 50;
+            ClearCorridor(home, foe, -1);
         }
         else
         {
@@ -217,21 +236,26 @@ public sealed partial class Sim
             s.Level = 2; s.Xp = Config.XpFor(s.Type, 2); s.Boss = true;
             ApplyLevel(ref s); s.Hp = s.MaxHp;
             StagId = stag; StagSerial = s.Serial; StagTeam = -1; StagLair = s.Home;
-            // Episode 3 won the middle ground: the lairs along the path between the mounds have been driven off
-            for (int i = 0; i < High; i++)
-            {
-                ref var b = ref Ants[i];
-                if (!b.Alive || b.Team != Config.Wild || i == stag) continue;
-                float along = Mathf.Clamp((b.Home - home).Dot(foe - home) / (foe - home).LengthSquared(), 0, 1);
-                if (b.Home.DistanceTo(home.Lerp(foe, along)) > Expedition.CorridorClear) continue;
-                b.Alive = false; WildCount--; _free.Push(i);
-            }
+            ClearCorridor(home, foe, stag);
             m.FlightAt = Expedition.FlightTime;
             m.RaidWaves = 4; m.RaidGap = 240; m.RaidAt = 480;
         }
         foreach (var c in Col) { c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop; }
         m.GatherBase = player.Gathered;
         UpdateCampaign();
+    }
+
+    /// The colonies' foragers have worn a highway between the mounds: no wild lair sits on it (except `keep`).
+    void ClearCorridor(Vector2 home, Vector2 foe, int keep)
+    {
+        for (int i = 0; i < High; i++)
+        {
+            ref var b = ref Ants[i];
+            if (!b.Alive || b.Team != Config.Wild || i == keep) continue;
+            float along = Mathf.Clamp((b.Home - home).Dot(foe - home) / (foe - home).LengthSquared(), 0, 1);
+            if (b.Home.DistanceTo(home.Lerp(foe, along)) > Expedition.CorridorClear) continue;
+            b.Alive = false; WildCount--; _free.Push(i);
+        }
     }
 
     /// The middle ground's outpost: about a third of the way to the red mound, clear of rocks and of every wild lair.
@@ -249,22 +273,10 @@ public sealed partial class Sim
     }
 
     /// The campaign's rival lives on a leaner diet than a Colony War opponent: it grows and guards, it does not swamp.
-    public static float RivalFoodMult(int episode) => episode == 3 ? 0.6f : 0.5f;
+    public static float RivalFoodMult(int episode) => episode switch { 2 => 0.35f, 3 => 0.6f, _ => 0.5f };
 
     (int, int) Track(int id) => (id, id >= 0 ? Ants[id].Serial : 0);
     int Living(List<(int id, int serial)> list) { int n = 0; foreach (var (id, serial) in list) if (Valid(id, serial)) n++; return n; }
-
-    /// The rival's founding party is absent: removed without a death event, which would award a queen kill.
-    void RemoveRival()
-    {
-        for (int i = 0; i < High; i++)
-        {
-            ref var a = ref Ants[i];
-            if (a.Team != Config.Enemy || !a.Alive) continue;
-            Col[1].Count[(int)a.Type]--; a.Alive = false; _free.Push(i);
-        }
-        Col[1].Alive = false; Col[1].Chambers.Clear();
-    }
 
     /// A colony that has already dug in: the royal chamber, `brood` incubators and `stores` stores, the queen below.
     void SettleColony(int team, int brood, int stores)
@@ -323,7 +335,6 @@ public sealed partial class Sim
             if (m.Episode == 3 && m.Step == 1) m.RaidAt = Time + 6;   // the scout was seen
             UpdateCampaign();
         }
-        if (m.Complete && Winner < 0) Winner = Config.Player;
     }
 
     bool StepDone(int step)
@@ -336,6 +347,7 @@ public sealed partial class Sim
             case (2, 1): return HerdTeam == 0;
             case (2, 2): return c.Gathered - m.GatherBase >= Expedition.GatherGoal;
             case (2, 3): return m.RaidsSent == m.RaidWaves && m.RaidersLeft == 0;
+            case (2, 4): case (3, 4): return !Col[1].Alive;
             case (3, 0): return Scouted();
             case (3, 1): return m.RaidsSent == m.RaidWaves && m.RaidersLeft == 0;
             case (3, 2): return c.T(Upgrade.Queen) >= 2 || c.T(Upgrade.Mandibles) >= 1 || c.T(Upgrade.Chitin) >= 1;
@@ -395,7 +407,7 @@ public sealed partial class Sim
                 else m.MarkerPos = StagLair;
                 break;
             case (4, 2): m.MarkerPos = W.Nests[1].Pos; m.Have = GuardiansLeft(1); break;
-            case (4, 3): m.MarkerPos = W.Nests[1].Pos; break;
+            case (4, 3): case (2, 4): case (3, 4): m.MarkerPos = W.Nests[1].Pos; break;
         }
     }
 

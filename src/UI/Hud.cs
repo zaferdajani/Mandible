@@ -592,7 +592,7 @@ public partial class Hud : CanvasLayer
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Episode {Game.Episode}: follow the objective card on the right. Keep your queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
+            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Episode {Game.Episode}: follow the steps on the objective card; the win is killing the red queen in her royal chamber. Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
@@ -680,6 +680,7 @@ public partial class Hud : CanvasLayer
     {
         var lines = new System.Collections.Generic.List<string>(CampaignEpisodes.Intro(episode));
         lines.Add("");
+        if (episode > 1) lines.Add($"Victory: {Game.Sim.Mission.Goal.TrimEnd('.').ToLowerInvariant()}.");
         lines.Add(episode == 4 ? "You lose if your queen dies or the princesses fly (30 minutes)." : "You lose if your queen dies.");
         _brief = Overlay($"EPISODE {episode}  ·  {CampaignEpisodes.Name(episode).ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
         _brief.Visible = true;
@@ -695,7 +696,7 @@ public partial class Hud : CanvasLayer
         var lines = new[]
         {
             mission != null ? victory ? CampaignEpisodes.Outro(Game.Episode) : mission.LossReason : victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
-            "",
+            mission is { Episode: > 1 } && victory ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
             $"Enemies slain  {me.Killed}   ·   Ants lost  {me.Lost}",

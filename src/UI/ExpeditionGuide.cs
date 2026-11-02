@@ -7,16 +7,21 @@ namespace Mandible;
 public partial class ExpeditionGuide : PanelContainer
 {
     public GameSession Game;
-    Label _heading, _body, _list, _stake;
+    Label _goal, _heading, _body, _list, _stake;
     Button _dig;
     int _shown = -1;
     public override void _Ready()
     {
         var m = Game.Sim.Mission;
         bool steps = m != null && m.Episode > 1;
-        UiTheme.Place(this, 1, 0, 1, 0, -445, 70, -16, steps ? 392 : 290);
+        UiTheme.Place(this, 1, 0, 1, 0, -445, 70, -16, steps ? 448 : 318);
         var column = new VBoxContainer(); AddChild(column);
         column.AddChild(UiTheme.Text($"EPISODE {Game.Episode} · {CampaignEpisodes.Name(Game.Episode).ToUpperInvariant()}", 12, UiTheme.Bold, UiTheme.Dim));
+        // the main victory, always on top: every step below leads to it
+        _goal = UiTheme.Text((steps ? "MAIN GOAL  ·  " : "") + m.Goal, 17, UiTheme.Title, steps ? new Color(1f, 0.55f, 0.4f) : UiTheme.Dim);
+        _goal.AutowrapMode = TextServer.AutowrapMode.WordSmart; _goal.CustomMinimumSize = new Vector2(380, 0);
+        column.AddChild(_goal);
+        column.AddChild(new HSeparator());
         _heading = UiTheme.Text("", 21, UiTheme.Title, UiTheme.Gold); column.AddChild(_heading);
         _body = UiTheme.Text("", 15); _body.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _body.CustomMinimumSize = new Vector2(380, 80); column.AddChild(_body);
@@ -49,7 +54,7 @@ public partial class ExpeditionGuide : PanelContainer
             for (int i = 0; i < m.Steps; i++)
                 sb.Append(i < m.Step ? "✓  " : i == m.Step ? "▶  " : "○  ").Append(m.StepTitle(i)).Append(i < m.Steps - 1 ? "\n" : "");
             _list.Text = sb.ToString();
-            string stake = "Lose if your queen dies";
+            string stake = m.Step < m.Steps - 1 ? "The steps lead to the red queen; kill her any time to win. Lose if your queen dies" : "Lose if your queen dies";
             if (m.FlightAt > 0)
             {
                 int left = Mathf.Max(0, (int)(m.FlightAt - Game.Sim.Time));

@@ -8,11 +8,13 @@ Built with Godot 4.7 (.NET / C#). Models, surface terrain, sound and music are g
 
 The main menu offers a **Campaign** of four episodes and **Skirmish · all castes unlocked**. The campaign list shows each episode as locked, unlocked or completed, replays any unlocked one, and **Continue** starts the next unfinished episode; progress is saved in `user://campaign.cfg`. Episode 1 teaches attacking a patrol, escorting the queen along a confined grass trail, selecting workers to dig the entrance, constructing an incubator and storage, then hatching four workers and six soldiers. Each completed incubator adds 50 population capacity, up to the colony's 460 limit. Production needs an incubator and the queen inside her royal chamber. Episode 1 permits workers and soldiers.
 
-- **Episode 2 · The Foraging Season**: dig a store, win the aphid herd from the beetle that guards it, carry 800 food home, then survive a wild-bug raid that breaks into the nest for the queen.
-- **Episode 3 · The Rival Colony**: scout the red fire-ant mound, hold your own against two raids, research royal jelly, a forge or an armory (majors unlock), and destroy the red outpost of mound guards.
+In every episode with a rival colony the victory is **killing the enemy queen in her royal chamber** (raid down the shaft); the other objectives are steps toward it, and killing her early still wins. Losing your own queen always loses. Episode 1 (no rival yet) keeps its founding ending and foreshadows the red queen.
+
+- **Episode 2 · The Foraging Season**: dig a store, win the aphid herd from the beetle that guards it, carry 800 food home, survive a wild-bug raid that breaks into the nest, then kill a young red queen who has just dug in across the yard.
+- **Episode 3 · The Rival Colony**: scout the red fire-ant mound, hold your own against two raids, research royal jelly, a forge or an armory (majors unlock), destroy the red outpost of mound guards, then kill the red queen.
 - **Episode 4 · The Nuptial Flight**: raise a hero, beat the Old Stag so it fights for you, break the red mound guardians that shield their queen, and kill her before the princesses fly (30 minutes).
 
-Each episode opens with a briefing and ends with its own outro; you lose if your queen dies (or, in the finale, when the flight leaves). Skirmish begins with every chamber and research tier unlocked for both colonies.
+Each episode opens with a briefing and ends with its own outro; the objective card always shows the main goal above the steps. Skirmish begins with every chamber and research tier unlocked for both colonies.
 
 The live Colony Command HUD follows the supplied reference's panel arrangement, uses ant portraits, and exposes chamber construction, production, research, heroes, queues and commands. All seven chambers have distinct props. **This implementation is not an exact visual match:** geometry, lighting, prop detail, fonts, frames and icons still need an art pass. See [implementation and validation notes](docs/colony-command-campaign.md).
 
