@@ -495,7 +495,7 @@ public partial class FieldGuide : ColorRect
         var h = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         h.AddThemeConstantOverride("separation", 20);
         h.AddChild(new RaceCard { Team = 0 });
-        h.AddChild(new RaceCard { Team = 1 });
+        if (CampaignProgress.MetRedColony) h.AddChild(new RaceCard { Team = 1 }); // the red colony arrives in Act II
         return h;
     }
 
@@ -518,7 +518,8 @@ public partial class FieldGuide : ColorRect
         v.AddThemeConstantOverride("separation", 10);
         var toggle = new HBoxContainer();
         toggle.AddChild(UiTheme.Text("Show colours of:", 14, UiTheme.Bold, UiTheme.Dim));
-        for (int team = 0; team < 2; team++)
+        if (!CampaignProgress.MetRedColony) _casteTeam = 0;
+        for (int team = 0; team < (CampaignProgress.MetRedColony ? 2 : 1); team++)
         {
             int tm = team;
             var b = new Button { Text = Config.RaceName(Config.RaceOf(team)), ToggleMode = true, ButtonPressed = _casteTeam == team };
@@ -529,7 +530,8 @@ public partial class FieldGuide : ColorRect
         var grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 12);
-        foreach (var (t, real) in CasteList) grid.AddChild(Card(t, _casteTeam, CasteText(t, _casteTeam), real));
+        // only what the player has met: the campaign reveals castes and bugs a chapter at a time
+        foreach (var (t, real) in CasteList) if (CampaignProgress.Met(t)) grid.AddChild(Card(t, _casteTeam, CasteText(t, _casteTeam), real));
         v.AddChild(grid);
         return v;
     }
@@ -587,7 +589,7 @@ public partial class FieldGuide : ColorRect
             (AntType.StagBeetle, "The lord of the yard. Spread out when it lowers its head: the toss hits everything in front of its jaws. Kill it for a feast.", "Male stag beetles wrestle rivals with antler-like mandibles."),
             (AntType.Wasp, "Flies. It stings, climbs away and comes back. Only flyers and spitters can reach it in the air.", "Hunting wasps snatch ants and other insects to feed their own larvae."),
         })
-            grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
+            if (CampaignProgress.Met(t)) grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
         return grid;
     }
 

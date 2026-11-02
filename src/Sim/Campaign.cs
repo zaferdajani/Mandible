@@ -6,56 +6,15 @@ namespace Mandible;
 /// Names and story text of the four campaign episodes (shown by the menu, the briefing and the end card).
 public static class CampaignEpisodes
 {
-    public const int Count = 4;
+    public const int Count = Levels.Count; // every level on the map; ids 1-4 are the episodes, 5-12 Levels.cs
 
-    public static string Name(int ep) => ep switch
-    {
-        1 => "The First Nest",
-        2 => "The Foraging Season",
-        3 => "The Rival Colony",
-        _ => "The Nuptial Flight",
-    };
+    public static string Name(int ep) => Levels.Info(ep).Name;
 
-    public static string Blurb(int ep) => ep switch
-    {
-        1 => "Escort a young queen down the grass alley and found her nest.",
-        2 => "Dig a store, win the aphid herd, drive off a lair raid, kill a young red queen.",
-        3 => "Scout the red mound, hold your own, break their outpost, kill their queen.",
-        _ => "Raise a hero, win over the Old Stag and end the red line before the flight.",
-    };
+    public static string Blurb(int ep) => Levels.Info(ep).Blurb;
 
-    public static string[] Intro(int ep) => ep switch
-    {
-        1 => new[]
-        {
-            "A young queen and her escort leave the old colony beneath the hedge. Past the grass alley lies a clearing rich in seeds.",
-            "Clear the path, settle her underground and raise the first brood. Somewhere across the yard a red queen is doing the same: one day your army will have to end her.",
-        },
-        2 => new[]
-        {
-            "The spring rain has passed and the yard is waking. Your nest is young: one royal chamber, one incubator and nowhere to keep a harvest.",
-            "Dig a store, take the aphid herd on the clover stem from the ground beetle that grazes beside it, and fill your galleries before the lair bugs notice how fat you have grown.",
-            "Across the yard a young red queen has just dug in. Grow strong enough to march down her shaft and end her before her colony grows.",
-        },
-        3 => new[]
-        {
-            "Across the yard a colony of red fire ants has raised its thatch. Their foragers walk your trails, and an outpost of mound guards watches the middle ground.",
-            "Send a scout to see what you face, hold your mound when they answer, grow stronger in the forge or with royal jelly and tear their outpost down. Then go down their shaft and kill the red queen.",
-        },
-        _ => new[]
-        {
-            "The evening air is warm and still: tonight the red colony's winged princesses take their nuptial flight. If they fly, red queens will seed the whole garden.",
-            "Raise a hero, wake the Old Stag that sleeps by the great raspberry and turn its fury on the red mound. Break the guardians that shield their queen, and end her line before the flight leaves the nest.",
-        },
-    };
+    public static string[] Intro(int ep) => Levels.Intro(ep);
 
-    public static string Outro(int ep) => ep switch
-    {
-        1 => "Your incubator, store, workers and first fighting squad are ready. Far across the yard, a red queen has dug in too.",
-        2 => "The young red queen is dead and her nest lies empty. But a far larger red colony has noticed you.",
-        3 => "The red queen is dead and the middle ground is yours. But her sister colony across the garden is raising winged princesses for the warm evening to come.",
-        _ => "The red queen is dead and her princesses never flew. The garden beneath the grass belongs to your colony.",
-    };
+    public static string Outro(int ep) => Levels.Outro(ep);
 }
 
 public sealed partial class Expedition
@@ -82,43 +41,23 @@ public sealed partial class Expedition
     public const float CorridorClear = 26f;    // the foragers' highway: no wild lairs this close to the line between the mounds
 
     public bool Confined => Episode == 1;
-    public bool ShieldsRival => Episode == 4;
-    public int Steps => Episode switch { 1 => 0, 4 => 4, _ => 5 };
+    public bool ShieldsRival => Episode is 4 or 11 or 12;
+    public int Steps => IsLevel ? Objectives.Count : Episode switch { 1 => 0, 4 => 4, _ => 5 };
     /// Steps finished when the red queen fell (the rest became optional the moment she died).
     public int StepsDone;
     public bool Complete => Episode == 1 ? Stage == ExpeditionStage.Complete : Step >= Steps;
 
     /// The episode's main victory, always on show: every step leads here.
-    public string Goal => Episode switch
+    public string Goal => IsLevel ? LevelGoal : Episode switch
     {
-        1 => "Found the nest. One day its army will march on the red queen.",
+        1 => "Found the Glass Queen's nest. One day its army will march on the red queens.",
         2 => "Kill the young red queen in her royal chamber.",
         _ => "Kill the red queen in her royal chamber.",
     };
 
-    /// The brood the player may hatch in this episode; later castes unlock as the campaign goes on.
-    public bool AllowsProd(ProdKind k) => Episode switch
-    {
-        1 or 2 => k is ProdKind.Worker or ProdKind.Soldier,
-        3 => k is ProdKind.Worker or ProdKind.Soldier or ProdKind.Major,
-        _ => true,
-    };
+    // what the player may hatch, dig and research: Reveal (CampaignReveal.cs), one chapter at a time
 
-    public bool AllowsChamber(ChamberKind k) => Episode switch
-    {
-        1 or 2 => k is ChamberKind.Brood or ChamberKind.Storage,
-        3 => k is ChamberKind.Brood or ChamberKind.Storage or ChamberKind.Royal or ChamberKind.Forge or ChamberKind.Armory,
-        _ => true,
-    };
-
-    public bool AllowsResearch(Upgrade u, int nextTier) => Episode switch
-    {
-        1 or 2 => false,
-        3 => u == Upgrade.Queen ? nextTier <= 2 : u is Upgrade.Mandibles or Upgrade.Chitin && nextTier <= 1,
-        _ => true,
-    };
-
-    public string StepTitle(int i) => (Episode, i) switch
+    public string StepTitle(int i) => IsLevel ? LevelStepTitle(i) : (Episode, i) switch
     {
         (2, 0) => "Dig a store",
         (2, 1) => "Win the aphid herd",
@@ -137,7 +76,7 @@ public sealed partial class Expedition
         _ => "Episode complete",
     };
 
-    string StepInstruction => (Episode, Step) switch
+    string StepInstruction => IsLevel ? LevelStepInstruction : (Episode, Step) switch
     {
         (2, 0) => "Open the Chambers tab (N), choose Storage and click beside a connected room. A store holds 400 more food.",
         (2, 1) => GuardsLeft > 0
@@ -172,7 +111,8 @@ public sealed partial class Sim
         var toFoe = (foe - home).Normalized();
         var side = new Vector2(toFoe.Y, -toFoe.X);
         var player = Col[0];
-        if (episode == 2)
+        if (episode >= 5) BeginLevel(episode);
+        else if (episode == 2)
         {
             ClearCorridor(home, foe, -1); // first: the herd's own beetle grazes beside the highway
             SettleColony(0, brood: 1, stores: 0);
@@ -240,6 +180,7 @@ public sealed partial class Sim
             m.FlightAt = Expedition.FlightTime;
             m.RaidWaves = 4; m.RaidGap = 240; m.RaidAt = 480;
         }
+        HideUnrevealedWildlife();
         foreach (var c in Col) { c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop; }
         m.GatherBase = player.Gathered;
         UpdateCampaign();
@@ -273,7 +214,7 @@ public sealed partial class Sim
     }
 
     /// The campaign's rival lives on a leaner diet than a Colony War opponent: it grows and guards, it does not swamp.
-    public static float RivalFoodMult(int episode) => episode switch { 2 => 0.35f, 3 => 0.6f, _ => 0.5f };
+    public static float RivalFoodMult(int episode) => Levels.Info(episode).RivalFood;
 
     (int, int) Track(int id) => (id, id >= 0 ? Ants[id].Serial : 0);
     int Living(List<(int id, int serial)> list) { int n = 0; foreach (var (id, serial) in list) if (Valid(id, serial)) n++; return n; }
@@ -313,6 +254,7 @@ public sealed partial class Sim
     void TickCampaign(float dt)
     {
         var m = Mission;
+        if (m.IsLevel) { TickLevel(dt); return; }
         if (m.Episode == 2 && HerdHere) TickHerd(dt);
         // the finale's rival stops raiding once its mound guardians fall: everything stays home to guard the queen
         bool raiding = m.Episode == 2 || Col[1].Alive && (m.Episode != 4 || GuardiansLeft(1) > 0);
@@ -375,6 +317,7 @@ public sealed partial class Sim
     void UpdateCampaign()
     {
         var m = Mission;
+        if (m.IsLevel) { UpdateLevel(); return; }
         var home = W.Nests[0].Pos;
         m.RaidersLeft = Living(m.Raiders);
         m.PostLeft = Living(m.Post);

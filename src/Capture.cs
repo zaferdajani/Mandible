@@ -584,7 +584,8 @@ public static class Capture
     }
 
     /// Quick layout check at whatever window size the game was launched with: menu, colony battle (surface,
-    /// build mode with a room selected, the pause menu), Episodes 1 and 3 (briefing and objective panel) and lane battle. Add --mobile to lay out as a phone.
+    /// build mode with a room selected, the pause menu), Episodes 1 and 3 (briefing and objective panel), the level map,
+    /// its banner picker, a level briefing, objective card and result card, and lane battle. Add --mobile to lay out as a phone.
     /// Each colony frame is audited: buttons narrower or shorter than a finger, and text or panels off screen.
     public static async Task Layout(Main app, string dir)
     {
@@ -625,6 +626,36 @@ public static class Capture
         await Wait(2);
         await Shot("layout_episode3");
         AuditLayout(app, "episode3");
+        // the level system: map, banner picker, a new level's briefing, its objective card and a result card
+        // (on a scratch progress file: the forced result below must never touch the player's own)
+        CampaignProgress.UsePath("user://campaign_layout.cfg"); CampaignProgress.Reset();
+        app.ShowMenu(); app.Menu.OpenCampaign();
+        await Wait(3);
+        await Shot("layout_levelmap");
+        AuditLayout(app, "levelmap", app.Menu);
+        app.Menu.Map.ToggleLook();
+        await Wait(1);
+        await Shot("layout_banner");
+        AuditLayout(app, "banner", app.Menu);
+        app.Menu.Map.ToggleLook();
+        app.Menu.Map.PlayStory(Comic.For(1), Levels.Info(1));
+        await Wait(2);
+        await Shot("layout_comic");
+        AuditLayout(app, "comic", app.Menu);
+        app.StartEpisode(7);
+        await Wait(3);
+        await Shot("layout_level_briefing");
+        AuditLayout(app, "level briefing");
+        app.Session.Hud.CloseBriefing();
+        await Wait(2);
+        await Shot("layout_level6");
+        AuditLayout(app, "level6");
+        app.Session.Sim.Col[1].Alive = false; app.Session.Sim.Winner = 0; // the frame only: the result card
+        await Wait(4);
+        await Shot("layout_level_result");
+        AuditLayout(app, "level result");
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_layout.cfg"));
+        CampaignProgress.UsePath("user://campaign.cfg");
         app.StartLanes(Difficulty.Normal, 1, AntType.Matron);
         await Wait(4);
         await Shot("layout_lanes");
@@ -634,7 +665,7 @@ public static class Capture
 
     /// Finger-size and on-screen checks over every visible control of the battle HUD, in canvas pixels
     /// (the units the UI is laid out in; a phone multiplies them by its content scale).
-    static void AuditLayout(Main app, string frame)
+    static void AuditLayout(Main app, string frame, Node root = null)
     {
         var screen = app.GetViewport().GetVisibleRect();
         int buttons = 0, small = 0, off = 0;
@@ -657,7 +688,7 @@ public static class Capture
             }
             foreach (var child in n.GetChildren()) Visit(child);
         }
-        Visit(app.Session.Hud);
+        Visit(root ?? app.Session.Hud);
         GD.Print($"[layout] {frame}: {buttons} buttons, smallest {smallest:0}px, {small} under 44px, {off} off screen");
     }
 

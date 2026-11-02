@@ -117,6 +117,14 @@ public partial class Minimap : Control
                 var stagColor = !sim.StagAwake ? new Color(0.6f, 0.45f, 0.3f, 0.7f) : sim.StagTeam < 0 ? new Color(1f, 0.55f, 0.25f) : Config.TeamUi(sim.StagTeam);
                 DrawArc(stagAt, sim.StagAwake ? 6 : 4, 0, Mathf.Tau, 16, stagColor, sim.StagAwake ? 3 : 1.5f, true);
             }
+            // a level's lairs, posts and nests while they stand
+            if (sim.Mission is { IsLevel: true } lm)
+                for (int g = 0; g < lm.Groups.Count; g++)
+                {
+                    bool up = false;
+                    foreach (var (id, serial) in lm.Groups[g]) if (sim.Valid(id, serial)) { up = true; break; }
+                    if (up) DrawArc(lm.GroupPos[g] * k, 3.5f, 0, Mathf.Tau, 14, lm.GroupNames[g] == "Watch post" ? Config.EnemyUi : Config.WildUi, 1.5f, true);
+                }
             // the current campaign objective
             if (sim.Mission is { Episode: > 1 } m && !m.Complete) DrawArc(m.Marker * k, 5, 0, Mathf.Tau, 20, UiTheme.Gold, 2, true);
         }

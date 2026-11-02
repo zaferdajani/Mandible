@@ -43,15 +43,15 @@ public sealed partial class Expedition
     };
     public string Instruction => Episode > 1 ? StepInstruction : Stage switch
     {
-        ExpeditionStage.ClearTrail => "Press F2 to select your attackers. Right-click the red ants ahead, or press A and click beyond them.",
+        ExpeditionStage.ClearTrail => "Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it. Its shell is hard, so attack together.",
         ExpeditionStage.EscortQueen => "With your attackers selected, right-click the food clearing. The queen and workers follow them along the protected trail.",
         ExpeditionStage.DigEntrance => "Press F3 to select workers, then click Dig entrance below. They will excavate the shaft and royal chamber at the food clearing.",
         ExpeditionStage.RoyalChamber => "Workers are excavating. The queen will enter the royal chamber as soon as it is ready.",
         ExpeditionStage.Incubator => "Press N, choose Brood Chamber, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
-        ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food.",
+        ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food; the chapter ends when they hatch.",
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
-        _ => "Episode complete. The Foraging Season is now open in the campaign list; Skirmish lets you try the complete roster now.",
+        _ => "Level complete. Sweet Rain is now open on the colony map; Skirmish lets you try the complete roster now.",
     };
     public Vector2 Marker => Episode > 1 ? MarkerPos : Stage == ExpeditionStage.ClearTrail ? Ambush : Clearing;
 }
@@ -85,12 +85,13 @@ public sealed partial class Sim
         }
         c.PopCap = 0;
         for (int type = 0; type < c.Count.Length; type++) c.PopCap += c.Count[type] * Config.Stats[type].Pop;
-        for (int i = 0; i < 3; i++)
+        // a ground beetle blocks the alley: the first wild bug, and the colony's first fight (no red ants in Act I)
         {
-            int id = Spawn(1, AntType.Soldier, Expedition.Ambush + new Vector2(i % 2 * 2, (i - 1) * 2), Mathf.Pi);
-            Ants[id].State = AntState.Hold;
+            int id = Spawn(Config.Wild, AntType.Beetle, Expedition.Ambush, Mathf.Pi);
+            Ants[id].State = AntState.Hold; Ants[id].Home = Expedition.Ambush;
             Mission.Guards.Add(id);
         }
+        HideUnrevealedWildlife();
     }
 
     /// Starts fully developed colonies for a repeatable, unrestricted testing match.
@@ -126,6 +127,7 @@ public sealed partial class Sim
     void TickExpedition(float dt)
     {
         if (Mission != null && Mission.Episode > 1 && Winner == Config.Player && !Mission.Complete) { Mission.StepsDone = Mission.Step; Mission.Step = Mission.Steps; }
+        if (Mission != null) TrackStars();
         if (Mission == null || !Col[0].Alive || Winner >= 0) return;
         if (Mission.Episode > 1) { TickCampaign(dt); return; }
         var c = Col[0];
@@ -141,8 +143,8 @@ public sealed partial class Sim
         }
         if (Mission.Stage == ExpeditionStage.Incubator && ChamberCount(0, ChamberKind.Brood, true) > 0) Mission.Stage = ExpeditionStage.Store;
         if (Mission.Stage == ExpeditionStage.Store && ChamberCount(0, ChamberKind.Storage, true) > 0) Mission.Stage = ExpeditionStage.RaiseWorkers;
-        if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal) Mission.Stage = ExpeditionStage.RaiseSoldiers;
-        if (Mission.Stage == ExpeditionStage.RaiseSoldiers && Mission.SoldiersHatched >= Expedition.SoldierGoal)
+        // the soldier caste is Chapter 2's lesson: the founding ends with the first workers
+        if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal)
         { Mission.Stage = ExpeditionStage.Complete; Winner = 0; }
         if (c.Founded || Mission.EntranceOrdered) return;
         // Founders stay behind the fighting party, rather than foraging into the ambush.
