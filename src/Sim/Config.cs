@@ -365,6 +365,7 @@ public static class Config
     public const float StageHp = 0.15f, StageBite = 0.12f, StageSize = 0.06f; // per stage
     public static readonly string[] StageNames = { "Hatched", "Blooded", "Scarred", "Grizzled" };
     public static string StageGain(int stage) => $"+{StageHp * 100:0}% health, +{StageBite * 100:0}% bite, heavier mandibles";
+    public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
     public const float HeroXpPerOrganic = 12.5f; // a hero turns what it eats into experience: about 290 organic from level 1 to 10
     public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
     public const float FeastHeal = 0.06f;      // share of its health each mouthful restores

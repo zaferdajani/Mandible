@@ -375,7 +375,7 @@ public sealed class Carnage
     /// there is one), a heap of bug legs, wing cases and enemy heads that grows and shrinks with the reserve.
     void DrawLarders(Sim sim, AntRenderer ants)
     {
-        if (!sim.CarrionRules) return;
+        if (!sim.OrganicRules) return;
         AntType[] kinds = { AntType.Beetle, AntType.Spider, AntType.Wasp, AntType.Worker, AntType.Soldier };
         for (int team = 0; team < 2; team++)
         {

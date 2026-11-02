@@ -14,10 +14,18 @@ public enum RemainsOrder : byte { Haul, Leave }
 /// Killing makes no one stronger. A colony's own dead are carried to the midden; only the fire-ant Warlord eats them.
 public sealed partial class Sim
 {
-    /// Burial, dragging, morale and the organic economy (evolution by eating, organic costs) run in skirmish, Lane War
-    /// and multiplayer. The campaign's episodes were tuned on a colony that ate its dead and ranked up by killing;
-    /// they keep that until the new campaign opts in (heroes still feast and the dead still lie in pieces there).
+    /// Burial, dragging, morale and the midden run in skirmish, Lane War and multiplayer. The campaign's levels were
+    /// tuned on a colony that eats its own dead and forages between fights, and keeps that.
     public bool CarrionRules => Mission == null;
+
+    /// The organic economy: other creatures' remains go into the organic reserve, the queen ascends on it, every brood
+    /// needs a little and the founders need it. Everywhere outside the campaign, and in the campaign from the chapter
+    /// that introduces it (Reveal.Organic: the founding, Chapter 1).
+    public bool OrganicRules => Mission == null || Mission.Organic;
+
+    /// Evolution by eating: kills teach nothing, fighters grow only on remains. The campaign ranks its squads by kills
+    /// until the chapter that introduces eating (Reveal.Evolution).
+    public bool EatRules => Mission == null || Mission.Evolution;
 
     public void SetRemains(int team, RemainsOrder order)
     {
@@ -29,11 +37,11 @@ public sealed partial class Sim
     /// Organic matter in this colony's reserve.
     public float Organic(int team) => team is >= 0 and <= 1 ? Col[team].Organic : 0;
     /// Organic matter a brood of this kind needs on top of its food (0 in the campaign until it opts in).
-    public float OrganicCost(ProdKind k) => CarrionRules ? Config.BroodOrganic(k) : 0;
+    public float OrganicCost(ProdKind k) => OrganicRules ? Config.BroodOrganic(k) : 0;
     /// Organic matter the queen's next ascension needs (0 in the campaign until it opts in).
-    public float QueenOrganic(int team) => CarrionRules ? Config.QueenOrganic(Col[team].T(Upgrade.Queen) + 1) : 0;
+    public float QueenOrganic(int team) => OrganicRules ? Config.QueenOrganic(Col[team].T(Upgrade.Queen) + 1) : 0;
     /// Whether the founders carry enough food and organic matter to found the nest (the royal chamber waits until they do).
-    public bool CanFound(int team) => !CarrionRules || Col[team].Food >= Config.FoundFood && Col[team].Organic >= Config.FoundOrganic;
+    public bool CanFound(int team) => !OrganicRules || Col[team].Food >= Config.FoundFood && Col[team].Organic >= Config.FoundOrganic;
     /// Organic matter these remains still hold (what hauling them home gives, and what eating them teaches).
     public static float RemainsValue(FoodSource f) => f.Kind == FoodKind.Corpse && f.Alive ? f.Amount * Config.OrganicPerLoad(f.AntType) : 0;
     /// The fire ants' Warlord, alone among all ants, feeds on its own colony's dead.
@@ -132,6 +140,11 @@ public sealed partial class Sim
         c.Organic += gain;
         c.OrganicGathered += gain;
         c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery * loads);
+        if (Mission is { RemainsFeed: true })
+        {
+            float food = Mathf.Min(loads * Config.FoodValue(FoodKind.Corpse, true) * c.FoodMult, Mathf.Max(0, c.FoodCap - c.Food));
+            c.Food += food; c.Gathered += food;
+        }
     }
 
     // ------------------------------------------------------------------ workers at remains
@@ -228,7 +241,7 @@ public sealed partial class Sim
     bool Feast(int i, ref Ant a, float dt, bool think, ref Vector2 desired)
     {
         bool hero = Config.IsHero(a.Type);
-        if (!CarrionRules && !hero) return false; // the campaign keeps its kill-ranked squads
+        if (!EatRules && !hero) return false; // the campaign keeps its kill-ranked squads until eating is introduced
         bool growing = hero ? a.Level < Config.HeroMaxLevel : a.Stage < Config.MaxStage && Evolves(a);
         if (!growing && a.Hp >= a.MaxHp * 0.999f) { a.FoodTarget = null; a.FeastOrder = false; return false; }
         var f = a.FoodTarget;
@@ -287,7 +300,7 @@ public sealed partial class Sim
     /// grows the queen or the army. Only those standing at the nest (or inside it) are fed.
     public void FeedFromReserve(int team, List<int> ids)
     {
-        if (!CarrionRules) return;
+        if (!EatRules) return;
         var c = Col[team];
         var nest = NestEntrance(team);
         foreach (int id in ids)
@@ -325,7 +338,7 @@ public sealed partial class Sim
         }
         // the queen's own body: a trickle that keeps a colony that never hunts from stalling outright
         foreach (var c in Col)
-            if (c.Alive && CarrionRules && c.Organic < Config.OrganicFloor) c.Organic += Config.OrganicTrickle * dt;
+            if (c.Alive && OrganicRules && c.Organic < Config.OrganicFloor && (Mission == null || c.Founded)) c.Organic += Config.OrganicTrickle * dt;
         if (CarrionRules && Ticks % 60 == 0) foreach (var c in Col) Recruit(c);
     }
 
@@ -454,7 +467,7 @@ public sealed partial class Sim
         }
         float take = Mathf.Min(f.Amount, Config.NestEatRate * dt);
         f.Amount -= take;
-        if (CarrionRules) { StoreRemains(c, f.AntType, take); return; }
+        if (CarrionRules || OrganicRules && f.Team != team) { StoreRemains(c, f.AntType, take); return; }
         // the campaign's colony eats them as food
         float gain = take * Config.FoodValue(FoodKind.Corpse, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.FoodBonus(c.Race) : 1f);
         gain = Mathf.Min(gain, Mathf.Max(0, c.FoodCap - c.Food));

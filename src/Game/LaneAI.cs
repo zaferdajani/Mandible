@@ -93,7 +93,7 @@ public sealed class LaneAI : IColonyAI
         }
 
         // a hero grows only by eating: with no enemy close, it eats the remains of the creeps that fell around it
-        if (_sim.CarrionRules && Enemies(h.Pos, 10) == 0 && h.Level < Config.HeroMaxLevel)
+        if (_sim.EatRules && Enemies(h.Pos, 10) == 0 && h.Level < Config.HeroMaxLevel)
         {
             if (h.Feasting || h.FeastOrder) return;
             var meal = _sim.BestRemains(_team, h.Pos, 16f, _sim.Cannibal(h));

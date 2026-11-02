@@ -274,7 +274,9 @@ public sealed partial class Sim
     public ResearchResult CanResearch(int team, Upgrade u)
     {
         var c = Col[team];
-        if (Mission != null && (team == 0 ? !Mission.AllowsResearch(u, c.T(u) + 1) : Mission.Episode < 3)) return ResearchResult.Locked;
+        // the campaign's rival keeps the queen its level gave it: the levels were tuned on her rank, and with remains as
+        // organic matter a raiding rival would otherwise ascend on the player's dead
+        if (Mission != null && (team == 0 ? !Mission.AllowsResearch(u, c.T(u) + 1) : Mission.Episode < 3 || u == Upgrade.Queen && OrganicRules)) return ResearchResult.Locked;
         if (!c.Alive) return ResearchResult.Dead;
         if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
         if (!c.Founded) return ResearchResult.Locked;
@@ -326,8 +328,8 @@ public sealed partial class Sim
     }
 
     /// What the next tier costs: the queen grows on organic matter alone (outside the campaign), everything else on food.
-    public float ResearchFood(Upgrade u, int next) => CarrionRules && u == Upgrade.Queen ? 0 : Config.ResearchCost(u, next);
-    public float ResearchOrganic(Upgrade u, int next) => CarrionRules && u == Upgrade.Queen ? Config.QueenOrganic(next) : 0;
+    public float ResearchFood(Upgrade u, int next) => OrganicRules && u == Upgrade.Queen ? 0 : Config.ResearchCost(u, next);
+    public float ResearchOrganic(Upgrade u, int next) => OrganicRules && u == Upgrade.Queen ? Config.QueenOrganic(next) : 0;
 
     void TickResearch(Colony c, float dt)
     {
@@ -352,8 +354,10 @@ public sealed partial class Sim
     /// Experience. Outside the campaign only eating teaches (Carrion.cs: Nourish); a kill alone makes no one stronger.
     void GrantXp(int id, float xp, bool eaten = false)
     {
-        if (CarrionRules && !eaten) return;
+        if (EatRules && !eaten) return;
         ref var a = ref Ants[id];
+        // the campaign's rival heroes grow only so far, from kills or remains: its levels set the rival's strength
+        if (Mission != null && a.Team == Config.Enemy && Config.IsHero(a.Type) && a.Level >= Config.RivalHeroCap) return;
         if (a.SquadP1 > 0) { SquadXp(Squads[a.SquadP1 - 1], xp); return; }
         int max = Config.MaxLevelOf(a.Type);
         if (!a.Alive || !Config.IsWarrior(a.Type) || a.Level >= max) return;
@@ -852,7 +856,7 @@ public sealed partial class Sim
     /// (its own dead are still taken to the midden).
     public FoodSource NearestFood(Vector2 p, float radius, FoodSource prefer, int team = -1)
     {
-        bool leave = team is >= 0 and <= 1 && CarrionRules && Col[team].Remains == RemainsOrder.Leave;
+        bool leave = team is >= 0 and <= 1 && EatRules && Col[team].Remains == RemainsOrder.Leave;
         FoodSource best = null;
         float bestD = radius * radius;
         foreach (var f in W.Food)
@@ -1579,7 +1583,7 @@ public sealed partial class Sim
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
-                if (a.CarryKind == FoodKind.Corpse && CarrionRules)
+                if (a.CarryKind == FoodKind.Corpse && (CarrionRules || OrganicRules && a.CarryTeam != a.Team))
                 {
                     // remains are not food: they go into the organic reserve, the colony's evolving material
                     StoreRemains(c, a.CarryType, 1);

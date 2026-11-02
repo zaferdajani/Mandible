@@ -327,7 +327,7 @@ public sealed partial class Sim
         if (ch.Kind == ChamberKind.Royal && !c.Founded)
         {
             c.Founded = true;
-            if (CarrionRules) { c.Food -= Config.FoundFood; c.Spent += Config.FoundFood; c.Organic -= Config.FoundOrganic; }
+            if (OrganicRules) { c.Food -= Config.FoundFood; c.Spent += Config.FoundFood; c.Organic -= Config.FoundOrganic; }
             if (Mission == null)
             {
                 if (ChamberCount(c.Team, ChamberKind.Brood, false) == 0) AddChamber(c.Team, ChamberKind.Brood, BroodWork, true);

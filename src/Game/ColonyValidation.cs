@@ -37,7 +37,10 @@ public static class ColonyValidation
             }
             if (only != "" && only != "chain")
             {
-                foreach (var part in only.Split(',')) LevelValidation.Play(app, int.Parse(part), out _);
+                // "ep2".."ep4": the scripted episode runs; numbers: the level bot
+                foreach (var part in only.Split(','))
+                    if (part == "ep2") Episode2(app); else if (part == "ep3") Episode3(app); else if (part == "ep4") Episode4(app);
+                    else LevelValidation.Play(app, int.Parse(part), out _);
                 GD.Print("[campaign-test] ALL PASS (selected levels)");
                 app.GetTree().Quit();
                 return;
@@ -59,18 +62,32 @@ public static class ColonyValidation
             s.CmdMove(army, Expedition.Ambush, true);
             Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "Burr's soldiers clear the beetle from the alley");
             s.CmdMove(Units(s, AntType.Soldier), Expedition.Clearing + new Vector2(8, 0), false);
-            Until(s, () => s.Mission.Stage == ExpeditionStage.DigEntrance, 150, "queen and workers reach the food clearing");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.Provision, 150, "queen and workers reach the food clearing");
+            // the opening: the site needs both food and the hunt's remains before the queen can found her nest
+            Check(!s.CanFound(0) && c.Organic < Config.FoundOrganic && !s.OrderEntrance(0, Units(s, AntType.Worker)), "The nest could be founded before the site was stocked");
+            var remains = s.BestRemains(0, Expedition.Ambush, 40f);
+            Check(remains != null && Sim.RemainsValue(remains) >= Config.FoundOrganic, "The beetle left no remains worth hauling");
+            var haulers = Units(s, AntType.Worker); haulers.RemoveRange(Math.Min(4, haulers.Count), Math.Max(0, haulers.Count - 4));
+            s.CmdGather(haulers, remains);
+            for (int i = 0; i < 300 && s.Mission.Stage == ExpeditionStage.Provision; i++) s.Tick(1f / 30);
+            Check(s.Mission.Stage == ExpeditionStage.Provision || c.Organic >= Config.FoundOrganic, "The site was stocked without the remains");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.DigEntrance, 240, "the founders stock the site with seeds and the beetle's remains");
+            Check(c.Food >= Config.FoundFood && c.Organic >= Config.FoundOrganic && c.OrganicGathered >= Config.FoundOrganic, "The site was stocked without food and hauled remains");
+            float stockedFood = c.Food, stockedOrganic = c.Organic;
             Check(!s.OrderEntrance(0, Units(s, AntType.Soldier)), "Soldiers could order the founding dig");
             Check(s.OrderEntrance(0, Units(s, AntType.Worker)), "Selected workers could not start the entrance");
             Check(!s.OrderEntrance(0, Units(s, AntType.Worker)), "Duplicate entrance order accepted");
             Until(s, () => s.Mission.Stage == ExpeditionStage.Incubator, 180, "workers dig and queen enters the royal chamber");
+            Check(c.Organic < stockedOrganic, "Founding did not consume the remains");
             Check(s.ChamberCount(0, ChamberKind.Brood, false) == 0 && s.ChamberCount(0, ChamberKind.Storage, false) == 0, "Founding gifted rooms instead of teaching construction");
             Check(s.CanEnqueue(0, ProdKind.Worker) == QueueResult.Locked, "Production allowed without an incubator");
             Check(s.CanDig(0, ChamberKind.Storage) != Sim.DigResult.Ok, "Storage allowed before incubator");
             int capacity = c.PopCap;
+            Until(s, () => s.CanDig(0, ChamberKind.Brood) == Sim.DigResult.Ok, 180, "foragers gather the incubator's food after the founding");
             Check(s.Dig(0, ChamberKind.Brood, s.DefaultSpot(0, ChamberKind.Brood)) == Sim.DigResult.Ok, "Cannot place incubator");
             Until(s, () => s.Mission.Stage == ExpeditionStage.Store, 180, "incubator completes");
             Check(c.PopCap == capacity + Config.ChamberPop, "Incubator did not increase population capacity");
+            Until(s, () => s.CanDig(0, ChamberKind.Storage) == Sim.DigResult.Ok, 180, "foragers gather the store's food");
             Check(s.Dig(0, ChamberKind.Storage, s.DefaultSpot(0, ChamberKind.Storage)) == Sim.DigResult.Ok, "Cannot place storage");
             Until(s, () => s.Mission.Stage == ExpeditionStage.RaiseWorkers, 180, "storage completes");
             for (int i = 0; i < Expedition.WorkerGoal; i++)
@@ -152,7 +169,7 @@ public static class ColonyValidation
         {
             if (t % 30 == 0) think();
             if (t % 600 == 0 && OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") != "")
-                GD.Print($"[campaign-trace] ep {s.Mission.Episode} t {s.Time:0} front {Front(s)} step {s.Mission.Step} {s.Mission.Have}/{s.Mission.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} guards {s.Mission.GuardsLeft} raiders {s.Mission.RaidersLeft}/{s.Mission.Raiders.Count} post {s.Mission.PostLeft} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} g{s.GuardiansLeft(1)} {GuardHp(s)} queen {s.Ants[s.Col[0].QueenId].Hp:0} rq {s.Ants[s.Col[1].QueenId].Hp:0} below {Below(s)}");
+                GD.Print($"[campaign-trace] ep {s.Mission.Episode} t {s.Time:0} front {Front(s)} step {s.Mission.Step} {s.Mission.Have}/{s.Mission.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} org {s.Col[0].Organic:0} stag {s.StagTeam}:{(s.Valid(s.StagId, s.StagSerial) ? s.Ants[s.StagId].Hp : -1):0}@{(s.Valid(s.StagId, s.StagSerial) ? s.Ants[s.StagId].Pos : default)} guards {s.Mission.GuardsLeft} raiders {s.Mission.RaidersLeft}/{s.Mission.Raiders.Count} post {s.Mission.PostLeft} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} g{s.GuardiansLeft(1)} {GuardHp(s)} queen {s.Ants[s.Col[0].QueenId].Hp:0} rq {s.Ants[s.Col[1].QueenId].Hp:0} below {Below(s)}");
             rival?.Tick(1f / 30);
             s.Tick(1f / 30);
             if (!allowLoss) Check(s.Winner != 1, $"Episode {s.Mission.Episode} lost during {reason}: {s.Mission.LossReason}; step {s.Mission.Step}; t {s.Time:0}s");
@@ -174,7 +191,7 @@ public static class ColonyValidation
     static string GuardHp(Sim s)
     {
         var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Guardian) sb.Append($"{s.Ants[i].Type}:{s.Ants[i].Hp:0}/{s.Ants[i].MaxHp:0} ");
+        for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Guardian) sb.Append($"{s.Ants[i].Type}:{s.Ants[i].Hp:0}/{s.Ants[i].MaxHp:0}@{s.Ants[i].Pos.X:0},{s.Ants[i].Pos.Y:0}L{s.Ants[i].Layer} ");
         return sb.ToString();
     }
 

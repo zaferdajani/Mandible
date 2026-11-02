@@ -771,7 +771,7 @@ public partial class GameSession : Node3D
                         Effects.Burst(wp, bug ? 10 : 2, 0, 1.5f, bug ? 1.4f : 0.3f, 1.2f); // a little dust; the hemolymph (Carnage) carries the moment
                         if (bug && !Demo && Audible(e.Pos)) Hud.Alert($"{Config.Of(e.Type).Name} slain! Its carcass is a feast.", new Color(0.85f, 0.7f, 1f));
                         // the first lesson of this world: killing makes no one stronger, eating does
-                        if (!Demo && !App.TestRun && Sim.CarrionRules && e.Team != Local.Me && e.FoodP1 > 0 && Settings.FirstTime(Settings.TipEatRemains)) EatLesson();
+                        if (!Demo && !App.TestRun && Sim.EatRules && e.Team != Local.Me && e.FoodP1 > 0 && Settings.FirstTime(Settings.TipEatRemains)) EatLesson();
                     }
                     break;
                 case EvKind.Evolve:

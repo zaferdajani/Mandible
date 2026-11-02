@@ -56,6 +56,10 @@ public partial class ExpeditionGuide : PanelContainer
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
         _dig.Visible = m.Episode == 1 && m.Stage == ExpeditionStage.DigEntrance;
+        bool stocking = m.Episode == 1 && m.Stage == ExpeditionStage.Provision && m.RemainsLeft;
+        if (stocking) Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
+        else if (_guiding) Game.Guide.Clear();
+        _guiding = stocking;
         if (_list != null)
         {
             var sb = new System.Text.StringBuilder();
@@ -112,7 +116,7 @@ public partial class ExpeditionGuide : PanelContainer
         var viewport = GetViewportRect().Size;
         Position = new Vector2(viewport.X - 12 - Size.X * hud.GuideScale, hud.TopEdge + 10);
     }
-    bool _flexible;
+    bool _flexible, _guiding;
     float _desktopBottom;
 
     /// The objectives are written for mouse and keyboard; on a touch screen the same steps are taps.

@@ -45,8 +45,8 @@ public static class Levels
 
     static readonly LevelInfo[] _all =
     {
-        new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "Workers, founding and the nest", Rival = RivalKind.None,
-            Blurb = "The tube is broken. Lead the Glass Queen down the grass alley and found her nest.",
+        new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "The hunt, remains, founding and workers", Rival = RivalKind.None,
+            Blurb = "The tube is broken. Hunt the beetle in the grass alley, stock a clearing with seeds and its remains, and found the Glass Queen's nest.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 3f, "Lose no more than 3 ants") } },
         new() { Id = 2, Season = 1, Name = "The Foraging Season", Novelty = "The first queen kill: Ashling", Rival = RivalKind.Young, RivalFood = 0.35f,
             Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, the red raiders' queen.",
@@ -94,7 +94,7 @@ public static class Levels
         1 => new[]
         {
             "The Giant never noticed. His collecting tube slipped from the backpack, struck the stones by the path and burst.",
-            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers. A ground beetle blocks the grass alley: clear it, lead her to the clearing rich in seeds and dig her a home.",
+            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers, with nothing left to eat. A ground beetle blocks the grass alley: bring it down, and its remains will feed the nest. A queen can only found her home where her workers have stocked both food and remains.",
         },
         5 => new[]
         {
@@ -156,7 +156,7 @@ public static class Levels
 
     public static string Outro(int id) => id switch
     {
-        1 => "The first nest is dug and the first brood is hatching. At dusk Burr finds a scent trail crossing the alley, sharp as smoke. No ant of the tube has smelled it before.",
+        1 => "The beetle's shell lines the first store, and the first brood is hatching. At dusk Burr finds a scent trail crossing the alley, sharp as smoke. No ant of the tube has smelled it before.",
         5 => "The storm breaks over a full larder. In the wet grass Burr's new squad finds a dead ant none of them knows: red, with a sting in its tail.",
         6 => "The wolf spider is dead and the log is quiet. On its far end, red ants stand in a silent line, watching the black colony count its dead. Then they turn and walk away, toward your trails.",
         7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed, and the red raid lies broken in the grass. But the raiders' young queen is still alive across the clearing.",
@@ -219,7 +219,7 @@ public static class Levels
 public sealed partial class Expedition
 {
     // ---------------------------------------------------------------- levels 5-12: generic objectives
-    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen, Raise }
+    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen, Raise, Haul }
 
     public sealed class Objective
     {
@@ -257,6 +257,7 @@ public sealed partial class Expedition
     public float Deadline;
     public string DeadlineName = "", DeadlineLoss = "";
     public readonly float[] KindBase = new float[5];
+    public float OrganicBase;   // organic matter hauled before the level began (remains go to the reserve, not the larder)
     public float QueenLow = 1;
     public float EndTime = -1;
     public int EndLost;
@@ -358,7 +359,7 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Raise, "Raise a squad", "Soldiers can hatch now. Burr wants a squad of his own: press X (or the Soldier card) and the incubator hatches six. Hatched: {0}/{1}.", b: Config.SquadSize(AntType.Soldier));
                 Add(Expedition.Obj.Dig, "Dig a second store", "Open the Chambers tab (N), choose Storage and click beside a connected room. Every store holds 400 more food.", a: (int)ChamberKind.Storage, b: 2);
                 Add(Expedition.Obj.Taste, "Taste the honeydew", "Send workers to a honeydew drop (right-click it with workers selected). While honeydew keeps arriving, your workers run 15% faster.", a: (int)FoodKind.Sugar);
-                Add(Expedition.Obj.Taste, "Bring home protein", "Send Burr's soldiers at the drowsy beetles in the wet grass (F2, then right-click them). Workers haul the carcasses home: protein makes the queen lay 30% faster.", a: (int)FoodKind.Corpse);
+                Add(Expedition.Obj.Taste, "Bring home protein", "Send Burr's soldiers at the drowsy beetles in the wet grass (F2, then right-click them). Workers haul the remains home: they feed the larder and the organic reserve, and the protein makes the queen lay 30% faster.", a: (int)FoodKind.Corpse);
                 Add(Expedition.Obj.Gather, "Fill the galleries", "Hatch workers (Z) and keep them foraging. Fruit heals your ants, seeds are heavy but rich. Gathered: {0}/{1}.", amount: 1600);
                 break;
             case 6: // The Hollow Log: defence
@@ -445,7 +446,7 @@ public sealed partial class Sim
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 12), (AntType.Major, 1, 2) } });
                 m.WaveAt = 330; m.WaveGap = 300;
                 Add(Expedition.Obj.Group, "Raid a lair", "Your workers have nothing to forage. March the army on a bug lair (the gold rings): every bug it kills is a carcass to haul home. Lairs left: {0}.", b: -1);
-                Add(Expedition.Obj.Gather, "Haul the feast home", "Workers carry the carcasses home on their own. Hatch more (Z) to haul faster, and hunt the next lair. Hauled: {0}/{1}.", amount: 350);
+                Add(Expedition.Obj.Haul, "Haul the feast home", "Workers carry the remains home on their own: they feed the larder as well as the reserve. Hatch more (Z) to haul faster, and hunt the next lair. Organic matter: {0}/{1}.", amount: 80);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The red colony is starving and its raids are thin. Gather the army and send everyone down the red shaft.");
                 break;
             case 9: // Wings and Acid
@@ -560,6 +561,7 @@ public sealed partial class Sim
         }
         foreach (var c in Col) { c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop; }
         for (int k = 0; k < 5; k++) m.KindBase[k] = player.GatheredBy[k];
+        m.OrganicBase = player.OrganicGathered;
     }
 
     void Add(Expedition.Obj kind, string title, string text, int a = 0, int b = 0, float amount = 0, string done = null)
@@ -716,7 +718,8 @@ public sealed partial class Sim
         {
             Expedition.Obj.Dig => ChamberCount(0, (ChamberKind)o.A, true) >= o.B,
             Expedition.Obj.Gather => c.Gathered - m.GatherBase >= o.Amount,
-            Expedition.Obj.Taste => c.GatheredBy[o.A] > m.KindBase[o.A],
+            Expedition.Obj.Taste => Tasted(o.A),
+            Expedition.Obj.Haul => c.OrganicGathered - m.OrganicBase >= o.Amount,
             Expedition.Obj.Hatch => c.Count[o.A] >= o.B,
             Expedition.Obj.Raise => m.SoldiersHatched >= o.B,
             Expedition.Obj.Research => c.T((Upgrade)o.A) >= o.B,
@@ -728,6 +731,14 @@ public sealed partial class Sim
             Expedition.Obj.KillQueen => !Col[1].Alive,
             _ => false,
         };
+    }
+
+    /// Food of this kind carried home since the level began. Remains count once they reach the organic reserve.
+    bool Tasted(int kind)
+    {
+        var m = Mission; var c = Col[0];
+        if (kind == (int)FoodKind.Corpse && OrganicRules && c.OrganicGathered > m.OrganicBase) return true;
+        return c.GatheredBy[kind] > m.KindBase[kind];
     }
 
     int CountLarders() { int n = 0; foreach (bool l in Mission.Larder) if (l) n++; return n; }
@@ -748,6 +759,7 @@ public sealed partial class Sim
             case Expedition.Obj.Gather: m.Have = (int)(c.Gathered - m.GatherBase); m.Need = (int)o.Amount; break;
             case Expedition.Obj.Hatch: m.Have = c.Count[o.A]; m.Need = o.B; break;
             case Expedition.Obj.Raise: m.Have = m.SoldiersHatched; m.Need = o.B; break;
+            case Expedition.Obj.Haul: m.Have = (int)(c.OrganicGathered - m.OrganicBase); m.Need = (int)o.Amount; m.MarkerPos = GroupMarker(-1, home); break;
             case Expedition.Obj.Taste:
                 m.MarkerPos = NearestFood((FoodKind)o.A, home, m.Groups.Count > 0 ? m.GroupPos[0] : home);
                 break;
@@ -861,7 +873,7 @@ public sealed partial class Sim
                 StarGoal.Lost => m.EndLost <= value,
                 StarGoal.AllSteps => m.Episode == 1 || m.StepsDone >= m.Steps - 1,
                 StarGoal.AllFood => Col[0].GatheredBy[(int)FoodKind.Seed] > m.KindBase[(int)FoodKind.Seed] && Col[0].GatheredBy[(int)FoodKind.Berry] > m.KindBase[(int)FoodKind.Berry]
-                                    && Col[0].GatheredBy[(int)FoodKind.Sugar] > m.KindBase[(int)FoodKind.Sugar] && Col[0].GatheredBy[(int)FoodKind.Corpse] > m.KindBase[(int)FoodKind.Corpse],
+                                    && Col[0].GatheredBy[(int)FoodKind.Sugar] > m.KindBase[(int)FoodKind.Sugar] && Tasted((int)FoodKind.Corpse),
                 StarGoal.QueenHp => m.QueenLow >= value,
                 StarGoal.Escort => m.EndEscort,
                 StarGoal.Stag => m.EndStag,

@@ -92,7 +92,7 @@ public sealed class Guidance
         Vector2 at = default;
         float height = 2f;
         if (_forced.HasValue) { at = _forced.Value; title = _forcedTitle; line = _forcedLine; }
-        else if (sim.CarrionRules) Pick(sim, selection, visible, ref at, ref title, ref line, ref height);
+        else if (sim.EatRules) Pick(sim, selection, visible, ref at, ref title, ref line, ref height);
         Target = title != null ? at : null;
         bool on = title != null;
         _arrow.Visible = _title.Visible = _line.Visible = on;

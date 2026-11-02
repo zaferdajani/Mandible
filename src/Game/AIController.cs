@@ -108,7 +108,7 @@ public sealed class AIController : IColonyAI
     /// the queen's next ascension is paid for, heroes at home are fed from the reserve.
     void Remains(Colony c)
     {
-        if (!_sim.CarrionRules || _sim.Time < _nextFeast) return;
+        if (!_sim.EatRules || _sim.Time < _nextFeast) return;
         _nextFeast = _sim.Time + 3f;
         var nest = _sim.W.Nests[_team].Pos;
         var claimed = new Dictionary<int, float>(); // food id -> organic already promised to an eater

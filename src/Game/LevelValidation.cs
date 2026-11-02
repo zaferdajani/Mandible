@@ -38,7 +38,7 @@ public static class LevelValidation
     {
         var parts = new List<string>();
         for (int i = 0; i < s.High; i++)
-            if (s.Ants[i].Alive && s.Ants[i].Team == Config.Wild && s.Ants[i].Pos.DistanceTo(home) < 60) parts.Add($"{s.Ants[i].Type}{s.Ants[i].Level}@{s.Ants[i].Pos.DistanceTo(home):0}");
+            if (s.Ants[i].Alive && s.Ants[i].Team != 0 && s.Ants[i].Pos.DistanceTo(home) < 60) parts.Add($"{(s.Ants[i].Team == 1 ? "red" : "")}{s.Ants[i].Type}{s.Ants[i].Level}@{s.Ants[i].Pos.DistanceTo(home):0}");
         return " wild[" + string.Join(" ", parts) + "]";
     }
 
@@ -161,8 +161,9 @@ public static class LevelValidation
                         if (marching) s.CmdMove(army, s.W.Nests[1].Pos, true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
+                    case Expedition.Obj.Haul:
                     case Expedition.Obj.Gather when id == 8:
-                        // the Dry Spell: the larders are the only food, so the army keeps hunting them
+                        // the Dry Spell: the lairs are the only larder, so the army keeps hunting them
                         var lair = s.Mission.Groups.FindIndex(g => g.Exists(b => s.Valid(b.id, b.serial)));
                         if (lair >= 0 && army.Count >= 18) s.CmdMove(army, s.Mission.GroupPos[lair], true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
@@ -401,6 +402,7 @@ public static class LevelValidation
                 if (!a.Alive || a.Team == 1) continue;
                 Check(Reveal.Creature(a.Type) <= n, $"Chapter {n}: a {a.Type} is on the field before its reveal in Chapter {Reveal.Creature(a.Type)}");
             }
+            Check(s.OrganicRules == (n >= Reveal.Organic) && s.EatRules == (n >= Reveal.Evolution) && !s.CarrionRules, $"Chapter {n}: organic matter or eating to evolve on the wrong side of their reveal");
             Check(s.Col[1].Alive == (n >= Reveal.RedColony), $"Chapter {n}: the red colony is {(s.Col[1].Alive ? "present" : "absent")}");
             Check(m.EndsWithQueen == (n >= Reveal.FirstQueenKill && Levels.Info(id).Rival != RivalKind.None), $"Chapter {n}: {(m.EndsWithQueen ? "won" : "not won")} by a queen kill");
             foreach (var (name, _) in Reveal.NewIn(n)) introduced.Add(name);
@@ -412,11 +414,11 @@ public static class LevelValidation
         var matron = Array.Find(Levels.Unlocks, u => u.Perk == Perk.Matron);
         Check(CampaignProgress.Met(AntType.Worker) && CampaignProgress.Met(AntType.Beetle) && !CampaignProgress.Met(AntType.Spider) && !CampaignProgress.Met(AntType.Gunner) && !CampaignProgress.MetRedColony,
             "A fresh save's Field Guide lists more than the broken tube");
-        Check(CampaignProgress.UnlockName(matron) != matron.Name, "A star unlock named the Acid Matron before she was met");
+        Check(CampaignProgress.UnlockName(matron) != matron.Name && !CampaignProgress.MetEvolution, "A star unlock named the Acid Matron, or the Feeding page showed, before they were met");
         for (int n = 1; n <= 3; n++) CampaignProgress.Record(Levels.IdAt(n), 1, 300);
         Check(CampaignProgress.Frontier == 4 && CampaignProgress.MetRedColony && CampaignProgress.Met(AntType.Spider) && !CampaignProgress.Met(AntType.Wasp), "Act I's end did not open the red colony and spiders (alone) in the guide");
         CampaignProgress.MetEverything();
-        Check(CampaignProgress.Met(AntType.StagBeetle) && CampaignProgress.UnlockName(matron) == matron.Name, "A Skirmish or Lane War game did not open the whole Field Guide");
+        Check(CampaignProgress.Met(AntType.StagBeetle) && CampaignProgress.UnlockName(matron) == matron.Name && CampaignProgress.MetEvolution, "A Skirmish or Lane War game did not open the whole Field Guide");
         DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(guide));
         CampaignProgress.UsePath("user://campaign.cfg");
         GD.Print($"[campaign-test] PASS gradual reveal: every caste, hero, chamber, research rank and wild bug appears only from its chapter, the Field Guide and star unlocks name only what the save has met; red colony from Chapter {Reveal.RedColony}, first queen kill in Chapter {Reveal.FirstQueenKill}; {introduced.Count} lessons introduced after Chapter 1");

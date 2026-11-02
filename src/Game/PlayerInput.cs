@@ -642,7 +642,7 @@ public partial class PlayerInput : Node
                 if (d < 1.8f && d < best) { best = d; food = f; }
             }
             // remains: the fighters and heroes in the selection eat them (and evolve); the workers carry them home
-            if (food != null && food.Kind == FoodKind.Corpse && Sim.CarrionRules && Selection.Exists(i => Sim.Eats(Sim.Ants[i]) && Sim.CanEat(Sim.Ants[i], food)))
+            if (food != null && food.Kind == FoodKind.Corpse && Sim.EatRules && Selection.Exists(i => Sim.Eats(Sim.Ants[i]) && Sim.CanEat(Sim.Ants[i], food)))
             {
                 var eaters = Selection.FindAll(i => Sim.Eats(Sim.Ants[i]));
                 var fc = Cmd.Units(CmdKind.Feast, Local.Me, eaters, Sim);

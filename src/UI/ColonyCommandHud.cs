@@ -249,7 +249,7 @@ public partial class ColonyCommandHud : Control
     bool Shown(ProdKind k) => Story is not { } m || m.AllowsProd(k);
     bool Shown(ChamberKind k) => Story is not { } m || m.AllowsChamber(k);
     bool Shown(Upgrade u) => Story is not { } m || m.ShowsResearch(u);
-    bool ShownTab(int page) => page switch { 2 => Story is not { } m || m.ShowsAnyResearch, 3 => Story is not { } h || h.ShowsHeroes, 4 => Game.Sim.CarrionRules, _ => true };
+    bool ShownTab(int page) => page switch { 2 => Story is not { } m || m.ShowsAnyResearch, 3 => Story is not { } h || h.ShowsHeroes, 4 => Game.Sim.EatRules, _ => true }; // the Remains order matters once fighters eat
     ChamberKind[] ShownRooms => System.Array.FindAll(Rooms, Shown);
 
     void BuildRoomList()
@@ -514,7 +514,7 @@ public partial class ColonyCommandHud : Control
         {
             _selection.Text = food.Kind == FoodKind.Corpse ? $"{Config.Of(food.AntType).Name} remains" : Config.FoodName(food.Kind);
             _counts.Text = $"{food.Amount:0} loads remaining";
-            _detail.Text = food.Kind != FoodKind.Corpse || !Game.Sim.CarrionRules ? Config.FoodEffectShort(food.Kind)
+            _detail.Text = food.Kind != FoodKind.Corpse || !Game.Sim.OrganicRules ? Config.FoodEffectShort(food.Kind)
                 : food.Team == Local.Me ? "One of ours. The workers carry our dead to the midden; they feed no one of our kind."
                 : $"{Sim.RemainsValue(food):0} organic matter. Haul it home for the queen and the brood, or have fighters eat it to evolve.";
         }
@@ -543,7 +543,7 @@ public partial class ColonyCommandHud : Control
             float nd = sim.EvolutionNeed(a);
             if (best < 0 || nd > need) { best = id; need = nd; }
         }
-        bool show = eaters > 0 && sim.CarrionRules && n > 0;
+        bool show = eaters > 0 && sim.EatRules && n > 0;
         _evo.Visible = show;
         _feedReserve.Visible = show && c.Organic >= 1 && need > 0;
         _detail.Size = new Vector2(212, show ? 68 : (_touch ? 90 : 84));

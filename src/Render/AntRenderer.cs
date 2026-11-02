@@ -385,11 +385,11 @@ public sealed class AntRenderer
                 float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, st.Size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
-                if (sim.CarrionRules && sim.Eats(a))
+                if (sim.EatRules && sim.Eats(a))
                     _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
             // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
-            int ranks = sim.CarrionRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
+            int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
             if (ranks > 0)
             {
                 float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);

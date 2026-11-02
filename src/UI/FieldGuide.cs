@@ -462,6 +462,7 @@ public partial class FieldGuide : ColorRect
         tabs.AddThemeConstantOverride("separation", 6);
         foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Feeding", "Colony Needs" })
         {
+            if (name == "Feeding" && !CampaignProgress.MetEvolution) continue; // eating to evolve is a later chapter's lesson
             var b = new Button { Text = name, ToggleMode = true, CustomMinimumSize = new Vector2(130, 38) };
             b.Pressed += () => Show(name);
             tabs.AddChild(b);
