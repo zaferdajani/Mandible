@@ -26,6 +26,15 @@ public static class ColonyValidation
     {
         try
         {
+            // MANDIBLE_LEVELS=5,6 plays only those level ids (tuning); the full run plays every level
+            var only = OS.GetEnvironment("MANDIBLE_LEVELS");
+            if (only != "")
+            {
+                foreach (var part in only.Split(',')) LevelValidation.Play(app, int.Parse(part), out _);
+                GD.Print("[campaign-test] ALL PASS (selected levels)");
+                app.GetTree().Quit();
+                return;
+            }
             Settings.Gfx = Settings.Quality.Low;
             var root = new Node3D(); app.AddChild(root);
             var w = WorldBuilder.Build(root, 20261031, firstNest: true);
@@ -87,12 +96,19 @@ public static class ColonyValidation
             Check(sk.Col[0].Queue[0].Progress == 0, "Eggs progressed while the queen was outside");
             sk.Ants[queen].Layer = (byte)Sim.NestLayer(0); sk.Ants[queen].Pos = queenPosition;
             sk.Tick(1f / 30); Check(sk.Col[0].Queue[0].Progress > 0, "Brood did not resume when queen returned");
+            for (int i = 0; i < 2; i++) s.Tick(1f / 30);
+            Rate(s);
             GD.Print($"[campaign-test] PASS episode 1 in {s.Time:0}s, gathered {c.Gathered:0}, workers {s.Mission.WorkersHatched}, soldiers {s.Mission.SoldiersHatched}; full skirmish roster unlocked");
             root.QueueFree(); other.QueueFree();
-            var times = new[] { s.Time, Episode2(app), Episode3(app), Episode4(app) };
+            var times = new Dictionary<int, float> { [1] = s.Mission.EndTime, [2] = Episode2(app), [3] = Episode3(app), [4] = Episode4(app) };
             Defeat(app);
-            SaveLoad();
-            GD.Print($"[campaign-test] ALL PASS; episodes won in {times[0]:0}s / {times[1]:0}s / {times[2]:0}s / {times[3]:0}s, finale loss path and saved progress checked");
+            for (int id = 5; id <= Levels.Count; id++) times[id] = LevelValidation.Play(app, id, out _);
+            LevelValidation.Losses(app);
+            LevelValidation.Gates(app);
+            LevelValidation.Progress();
+            var sb = new System.Text.StringBuilder();
+            for (int n = 1; n <= Levels.Count; n++) sb.Append($"L{n} {times[Levels.IdAt(n)]:0}s  ");
+            GD.Print($"[campaign-test] ALL PASS; 12 levels won ({sb.ToString().TrimEnd()}); loss paths, gates, perks, stars and saved progress checked");
             app.GetTree().Quit();
         }
         catch (Exception e) { GD.PushError("[campaign-test] FAIL " + e); app.GetTree().Quit(1); }
@@ -213,7 +229,8 @@ public static class ColonyValidation
             else if (phase == 2 && m.Step == 3 && m.RaidsSent == 0 && m.Have < 15) { s.CmdMove(army, home.Lerp(m.Lair, 0.12f), false); phase = 3; }
         });
         Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && s.HerdTeam == 0 && c.Gathered - m.GatherBase >= Expedition.GatherGoal && m.RaidsSent == 1 && m.RaidersLeft == 0, "Episode 2 won without killing the queen or its steps");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
     }
 
     static float Episode3(Main app)
@@ -244,7 +261,8 @@ public static class ColonyValidation
             else s.CmdMove(army, home + (foe - home).Normalized() * 10, false);
         });
         Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && m.PostLeft == 0 && m.RaidsSent == 2 && c.T(Upgrade.Queen) >= 2, "Episode 3 won without killing the queen or its steps");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
     }
 
     static float Episode4(Main app)
@@ -273,7 +291,28 @@ public static class ColonyValidation
             else s.CmdMove(army, foe, true);
         });
         Check(m.Complete && !s.Col[1].Alive && s.StagTeam == 0 && s.GuardiansLeft(1) == 0 && s.Time < m.FlightAt, "Episode 4 won without its objectives");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
+    }
+
+    /// Prints the stars an episode earned and checks the time and loss stars against what happened.
+    static float Rate(Sim s)
+    {
+        var m = s.Mission;
+        int stars = s.Stars();
+        Check((stars & 1) == 1 && m.EndTime > 0, $"Episode {m.Episode} won without its first star");
+        var parts = new List<string>();
+        for (int k = 0; k < 2; k++)
+        {
+            var (goal, value, text) = m.Info.Stars[k];
+            bool earned = (stars & 2 << k) != 0;
+            if (goal == StarGoal.Time) Check(earned == m.EndTime <= value, $"Time star wrong in episode {m.Episode}");
+            if (goal == StarGoal.Lost) Check(earned == m.EndLost <= value, $"Loss star wrong in episode {m.Episode}");
+            if (goal == StarGoal.AllSteps) Check(earned == m.StepsDone >= m.Steps - 1, $"Steps star wrong in episode {m.Episode}");
+            parts.Add((earned ? "+" : "-") + text);
+        }
+        GD.Print($"[campaign-test] stars for level {Levels.NumberOf(m.Episode)} ({m.Info.Name}): {1 + ((stars >> 1) & 1) + ((stars >> 2) & 1)} · won {m.EndTime:0}s, lost {m.EndLost} · {string.Join("; ", parts)}");
+        return m.EndTime;
     }
 
     /// The finale's loss path: a colony that never attacks loses to the red raids or the nuptial flight.

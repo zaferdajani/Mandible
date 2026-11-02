@@ -126,6 +126,7 @@ public sealed partial class Sim
     void TickExpedition(float dt)
     {
         if (Mission != null && Mission.Episode > 1 && Winner == Config.Player && !Mission.Complete) { Mission.StepsDone = Mission.Step; Mission.Step = Mission.Steps; }
+        if (Mission != null) TrackStars();
         if (Mission == null || !Col[0].Alive || Winner >= 0) return;
         if (Mission.Episode > 1) { TickCampaign(dt); return; }
         var c = Col[0];

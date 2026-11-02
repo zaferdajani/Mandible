@@ -592,7 +592,7 @@ public partial class Hud : CanvasLayer
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Episode {Game.Episode}: follow the steps on the objective card; the win is killing the red queen in her royal chamber. Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
+            Game.TutorialMode ? "Level 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Level {Levels.NumberOf(Game.Episode)}: follow the steps on the objective card. {Game.Sim.Mission.Goal} Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
@@ -678,13 +678,36 @@ public partial class Hud : CanvasLayer
     /// The episode's opening card: the story so far and what is at stake. The colony waits until Begin.
     public void ShowBriefing(int episode)
     {
+        var m = Game.Sim.Mission;
+        var info = Levels.Info(episode);
         var lines = new System.Collections.Generic.List<string>(CampaignEpisodes.Intro(episode));
         lines.Add("");
-        if (episode > 1) lines.Add($"Victory: {Game.Sim.Mission.Goal.TrimEnd('.').ToLowerInvariant()}.");
-        lines.Add(episode == 4 ? "You lose if your queen dies or the princesses fly (30 minutes)." : "You lose if your queen dies.");
-        _brief = Overlay($"EPISODE {episode}  ·  {CampaignEpisodes.Name(episode).ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
+        if (episode > 1) lines.Add($"Victory: {m.Goal.TrimEnd('.').ToLowerInvariant()}.");
+        string lose = "You lose if your queen dies";
+        if (m.EscortId >= 0) lose += $" or the {m.EscortName} falls";
+        if (episode == 4) lose += " or the princesses fly (30 minutes)";
+        else if (m.Deadline > 0) lose += $" or {m.DeadlineName} ({m.Deadline / 60:0} minutes)";
+        lines.Add(lose + ".");
+        _brief = Overlay($"LEVEL {info.Number}  ·  {info.Name.ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
+        // the novelty and the three stars on offer, the ones already earned lit
+        var body = (VBoxContainer)_brief.GetChild(0).GetChild(0);
+        var tag = UiTheme.Text($"NEW  ·  {info.Novelty.ToUpperInvariant()}", 14, UiTheme.Bold, new Color(1f, 0.85f, 0.5f));
+        tag.HorizontalAlignment = HorizontalAlignment.Center;
+        body.AddChild(tag); body.MoveChild(tag, 1);
+        int bits = CampaignProgress.StarBits(episode);
+        var stars = new StarList { Size_ = 13, FontSize = 16, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
+        stars.Set(new[] { ((bits & 1) != 0, Levels.StarText(episode, 0)), ((bits & 2) != 0, Levels.StarText(episode, 1)), ((bits & 4) != 0, Levels.StarText(episode, 2)) });
+        body.AddChild(stars); body.MoveChild(stars, body.GetChildCount() - 3);
+        Grow(_brief, 300);
         _brief.Visible = true;
         Game.SetPaused(true);
+    }
+
+    /// Makes an overlay's panel taller (it is centred, so it grows both ways).
+    static void Grow(Control overlay, float half)
+    {
+        var p = (Control)overlay.GetChild(0);
+        p.OffsetTop = -half; p.OffsetBottom = half;
     }
 
     public bool BriefingOpen => _brief?.Visible ?? false;
@@ -696,20 +719,48 @@ public partial class Hud : CanvasLayer
         var lines = new[]
         {
             mission != null ? victory ? CampaignEpisodes.Outro(Game.Episode) : mission.LossReason : victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
-            mission is { Episode: > 1 } && victory ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
+            mission is { Episode: > 1 } && victory && mission.Info.Rival != RivalKind.None ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
             $"Enemies slain  {me.Killed}   ·   Ants lost  {me.Lost}",
         };
         if (mission != null)
         {
-            int next = Game.Episode + 1;
-            _end = victory && next <= CampaignEpisodes.Count
-                ? Overlay("EPISODE COMPLETE", lines, ($"Episode {next}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()))
-                : Overlay(victory ? "CAMPAIGN COMPLETE" : "EPISODE FAILED", lines, (victory ? "Replay" : "Try Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+            int number = Levels.NumberOf(Game.Episode), next = Levels.IdAt(number + 1);
+            _end = victory && next > 0
+                ? Overlay("LEVEL COMPLETE", lines, ($"Level {number + 1}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
+                : Overlay(victory ? "THE GARDEN IS YOURS" : "LEVEL FAILED", lines, (victory ? "Replay" : "Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
+            if (victory) AddResult(_end);
         }
         else _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
         _end.Visible = true;
+    }
+
+    void QuitToMap() { Game.QuitToMenu(); Game.App.Menu.OpenCampaign(); }
+
+    /// The result of a won level: three stars that land one after the other, each goal met or missed, and
+    /// what the stars bought (or what the next unlock costs).
+    void AddResult(Control end)
+    {
+        var body = (VBoxContainer)end.GetChild(0).GetChild(0);
+        int id = Game.Episode;
+        var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars };
+        body.AddChild(big); body.MoveChild(big, 1);
+        var list = new StarList { Size_ = 11, FontSize = 15, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
+        var rows = new System.Collections.Generic.List<(bool, string)>();
+        for (int s = 0; s < 3; s++) rows.Add(((Game.Stars & 1 << s) != 0, Levels.StarText(id, s) + ((Game.NewStars & 1 << s) != 0 ? "   NEW" : "")));
+        list.Set(rows);
+        body.AddChild(list); body.MoveChild(list, 2);
+        int total = CampaignProgress.TotalStars;
+        string unlock = "";
+        foreach (var u in Levels.Unlocks) if (u.Stars > Game.StarsBefore && u.Stars <= total) unlock += (unlock == "" ? "" : "  ·  ") + $"{u.Kind}: {u.Name}";
+        var next = Levels.NextUnlock(total);
+        var line = UiTheme.Text(unlock != "" ? $"UNLOCKED  ·  {unlock}" : next != null ? $"{total} stars  ·  {next.Name} at {next.Stars}" : $"{total} stars  ·  every unlock earned", 16, UiTheme.Bold, unlock != "" ? new Color(0.6f, 1f, 0.55f) : UiTheme.Gold);
+        line.HorizontalAlignment = HorizontalAlignment.Center;
+        line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        body.AddChild(line); body.MoveChild(line, body.GetChildCount() - 3);
+        Grow(end, 340);
+        Game.Audio.Ui("research");
     }
 
     public void Alert(string text, Color? c = null)
@@ -1022,5 +1073,31 @@ public partial class SelectionBox : Control
         var r = Rect.Abs();
         DrawRect(r, new Color(0.55f, 1f, 0.45f, 0.08f));
         DrawRect(r, new Color(0.55f, 1f, 0.45f, 0.85f), false, 1.5f);
+    }
+}
+
+/// The end card's three big stars: earned ones drop in one after the other, new ones flash.
+public partial class ResultStars : Control
+{
+    public int Bits, Fresh;
+    float _t;
+    public ResultStars() { CustomMinimumSize = new Vector2(0, 96); MouseFilter = MouseFilterEnum.Ignore; }
+    public override void _Process(double delta) { _t += (float)delta; if (_t < 4) QueueRedraw(); }
+    public override void _Draw()
+    {
+        for (int s = 0; s < 3; s++)
+        {
+            float delay = 0.35f + s * 0.45f;
+            float k = Mathf.Clamp((_t - delay) / 0.3f, 0, 1);
+            bool on = (Bits & 1 << s) != 0;
+            var c = new Vector2(Size.X / 2 + (s - 1) * 92, 50 - (s == 1 ? 8 : 0));
+            float r = s == 1 ? 40 : 32;
+            Emblem.Star(this, c, r, false);
+            if (on && k > 0)
+            {
+                float pop = 1 + 0.35f * Mathf.Sin(k * Mathf.Pi);
+                Emblem.Star(this, c, r * pop * Mathf.Min(1, k * 1.4f), true, (Fresh & 1 << s) != 0 ? 1 : 0.4f);
+            }
+        }
     }
 }

@@ -25,7 +25,8 @@ public partial class GameSession : Node3D
     public IOrders Orders;
     public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
     public GameMode Mode = GameMode.Colony;
-    public int Episode;           // campaign episode 1-4 (0: not a campaign game)
+    public int Episode;           // campaign level id 1-12 (Levels.Order places it on the map; 0: not a campaign game)
+    public int Stars, NewStars, StarsBefore; // the result of a won level
     public bool TutorialMode => Episode == 1; // Episode 1: the guided colony founding
     public bool Campaign => Episode > 0;
     public bool Skirmish;
@@ -55,6 +56,9 @@ public partial class GameSession : Node3D
         Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
         if (Skirmish) Sim.BeginSkirmish();
         if (Episode > 1) Sim.BeginEpisode(Episode);
+        if (Campaign) Sim.ApplyPerks(CampaignProgress.Perks);
+        foreach (var f in World.Food) if (!f.Alive && f.Node != null) f.Node.Visible = false; // the Dry Spell's dried-up food
+        CampaignProgress.ApplyLook(!Demo && Local.Me == Config.Player);
         Orders = Net != null ? Net : new DirectOrders(Sim);
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
@@ -65,7 +69,8 @@ public partial class GameSession : Node3D
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
         if (Episode == 2) BuildHerdDressing();
-        if (Episode == 4) BuildStagDressing();
+        if (Episode is 4 or 12) BuildStagDressing();
+        if (Episode is 6 or 10) BuildLairDressing();
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile && !App.TestRun }; // touch laptops still have a mouse; test runs leave the cursor wherever it is
@@ -102,7 +107,7 @@ public partial class GameSession : Node3D
             {
                 // the campaign's rival keeps its own mound; the episode script sends its raids
                 if (Net == null && !Campaign) _ai.Add(new AIController(Sim, Local.Foe, Diff));
-                if (Net == null && Episode >= 3) _ai.Add(AIController.CampaignRival(Sim));
+                if (Net == null && Campaign && AIController.ForLevel(Sim) is { } rival) _ai.Add(rival);
                 if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
             }
             if (Net != null)
@@ -116,7 +121,7 @@ public partial class GameSession : Node3D
             if (Campaign)
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
-                Hud.Alert(TutorialMode ? "Episode 1: select the attackers with F2" : $"Episode {Episode}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
+                Hud.Alert(TutorialMode ? "Level 1: select the attackers with F2" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
                 Hud.ShowBriefing(Episode);
             }
             else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
@@ -406,6 +411,58 @@ public partial class GameSession : Node3D
         _herd.AddChild(new MultiMeshInstance3D { Multimesh = aphid, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.9f, 0.5f), Roughness = 0.6f } });
         _herd.Visible = false;
         AddChild(_herd);
+    }
+
+    /// The Hollow Log's rotten trunk, or the Hornet Mother's paper nest: where the level's raids come from.
+    void BuildLairDressing()
+    {
+        var hf = World.HF;
+        var l = Sim.Mission.WaveFrom;
+        var away = (l - World.Nests[0].Pos).Normalized();
+        var along = new Vector2(-away.Y, away.X);
+        var root = new Node3D { Name = "Lair", Position = new Vector3(l.X, hf.Sample(l.X, l.Y), l.Y) };
+        AddChild(root);
+        if (Episode == 6)
+        {
+            var c = away * 4.5f;
+            var yaw = -Mathf.Atan2(along.Y, along.X);
+            var bark = new StandardMaterial3D { AlbedoColor = new Color(0.33f, 0.22f, 0.13f), Roughness = 1 };
+            var rot = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.08f, 0.05f), Roughness = 1 };
+            var moss = new StandardMaterial3D { AlbedoColor = new Color(0.42f, 0.44f, 0.16f), Roughness = 1 };
+            root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 2.6f, BottomRadius = 2.8f, Height = 15f, RadialSegments = 16, Rings = 3 }, MaterialOverride = bark, Position = new Vector3(c.X, 1.9f, c.Y), Rotation = new Vector3(Mathf.Pi / 2, yaw, 0.05f) });
+            // the hollow: a dark mouth at the end that faces the yard
+            var mouth = c + along * 7.55f;
+            root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 1.9f, BottomRadius = 1.9f, Height = 0.4f, RadialSegments = 16, Rings = 1 }, MaterialOverride = rot, Position = new Vector3(mouth.X, 1.9f, mouth.Y), Rotation = new Vector3(Mathf.Pi / 2, yaw, 0.05f) });
+            for (int i = 0; i < 5; i++)
+            {
+                var m = c + along * (i * 3f - 6) + away * 1.2f;
+                root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 1.1f, Height = 0.7f, RadialSegments = 8, Rings = 3 }, MaterialOverride = moss, Position = new Vector3(m.X, 4.3f, m.Y), Scale = new Vector3(1.4f, 1, 1) });
+            }
+        }
+        else
+        {
+            // a grey-tan paper nest hanging from a bent grass stalk, layered like old wasp paper
+            var stalk = new StandardMaterial3D { AlbedoColor = new Color(0.5f, 0.45f, 0.2f), Roughness = 0.9f };
+            root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.18f, BottomRadius = 0.35f, Height = 11f, RadialSegments = 8, Rings = 1 }, MaterialOverride = stalk, Position = new Vector3(2.5f, 5.5f, 0), Rotation = new Vector3(0, 0, 0.22f) });
+            var prng = new Rng(Seed ^ 0x9A9E5u);
+            for (int i = 0; i < 9; i++)
+            {
+                // overlapping shells of chewed wood pulp, banded grey-brown and tan, swelling then narrowing to the stalk
+                float t = i / 8f;
+                float rad = 2.5f * Mathf.Sin(Mathf.Pi * (0.18f + 0.78f * t)) + 0.4f;
+                var tone = i % 2 == 0 ? new Color(0.55f, 0.47f, 0.36f) : new Color(0.68f, 0.58f, 0.43f);
+                var paper = new StandardMaterial3D { AlbedoColor = tone.Darkened(prng.R(0, 0.12f)), Roughness = 1 };
+                root.AddChild(new MeshInstance3D
+                {
+                    Mesh = new SphereMesh { Radius = rad, Height = 1.3f, RadialSegments = 12, Rings = 4 },
+                    MaterialOverride = paper,
+                    Position = new Vector3(0.8f + prng.R(-0.25f, 0.25f), 2.3f + i * 0.62f, prng.R(-0.25f, 0.25f)),
+                    Rotation = new Vector3(prng.R(-0.15f, 0.15f), prng.R(0, 6), prng.R(-0.15f, 0.15f)),
+                    Scale = new Vector3(1, 1, prng.R(0.85f, 1.1f)),
+                });
+            }
+            root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.6f, Height = 1.0f, RadialSegments = 10, Rings = 4 }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.05f, 0.03f) }, Position = new Vector3(0.8f, 2.5f, 0) });
+        }
     }
 
     /// ...and the Old Stag's fallen log.
@@ -925,7 +982,12 @@ public partial class GameSession : Node3D
         if (_ended || Demo || Sim.Winner < 0) return;
         _ended = true;
         bool win = Sim.Winner == Local.Me;
-        if (win && Campaign && Sim.Mission != null) CampaignProgress.Complete(Episode);
+        if (win && Campaign && Sim.Mission != null)
+        {
+            StarsBefore = CampaignProgress.TotalStars;
+            Stars = Sim.Stars();
+            NewStars = CampaignProgress.Record(Episode, Stars, Sim.Mission.EndTime >= 0 ? Sim.Mission.EndTime : Sim.Time);
+        }
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");
         Camera.PanTo(World.Nests[win ? Local.Foe : Local.Me].Pos);
