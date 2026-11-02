@@ -48,6 +48,7 @@ varying float v_seed;
 varying float v_sel;
 varying float v_hov;
 varying float v_ao;
+varying float v_pale;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
@@ -64,7 +65,7 @@ void vertex() {
     //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening, 3 grooming) + gait fraction (distance-locked in the sim)
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
     //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15) + bite fraction
-    //   w = one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    //   w = 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
     float xi = floor(INSTANCE_CUSTOM.x);
     float phase = fract(INSTANCE_CUSTOM.x) * TAU;
     float seed = mod(xi, 16.0);
@@ -82,7 +83,9 @@ void vertex() {
     float carry = step(8.0, zi); zi -= carry * 8.0;
     float charge = step(4.0, zi); zi -= charge * 4.0;
     float block = step(2.0, zi);
-    float kind = floor(INSTANCE_CUSTOM.w);
+    float wi = floor(INSTANCE_CUSTOM.w);
+    float kind = mod(wi, 4.0);
+    v_pale = floor(wi / 4.0) / 15.0; // a callow just out of its cocoon: pale until its cuticle tans
     float ot = fract(INSTANCE_CUSTOM.w);
     float ack = kind == 1.0 ? sin(ot * PI) : 0.0;
     float flinch = kind == 2.0 ? sin(ot * PI) : 0.0;
@@ -339,6 +342,13 @@ void fragment() {
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
+    if (v_pale > 0.0 && part != 11.0) {
+        // callow cuticle: soft translucent amber-cream that tans to the colony's colour within seconds
+        vec3 callow = part == 13.0 ? vec3(0.46, 0.31, 0.16) : part >= 1.0 && part <= 8.0 ? vec3(0.56, 0.42, 0.25) : vec3(0.52, 0.36, 0.2);
+        c = mix(c, callow, v_pale);
+        rough = mix(rough, 0.5, v_pale); metal *= 1.0 - v_pale; cc *= 1.0 - v_pale * 0.6;
+        BACKLIGHT = mix(BACKLIGHT, vec3(0.5, 0.34, 0.16), v_pale);
+    }
     ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
     AO = v_ao;
     AO_LIGHT_AFFECT = 0.35;

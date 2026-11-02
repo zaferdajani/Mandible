@@ -31,6 +31,7 @@ public sealed partial class NestInterior
         public Label3D Label;
         public int ContentCount = -1, Tier, TierStamp = -1;
         public float ShownProgress = -1;
+        public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
     }
 
     public NestInterior(GameSession g)
@@ -39,6 +40,7 @@ public sealed partial class NestInterior
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
         for (int team = 0; team < 2; team++) BuildNest(team);
+        InitBrood();
         ApplyQuality();
     }
 
@@ -326,7 +328,7 @@ public sealed partial class NestInterior
         float fill = ch.Kind == ChamberKind.Storage ? Mathf.Clamp(col.Food / Mathf.Max(1, col.FoodCap), 0, 1) : 0;
         int count = ch.Kind switch
         {
-            ChamberKind.Brood => ch.Built ? 6 + System.Math.Min(18, col.Queue.Count * 4) : 0,
+            ChamberKind.Brood => ch.Built ? 6 : 0, // the beds themselves follow the queue every frame
             ChamberKind.Storage => ch.Built ? 1 + (int)(fill * 14) : 0,
             ChamberKind.Royal => ch.Built ? 12 + 5 * ch.Tier : 0,
             _ => ch.Built ? 4 + 2 * ch.Tier : 0,
@@ -336,6 +338,7 @@ public sealed partial class NestInterior
         room.Tier = ch.Tier;
         room.TierStamp = _tierStamp;
         foreach (var c in room.Contents.GetChildren()) c.QueueFree();
+        room.Beds = null;
         if (count == 0) return;
         float dens = Settings.Gfx switch { Settings.Quality.Low => 0.5f, Settings.Quality.Medium => 0.8f, Settings.Quality.High => 1f, _ => 1.3f };
         FillIdentity(room, dens);
@@ -405,5 +408,6 @@ public sealed partial class NestInterior
                 _status[team].Text = string.Join("\n", lines);
             }
         }
+        UpdateBrood(alpha);
     }
 }

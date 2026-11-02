@@ -114,6 +114,9 @@ public sealed class AntRenderer
     }
     readonly Batch[,] _dead = new Batch[3, 13];
     readonly Batch[] _cargo = new Batch[5];
+    readonly Batch[] _broodCargo = new Batch[2];
+    /// The nest's brood life: nurses drawn with the workers, and the callow pose of ants that just hatched.
+    public NestInterior Brood;
     readonly Batch _rings, _bars;
     readonly Batch _auraGround, _auraHalo;
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
@@ -196,6 +199,8 @@ public sealed class AntRenderer
         root.AddChild(_labelRoot);
         for (int kind = 0; kind < _cargo.Length; kind++)
             _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind), WorkerCargo.Material((FoodKind)kind), false, $"Carried{(FoodKind)kind}");
+        for (int k = 0; k < 2; k++)
+            _broodCargo[k] = new Batch(root, WorkerCargo.BroodMesh(k == 1), WorkerCargo.BroodMaterial(k == 1), false, k == 1 ? "CarriedLarva" : "CarriedEgg");
 
         var ringMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Ring) };
         ringMat.SetShaderParameter("color", new Color(0.55f, 1.0f, 0.45f, 0.95f));
@@ -270,6 +275,7 @@ public sealed class AntRenderer
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         foreach (var cargo in _cargo) cargo.Begin();
+        foreach (var cargo in _broodCargo) cargo.Begin();
         _rings.Begin(); _bars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
@@ -299,19 +305,34 @@ public sealed class AntRenderer
             var ip = a.PrevPos.DistanceSquaredTo(a.Pos) > 36 ? a.Pos : a.PrevPos.Lerp(a.Pos, alpha);
             float ih = Mathf.LerpAngle(a.PrevHeading, a.Heading, alpha);
             float ialt = Mathf.Lerp(a.PrevAlt, a.Alt, alpha);
+            // a fresh callow: first out of its cocoon, then retracing its real path a moment behind until it catches up
+            var callow = Brood != null && a.Team == Local.Me ? Brood.Callow(i, a, ref ip, ref ih) : default;
+            int layer = callow.Active ? callow.Layer : a.Layer;
             var n = hf.Normal(ip.X, ip.Y);
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
             var b = Orient(up, ih, st.Size);
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
             // underground ants stand on the gallery floor at their depth below the mound
-            float gy = a.Layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[a.Layer - 1].Pos.X, sim.W.Nests[a.Layer - 1].Pos.Y) - NestGeometry.Depth;
-            if (a.Layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
+            float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.Depth;
+            if (layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
+            if (callow.Active)
+            {
+                // rising out of the split cocoon head first, legs unfolding as it straightens
+                b = Orient(up, ih, st.Size * callow.Scale);
+                b = new Basis(b.X.Normalized(), -callow.Rise) * b;
+                gy += callow.Lift;
+            }
+            if (a.Type == AntType.Queen && a.Layer > 0 && Brood != null)
+                b = new Basis(b.X.Normalized(), -0.07f * Brood.LayPulse(a.Team)) * b; // she lifts her head as the gaster presses an egg out
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
+            if (callow.Active) amp = callow.Amp;
             float camDist = camPos.DistanceTo(o);
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
+            if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
+            data.A += 4 * callow.Pale;
             var farBatch = _far[a.Team, (int)a.Type];
             if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
             else _live[a.Team, (int)a.Type].Add(b, o, data);
@@ -436,10 +457,12 @@ public sealed class AntRenderer
             var wo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 1.2f + 4f * t * (1 - t) * 3f, p.Y);
             _blobs.Add(Basis.FromScale(Vector3.One * 1.6f), wo, new Color(0.95f, 0, 0, 0));
         }
+        Brood?.DrawNurses(this);
         foreach (var b in _live) b?.End();
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
         foreach (var cargo in _cargo) cargo.End();
+        foreach (var cargo in _broodCargo) cargo.End();
         _rings.End(); _bars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
@@ -477,6 +500,25 @@ public sealed class AntRenderer
         var away = (o - camPos).Normalized();
         _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.7f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
             new Color(col.R, col.G, col.B, strength * 0.75f));
+    }
+
+    /// A render-only worker (a nurse in the nest) drawn with the colony's own, and the brood in its jaws (1 egg, 2 larva).
+    internal void AddWorker(int team, in Basis b, in Vector3 o, in Color data, int brood)
+    {
+        _live[team, (int)AntType.Worker].Add(b, o, data);
+        if (brood > 0) _broodCargo[brood - 1].Add(b, o, data);
+    }
+    internal int VisibleBroodCargo => _broodCargo[0].Count + _broodCargo[1].Count;
+
+    /// The four per-instance floats of the Ant shader, for ants the sim does not own (see Mind and the shader's vertex()).
+    internal static Color Pack(int seed, int pose, float gait, float yaw, float pitch, float amp, bool carry, float bite, int kind = 0, float kindT = 0)
+    {
+        float x = (seed & 15) + 16 * pose + Mathf.Clamp(Mathf.PosMod(gait, 1), 0, 0.999f);
+        int yaw8 = (int)Mathf.Clamp((yaw / 1.2f * 0.5f + 0.5f) * 255f, 0, 255);
+        int pitch8 = (int)Mathf.Clamp((pitch / 0.6f * 0.5f + 0.5f) * 255f, 0, 255);
+        float y = yaw8 * 256 + pitch8 + Mathf.Clamp(amp, 0, 0.996f);
+        float z = (carry ? 8 : 0) + Mathf.Clamp(Mathf.Max(bite, carry ? 0.15f : 0), 0, 0.996f);
+        return new Color(x, y, z, kind == 0 ? 0 : kind + Mathf.Clamp(kindT, 0, 0.996f));
     }
 
     /// Decides where this ant looks and what it is doing with its face this frame, from read-only sim state,
