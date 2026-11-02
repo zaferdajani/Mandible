@@ -62,6 +62,22 @@ public sealed class AIController : IColonyAI
 
     /// The campaign's red colony (Episodes 3 and 4): it hatches, researches and defends its mound, but the
     /// episode script, not this AI, decides when it raids.
+    /// The red colony a campaign level runs: none, the passive rival the level script raids with, or an awake AI.
+    public static AIController ForLevel(Sim sim)
+    {
+        var m = sim.Mission;
+        if (m == null || !sim.Col[Config.Enemy].Alive || m.Episode == 2) return null; // Episode 2's young queen has no AI
+        var kind = m.Info.Rival;
+        if (kind == RivalKind.None) return null;
+        if (kind is RivalKind.Awake or RivalKind.Empress)
+        {
+            var ai = new AIController(sim, Config.Enemy, kind == RivalKind.Empress ? Difficulty.Normal : Difficulty.Easy);
+            sim.Col[Config.Enemy].FoodMult = kind == RivalKind.Empress ? 0.85f : 1f;
+            return ai;
+        }
+        return CampaignRival(sim);
+    }
+
     public static AIController CampaignRival(Sim sim)
     {
         var ai = new AIController(sim, Config.Enemy, Difficulty.Easy) { Passive = true };

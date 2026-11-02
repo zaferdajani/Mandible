@@ -244,15 +244,24 @@ public partial class ColonyCommandHud : Control
         };
     }
     const ulong LongPressMs = 450; // as long as the press that turns a tap into attack-move
+    // The campaign reveals the game a chapter at a time: what it has not introduced yet is left out, not greyed.
+    Expedition Story => Game.Sim.Mission;
+    bool Shown(ProdKind k) => Story is not { } m || m.AllowsProd(k);
+    bool Shown(ChamberKind k) => Story is not { } m || m.AllowsChamber(k);
+    bool Shown(Upgrade u) => Story is not { } m || m.ShowsResearch(u);
+    bool ShownTab(int page) => page switch { 2 => Story is not { } m || m.ShowsAnyResearch, 3 => Story is not { } h || h.ShowsHeroes, 4 => Game.Sim.CarrionRules, _ => true };
+    ChamberKind[] ShownRooms => System.Array.FindAll(Rooms, Shown);
+
     void BuildRoomList()
     {
         float row = _touch ? 54 : 48, h = _touch ? 48 : 42, d = (h - 42) / 2;
-        _chambersSize = new Vector2(285, _touch ? 32 + Rooms.Length * row + 4 : 369);
+        var rooms = ShownRooms;
+        _chambersSize = new Vector2(285, _touch || rooms.Length < Rooms.Length ? 32 + rooms.Length * row + 4 : 369);
         _chambers = Panel(_canvas, 14, 71, _chambersSize.X, _chambersSize.Y);
         Text(_chambers, "Chambers", 13, 4, 240, 25, 18, true, Gold);
-        for (int i = 0; i < Rooms.Length; i++)
+        for (int i = 0; i < rooms.Length; i++)
         {
-            var kind = Rooms[i];
+            var kind = rooms[i];
             var b = Button(_chambers, "", 7, 32 + i * row, 270, h, () => OrderRoom(kind));
             if (RoomUpgrade(kind) is { } upgrade) ResearchCancel(b, upgrade);
             Art(b, RoomArt(kind), 3, 3 + d, 76, 36);
@@ -291,7 +300,11 @@ public partial class ColonyCommandHud : Control
             int page = i;
             var tabButton = Button(_cardsBlock, names[i], 4 + i * 115, 0, 115, tab, () => { _page = page; RebuildCards(); });
             _tabs.Add(tabButton);
-            if (i == 4 && Game.Sim.Mission != null) tabButton.Visible = false; // the campaign's colony eats its dead (Sim.CarrionRules)
+        }
+        for (int i = 0, x = 0; i < _tabs.Count; i++)
+        {
+            _tabs[i].Visible = ShownTab(i);
+            if (_tabs[i].Visible) _tabs[i].Position = new Vector2(4 + x++ * 115, 0);
         }
         _cards = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, 0, cardsY, 691, 125); _cardsBlock.AddChild(_cards);
         Text(_cardsBlock, _touch ? "COLONY QUEUE  ·  HOLD TO CANCEL" : "COLONY QUEUE", 0, queueY, 290, 17, _touch ? 12 : 11);
@@ -345,11 +358,12 @@ public partial class ColonyCommandHud : Control
         if (_page is 1 or 3)
         {
             var list = _page == 1 ? Units : new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal };
-            for (int i = 0; i < list.Length; i++)
+            for (int i = 0, slot = 0; i < list.Length; i++)
             {
                 var kind = list[i];
+                if (!Shown(kind)) continue;
                 string key = _page == 1 ? Keys[i] : new[] { "Y", "U", "I" }[i];
-                var b = Button(_cards, "", i * 133, 0, 129, 125, () => Game.TryEnqueue(kind));
+                var b = Button(_cards, "", slot++ * 133, 0, 129, 125, () => Game.TryEnqueue(kind));
                 var title = Text(b, Config.ProdName(kind), 2, 4, 125, 24, 13); title.HorizontalAlignment = HorizontalAlignment.Center;
                 Art(b, UnitArt(kind), 3, 26, 123, 64);
                 float protein = Game.Sim.OrganicCost(kind);
@@ -383,9 +397,10 @@ public partial class ColonyCommandHud : Control
         }
         else if (_page == 0)
         {
-            for (int i = 0; i < Rooms.Length; i++)
+            var rooms = ShownRooms;
+            for (int i = 0; i < rooms.Length; i++)
             {
-                var kind = Rooms[i];
+                var kind = rooms[i];
                 var b = Button(_cards, "", i * 98, 0, 94, 125, () => OrderRoom(kind));
                 Art(b, RoomArt(kind), 3, 4, 88, 64);
                 var l = Text(b, Sim.ChamberName(kind), 5, 74, 85, 45, 11); l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -394,10 +409,11 @@ public partial class ColonyCommandHud : Control
         }
         else
         {
-            for (int i = 0; i < 5; i++)
+            for (int i = 0, slot = 0; i < 5; i++)
             {
                 var u = (Upgrade)i;
-                var b = Button(_cards, "", i * 133, 0, 129, 125, () => Game.TryResearch(u));
+                if (!Shown(u)) continue;
+                var b = Button(_cards, "", slot++ * 133, 0, 129, 125, () => Game.TryResearch(u));
                 ResearchCancel(b, u);
                 Art(b, RoomArt(Sim.KindOf(u)), 3, 3, 123, 67);
                 Text(b, Sim.ChamberName(Sim.KindOf(u)), 4, 73, 121, 22, 11);
@@ -422,11 +438,11 @@ public partial class ColonyCommandHud : Control
             if (RoomUpgrade(kind) is { } u)
             {
                 bool complete = c.T(u) >= Config.MaxTier(u);
-                status.Text = c.Researching && c.ResearchKind == u ? $"{100 * c.ResearchProgress / c.ResearchTime:0}%" : complete ? "Complete" : episodeLock ? "Later" : Price(sim, u, c.T(u) + 1, true);
+                status.Text = c.Researching && c.ResearchKind == u ? $"{100 * c.ResearchProgress / c.ResearchTime:0}%" : complete ? "Complete" : episodeLock ? (Shown(u) ? $"Rank {c.T(u)}" : "") : Price(sim, u, c.T(u) + 1, true);
                 button.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             }
             else { status.Text = $"{(kind == ChamberKind.Brood ? Sim.BroodCost : Sim.StorageCost):0}"; button.Disabled = sim.CanDig(Local.Me, kind) != Sim.DigResult.Ok; }
-            button.TooltipText = kind == ChamberKind.Brood ? "Incubator: eggs hatch here. Each completed chamber adds 50 population capacity." : episodeLock ? "Introduced in a later episode. Available in Skirmish." : Sim.ChamberName(kind);
+            button.TooltipText = kind == ChamberKind.Brood ? "Incubator: eggs hatch here. Each completed chamber adds 50 population capacity." : Sim.ChamberName(kind);
             if (RoomUpgrade(kind) == c.ResearchKind && c.Researching) button.TooltipText = "Researching. Right-click to cancel and refund food.";
         }
         foreach (var (b, k) in _units)
@@ -434,13 +450,13 @@ public partial class ColonyCommandHud : Control
             var availability = sim.CanEnqueue(Local.Me, k);
             b.Disabled = availability != QueueResult.Ok;
             b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : b.Disabled ? 0.65f : 1f);
-            b.TooltipText = sim.Mission != null && !sim.Mission.AllowsProd(k) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
+            b.TooltipText = $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
         }
         foreach (var (b, u, status) in _research)
         {
             b.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             bool active = c.Researching && c.ResearchKind == u;
-            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "Later episode" : Price(sim, u, c.T(u) + 1, false);
+            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? $"Rank {c.T(u)}" : Price(sim, u, c.T(u) + 1, false);
             b.TooltipText = active ? "Right-click to cancel research and refund food." : Sim.ChamberName(Sim.KindOf(u));
         }
         RefreshRemains(c);

@@ -471,6 +471,7 @@ public sealed partial class Sim
     public bool QueenShielded(int team)
     {
         if (team > 1) return false;
+        if (PostsShield(team)) return true; // Wings and Acid: the watch posts shield the red queen from afar
         // the campaign finale borrows the siege rule: the red queen is safe while her mound guardians stand
         if (Mode != GameMode.Lanes && !(Mission?.ShieldsRival == true && team == Config.Enemy)) return false;
         var nest = W.Nests[team].Pos;

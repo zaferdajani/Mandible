@@ -295,7 +295,8 @@ public static class Config
         _ => true,
     };
 
-    public static readonly Color PlayerUi = new(1.0f, 0.78f, 0.29f);
+    public static readonly Color DefaultPlayerUi = new(1.0f, 0.78f, 0.29f);
+    public static Color PlayerUi = DefaultPlayerUi; // the colony colour chosen on the level map tints it (CampaignProgress.ApplyLook)
     public static readonly Color EnemyUi = new(1.0f, 0.27f, 0.18f);
     public static readonly Color WildUi = new(0.78f, 0.55f, 1.0f);
     public static Color TeamUi(int team) => team == Local.Me ? PlayerUi : team < 2 ? EnemyUi : WildUi;
