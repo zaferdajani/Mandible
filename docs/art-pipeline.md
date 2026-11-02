@@ -86,3 +86,23 @@ Common causes, to fix next:
 - The capture camera's depth-of-field blur and the 34-unit base tile flatten the soil grain. Next: a finer second octave of the ground set and less depth-of-field blur on the ground plane.
 - The capture framing for food and the yard is too far out and has no ants in it. Next: frame each food source closer, after letting a few workers reach it.
 - The chamber view (the nest interior, `NestInterior`) still uses the older brood and wall geometry. It needs its own pass.
+
+**2026-11-03, after pass 2 (DOF off, sand grain octave, grass kept off food, glossy berries, sugar cubes, egg heaps). All ten views fail again, with scores about the same.**
+
+| View | Scores | What the reviewer would fix first |
+|---|---|---|
+| a-opening | 3 3 3 2 3 3 2 | granular soil and litter; the tube should read as cracked glass; ants visible around it |
+| a-tube-close | 3 3 2 3 3 3 4 | grainy soil, litter and grass; ground the tube with contact shadows; scale relative to the ants |
+| b-yard | 3 3 2 2 3 4 2 | a high-frequency soil and gravel material; visible ant trails; no flat stick cards |
+| c-level-map | 3 3 3 4 4 4 3 | vary the chamber shapes and rims; light the lower chambers |
+| d-chamber | 3 2 3 2 2 3 3 | true 3D cavities with grainy walls and directional light; organic, translucent brood |
+| e-food-crumb | 3 3 3 3 3 4 1 | a large, clearly modelled crumb pile with ants on it; no log in the foreground |
+| e-food-seed | 3 3 2 2 3 3 1 | a large, readable seed cluster with ants on it |
+| e-food-sugar | 3 3 3 2 3 4 3 | irregular, translucent sugar chunks with sparkle; ants on them |
+| e-food-berry | 3 2 3 3 4 4 2 | irregular glossy berries with stems and a juice pool; ants on them |
+| f-fog-of-war | 3 3 3 3 3 4 3 | grainy, pebbly soil; warmer directional light; a softer edge |
+
+The scores have plateaued between pass 1 and pass 2. What keeps failing is not the asset choice but three things:
+1. **Readability at game zoom.** At play distance an ant is 1-2% of the frame; in the macro targets it is 5-10%. Every food and fog view loses its readability score on this. Either the gate judges material at the target's framing (a close camera) and readability separately at game zoom, or the food piles and ants have to be scaled up beyond life-size.
+2. **Soil reads smooth at 40+ units.** A 1-2k texture tiled at real scale cannot show grain at that distance on a 1600-px frame. Parallax or displaced geometry, or bigger stones in the near ground, would show it.
+3. **Chambers.** The nest interior is still the old top-down cut with an outline band. It needs a real rebuild of the cavity walls and lighting (the NestInterior and Earth shader), not a texture change.
