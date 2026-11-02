@@ -10,36 +10,73 @@ public static class Emblem
     public static readonly Color Gold = new(1f, 0.8f, 0.32f);
     public static readonly Color Socket = new(0.25f, 0.18f, 0.11f);
 
-    /// A five-pointed star; `filled` false draws an empty socket with a faint rim.
+    /// A rating star, shown as the map shows it: a bead of amber resin set into the earth, glossy and lit from
+    /// within; an unearned star is an empty socket. `glow` adds a warm halo for a newly earned one.
     public static void Star(CanvasItem ci, Vector2 c, float r, bool filled, float glow = 0)
     {
-        var pts = new Vector2[10];
-        for (int i = 0; i < 10; i++)
+        float br = r * 0.62f;
+        if (glow > 0) for (int i = 4; i > 0; i--) ci.DrawCircle(c, br * (1 + i * 0.28f), new Color(1f, 0.6f, 0.15f, 0.06f * glow));
+        if (!filled)
         {
-            float a = -Mathf.Pi / 2 + i * Mathf.Pi / 5;
-            pts[i] = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (i % 2 == 0 ? r : r * 0.45f);
+            ci.DrawCircle(c, br, new Color(0.08f, 0.045f, 0.02f, 0.9f));
+            ci.DrawArc(c, br, Mathf.Pi * 0.15f, Mathf.Pi * 0.85f, 16, new Color(0.62f, 0.42f, 0.22f, 0.6f), Mathf.Max(1, br * 0.12f), true);
+            return;
         }
-        if (glow > 0)
-            for (int i = 0; i < 12; i++)
-            {
-                // a burst of thin rays rather than a disc: it reads as light on any background
-                float a = i * Mathf.Tau / 12 + Mathf.Pi / 12;
-                var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                ci.DrawLine(c + d * r * 1.05f, c + d * r * (i % 2 == 0 ? 1.7f : 1.45f), new Color(1f, 0.85f, 0.45f, 0.55f * glow), Mathf.Max(1, r * 0.06f), true);
-            }
-        ci.DrawColoredPolygon(Offset(pts, new Vector2(0, r * 0.12f)), new Color(0, 0, 0, 0.45f));
-        ci.DrawColoredPolygon(pts, filled ? Gold : Socket);
-        if (filled)
+        ci.DrawCircle(c + new Vector2(0, br * 0.15f), br * 1.02f, new Color(0, 0, 0, 0.5f));
+        for (int i = 0; i < 6; i++)
         {
-            // a lit upper facet
-            var hi = new Vector2[] { pts[9].Lerp(c, 0.2f), pts[0], pts[1].Lerp(c, 0.2f), c };
-            ci.DrawColoredPolygon(hi, new Color(1f, 0.95f, 0.7f, 0.55f));
+            // amber, deep at the rim and honey-bright where the light passes through
+            float t = i / 5f;
+            ci.DrawCircle(c + new Vector2(0, br * 0.12f * t), br * (1 - t * 0.55f), new Color(0.72f, 0.3f, 0.04f).Lerp(new Color(1f, 0.72f, 0.24f), t));
         }
-        var rim = new Vector2[11]; System.Array.Copy(pts, rim, 10); rim[10] = pts[0];
-        ci.DrawPolyline(rim, filled ? new Color(0.55f, 0.32f, 0.08f) : new Color(0.55f, 0.42f, 0.26f, 0.8f), Mathf.Max(1, r * 0.09f), true);
+        ci.DrawCircle(c + new Vector2(-br * 0.3f, -br * 0.32f), br * 0.22f, new Color(1f, 0.96f, 0.85f, 0.85f));
+        ci.DrawArc(c, br, 0, Mathf.Tau, 24, new Color(0.3f, 0.12f, 0.02f, 0.9f), Mathf.Max(1, br * 0.08f), true);
     }
 
     static Vector2[] Offset(Vector2[] p, Vector2 d) { var q = new Vector2[p.Length]; for (int i = 0; i < p.Length; i++) q[i] = p[i] + d; return q; }
+
+    /// A swatch of dyed chitin: a glossy, slightly domed plate of the colour with a warm highlight and dark rim,
+    /// like a piece of an ant's armour. Locked dyes are dull and matt.
+    public static void Chitin(CanvasItem ci, Vector2 c, float rx, float ry, Color colour, bool open)
+    {
+        var pts = new Vector2[40];
+        var cols = new Color[40];
+        for (int i = 0; i < 40; i++)
+        {
+            float a = i * Mathf.Tau / 40;
+            var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            pts[i] = c + new Vector2(d.X * rx, d.Y * ry);
+            // darker toward the lower rim, as a domed plate lit from above
+            cols[i] = colour.Darkened(0.25f + 0.35f * Mathf.Max(0, d.Y));
+        }
+        ci.DrawColoredPolygon(Offset(pts, new Vector2(0, 3)), new Color(0, 0, 0, 0.55f));
+        ci.DrawPolygon(pts, cols);
+        // the chitin's segment ridge and a wet highlight
+        ci.DrawLine(c + new Vector2(-rx * 0.8f, ry * 0.15f), c + new Vector2(rx * 0.8f, ry * 0.15f), colour.Darkened(0.5f), 1.5f, true);
+        if (open)
+        {
+            var hi = new Vector2[16];
+            for (int i = 0; i < 16; i++) { float a = Mathf.Pi * 1.08f + i * Mathf.Pi * 0.8f / 15; hi[i] = c + new Vector2(Mathf.Cos(a) * rx * 0.72f, Mathf.Sin(a) * ry * 0.62f); }
+            ci.DrawPolyline(hi, new Color(1f, 0.96f, 0.85f, 0.75f), 2.5f, true);
+        }
+        var rim = new Vector2[41]; System.Array.Copy(pts, rim, 40); rim[40] = pts[0];
+        ci.DrawPolyline(rim, new Color(0.08f, 0.04f, 0.02f, 0.9f), 1.5f, true);
+    }
+
+    /// An emblem engraved in metal: struck into a square plate, its relief catching the light. Locked emblems are
+    /// only a dull, unpolished outline.
+    public static void Engraved(CanvasItem ci, Vector2 c, float r, int emblem, bool open)
+    {
+        var gold = open ? new Color(0.86f, 0.64f, 0.3f) : new Color(0.36f, 0.26f, 0.16f);
+        ci.DrawRect(new Rect2(c - new Vector2(r, r), new Vector2(r * 2, r * 2)), open ? new Color(0.17f, 0.11f, 0.06f) : new Color(0.1f, 0.07f, 0.04f));
+        ci.DrawRect(new Rect2(c - new Vector2(r, r), new Vector2(r * 2, r * 2)), gold.Darkened(0.3f), false, 1.5f);
+        // relief: a dark cut first, then the face of the metal offset toward the light
+        // struck in one metal: every part of the design takes the plate's own tone
+        _mono = new Color(0.05f, 0.03f, 0.015f); Draw(ci, c + new Vector2(1.5f, 1.5f), r * 0.62f, emblem, _mono.Value);
+        _mono = gold; Draw(ci, c, r * 0.62f, emblem, gold);
+        if (open) { _mono = new Color(1f, 0.9f, 0.65f, 0.25f); Draw(ci, c - new Vector2(0.8f, 0.8f), r * 0.62f, emblem, _mono.Value); }
+        _mono = null;
+    }
 
     /// The colony banner: a dark disc ringed in the colony colour with the emblem in the middle.
     public static void Banner(CanvasItem ci, Vector2 c, float r, int emblem, Color colour)
@@ -51,6 +88,9 @@ public static class Emblem
         Draw(ci, c, r * 0.62f, emblem, colour);
     }
 
+    static Color? _mono;
+    static Color Tone(Color natural) => _mono is { } m ? new Color(m, natural.A * m.A) : natural;
+
     /// One emblem, centred on `c` within radius `r`.
     public static void Draw(CanvasItem ci, Vector2 c, float r, int emblem, Color colour)
     {
@@ -59,31 +99,31 @@ public static class Emblem
         switch (emblem)
         {
             case 1: // clover: four heart leaves and a stem
-                ci.DrawLine(c, c + new Vector2(r * 0.35f, r * 0.95f), new Color(0.5f, 0.62f, 0.2f), w, true);
+                ci.DrawLine(c, c + new Vector2(r * 0.35f, r * 0.95f), Tone(new Color(0.5f, 0.62f, 0.2f)), w, true);
                 for (int i = 0; i < 4; i++)
                 {
                     float a = i * Mathf.Pi / 2 + Mathf.Pi / 4;
                     var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
                     var side = new Vector2(-d.Y, d.X);
                     var leaf = c + d * r * 0.42f;
-                    ci.DrawCircle(leaf + side * r * 0.16f, r * 0.27f, new Color(0.52f, 0.68f, 0.22f));
-                    ci.DrawCircle(leaf - side * r * 0.16f, r * 0.27f, new Color(0.46f, 0.62f, 0.2f));
+                    ci.DrawCircle(leaf + side * r * 0.16f, r * 0.27f, Tone(new Color(0.52f, 0.68f, 0.22f)));
+                    ci.DrawCircle(leaf - side * r * 0.16f, r * 0.27f, Tone(new Color(0.46f, 0.62f, 0.2f)));
                 }
                 ci.DrawCircle(c, r * 0.12f, light);
                 break;
             case 2: // raspberry: a cone of drupelets under a leaf crown
                 {
-                    var berry = new Color(0.78f, 0.2f, 0.25f);
+                    var berry = Tone(new Color(0.78f, 0.2f, 0.25f));
                     for (int row = 0; row < 4; row++)
                         for (int k = 0; k <= 3 - row; k++)
                         {
                             float x = (k - (3 - row) * 0.5f) * r * 0.36f;
                             var p = c + new Vector2(x, -r * 0.3f + row * r * 0.32f);
                             ci.DrawCircle(p, r * 0.2f, berry.Darkened(0.1f * row));
-                            ci.DrawCircle(p + new Vector2(-r * 0.06f, -r * 0.06f), r * 0.07f, new Color(1, 0.7f, 0.7f, 0.7f));
+                            ci.DrawCircle(p + new Vector2(-r * 0.06f, -r * 0.06f), r * 0.07f, Tone(new Color(1, 0.7f, 0.7f, 0.7f)));
                         }
                     for (int i = -1; i <= 1; i++)
-                        ci.DrawColoredPolygon(new[] { c + new Vector2(i * r * 0.3f, -r * 0.5f), c + new Vector2(i * r * 0.55f, -r * 0.92f), c + new Vector2(i * r * 0.1f, -r * 0.62f) }, new Color(0.45f, 0.6f, 0.2f));
+                        ci.DrawColoredPolygon(new[] { c + new Vector2(i * r * 0.3f, -r * 0.5f), c + new Vector2(i * r * 0.55f, -r * 0.92f), c + new Vector2(i * r * 0.1f, -r * 0.62f) }, Tone(new Color(0.45f, 0.6f, 0.2f)));
                 }
                 break;
             case 3: // stag crest: two curved antlers with tines
@@ -111,7 +151,7 @@ public static class Emblem
                     ci.DrawColoredPolygon(pts, colour);
                     ci.DrawRect(new Rect2(c + new Vector2(-r * 0.8f, r * 0.3f), new Vector2(r * 1.6f, r * 0.28f)), colour.Darkened(0.25f));
                     foreach (var tip in new[] { pts[1], pts[3], pts[5] }) ci.DrawCircle(tip, r * 0.12f, light);
-                    ci.DrawCircle(c + new Vector2(0, r * 0.18f), r * 0.13f, new Color(0.8f, 0.2f, 0.2f));
+                    ci.DrawCircle(c + new Vector2(0, r * 0.18f), r * 0.13f, Tone(new Color(0.8f, 0.2f, 0.2f)));
                 }
                 break;
             default: // mandibles: two curved jaws closing on a seed

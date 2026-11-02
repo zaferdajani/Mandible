@@ -267,6 +267,34 @@ public static class LevelValidation
         GD.Print("[campaign-test] PASS level gates, the watch-post shield and star perks (Matron, early gunners and flyers, veteran brood)");
     }
 
+    /// `--map-capture=<dir>`: the colony map alone, part-way through the campaign and with its banner picker open.
+    public static async System.Threading.Tasks.Task MapCapture(Main app, string directory)
+    {
+        try
+        {
+            DirAccess.MakeDirRecursiveAbsolute(directory);
+            async System.Threading.Tasks.Task Shot(string name, float s)
+            {
+                await app.ToSignal(app.GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
+                await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var im = app.GetViewport().GetTexture().GetImage();
+                im.SavePng(directory.PathJoin(name + ".png"));
+                GD.Print("[map-capture] " + name);
+            }
+            CampaignProgress.UsePath("user://campaign_mapcap.cfg"); CampaignProgress.Reset();
+            int[] earned = { 7, 3, 7, 5, 3, 7 };
+            for (int n = 1; n <= 6; n++) CampaignProgress.Record(Levels.IdAt(n), earned[n - 1], 300 + n * 60);
+            app.ShowMenu(); app.Menu.OpenCampaign();
+            await Shot("map", 4);
+            app.Menu.Map.Select(3); await Shot("map-selected", 1.5f);
+            app.Menu.Map.ToggleLook(); await Shot("map-banner", 1.5f);
+            DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_mapcap.cfg"));
+            CampaignProgress.UsePath("user://campaign.cfg");
+            app.GetTree().Quit();
+        }
+        catch (Exception e) { GD.PushError("[map-capture] FAIL " + e); app.GetTree().Quit(1); }
+    }
+
     /// `--level-capture=<dir>`: real frames of the level map, the banner picker, briefings, objective cards in
     /// play and the result cards. Progress comes from a scratch file so the player's own is never touched.
     public static async System.Threading.Tasks.Task Capture(Main app, string directory)
