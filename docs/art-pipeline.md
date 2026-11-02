@@ -76,7 +76,7 @@ and readability, and 3 on light. The fog of war scored 2-3 on every criterion. B
 | b-yard | 3 3 3 2 3 4 2 | grainy, pebbly soil; denser stones and debris; a visible ant trail |
 | c-level-map | 3 3 3 4 4 4 3 | vary the chamber shapes; legible labels; lighter lower chambers |
 | d-chamber | 2 2 3 2 2 3 3 | carved cavities with relief; varied, translucent brood (the egg ring repeats) |
-| e-food-crumb | (no report) | |
+| e-food-crumb | 3 2 2 3 4 4 1 | a dense pile of small, varied crumbs at this framing, with ants on it |
 | e-food-seed | 3 3 2 3 3 4 1 | a bigger, denser pile at this framing, with ants on it |
 | e-food-sugar | 3 3 3 3 4 3 1 | make the source visible (grass hides it); glistening crystals with ants on them |
 | e-food-berry | 3 2 3 2 4 3 2 | glossy, translucent berries in clear view with ants on them |
