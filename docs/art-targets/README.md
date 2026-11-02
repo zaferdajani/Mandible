@@ -2,7 +2,7 @@
 
 Every art change is judged against these images, not against the previous frame. `REVIEW.jpg` puts each one next to today's rejected frame.
 
-Status: **waiting for the owner's approval** (2026-11-02). Nothing is built against them until they are approved.
+Status: **approved by the owner on 2026-11-02** ("Approve all", then "Approve both" for the food and fog-of-war additions). These are the acceptance targets.
 
 | Surface | Target | Source |
 |---|---|---|
