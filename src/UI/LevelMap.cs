@@ -4,9 +4,9 @@ using Godot;
 
 namespace Mandible;
 
-/// The level map: a cut through the colony's nest. Level 1 is the first chamber below the entrance; every level after
-/// it is dug a little deeper, act by act, down to the Empress's chamber at the bottom. Ants walk the dug galleries,
-/// locked chambers are still soil, won chambers keep a keepsake and their stars. Landscape on every device.
+/// The level map: a cut through the colony's nest (ColonyMapArt). Level 1 is the first chamber below the entrance;
+/// every level after it is dug a little deeper, act by act, down to the royal chamber at the bottom. Locked chambers
+/// are still soil, won chambers are lit, each carries its numeral, stars and name. Landscape on every device.
 public partial class LevelMap : Control
 {
     public Main App;
@@ -205,7 +205,7 @@ public partial class LevelMap : Control
     {
         if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb)
             for (int n = 1; n <= Levels.Count; n++)
-                if (mb.Position.DistanceTo(Spot(n)) < NodeR * 1.3f)
+                if (InChamber(mb.Position, n))
                 {
                     App.Audio.Ui("ui_click");
                     if (_selected == n && CampaignProgress.Unlocked(Levels.IdAt(n)) && mb.DoubleClick) { App.StartEpisode(Levels.IdAt(n)); return; }
@@ -223,30 +223,31 @@ public partial class LevelMap : Control
 
     public override void _Process(double delta) { if (Size != _built) BuildScene(); }
 
-    // ------------------------------------------------------------------ the engine-rendered nest behind the UI
-    SubViewportContainer _view;
-    NestMapScene _scene;
+    // ------------------------------------------------------------------ the painted nest behind the UI
+    ColonyMapArt _scene;
     Vector2 _built;
 
     void BuildScene()
     {
         if (Size.X < 10 || Size == _built) return;
         _built = Size;
-        if (_view == null)
+        if (_scene == null)
         {
-            _view = new SubViewportContainer { Stretch = true, MouseFilter = MouseFilterEnum.Ignore };
-            UiTheme.Place(_view, 0, 0, 1, 1, 0, 0, 0, 0);
-            AddChild(_view);
-            MoveChild(_view, 0);
-            _scene = new NestMapScene { Map = this };
-            _view.AddChild(_scene);
-            // the map's own drawing (title band, act tags, names) sits on top of the rendered earth
+            var under = new ColorRect { Color = new Color(0.13f, 0.07f, 0.04f), MouseFilter = MouseFilterEnum.Ignore };
+            UiTheme.Place(under, 0, 0, 1, 1, 0, 0, 0, 0);
+            AddChild(under);
+            MoveChild(under, 0);
+            _scene = new ColonyMapArt { Map = this };
+            UiTheme.Place(_scene, 0, 0, 1, 1, 0, 0, 0, 0);
+            AddChild(_scene);
+            MoveChild(_scene, 1);
+            // the map's own drawing (title band, act tags, plates, names) sits on top of the picture
             _overlay = new Overlay { Map = this };
             UiTheme.Place(_overlay, 0, 0, 1, 1, 0, 0, 0, 0);
             AddChild(_overlay);
-            MoveChild(_overlay, 1);
+            MoveChild(_overlay, 2);
         }
-        _scene.Build(Size);
+        _scene.QueueRedraw();
         _overlay.QueueRedraw();
     }
 
@@ -259,8 +260,15 @@ public partial class LevelMap : Control
     }
 
     public int Selected => _selected;
-    public float GroundPx => Ground;
-    public float ChamberRadius(int n) => NodeR * (n == Levels.Count ? 1.2f : 1);
+    /// Half the height of chamber n on screen.
+    public float ChamberRadius(int n) => ColonyMapArt.Anchors[n - 1].W * ArtRect.Size.Y;
+
+    bool InChamber(Vector2 p, int n)
+    {
+        var a = ColonyMapArt.Anchors[n - 1];
+        var d = (p - Spot(n)) / (new Vector2(a.Z, a.W) * ArtRect.Size * 1.15f);
+        return d.LengthSquared() < 1;
+    }
 
     public override void _Draw() => _overlay?.QueueRedraw();
 
@@ -271,14 +279,15 @@ public partial class LevelMap : Control
         ci.DrawPolygon(new[] { Vector2.Zero, new Vector2(size.X, 0), new Vector2(size.X, TopH - 4), new Vector2(0, TopH - 4) },
             new[] { new Color(0.04f, 0.025f, 0.015f, 0.94f), new Color(0.04f, 0.025f, 0.015f, 0.94f), new Color(0.04f, 0.025f, 0.015f, 0.0f), new Color(0.04f, 0.025f, 0.015f, 0.0f) });
         Emblem.Engraved(ci, new Vector2(64, 56), 32, CampaignProgress.Emblem, true);
-        float[] e = BandEdges();
         var map = MapRect;
         for (int b = 0; b < 4; b++)
         {
-            // the act, carved upright in the margin of its stratum (the card names it in full)
+            // the act, carved upright in the margin beside its chambers (the card names it in full)
             var act = Levels.Seasons[b].ToUpperInvariant();
             float lw = UiTheme.Title.GetStringSize(act, HorizontalAlignment.Left, -1, LabelSize + 4).X;
-            float mid = (b == 0 ? (e[0] + 30 + e[1]) / 2 : (e[b] + e[b + 1]) / 2) + lw / 2;
+            float mid = 0;
+            for (int n = b * 3 + 1; n <= b * 3 + 3; n++) mid += Spot(n).Y / 3;
+            mid += lw / 2;
             ci.DrawSetTransform(new Vector2(map.Position.X + LabelSize + 6, mid), -Mathf.Pi / 2, Vector2.One);
             ci.DrawString(UiTheme.Title, new Vector2(1, 1), act, HorizontalAlignment.Left, -1, LabelSize + 4, new Color(0.05f, 0.02f, 0.01f, 0.7f));
             ci.DrawString(UiTheme.Title, Vector2.Zero, act, HorizontalAlignment.Left, -1, LabelSize + 4, new Color(0.95f, 0.78f, 0.5f, 0.75f));
@@ -292,7 +301,23 @@ public partial class LevelMap : Control
             var name = Levels.Info(id).Name;
             int nf = Settings.Mobile ? 18 : 15;
             var ns = UiTheme.Title.GetStringSize(name, HorizontalAlignment.Left, -1, nf);
-            var np = c + new Vector2(-ns.X / 2, ChamberRadius(n) * 1.12f + nf + 14);
+            float rr = ChamberRadius(n);
+            // the numeral on a small bronze plate above the chamber, the stars below it
+            var numeral = Roman(n);
+            float pf = Settings.Mobile ? 20 : 16;
+            var ps = UiTheme.Title.GetStringSize(numeral, HorizontalAlignment.Left, -1, (int)pf);
+            var plate = new Rect2(c + new Vector2(-ps.X / 2 - 10, -rr - pf - 14), new Vector2(ps.X + 20, pf + 8));
+            ci.DrawStyleBox(UiTheme.Box(open ? new Color(0.2f, 0.12f, 0.06f, 0.9f) : new Color(0.1f, 0.07f, 0.05f, 0.85f), open ? Emblem.Gold : new Color(0.45f, 0.32f, 0.2f), 1, 4, 0), plate);
+            ci.DrawString(UiTheme.Title, plate.Position + new Vector2(10, pf + 1), numeral, HorizontalAlignment.Left, -1, (int)pf, open ? new Color(1f, 0.8f, 0.42f) : new Color(0.55f, 0.4f, 0.26f));
+            int bits = CampaignProgress.StarBits(id);
+            for (int st = 0; st < 3; st++)
+            {
+                var sp = c + new Vector2((st - 1) * 15, rr + 9);
+                bool on = (bits & 1 << st) != 0;
+                ci.DrawCircle(sp, on ? 5.5f : 4f, on ? new Color(1f, 0.66f, 0.18f) : new Color(0.12f, 0.07f, 0.04f, 0.85f));
+                if (on) ci.DrawCircle(sp + new Vector2(-1.5f, -1.5f), 1.6f, new Color(1f, 0.92f, 0.7f));
+            }
+            var np = c + new Vector2(-ns.X / 2, rr + nf + 20);
             var col = n == _selected ? new Color(1f, 0.8f, 0.42f) : open ? new Color(0.98f, 0.9f, 0.74f) : new Color(0.72f, 0.52f, 0.33f, 0.9f);
             ci.DrawString(UiTheme.Title, np + new Vector2(1, 1), name, HorizontalAlignment.Left, -1, nf, new Color(0.04f, 0.02f, 0.01f, 0.85f));
             ci.DrawString(UiTheme.Title, np, name, HorizontalAlignment.Left, -1, nf, col);
@@ -300,57 +325,29 @@ public partial class LevelMap : Control
     }
 
     int LabelSize => Settings.Mobile ? 19 : 15;
-    float Ground => TopH + 30;   // the surface line: the yard above, the colony below
 
-    Vector2 Entrance => new(MapRect.Position.X + MapRect.Size.X * 0.06f, Ground);
-
-    float[] BandEdges()
+    /// Where the nest picture lies: as wide as the map area allows (with its outer chambers kept clear of the card),
+    /// its surface just under the title band; on short screens it shrinks to fit above the buttons.
+    public Rect2 ArtRect
     {
-        float top = Ground, bottom = Size.Y - BottomH - 8;   // the deepest chambers stay clear of the buttons
-        float h = (bottom - top) / 4;
-        return new[] { top, top + h, top + 2 * h, top + 3 * h, bottom };
+        get
+        {
+            float areaW = Size.X - CardW - 36, top = TopH - 64, avail = Size.Y - top - BottomH + 40;
+            float s = Mathf.Min(areaW / (0.84f * ColonyMapArt.ArtSize.X), avail / ColonyMapArt.ArtSize.Y);
+            var size = ColonyMapArt.ArtSize * s;
+            return new Rect2(new Vector2(areaW / 2 - size.X / 2 + 18, top), size);
+        }
     }
 
-    /// Chamber centres: four rows, one per act, each a stratum deeper; the rows wind left, right, left, right.
+    /// Chamber centres: the painted chambers, in level order.
     public Vector2 Spot(int number)
     {
-        var map = MapRect;
-        float[] e = BandEdges();
-        int row = (number - 1) / 3, col = (number - 1) % 3;
-        if (row % 2 == 1) col = 2 - col;
-        float x = map.Position.X + map.Size.X * (0.22f + col * 0.31f + (row % 2 == 0 ? 0 : 0.04f));
-        float y = Mathf.Lerp(e[row], e[row + 1], row == 0 ? 0.52f : 0.44f) + (col == 1 ? 6 : 0);
-        return new Vector2(x, y);
+        var a = ColonyMapArt.Anchors[Mathf.Clamp(number, 1, ColonyMapArt.Anchors.Length) - 1];
+        var r = ArtRect;
+        return r.Position + new Vector2(a.X, a.Y) * r.Size;
     }
 
-    /// Chamber size: as wide as the map allows, but never taller than its stratum can hold with its plate and name.
-    float NodeR { get { var e = BandEdges(); return Mathf.Clamp(Mathf.Min(MapRect.Size.X / 20, (e[1] - e[0]) * 0.2f), 20, 54); } }
-
-    /// The galleries from the entrance through every chamber, and how much of it is dug (up to the last open chamber).
-    public (List<Vector2> curve, int dug) TunnelCurve()
-    {
-        var pts = new List<Vector2> { Entrance };
-        for (int n = 1; n <= Levels.Count; n++) pts.Add(Spot(n));
-        int open = 0;
-        for (int n = 1; n <= Levels.Count; n++) if (CampaignProgress.Unlocked(Levels.IdAt(n))) open = n;
-        var curve = new List<Vector2>();
-        int dug = 0;
-        for (int i = 0; i < pts.Count - 1; i++)
-        {
-            // each gallery sags a little between chambers, like a real one
-            var a = pts[i]; var b = pts[i + 1];
-            var mid = (a + b) / 2 + new Vector2(0, Mathf.Abs(b.X - a.X) > 40 ? 22 : 0) + new Vector2(Mathf.Abs(b.X - a.X) > 40 ? 0 : (i % 2 == 0 ? 40 : -40), 0);
-            for (int k = 0; k < 18; k++)
-            {
-                float t = k / 18f;
-                curve.Add((1 - t) * (1 - t) * a + 2 * (1 - t) * t * mid + t * t * b);
-            }
-            if (i < open) dug = curve.Count;
-        }
-        curve.Add(pts[^1]);
-        if (open >= Levels.Count) dug = curve.Count;
-        return (curve, dug);
-    }
+    static string Roman(int n) => n switch { 1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V", 6 => "VI", 7 => "VII", 8 => "VIII", 9 => "IX", 10 => "X", 11 => "XI", _ => "XII" };
 
     // ------------------------------------------------------------------ small widgets
     partial class Pill : Control

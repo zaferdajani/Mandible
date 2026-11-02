@@ -90,13 +90,14 @@ public static partial class WorldBuilder
     /// A small fallen leaf draped on the ground, with the same shader (and decay tint) as the yard's big leaves.
     static void SmallLeaf(World w, Vector2 at, float len, float yaw, float age, float seed)
     {
-        var l = new LeafDef { P = at, Len = len, Wid = len * 0.5f, Yaw = yaw, Age = age, Seed = seed, Rows = 10, Cols = 6 };
+        int sp = (int)(seed * 2.99f);
+        var l = new LeafDef { P = at, Len = len, Wid = len * LeafAspect[sp], Yaw = yaw, Age = age, Seed = seed, Species = sp, Rows = 10, Cols = 6 };
         l.Verts = new Vector3[(l.Rows + 1) * (l.Cols + 1)];
         l.Uvs = new Vector2[l.Verts.Length];
         var rot = new Basis(Vector3.Up, yaw);
         for (int r = 0; r <= l.Rows; r++)
         {
-            float v = (float)r / l.Rows, hw = Mathf.Max(0.02f, LeafHalfWidth(v, l.Wid));
+            float v = (float)r / l.Rows, hw = l.Wid * 0.5f;
             for (int c = 0; c <= l.Cols; c++)
             {
                 float u = (float)c / l.Cols;

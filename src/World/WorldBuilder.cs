@@ -253,7 +253,10 @@ public static partial class WorldBuilder
     }
 
     // ---------------------------------------------------------------- leaves
-    sealed class LeafDef { public Vector2 P; public float Len, Wid, Yaw, Age, Seed; public Vector3[] Verts; public Vector2[] Uvs; public int Rows, Cols; }
+    sealed class LeafDef { public Vector2 P; public float Len, Wid, Yaw, Age, Seed; public int Species; public Vector3[] Verts; public Vector2[] Uvs; public int Rows, Cols; }
+
+    /// Width over length of each scanned leaf in the atlas (serrated broadleaf, dandelion, cut-leaf).
+    static readonly float[] LeafAspect = { 0.547f, 0.263f, 0.523f };
 
     static float LeafHalfWidth(float v, float wid) => wid * 0.5f * Mathf.Pow(Mathf.Max(0, Mathf.Sin(Mathf.Pi * Mathf.Pow(v, 0.75f))), 0.85f) * (1 + 0.035f * Mathf.Sin(v * 70));
 
@@ -275,8 +278,9 @@ public static partial class WorldBuilder
             var p = new Vector2(rng.R(20, S - 20), rng.R(20, S - 20));
             if (p.X + p.Y > S) continue;
             if (!Ok(p, len) || !Ok(Mirror(p), len) || p.DistanceTo(Mirror(p)) < len) continue;
-            var a = new LeafDef { P = p, Len = len, Wid = len * rng.R(0.42f, 0.55f), Yaw = rng.R(0, Mathf.Tau), Age = rng.R(0.15f, 1f), Seed = rng.F() };
-            var b = new LeafDef { P = Mirror(p), Len = a.Len, Wid = a.Wid, Yaw = a.Yaw + Mathf.Pi, Age = a.Age, Seed = a.Seed };
+            int sp = rng.F() < 0.55f ? 0 : rng.F() < 0.5f ? 2 : 1;
+            var a = new LeafDef { P = p, Len = len, Wid = len * LeafAspect[sp] * rng.R(0.95f, 1.05f), Yaw = rng.R(0, Mathf.Tau), Age = rng.R(0.3f, 1f), Seed = rng.F(), Species = sp };
+            var b = new LeafDef { P = Mirror(p), Len = a.Len, Wid = a.Wid, Yaw = a.Yaw + Mathf.Pi, Age = Mathf.Clamp(a.Age + rng.R(-0.2f, 0.2f), 0.3f, 1f), Seed = rng.F(), Species = rng.I(0, 3) == 1 ? 1 : sp };
             list.Add(a); list.Add(b);
         }
         // drape onto the ground and raise the walkable surface
@@ -291,7 +295,7 @@ public static partial class WorldBuilder
             for (int r = 0; r <= rows; r++)
             {
                 float v = (float)r / rows;
-                float hw = Mathf.Max(0.05f, LeafHalfWidth(v, l.Wid));
+                float hw = l.Wid * 0.5f; // a rectangle over the photo; the leaf's own outline is cut from its alpha
                 for (int c = 0; c <= cols; c++)
                 {
                     float u = (float)c / cols;
@@ -327,10 +331,18 @@ public static partial class WorldBuilder
         return list;
     }
 
+    static ShaderMaterial LeafMaterial(World w)
+    {
+        var m = Mat(w, Shaders.Leaf);
+        m.SetShaderParameter("leaf_tex", NatureAssets.Texture("tex/leaf_atlas_diff"));
+        m.SetShaderParameter("leaf_nor", NatureAssets.Texture("tex/leaf_atlas_nor"));
+        return m;
+    }
+
     static void BuildLeaf(World w, LeafDef l)
     {
         var k = new MeshKit();
-        var col = new Color(l.Age, l.Seed, 1, 1);
+        var col = new Color(l.Age, l.Seed, l.Species * 0.5f, 1);
         for (int i = 0; i < l.Verts.Length; i++) k.Add(l.Verts[i], Vector3.Up, col, l.Uvs[i], Vector2.Zero);
         int cols = l.Cols + 1;
         for (int r = 0; r < l.Rows; r++)
@@ -341,13 +353,7 @@ public static partial class WorldBuilder
             }
         k.RecalcNormals();
         for (int i = 0; i < k.Nrm.Count; i++) if (k.Nrm[i].Y < 0) k.Nrm[i] = -k.Nrm[i];
-        // stem
-        var rot = new Basis(Vector3.Up, l.Yaw);
-        Vector3 b0 = new Vector3(l.P.X, 0, l.P.Y) + rot * new Vector3(0, 0, -0.45f * l.Len);
-        Vector3 b1 = new Vector3(l.P.X, 0, l.P.Y) + rot * new Vector3(0, 0, -0.45f * l.Len - l.Len * 0.18f);
-        b0.Y = w.HF.Sample(b0.X, b0.Z) + 0.35f; b1.Y = w.HF.Sample(b1.X, b1.Z) + 0.45f;
-        k.Tube(b0, b1, 0.32f, 0.22f, 6, new Color(l.Age, l.Seed, 1, 1), new Color(l.Age, l.Seed, 1, 1), Vector2.Zero);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Leaf) };
+        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = LeafMaterial(w) };
         w.Root.AddChild(mi);
     }
 

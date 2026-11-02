@@ -32,6 +32,13 @@ public static class NatureAssets
         return t;
     }
 
+    /// A picture in assets/ui (the colony map painting).
+    public static Texture2D UiTexture(string name)
+    {
+        if (!_tex.TryGetValue("ui/" + name, out var t)) _tex["ui/" + name] = t = GD.Load<Texture2D>($"res://assets/ui/{name}.jpg");
+        return t;
+    }
+
     public static List<Piece> Kind(string kind)
     {
         Load();
@@ -71,6 +78,7 @@ public static class NatureAssets
         ["rock_moss_set_01"] = new Color(1.08f, 0.97f, 0.84f), ["rock_moss_set_02"] = new Color(1.08f, 0.97f, 0.84f),
         ["boulder_01"] = new Color(1.1f, 0.98f, 0.82f), ["stone_01"] = new Color(1.06f, 0.97f, 0.86f),
         ["rock_07"] = new Color(1.08f, 0.98f, 0.84f), ["rock_09"] = new Color(1.08f, 0.98f, 0.84f),
+        ["dry_branches_medium_01"] = new Color(1.12f, 0.95f, 0.78f), ["bark_debris_01"] = new Color(1.05f, 0.93f, 0.8f),
     };
 
     public static Material MaterialFor(string src)

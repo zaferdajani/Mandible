@@ -569,36 +569,38 @@ void fragment() {
 }
 ";
 
+    /// Fallen leaves: real scanned leaves (ambientCG Leaf001-003, CC0) in one atlas, cut out by their own outline and
+    /// dried from green through yellow to brown by age, keeping the photo's veins and blemishes.
     public static readonly string Leaf = @"
 shader_type spatial;
 render_mode cull_disabled;
 " + Fow + @"
+uniform sampler2D leaf_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2D leaf_nor : hint_normal, filter_linear_mipmap, repeat_disable;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec4 vcol;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; vcol = COLOR; }
 void fragment() {
     float age = vcol.r;
-    vec3 green = vec3(0.22, 0.34, 0.09);
-    vec3 yellow = vec3(0.70, 0.52, 0.13);
-    vec3 brown = vec3(0.40, 0.21, 0.08);
-    vec3 col = age < 0.5 ? mix(green, yellow, age * 2.0) : mix(yellow, brown, (age - 0.5) * 2.0);
-    float u = UV.x - 0.5;
-    float v = UV.y;
-    float rib = 1.0 - smoothstep(0.0, 0.012, abs(u));
-    float lat = 1.0 - smoothstep(0.0, 0.03, abs(fract(v * 9.0 - abs(u) * 5.0) - 0.5) - 0.44);
-    lat *= step(0.02, abs(u));
-    float spots = smoothstep(0.62, 0.7, texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r);
-    float n = texture(noise_b, UV * vec2(3.0, 8.0) + vcol.g * 3.0).r;
-    col *= 0.82 + 0.3 * n;
-    col = mix(col, col * 1.45 + 0.04, max(rib, lat * 0.6));
-    col = mix(col, vec3(0.16, 0.09, 0.04), spots * (0.3 + age * 0.5));
-    // dry, darker edges
-    col = mix(col, brown * 0.7, smoothstep(0.38, 0.5, abs(u) / max(0.001, vcol.b)) * age);
-    ALBEDO = col * fow(wpos);
-    ROUGHNESS = mix(0.45, 0.85, age);
+    // where each species sits in the atlas (x, y, w, h); the stem end of the mesh (v = 0) is the photo's bottom
+    vec4 r = vcol.b < 0.25 ? vec4(0.0, 0.1943, 0.3333, 0.6104) : vcol.b < 0.75 ? vec4(0.3684, 0.0, 0.2622, 0.999) : vec4(0.6667, 0.1807, 0.3333, 0.6387);
+    vec2 t = r.xy + vec2(UV.x, 1.0 - UV.y) * r.zw;
+    vec4 photo = texture(leaf_tex, t);
+    if (photo.a < 0.5) discard;
+    float lum = dot(photo.rgb, vec3(0.3, 0.59, 0.11));
+    vec3 yellow = vec3(1.75, 1.18, 0.34) * lum;
+    vec3 brown = vec3(1.15, 0.58, 0.22) * lum;
+    vec3 col = age < 0.45 ? mix(photo.rgb, yellow, age / 0.45) : mix(yellow, brown, (age - 0.45) / 0.55);
+    // decay works in from the edges and in blotches
+    float n = texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r;
+    float rim = smoothstep(0.32, 0.5, abs(UV.x - 0.5));
+    col = mix(col, brown * 0.62, clamp(smoothstep(0.6, 0.72, n) * (0.25 + age * 0.6) + rim * age * 0.5, 0.0, 1.0));
+    ALBEDO = col;
+    NORMAL_MAP = texture(leaf_nor, t).rgb;
+    ROUGHNESS = mix(0.5, 0.88, age);
     SPECULAR = 0.35;
-    BACKLIGHT = col * 0.5;
+    BACKLIGHT = col * (0.55 - 0.35 * age);
 }
 ";
 
