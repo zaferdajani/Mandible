@@ -7,11 +7,24 @@ namespace Mandible;
 /// Live command interface measured against the supplied 1672 x 941 reference.
 /// Only portrait artwork is sampled from the reference atlas. Text, buttons, queues,
 /// minimap, selection and all world geometry remain live game systems.
+/// The interface is built from blocks (top bar, chamber list, minimap, selection, cards, commands). On a
+/// computer in landscape they sit exactly where the reference puts them and the whole canvas scales as one.
+/// On a phone or tablet (always held sideways) each block is pinned to the screen edges at its own scale,
+/// with finger-sized buttons (at least 44 px), no key hints and a long press for right-click.
 public partial class ColonyCommandHud : Control
 {
     public GameSession Game;
     public Minimap Map;
-    Control _canvas, _chambers, _cards;
+    /// Where the HUD sits in the touch layout, so the episode card and alerts can stay clear of it.
+    public bool Flexible { get; private set; }
+    public float TopEdge { get; private set; } = 44;
+    public float BottomEdge { get; private set; } = 600;
+    public float GuideScale { get; private set; } = 1;
+    public Rect2 MapRect { get; private set; }
+    Control _canvas, _chambers, _cards, _title, _resources, _mapFrame, _selectionBlock, _cardsBlock, _commandsBlock, _labelLayer;
+    Panel _selectionPanel, _cardsPanel;
+    readonly bool _touch = Settings.Mobile;
+    Vector2 _resourcesSize, _chambersSize, _selectionSize, _cardsSize, _commandsSize;
     Label _food, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
     TextureRect _selectedArt, _queueArt, _nextArt;
     public Texture2D SelectedArt => _selectedArt.Texture;
@@ -38,16 +51,84 @@ public partial class ColonyCommandHud : Control
     {
         MouseFilter = MouseFilterEnum.Ignore;
         _atlas = GD.Load<Texture2D>("res://assets/ui/colony-reference.png");
+        _labelLayer = new Control { MouseFilter = MouseFilterEnum.Ignore }; AddChild(_labelLayer); // room names float over the world, under the panels
         _canvas = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(1672, 941) }; AddChild(_canvas);
-        Text(_canvas, "MANDIBLE", 22, 3, 280, 39, 27, true, Gold);
-        Text(_canvas, Game.Campaign ? CampaignEpisodes.Name(Game.Episode).ToUpperInvariant() : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 23, 38, 260, 18, 12, false, UiTheme.Dim);
+        _title = Block(22, 3, 280, 55);
+        Text(_title, "MANDIBLE", 0, 0, 280, 39, 27, true, Gold);
+        Text(_title, Game.Campaign ? CampaignEpisodes.Name(Game.Episode).ToUpperInvariant() : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 1, 35, 260, 18, 12, false, UiTheme.Dim);
         BuildResources(); BuildRoomList(); BuildBottom();
         _network = Text(_canvas, "", 320, 52, 650, 20, 12);
-        var mapFrame = Panel(_canvas, 14, 651, 254, 267);
+        _mapFrame = Panel(_canvas, 14, 651, 254, 267);
         Map = new Minimap { Game = Game, MouseFilter = MouseFilterEnum.Stop };
-        At(Map, 5, 5, 244, 257); mapFrame.AddChild(Map);
+        At(Map, 5, 5, 244, 257); _mapFrame.AddChild(Map);
         RebuildCards();
     }
+
+    /// A group of controls placed together; its children use coordinates relative to it.
+    Control Block(float x, float y, float w, float h)
+    {
+        var b = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, x, y, w, h);
+        _canvas.AddChild(b); return b;
+    }
+
+    static void Place(Control block, float x, float y, float scale)
+    { block.Position = new Vector2(x, y); block.Scale = Vector2.One * scale; }
+
+    /// Computer: the reference composition, scaled as one. Phones and tablets: blocks pinned to the edges, the
+    /// bottom row first, then the top bar and the minimap (or the chamber list in build mode), as large as fits.
+    void Arrange(Vector2 viewport)
+    {
+        Flexible = _touch;
+        _title.Visible = !Flexible;
+        if (!Flexible)
+        {
+            float scale = Mathf.Min(viewport.X / 1672, viewport.Y / 941);
+            _canvas.Scale = Vector2.One * scale; _canvas.Position = (viewport - new Vector2(1672, 941) * scale) / 2;
+            Place(_resources, 1064, 2, 1); Place(_chambers, 14, 71, 1); Place(_mapFrame, 14, 651, 1);
+            Place(_selectionBlock, 271, 709, 1); Place(_cardsBlock, 682, 689, 1); Place(_commandsBlock, 1398, 709, 1);
+            Place(_network, 320, 52, 1);
+            _selectionPanel.Size = new Vector2(1123, 221); // one panel runs on under the cards
+            _mapFrame.Visible = true; _cardsPanel.Visible = false;
+            TopEdge = _canvas.Position.Y + 42 * scale; GuideScale = 1;
+            MapRect = new Rect2(_canvas.Position + new Vector2(14, 651) * scale, new Vector2(254, 267) * scale);
+            return;
+        }
+        _canvas.Scale = Vector2.One; _canvas.Position = Vector2.Zero;
+        _selectionPanel.Size = _selectionSize; _cardsPanel.Visible = true;
+        const float m = 12, gap = 10;
+        float bottom = viewport.Y - m, k;
+        {
+            // one row along the bottom edge; on a narrower screen (a 4:3 tablet) the commands step up above the cards
+            float row = _selectionSize.X + _cardsSize.X + _commandsSize.X + 2 * gap;
+            k = Mathf.Min(Mathf.Min((viewport.X - 2 * m) / row, viewport.Y * 0.34f / _cardsSize.Y), 1.25f);
+            if (k * MinButton < 44)
+            {
+                k = Mathf.Min(Mathf.Min((viewport.X - 2 * m - gap) / (_selectionSize.X + _cardsSize.X), viewport.Y * 0.55f / (_cardsSize.Y + gap + _commandsSize.Y)), 1.25f);
+                Place(_selectionBlock, m, bottom - _selectionSize.Y * k, k);
+                Place(_cardsBlock, viewport.X - m - _cardsSize.X * k, bottom - _cardsSize.Y * k, k);
+                Place(_commandsBlock, viewport.X - m - _commandsSize.X * k, bottom - (_cardsSize.Y + _commandsSize.Y) * k - gap, k);
+            }
+            else
+            {
+                float left = m + _selectionSize.X * k, right = viewport.X - m - _commandsSize.X * k;
+                Place(_selectionBlock, m, bottom - _selectionSize.Y * k, k);
+                Place(_cardsBlock, (left + right - _cardsSize.X * k) / 2, bottom - _cardsSize.Y * k, k);
+                Place(_commandsBlock, right, bottom - _commandsSize.Y * k, k);
+            }
+        }
+        BottomEdge = Mathf.Min(_cardsBlock.Position.Y, Mathf.Min(_selectionBlock.Position.Y, _commandsBlock.Position.Y));
+        float top = Mathf.Min(k, (viewport.X - 2 * m) / _resourcesSize.X);
+        Place(_resources, viewport.X - m - _resourcesSize.X * top, m, top);
+        TopEdge = m + _resourcesSize.Y * top;
+        Place(_network, viewport.X - m - _resourcesSize.X * top, TopEdge + 4, top);
+        float mapScale = k * 0.85f;
+        Place(_mapFrame, m, m, mapScale);
+        Place(_chambers, m, m, k * 0.95f);
+        _mapFrame.Visible = !Game.NestView; // the chamber list takes its corner in build mode
+        MapRect = new Rect2(m, m, new Vector2(254, 267) * mapScale);
+        GuideScale = Mathf.Min(k, 1.15f);
+    }
+    float MinButton => _touch ? 46 : 26; // the shortest button in the blocks (the tabs), before scaling
 
     Panel Panel(Node parent, float x, float y, float w, float h)
     {
@@ -63,7 +144,7 @@ public partial class ColonyCommandHud : Control
     Button Button(Node parent, string name, float x, float y, float w, float h, Action action)
     {
         var b = At(new Button { Text = name }, x, y, w, h);
-        b.AddThemeFontSizeOverride("font_size", 13);
+        b.AddThemeFontSizeOverride("font_size", _touch ? 15 : 13);
         b.AddThemeStyleboxOverride("normal", UiTheme.Box(new Color(0.035f, 0.03f, 0.02f, 0.98f), Edge, 1, 3, 0));
         b.AddThemeStyleboxOverride("hover", UiTheme.Box(new Color(0.18f, 0.13f, 0.055f), Gold, 1, 3, 0));
         b.AddThemeStyleboxOverride("disabled", UiTheme.Box(new Color(0.035f, 0.03f, 0.02f, 0.98f), new Color(Edge, 0.6f), 1, 3, 0));
@@ -105,14 +186,24 @@ public partial class ColonyCommandHud : Control
     }
     void BuildResources()
     {
-        var p = Panel(_canvas, 1064, 2, 606, 40);
-        Text(p, "FOOD", 12, 12, 35, 16, 10);
-        _food = Text(p, "", 50, 6, 118, 25, 17, false, Gold);
-        Text(p, "BROOD", 160, 12, 42, 16, 10);
-        _brood = Text(p, "", 206, 6, 85, 25, 17);
-        _queen = Text(p, "", 295, 10, 136, 20, 11, false, Gold);
-        Button(p, "Build  N", 433, 5, 82, 30, () => Game.Input.ToggleBuild());
-        Button(p, "Menu", 527, 5, 69, 30, () => Game.Hud.TogglePause());
+        float d = _touch ? 8 : 0; // a taller bar on phones, so its buttons are finger-sized
+        _resourcesSize = new Vector2(_touch ? 624 : 606, 40 + 2 * d);
+        var p = Panel(_canvas, 1064, 2, _resourcesSize.X, _resourcesSize.Y); _resources = p;
+        Text(p, "FOOD", 12, 12 + d, 35, 16, 10);
+        _food = Text(p, "", 50, 6 + d, 118, 25, 17, false, Gold);
+        Text(p, "BROOD", 160, 12 + d, 42, 16, 10);
+        _brood = Text(p, "", 206, 6 + d, 85, 25, 17);
+        _queen = Text(p, "", 295, 10 + d, 136, 20, 11, false, Gold);
+        if (_touch)
+        {
+            Button(p, "Build", 433, 5, 96, 46, () => Game.Input.ToggleBuild());
+            Button(p, "Menu", 537, 5, 80, 46, () => Game.Hud.TogglePause());
+        }
+        else
+        {
+            Button(p, "Build  N", 433, 5, 82, 30, () => Game.Input.ToggleBuild());
+            Button(p, "Menu", 527, 5, 69, 30, () => Game.Hud.TogglePause());
+        }
     }
     static Upgrade? RoomUpgrade(ChamberKind k) => k switch
     { ChamberKind.Royal => Upgrade.Queen, ChamberKind.Wings => Upgrade.Wings, ChamberKind.Forge => Upgrade.Mandibles, ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null };
@@ -120,63 +211,97 @@ public partial class ColonyCommandHud : Control
     { if (RoomUpgrade(kind) is { } u) Game.TryResearch(u); else Game.TryDig(kind); }
     void ResearchCancel(Button button, Upgrade upgrade)
     {
-        button.GuiInput += e =>
+        SecondaryAction(button, () =>
         {
             var c = Game.Sim.Col[Local.Me];
-            if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } && c.Researching && c.ResearchKind == upgrade)
-                Game.Issue(new Cmd { Kind = CmdKind.CancelResearch, Team = (byte)Local.Me });
+            if (c.Researching && c.ResearchKind == upgrade) Game.Issue(new Cmd { Kind = CmdKind.CancelResearch, Team = (byte)Local.Me });
+        });
+    }
+
+    /// A right-click, or on a touch screen a long press (a finger has no right button), runs the secondary action.
+    void SecondaryAction(Button button, Action action)
+    {
+        ulong pressed = 0;
+        button.GuiInput += e =>
+        {
+            if (e is not InputEventMouseButton mb) return;
+            if (mb.Pressed && mb.ButtonIndex == MouseButton.Right) action();
+            else if (mb.ButtonIndex == MouseButton.Left && mb.Device == InputEvent.DeviceIdEmulation)
+            {
+                if (mb.Pressed) pressed = Time.GetTicksMsec();
+                else if (pressed > 0 && Time.GetTicksMsec() - pressed > LongPressMs) action();
+                if (!mb.Pressed) pressed = 0;
+            }
         };
     }
+    const ulong LongPressMs = 450; // as long as the press that turns a tap into attack-move
     void BuildRoomList()
     {
-        _chambers = Panel(_canvas, 14, 71, 285, 369);
+        float row = _touch ? 54 : 48, h = _touch ? 48 : 42, d = (h - 42) / 2;
+        _chambersSize = new Vector2(285, _touch ? 32 + Rooms.Length * row + 4 : 369);
+        _chambers = Panel(_canvas, 14, 71, _chambersSize.X, _chambersSize.Y);
         Text(_chambers, "Chambers", 13, 4, 240, 25, 18, true, Gold);
         for (int i = 0; i < Rooms.Length; i++)
         {
             var kind = Rooms[i];
-            var b = Button(_chambers, "", 7, 32 + i * 48, 270, 42, () => OrderRoom(kind));
+            var b = Button(_chambers, "", 7, 32 + i * row, 270, h, () => OrderRoom(kind));
             if (RoomUpgrade(kind) is { } upgrade) ResearchCancel(b, upgrade);
-            Art(b, RoomArt(kind), 3, 3, 76, 36);
-            Text(b, Sim.ChamberName(kind), 89, 9, 143, 24, 13);
-            var status = Text(b, "", 203, 10, 61, 24, 12);
+            Art(b, RoomArt(kind), 3, 3 + d, 76, 36);
+            Text(b, Sim.ChamberName(kind), 89, 9 + d, 143, 24, _touch ? 14 : 13);
+            var status = Text(b, "", 203, 10 + d, 61, 24, 12);
             status.HorizontalAlignment = HorizontalAlignment.Right;
             _rooms.Add((b, kind, status));
         }
     }
     void BuildBottom()
     {
-        Panel(_canvas, 271, 709, 1123, 221);
-        _selectedArt = Art(_canvas, Region(new Rect2(286, 726, 154, 190)), 286, 726, 155, 190);
-        _selection = Text(_canvas, "BROOD CHAMBER", 451, 724, 226, 30, 18, true, Gold);
-        _health = Bar(_canvas, 453, 758, 213, 6);
-        _counts = Text(_canvas, "", 455, 783, 214, 30, 13);
-        _detail = Text(_canvas, "", 456, 828, 212, 84, 12);
+        // selection: what is selected, its health and what it does
+        _selectionSize = new Vector2(410, 221);
+        _selectionBlock = Block(271, 709, _selectionSize.X, _selectionSize.Y);
+        _selectionPanel = Panel(_selectionBlock, 0, 0, 1123, 221);
+        _selectedArt = Art(_selectionBlock, Region(new Rect2(286, 726, 154, 190)), 15, 17, 155, 190);
+        _selection = Text(_selectionBlock, "BROOD CHAMBER", 180, 15, 226, 30, 18, true, Gold);
+        _health = Bar(_selectionBlock, 182, 49, 213, 6);
+        _counts = Text(_selectionBlock, "", 184, 74, 214, 30, _touch ? 14 : 13);
+        _detail = Text(_selectionBlock, "", 185, 119, 212, _touch ? 90 : 84, _touch ? 14 : 12);
         _detail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        // tabs, cards and the colony queue (taller tabs and queue on phones)
+        float tab = _touch ? 46 : 26, q = _touch ? 48 : 43, cardsY = tab + 10, queueY = cardsY + 131;
+        _cardsSize = new Vector2(_touch ? 730 : 712, queueY + 19 + q + (_touch ? 8 : 0));
+        _cardsBlock = Block(682, 689, _cardsSize.X, _cardsSize.Y);
+        // on a computer the selection panel runs on under the cards; standing alone they need their own
+        _cardsPanel = Panel(_cardsBlock, -8, cardsY - 6, _cardsSize.X + 16, _cardsSize.Y - cardsY + 6);
         string[] names = { "Chambers", "Ants", "Research", "Heroes" };
         for (int i = 0; i < names.Length; i++)
         {
             int page = i;
-            var tab = Button(_canvas, names[i], 686 + i * 115, 689, 115, 26, () => { _page = page; RebuildCards(); });
-            _tabs.Add(tab);
+            var tabButton = Button(_cardsBlock, names[i], 4 + i * 115, 0, 115, tab, () => { _page = page; RebuildCards(); });
+            _tabs.Add(tabButton);
         }
-        _cards = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, 682, 725, 691, 125); _canvas.AddChild(_cards);
-        Text(_canvas, "COLONY QUEUE", 682, 856, 290, 17, 11);
-        var first = Button(_canvas, "", 682, 875, 304, 43, () => { });
+        _cards = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, 0, cardsY, 691, 125); _cardsBlock.AddChild(_cards);
+        Text(_cardsBlock, _touch ? "COLONY QUEUE  ·  HOLD TO CANCEL" : "COLONY QUEUE", 0, queueY, 290, 17, _touch ? 12 : 11);
+        queueY += 19;
+        var first = Button(_cardsBlock, "", 0, queueY, 304, q, () => { });
         first.TooltipText = "Right-click to cancel the last queued batch and refund its food.";
-        first.GuiInput += e => { if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }) Game.Issue(new Cmd { Kind = CmdKind.CancelLast, Team = (byte)Local.Me }); };
-        _queueArt = Art(first, UnitArt(ProdKind.Worker), 3, 3, 55, 37);
-        _queueName = Text(first, "", 70, 2, 210, 18, 12);
-        _queueProgress = Bar(first, 70, 26, 200, 8);
-        _queueTime = Text(first, "", 276, 20, 27, 18, 11);
-        var next = Panel(_canvas, 998, 875, 221, 43);
-        _nextArt = Art(next, UnitArt(ProdKind.Worker), 3, 3, 78, 37);
-        _queueNext = Text(next, "", 90, 5, 130, 30, 12);
+        SecondaryAction(first, () => Game.Issue(new Cmd { Kind = CmdKind.CancelLast, Team = (byte)Local.Me }));
+        float d = (q - 43) / 2;
+        _queueArt = Art(first, UnitArt(ProdKind.Worker), 3, 3 + d, 55, 37);
+        _queueName = Text(first, "", 70, 2 + d, 210, 18, _touch ? 14 : 12);
+        _queueProgress = Bar(first, 70, 26 + d, 200, 8);
+        _queueTime = Text(first, "", 276, 20 + d, 27, 18, 11);
+        var next = Panel(_cardsBlock, _touch ? 312 : 316, queueY, _touch ? 200 : 221, q);
+        _nextArt = Art(next, UnitArt(ProdKind.Worker), 3, 3 + d, 78, 37);
+        _queueNext = Text(next, "", 90, 5 + d, _touch ? 108 : 130, 30, _touch ? 14 : 12);
         for (int i = 0; i < 4; i++)
         {
-            var b = Button(_canvas, "", 1224 + i * 40, 875, 35, 43, () => { });
-            _queueSlots.Add((b, Art(b, UnitArt(ProdKind.Worker), 2, 2, 31, 39)));
+            float w = _touch ? 48 : 35;
+            var b = Button(_cardsBlock, "", (_touch ? 520 + i * 53 : 542 + i * 40), queueY, w, q, () => { });
+            _queueSlots.Add((b, Art(b, UnitArt(ProdKind.Worker), 2, 2, w - 4, q - 4)));
         }
-        var commands = Panel(_canvas, 1398, 709, 268, 209);
+        // orders for the selected ants
+        float h = _touch ? 46 : 37;
+        _commandsSize = new Vector2(268, _touch ? 12 + 4 * 54 : 209);
+        var commands = Panel(_canvas, 1398, 709, _commandsSize.X, _commandsSize.Y); _commandsBlock = commands;
         (string name, string key, Action act)[] actions = {
             ("Attack", "A", () => Game.Input.BeginAttackMove()), ("Stop", "S", () => Game.Input.Stop(false)),
             ("Hold", "H", () => Game.Input.Stop(true)), ("Gather", "G", () => Game.Input.BeginGather()),
@@ -185,11 +310,12 @@ public partial class ColonyCommandHud : Control
         {
             var a = actions[i];
             float x = i is 1 or 3 or 6 ? 137 : 12, y = i < 4 ? 12 + i / 2 * 47 : i == 4 ? 107 : 156;
-            float w = i == 4 ? 244 : 119;
-            var b = Button(commands, "", x, y, w, 37, a.act);
-            Text(b, a.name, 41, 8, 75, 23, 12);
-            Text(b, a.key, w - 25, 9, 20, 22, 12, false, UiTheme.Dim);
-            b.AddChild(At(new CommandMark { Kind = i, MouseFilter = MouseFilterEnum.Ignore }, 9, 8, 23, 23));
+            if (_touch) y = 12 + (i < 4 ? i / 2 : i == 4 ? 2 : 3) * 54;
+            float w = i == 4 ? 244 : 119, dy = (h - 37) / 2;
+            var b = Button(commands, "", x, y, w, h, a.act);
+            Text(b, a.name, 41, 8 + dy, 75, 23, _touch ? 14 : 12);
+            if (!_touch) Text(b, a.key, w - 25, 9, 20, 22, 12, false, UiTheme.Dim); // phones have no keys to hint
+            b.AddChild(At(new CommandMark { Kind = i, MouseFilter = MouseFilterEnum.Ignore }, 9, 8 + dy, 23, 23));
         }
     }
     void RebuildCards()
@@ -211,9 +337,9 @@ public partial class ColonyCommandHud : Control
                 var b = Button(_cards, "", i * 133, 0, 129, 125, () => Game.TryEnqueue(kind));
                 var title = Text(b, Config.ProdName(kind), 2, 4, 125, 24, 13); title.HorizontalAlignment = HorizontalAlignment.Center;
                 Art(b, UnitArt(kind), 3, 26, 123, 64);
-                Text(b, $"{Config.ProdCost(kind):0} food", 26, 91, 94, 17, 12);
-                Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", 26, 106, 88, 17, 12);
-                Text(b, key, 105, 101, 20, 18, 13);
+                Text(b, $"{Config.ProdCost(kind):0} food", 26, 91, 94, 17, _touch ? 13 : 12);
+                Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", 26, 106, 88, 17, _touch ? 13 : 12);
+                if (!_touch) Text(b, key, 105, 101, 20, 18, 13);
                 Art(b, Region(new Rect2(691, 820, 13, 22)), 8, 94, 13, 22);
                 _units.Add((b, kind));
             }
@@ -245,10 +371,8 @@ public partial class ColonyCommandHud : Control
     }
     public void Refresh(float dt)
     {
-        var viewport = GetViewport().GetVisibleRect().Size;
-        float scale = Mathf.Min(viewport.X / 1672, viewport.Y / 941);
-        _canvas.Scale = Vector2.One * scale; _canvas.Position = (viewport - new Vector2(1672, 941) * scale) / 2;
-        UpdateRoomLabels(scale);
+        Arrange(GetViewport().GetVisibleRect().Size);
+        UpdateRoomLabels();
         _refresh -= dt; if (_refresh > 0) return; _refresh = 0.12f;
         var sim = Game.Sim; var c = sim.Col[Local.Me];
         _food.Text = $"{(int)c.Food} / {(int)c.FoodCap}"; _brood.Text = $"{c.PopUsed} / {c.PopCap}";
@@ -306,7 +430,9 @@ public partial class ColonyCommandHud : Control
         // a selected hero shows its own upright bust; the wide card art serves the queue and the Heroes tab
         _selectedArt.Texture = n > 0 && Config.IsHero(type) && HeroArt.Bust(type, Local.Me) is { } bust ? bust : n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
         _counts.Text = n > 0 ? $"{hp:0} / {max:0} health" : $"Workers {c.Count[0]}  ·  Soldiers {c.Count[1]}";
-        _detail.Text = n > 0 ? "Right-click to move or attack. Workers gather food and dig chambers." : "Select ants to command them. Click a chamber to inspect it. N opens the nest.";
+        _detail.Text = _touch
+            ? n > 0 ? "Tap the ground to move or an enemy to attack. Hold for attack-move." : "Tap ants to command them. Tap the nest hole or Build to see the chambers."
+            : n > 0 ? "Right-click to move or attack. Workers gather food and dig chambers." : "Select ants to command them. Click a chamber to inspect it. N opens the nest.";
         if (input.InspectFood is { Alive: true } food && n == 0) { _selection.Text = Config.FoodName(food.Kind); _counts.Text = $"{food.Amount:0} loads remaining"; _detail.Text = Config.FoodEffectShort(food.Kind); }
         if (n == 0 && Game.Sim.Valid(input.Inspect, input.InspectSerial))
         {
@@ -337,11 +463,14 @@ public partial class ColonyCommandHud : Control
             if (i == _queueSlots.Count - 1 && c.Queue.Count > 6) { slot.art.Visible = false; slot.button.Text = $"+{c.Queue.Count - 5}"; }
         }
     }
-    void UpdateRoomLabels(float scale)
+    /// Room names float over their chambers in build mode, never under a panel or off the screen.
+    void UpdateRoomLabels()
     {
         foreach (var entry in _labels) entry.Value.Visible = false;
         if (!Game.NestView || Game.Camera?.Cam == null) return;
         var sim = Game.Sim; var home = Game.World.Nests[Local.Me].Pos;
+        float scale = Flexible ? Mathf.Max(1, _cardsBlock.Scale.X * 0.9f) : _canvas.Scale.X;
+        var screen = new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size);
         foreach (var ch in sim.Col[Local.Me].Chambers)
         {
             if (!_labels.TryGetValue(ch.Id, out var panel))
@@ -349,16 +478,33 @@ public partial class ColonyCommandHud : Control
                 panel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
                 panel.AddThemeStyleboxOverride("panel", UiTheme.Box(Background, Edge, 1, 3, 5));
                 var l = UiTheme.Text(Sim.ChamberName(ch.Kind).ToUpperInvariant(), 11, UiTheme.Bold, Gold); l.MouseFilter = MouseFilterEnum.Ignore; panel.AddChild(l);
-                _canvas.AddChild(panel); _labels[ch.Id] = panel;
+                _labelLayer.AddChild(panel); _labels[ch.Id] = panel;
             }
             var p = sim.ChamberPos(Local.Me, ch);
             var world = new Vector3(p.X, Game.World.HF.Sample(home.X, home.Y) - NestGeometry.Depth + 0.3f, p.Y);
             if (Game.Camera.Cam.IsPositionBehind(world)) continue;
-            var screen = (Game.Camera.Cam.UnprojectPosition(world) - _canvas.Position) / scale;
-            if (screen.X < 315 || screen.X > 1610 || screen.Y < 90 || screen.Y > 670) continue;
-            panel.Position = screen - new Vector2(panel.Size.X * 0.5f, 60);
+            panel.Scale = Vector2.One * scale;
+            var size = panel.Size * scale;
+            var rect = new Rect2(Game.Camera.Cam.UnprojectPosition(world) - new Vector2(size.X * 0.5f, 60 * scale), size);
+            if (!screen.Encloses(rect) || Covered(rect)) continue;
+            panel.Position = rect.Position;
             panel.Visible = true;
         }
+    }
+
+    bool Covered(Rect2 r)
+    {
+        foreach (var block in new[] { _resources, _chambers, _mapFrame, _selectionBlock, _cardsBlock, _commandsBlock })
+            if (block.IsVisibleInTree() && Bounds(block).Grow(4).Intersects(r)) return true;
+        return Game.Hud.EpisodeCard is { } card && card.IsVisibleInTree() && card.GetGlobalRect().Intersects(r);
+    }
+
+    /// A block's rectangle on screen (on a computer the selection block's panel runs on under the cards).
+    Rect2 Bounds(Control block)
+    {
+        var size = block == _selectionBlock ? _selectionPanel.Size : block.Size;
+        var t = block.GetGlobalTransformWithCanvas();
+        return new Rect2(t.Origin, size * t.Scale);
     }
 }
 

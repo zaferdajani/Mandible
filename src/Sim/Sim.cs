@@ -670,7 +670,7 @@ public sealed partial class Sim
         // greater queens lay faster; protein feeds the larvae; each race has its own brood rhythm
         float brood = Config.BroodSpeed(c.T(Upgrade.Queen)) * (c.ProteinT > 0 ? 1.3f : 1f);
         if (c.Race == Race.RedFire) brood *= Config.RedBrood;
-        else if (item.Kind == ProdKind.Worker) brood *= Config.BlackWorkerBrood;
+        else brood *= item.Kind == ProdKind.Worker ? Config.BlackWorkerBrood : Config.BlackSquadBrood;
         item.Progress += dt * brood;
         if (item.Progress < item.Time) return;
         c.Queue.RemoveAt(0);
@@ -1513,7 +1513,7 @@ public sealed partial class Sim
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
-                float gain = Config.FoodValue(a.CarryKind) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
+                float gain = Config.FoodValue(a.CarryKind, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
                 if (c.Food + gain > c.FoodCap)
                 {
                     // the stores are full: the surplus is eaten on the spot
@@ -1640,6 +1640,7 @@ public sealed partial class Sim
             float turn = (a.Type == AntType.Major ? 5f : 8f) * dt;
             a.Heading += Mathf.Clamp(diff, -turn, turn);
             if (a.Type == AntType.Worker && a.Team < 2 && Col[a.Team].SugarT > 0) speedMul *= 1.15f; // sugar energy
+            if (a.Type == AntType.Worker && a.Team < 2 && a.Layer == NestLayer(a.Team)) speedMul *= Config.GalleryPace;
             targetSpeed = st.Speed * a.SpeedMul * (a.BuffT > 0 ? 1.2f : 1f) * speedMul * (Mathf.Abs(diff) > 1.3f ? 0.35f : 1f);
         }
         a.Speed = Mathf.MoveToward(a.Speed, targetSpeed, st.Speed * dt * 6);

@@ -583,7 +583,9 @@ public static class Capture
         app.GetTree().Quit();
     }
 
-    /// Quick layout check at whatever window size the game was launched with: menu, colony battle, lane battle.
+    /// Quick layout check at whatever window size the game was launched with: menu, colony battle (surface,
+    /// build mode with a room selected, the pause menu), Episodes 1 and 3 (briefing and objective panel) and lane battle. Add --mobile to lay out as a phone.
+    /// Each colony frame is audited: buttons narrower or shorter than a finger, and text or panels off screen.
     public static async Task Layout(Main app, string dir)
     {
         _app = app;
@@ -596,11 +598,67 @@ public static class Capture
         app.Session.Input.SelectArmy();
         await Wait(1);
         await Shot("layout_colony");
+        AuditLayout(app, "colony");
+        var g = app.Session;
+        g.Sim.DevelopNest(0);
+        g.SetNestView(true);
+        g.Camera.JumpTo(g.World.Nests[0].Pos + new Vector2(0, 5), 39);
+        g.Input.SelectedRoom = g.Sim.ChamberOf(0, ChamberKind.Brood).Id;
+        g.Sim.Enqueue(0, ProdKind.Soldier); g.Sim.Enqueue(0, ProdKind.Worker);
+        await Wait(2);
+        await Shot("layout_build");
+        AuditLayout(app, "build");
+        g.Hud.TogglePause();
+        await Wait(1);
+        await Shot("layout_pause");
+        AuditLayout(app, "pause");
+        g.Hud.TogglePause();
+        app.StartTutorial();
+        await Wait(4);
+        await Shot("layout_episode");
+        AuditLayout(app, "episode");
+        app.StartEpisode(3);
+        await Wait(3);
+        await Shot("layout_briefing");
+        AuditLayout(app, "briefing");
+        app.Session.Hud.CloseBriefing();
+        await Wait(2);
+        await Shot("layout_episode3");
+        AuditLayout(app, "episode3");
         app.StartLanes(Difficulty.Normal, 1, AntType.Matron);
         await Wait(4);
         await Shot("layout_lanes");
-        GD.Print($"[layout] window {DisplayServer.WindowGetSize()} portrait={Settings.Portrait} canvas {app.GetViewport().GetVisibleRect().Size}");
+        GD.Print($"[layout] window {DisplayServer.WindowGetSize()} portrait={Settings.Portrait} mobile={Settings.Mobile} canvas {app.GetViewport().GetVisibleRect().Size}");
         app.GetTree().Quit();
+    }
+
+    /// Finger-size and on-screen checks over every visible control of the battle HUD, in canvas pixels
+    /// (the units the UI is laid out in; a phone multiplies them by its content scale).
+    static void AuditLayout(Main app, string frame)
+    {
+        var screen = app.GetViewport().GetVisibleRect();
+        int buttons = 0, small = 0, off = 0;
+        float smallest = float.MaxValue;
+        void Visit(Node n)
+        {
+            if (n is CanvasItem ci && !ci.IsVisibleInTree()) return;
+            if (n is Control c && c.Size.X > 0 && c.Size.Y > 0)
+            {
+                var rect = new Rect2(c.GetGlobalTransformWithCanvas().Origin, c.Size * c.GetGlobalTransformWithCanvas().Scale);
+                if (c is BaseButton && c.MouseFilter != Control.MouseFilterEnum.Ignore && !(c.GetParent() is BaseButton))
+                {
+                    buttons++;
+                    float m = Mathf.Min(rect.Size.X, rect.Size.Y);
+                    smallest = Mathf.Min(smallest, m);
+                    if (m < 44) { small++; if (small <= 8) GD.Print($"[layout] {frame}: small target {m:0}px '{(c as Button)?.Text}{c.TooltipText}' at {rect.Position.X:0},{rect.Position.Y:0} {rect.Size.X:0}x{rect.Size.Y:0}"); }
+                }
+                if ((c is Label l && l.Text != "" || c is Panel || c is PanelContainer || c is BaseButton) && !screen.Grow(1).Encloses(rect))
+                { off++; if (off <= 8) GD.Print($"[layout] {frame}: off screen {c.GetType().Name} '{(c as Label)?.Text}' at {rect.Position.X:0},{rect.Position.Y:0} {rect.Size.X:0}x{rect.Size.Y:0}"); }
+            }
+            foreach (var child in n.GetChildren()) Visit(child);
+        }
+        Visit(app.Session.Hud);
+        GD.Print($"[layout] {frame}: {buttons} buttons, smallest {smallest:0}px, {small} under 44px, {off} off screen");
     }
 
     /// Headless Lane War: two lane AIs with different heroes play out a match; prints the state each minute.
@@ -670,8 +728,14 @@ public static class Capture
         double worst = 0, total = 0;
         int ticks = 0, peak = 0;
         float nextLog = 60;
+        var workerTime = new long[4]; // black workers' ticks: surface laden, surface empty, below laden, below empty
         while (sim.Time < seconds && sim.Winner < 0)
         {
+            for (int i = 0; i < sim.High; i++)
+            {
+                ref var w = ref sim.Ants[i];
+                if (w.Alive && w.Team == 0 && w.Type == AntType.Worker) workerTime[(w.Layer > 0 ? 2 : 0) + (w.Carrying ? 0 : 1)]++;
+            }
             sw.Restart();
             sim.Tick(dt);
             foreach (var ai in ais) ai.Tick(dt);
@@ -693,6 +757,16 @@ public static class Capture
                     { if (sim.Ants[i].Team == 0) v0++; else v1++; top = System.Math.Max(top, sim.Ants[i].Level); }
                 int sq0 = 0, sq1 = 0, full = 0, ranked = 0;
                 foreach (var sq in sim.Squads) if (sq.Alive) { if (sq.Team == 0) sq0++; else sq1++; if (sq.Count == sq.Size) full++; if (sq.Level > 1) ranked++; }
+                string Siege(int t)
+                {
+                    var foe = sim.W.Nests[1 - t].Pos; int near = 0, below = 0;
+                    for (int i = 0; i < sim.High; i++) { ref var x = ref sim.Ants[i]; if (x.Alive && x.Team == t && Config.IsWarrior(x.Type) && x.Pos.DistanceTo(foe) < 25) { near++; if (x.Layer > 0) below++; } }
+                    int q = sim.Col[1 - t].QueenId;
+                    return $"{near} at foe mound ({below} below), foe queen {(q >= 0 && sim.Ants[q].Alive ? sim.Ants[q].Hp : 0):0}";
+                }
+                GD.Print($"[simtest]    siege black: {Siege(0)} | red: {Siege(1)}");
+                long wt = System.Math.Max(1, workerTime[0] + workerTime[1] + workerTime[2] + workerTime[3]);
+                GD.Print($"[simtest]    black worker time: surface laden {100f * workerTime[0] / wt:0}% empty {100f * workerTime[1] / wt:0}% | below laden {100f * workerTime[2] / wt:0}% empty {100f * workerTime[3] / wt:0}% | food/worker-min {60f * sim.Col[0].Gathered / (wt / 30f):0.0}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top} squads {sq0}/{sq1} full {full} ranked {ranked}");
                 string Heroes(int team)
                 {

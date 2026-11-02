@@ -116,7 +116,7 @@ public partial class GameSession : Node3D
             if (Campaign)
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
-                Hud.Alert(TutorialMode ? "Episode 1: select the attackers with F2" : $"Episode {Episode}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
+                Hud.Alert(TutorialMode ? Settings.Mobile ? "Episode 1: tap Army to select the attackers" : "Episode 1: select the attackers with F2" : $"Episode {Episode}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
                 Hud.ShowBriefing(Episode);
             }
             else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
@@ -509,7 +509,7 @@ public partial class GameSession : Node3D
         if (!on) { Input?.LeaveBuild(); return; }
         if (Camera.Focus2D.DistanceTo(home) > 30) { Camera.PanTo(home); Camera.TargetDistance = Mathf.Min(Camera.TargetDistance, 40); }
         if (!Sim.Col[Local.Me].Founded) Hud.Alert("Nothing below yet: the workers are still digging", UiTheme.Dim);
-        else Hud.Alert("Build mode: pick a room to dig, or click a room below to see it (Esc or right-click to close)", UiTheme.Dim);
+        else Hud.Alert(Settings.Mobile ? "Build mode: pick a room to dig, or tap a room below to see it (tap Build or the hole to close)" : "Build mode: pick a room to dig, or click a room below to see it (Esc or right-click to close)", UiTheme.Dim);
     }
 
     void UpdateGlass(float dt)
