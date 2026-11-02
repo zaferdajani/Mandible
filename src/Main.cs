@@ -78,9 +78,11 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--episode=") && int.TryParse(a["--episode=".Length..], out int ep)) StartEpisode(ep); // jump straight into a campaign episode
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
-        foreach (var a in args) if (a.StartsWith("--transport-capture=")) _ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
+        foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
     }
 
     string _layout, _gfx;

@@ -48,6 +48,7 @@ varying float v_seed;
 varying float v_sel;
 varying float v_hov;
 varying float v_ao;
+varying float v_pale;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
@@ -64,7 +65,7 @@ void vertex() {
     //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening, 3 grooming) + gait fraction (distance-locked in the sim)
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
     //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15) + bite fraction
-    //   w = one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    //   w = 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
     float xi = floor(INSTANCE_CUSTOM.x);
     float phase = fract(INSTANCE_CUSTOM.x) * TAU;
     float seed = mod(xi, 16.0);
@@ -82,7 +83,9 @@ void vertex() {
     float carry = step(8.0, zi); zi -= carry * 8.0;
     float charge = step(4.0, zi); zi -= charge * 4.0;
     float block = step(2.0, zi);
-    float kind = floor(INSTANCE_CUSTOM.w);
+    float wi = floor(INSTANCE_CUSTOM.w);
+    float kind = mod(wi, 4.0);
+    v_pale = floor(wi / 4.0) / 15.0; // a callow just out of its cocoon: pale until its cuticle tans
     float ot = fract(INSTANCE_CUSTOM.w);
     float ack = kind == 1.0 ? sin(ot * PI) : 0.0;
     float flinch = kind == 2.0 ? sin(ot * PI) : 0.0;
@@ -339,6 +342,13 @@ void fragment() {
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
+    if (v_pale > 0.0 && part != 11.0) {
+        // callow cuticle: soft translucent amber-cream that tans to the colony's colour within seconds
+        vec3 callow = part == 13.0 ? vec3(0.46, 0.31, 0.16) : part >= 1.0 && part <= 8.0 ? vec3(0.56, 0.42, 0.25) : vec3(0.52, 0.36, 0.2);
+        c = mix(c, callow, v_pale);
+        rough = mix(rough, 0.5, v_pale); metal *= 1.0 - v_pale; cc *= 1.0 - v_pale * 0.6;
+        BACKLIGHT = mix(BACKLIGHT, vec3(0.5, 0.34, 0.16), v_pale);
+    }
     ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
     AO = v_ao;
     AO_LIGHT_AFFECT = 0.35;
@@ -729,6 +739,33 @@ void fragment() {
     float fill = (1.0 - smoothstep(0.0, 0.8, r)) * 0.12;
     ALBEDO = color.rgb;
     ALPHA = (ring + fill) * color.a * v_alpha;
+}
+";
+
+    /// A hero's aura: a soft additive glow that slowly swirls. On the ground it is a disc with a faint rim; with
+    /// billboard = 1 it is a halo facing the camera. Per instance: rgb = colour, a = strength.
+    public const string Aura = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform float billboard = 0.0;
+varying vec4 v_c;
+void vertex() {
+    v_c = INSTANCE_CUSTOM;
+    if (billboard > 0.5) {
+        float s = length(MODEL_MATRIX[0].xyz);
+        MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+    }
+}
+void fragment() {
+    vec2 p = UV - 0.5;
+    float r = length(p) * 2.0;
+    float a = atan(p.y, p.x);
+    // two slow counter-turning lobes so the light seems to drift and blend rather than sit still
+    float swirl = 0.72 + 0.28 * sin(a * 3.0 + TIME * 1.1 - r * 5.0) * sin(a * 2.0 - TIME * 0.7 + r * 3.0);
+    float glow = pow(max(0.0, 1.0 - r), 2.4) * swirl;
+    float rim = (1.0 - billboard) * smoothstep(0.6, 0.82, r) * (1.0 - smoothstep(0.82, 1.0, r)) * 0.35 * swirl;
+    ALBEDO = v_c.rgb;
+    ALPHA = clamp((glow + rim) * v_c.a, 0.0, 1.0);
 }
 ";
 

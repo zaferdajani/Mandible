@@ -64,6 +64,7 @@ public struct SimEvent
     public int Tier;
     public float Radius;
     public ChamberKind Chamber;
+    public int HatchP1;               // Spawn of a newly hatched ant: its id + 1 (0 = none); `To` is where it hatched. Rendering only.
 }
 
 public sealed class WebZone
@@ -708,7 +709,7 @@ public sealed partial class Sim
                     var f = NearestFood(c.Rally, 12, null);
                     if (f != null) { a.Assigned = f; a.FoodTarget = f; a.State = AntState.Gather; }
                 }
-                Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = nest, Team = c.Team, Type = type });
+                Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = nest, To = a.Pos, HatchP1 = id + 1, Team = c.Team, Type = type });
             }
             }
         }

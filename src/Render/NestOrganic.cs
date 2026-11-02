@@ -19,7 +19,8 @@ uniform int kind = 0;
 varying vec3 lp;
 varying vec3 vc;
 varying float variation;
-void vertex() { lp = VERTEX; vc = COLOR.rgb; variation = INSTANCE_CUSTOM.x; }
+varying float wet; // a freshly laid egg glistens
+void vertex() { lp = VERTEX; vc = COLOR.rgb; variation = INSTANCE_CUSTOM.x; wet = INSTANCE_CUSTOM.y; }
 float hash(vec3 p) { return fract(sin(dot(p,vec3(127.1,311.7,74.7))) * 43758.5453); }
 float noise(vec3 p) {
     vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
@@ -35,7 +36,8 @@ void fragment() {
         col*=mix(vec3(0.75,0.62,0.42),vec3(1.0),smoothstep(-0.12,0.13,lp.y));
         rough=kind==0 ? 0.24 : 0.35;
         BACKLIGHT=col*0.12;
-        CLEARCOAT=0.22; CLEARCOAT_ROUGHNESS=0.35;
+        CLEARCOAT=mix(0.22,1.0,wet); CLEARCOAT_ROUGHNESS=mix(0.35,0.04,wet);
+        rough=mix(rough,0.06,wet); col=mix(col,col*vec3(1.04,1.02,0.9),wet); EMISSION=col*0.3*wet;
     } else if(kind==2 || kind==10) {
         float fiber=sin(UV.x*420.0+sin(UV.y*38.0)*2.0)*sin(UV.y*330.0+UV.x*16.0);
         col*=0.89+0.09*fiber+0.15*fine; rough=0.83;
