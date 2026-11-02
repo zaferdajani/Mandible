@@ -669,7 +669,7 @@ public sealed partial class Sim
         // greater queens lay faster; protein feeds the larvae; each race has its own brood rhythm
         float brood = Config.BroodSpeed(c.T(Upgrade.Queen)) * (c.ProteinT > 0 ? 1.3f : 1f);
         if (c.Race == Race.RedFire) brood *= Config.RedBrood;
-        else if (item.Kind == ProdKind.Worker) brood *= Config.BlackWorkerBrood;
+        else brood *= item.Kind == ProdKind.Worker ? Config.BlackWorkerBrood : Config.BlackSquadBrood;
         item.Progress += dt * brood;
         if (item.Progress < item.Time) return;
         c.Queue.RemoveAt(0);
