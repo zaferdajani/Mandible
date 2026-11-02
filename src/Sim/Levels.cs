@@ -65,7 +65,7 @@ public static class Levels
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Escort, 0f, "The Matron lives to the end") } },
         new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "Economy puzzle: the lairs are the larder", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
             Blurb = "The yard is bare. Hunt the bug lairs for their feasts and outlast the red colony.",
-            Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
+            Stars = new[] { (StarGoal.Time, 1560f, Under(26)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
         new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Flying ants, acid gunners, watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
             Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },

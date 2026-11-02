@@ -128,7 +128,7 @@ code does not move, and new levels use ids 5-12. The order on the map is the tab
 | 4 | Summer | **The Hollow Log** | defence against waves of wasps and spiders, majors, a mini-boss (the Hornet Mother) | - | beat every wave | lose no more than 30 ants · the queen never drops below 70% |
 | 5 | Summer | **The Rival Colony** (Ep 3) | scouting, research, an outpost | grown | kill the red queen | under 22:00 · lose no more than 60 ants |
 | 6 | Summer | **The Matron's Road** | escort: bring a wounded Acid Matron home through bug country | young | kill the red queen | under 20:00 · the Matron lives to the end |
-| 7 | Autumn | **The Dry Spell** | economy puzzle: the yard is bare, lairs are the larder | grown | kill the red queen | under 22:00 · clear all three lairs first |
+| 7 | Autumn | **The Dry Spell** | economy puzzle: the yard is bare, lairs are the larder | grown | kill the red queen | under 26:00 · clear all three lairs first |
 | 8 | Autumn | **Wings and Acid** | flying ants and acid gunners, three watch posts shielding the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
 | 9 | Autumn | **The Nuptial Flight** (Ep 4) | heroes, the Old Stag, mound guardians, a deadline | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
 | 10 | Late summer | **The Hornet Mother** | a boss with her own nest who raids you, plus a rival | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
