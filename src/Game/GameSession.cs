@@ -101,6 +101,10 @@ public partial class GameSession : Node3D
         {
             Fog = new FogOfWar(World);
             Ants.VisibleToPlayer = Fog.Visible;
+            FogOverlay.Attach(Camera.Cam, World);
+            // level 1 opens on the trail alone: it is known (dim) before anyone walks it, everything else is black
+            if (Sim.Mission is { Episode: 1 })
+                Fog.Know(p => 1f - Mathf.SmoothStep(3f, 7f, p.DistanceTo(new Vector2(Mathf.Clamp(p.X, 36, 128), Mathf.Clamp(p.Y, 252, 260)))));
             if (Lanes)
             {
                 if (Net == null) _ai.Add(new LaneAI(Sim, Local.Foe, Diff));

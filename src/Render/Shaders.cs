@@ -15,10 +15,8 @@ public static class Shaders
     const string Fow = @"
 uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
 uniform float map_size = 320.0;
-float fow(vec3 wp) {
-    vec2 f = texture(fow_tex, wp.xz / map_size).rg;
-    return mix(0.10, mix(0.42, 1.0, f.r), f.g);
-}
+// the fog of war itself is FogOverlay's screen pass (true black over the unknown); materials no longer dim themselves
+float fow(vec3 wp) { return 1.0; }
 ";
 
     public const string Ant = @"
