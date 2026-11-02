@@ -144,6 +144,7 @@ void vertex() {
         // jaws gape on the bite; held open on sentry; a slow gnash at rest; wide on a charge
         float open = bite * 0.55 + sin(TIME * 3.0 + id) * (0.04 + 0.06 * hero) + charge * 0.45
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
+        if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
@@ -367,51 +368,51 @@ void fragment() {
 }
 ";
 
-    /// The tunnel network, shared by the terrain cut, the glass pane and the ground litter: up to 32 galleries
-    /// packed seven floats each (from.xy, to.xy, room radius at 'to', depth at 'from', depth at 'to'). A gallery
-    /// is a capsule 1.5 wide sloping between its two depths; a room is a disc of its radius at its depth.
-    /// net_dist follows the line of sight from the camera through the ground point down to each gallery's depth,
-    /// so the window in the soil sits exactly over what is seen through it from any camera angle, instead of
-    /// over the rooms' map positions (which drift out from under a ground-level cut as the camera tilts).
+    /// Same signed-distance union as NestGeometry: nest-local from.xy, to.xy, room radii.xy,
+    /// gallery half-width. The roof follows the camera ray to the shared horizontal floor.
     public const string NetworkFn = @"
 uniform float xray_on = 0.0;
 uniform vec2 xray_center = vec2(-1000.0);
+uniform float net_ground_y = 0.0;
 uniform float net[224];
 uniform int net_count = 0;
-float net_dist(vec3 p, vec3 cam) {
-    vec3 dir = p - cam;
-    // how far the line of sight drifts across the ground per unit of depth (clamped for a near-horizontal view)
-    vec2 sh = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
-    float shl = length(sh);
-    if (shl > 6.0) sh *= 6.0 / shl;
-    // nothing of the network can be seen through ground this far from the mound: skip the loop
-    if (distance(p.xz, xray_center) > 48.0 + 11.0 * min(shl, 6.0)) return 1e9;
-    float best = 1e9;
+float nest_union(float a, float b) {
+    float h = max(0.45 - abs(a - b), 0.0) / 0.45;
+    return min(a, b) - h * h * 0.1125;
+}
+float nest_field(vec2 p) {
+    float best = 100000.0;
     for (int i = 0; i < net_count; i++) {
         int k = i * 7;
         vec2 a = vec2(net[k], net[k + 1]);
         vec2 b = vec2(net[k + 2], net[k + 3]);
-        float r = net[k + 4];
-        float da = net[k + 5], db = net[k + 6];
+        vec2 radii = vec2(net[k + 4], net[k + 5]);
         vec2 ab = b - a;
-        float len2 = max(dot(ab, ab), 0.0001);
-        for (int s = 0; s < 3; s++) {
-            float f = float(s) * 0.5;
-            vec2 q = p.xz + sh * mix(da, db, f);
-            float t = clamp(dot(q - a, ab) / len2, 0.0, 1.0);
-            best = min(best, length(q - (a + ab * t)) - 1.5);
-            if (s == 2) best = min(best, length(q - b) - r);
-        }
+        float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 0.0001), 0.0, 1.0);
+        float tube = length(p - a - ab * t) - net[k + 6];
+        float room = (length((p - b) / radii) - 1.0) * min(radii.x, radii.y);
+        best = nest_union(best, nest_union(tube, room));
     }
-    return best;
+    return best + 0.10 * sin(p.x * 2.1 + sin(p.y * 1.3)) * sin(p.y * 1.8)
+                + 0.045 * sin(p.x * 5.7 + p.y * 4.3);
 }
-// how open the ground is at p (0 soil .. 1 glass); surface dressing over an opening is dropped with it
-float glass_at(vec3 p, vec3 cam) { return xray_on > 0.001 ? xray_on * (1.0 - smoothstep(0.0, 1.0, net_dist(p, cam))) : 0.0; }
+float net_dist(vec3 p, vec3 cam) {
+    if (net_count == 0 || distance(p.xz, xray_center) > 65.0) return 100000.0;
+    vec3 dir = p - cam;
+    vec2 shift = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
+    float sl = length(shift);
+    if (sl > 6.0) shift *= 6.0 / sl;
+    vec2 q = p.xz + shift * (p.y - net_ground_y + 2.4) - xray_center;
+    return nest_field(q);
+}
+float glass_at(vec3 p, vec3 cam) {
+    return xray_on > 0.001 ? xray_on * (1.0 - smoothstep(-0.15, 0.85, net_dist(p, cam))) : 0.0;
+}
 ";
 
     /// The terrain while the Glass Earth is open: the same shader, drawn in the transparent pass so the soil over
     /// the galleries thins to a translucent roof instead of vanishing. Swapped in only while the earth is opened.
-    public static string TerrainRoof => _roof ??= Terrain.Replace("//ROOF_MODE", "render_mode depth_draw_always;").Replace("//ROOF_ALPHA", "ALPHA = 1.0 - glass * 0.74;");
+    public static string TerrainRoof => _roof ??= Terrain.Replace("//ROOF_MODE", "render_mode depth_draw_never;").Replace("//ROOF_ALPHA", "ALPHA = 1.0 - glass * 0.92;");
     static string _roof;
 
     public static readonly string Terrain = @"
@@ -425,6 +426,8 @@ uniform sampler2D normal_b : hint_normal, filter_linear_mipmap_anisotropic, repe
 uniform sampler2D normal_c : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable; // the sand grains themselves
 uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
+uniform vec2 entrance_a = vec2(-1000.0);
+uniform vec2 entrance_b = vec2(-1000.0);
 uniform int detail = 1; // graphics tier: 0 plain soil (phones), 1 grain and clods, 2 a finer grain octave on top
 // Glass Earth: while xray_on, the soil directly over the colony's galleries and rooms is cut away
 varying vec3 wpos;
@@ -438,10 +441,13 @@ void vertex() {
 " + NetworkFn + @"
 void fragment() {
     vec2 uv = wpos.xz;
+    // Actual small entrance holes remain readable with build mode both open and closed.
+    vec2 mouth = distance(uv, entrance_a) < distance(uv, entrance_b) ? uv - entrance_a : uv - entrance_b;
+    if (length(mouth) < 0.82 + 0.055 * sin(atan(mouth.y, mouth.x) * 7.0)) discard;
     // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
-    float glass = xray_on * (1.0 - smoothstep(0.0, 1.0, nd));
+    float glass = xray_on * (1.0 - smoothstep(-0.15, 0.85, nd));
     float band = exp(-pow((nd - 0.1) / 0.9, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
@@ -492,7 +498,7 @@ void fragment() {
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
     // the freshly cut soil at the opening's edge: darker and damper than the surface
-    col *= 1.0 - 0.42 * band - 0.14 * glass;
+    col *= 1.0 - 0.32 * band - 0.46 * glass;
     col = mix(col, col * vec3(1.0, 0.9, 0.8), 0.5 * max(band, glass));
     ALBEDO = col;
     ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
@@ -942,8 +948,11 @@ render_mode cull_CULL;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_c : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float ground_y = 0.0;   // world height of the nest entrance
+uniform sampler2D soil_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float shade = 1.0;      // how much of the sun this surface can see
 uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
+uniform bool cavity_surface = false;
+uniform bool flat_lighting = false; // Low tier: stable directional light without screen-space buffers
 uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
 uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roots and grooves, 2 finer grain
 varying vec3 wpos;
@@ -951,6 +960,11 @@ varying vec3 wnrm;
 void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    // Excavation UV.x stores a distance and UV.y is constant; it is not a valid
+    // tangent parameterization. Supply a stable basis for the triplanar normal map.
+    vec3 tangent_axis = abs(NORMAL.x) > 0.95 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    TANGENT = normalize(tangent_axis - NORMAL * dot(NORMAL, tangent_axis));
+    BINORMAL = normalize(cross(NORMAL, TANGENT));
 }
 float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
@@ -988,12 +1002,38 @@ void fragment() {
     if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
     // a trodden floor darkens toward the foot of the wall, so the cavity reads as a depression
     if (grooves < 0.01) { float rr = length(UV - 0.5) * 2.0; col *= 1.0 - 0.42 * smoothstep(0.5, 1.0, rr); }
+    if (cavity_surface) {
+        // Triplanar photographic soil keeps grain continuous across the floor and banks.
+        vec3 weights = pow(an, vec3(4.0)); weights /= max(dot(weights, vec3(1.0)), 0.001);
+        vec3 tx = texture(soil_albedo, wpos.yz * 0.17).rgb;
+        vec3 ty = texture(soil_albedo, wpos.xz * 0.17).rgb;
+        vec3 tz = texture(soil_albedo, wpos.xy * 0.17).rgb;
+        col = tx * weights.x + ty * weights.y + tz * weights.z;
+        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.58) * vec3(0.55,0.53,0.50);
+        col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
+        col *= 0.87 + 0.20 * g;
+        float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
+        col *= 1.0 - 0.32 * crevice;
+        if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
+        AO = 1.0 - 0.45 * crevice;
+        AO_LIGHT_AFFECT = 0.5;
+    }
     ALBEDO = col * shade;
     ROUGHNESS = 0.96 - t2 * 0.08;
     SPECULAR = 0.2;
     vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
     NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
+    if (cavity_surface && !flat_lighting) {
+        vec2 suv = (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.17;
+        vec2 px = 1.0 / vec2(textureSize(soil_albedo, 0));
+        float l = dot(texture(soil_albedo, suv - vec2(px.x, 0.0)).rgb, vec3(0.3333));
+        float r = dot(texture(soil_albedo, suv + vec2(px.x, 0.0)).rgb, vec3(0.3333));
+        float d = dot(texture(soil_albedo, suv - vec2(0.0, px.y)).rgb, vec3(0.3333));
+        float u = dot(texture(soil_albedo, suv + vec2(0.0, px.y)).rgb, vec3(0.3333));
+        NORMAL_MAP = normalize(vec3((l-r) * 3.2, (d-u) * 3.2, 1.0)) * 0.5 + 0.5;
+        NORMAL_MAP_DEPTH = 0.8;
+    }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
 }
 ";

@@ -47,18 +47,7 @@ public partial class PlayerInput : Node
     }
 
     /// The chamber under a screen point (by its dug footprint), or -1.
-    int PickRoom(Vector2 screen)
-    {
-        if (!Game.NestView || !Cam.ScreenToGround(screen, out var g)) return -1;
-        var p = new Vector2(g.X, g.Z);
-        int best = -1; float bestD = float.MaxValue;
-        foreach (var ch in Sim.Col[Local.Me].Chambers)
-        {
-            float d = Sim.ChamberPos(Local.Me, ch).DistanceTo(p) - (ch.Radius + 0.9f);
-            if (d < 0 && d < bestD) { bestD = d; best = ch.Id; }
-        }
-        return best;
-    }
+    int PickRoom(Vector2 screen) => Game.NestView ? Game.Interior.PickRoom(screen) : -1;
 
     /// The placement cue: a ring the size of a room under the cursor, green where it may be dug and red where
     /// not, and a small gold ring on the node its gallery would start from.
@@ -79,17 +68,19 @@ public partial class PlayerInput : Node
             _cueNode = Ring(2.4f);
         }
         var mp = GetViewport().GetMousePosition();
-        if (!Cam.ScreenToGround(mp, out var g)) { _cue.Visible = false; _cueNode.Visible = false; return; }
-        var p = new Vector2(g.X, g.Z);
+        if (!Game.Interior.ScreenToColony(mp, out var p)) { _cue.Visible = false; _cueNode.Visible = false; return; }
         bool ok = Sim.PlaceCheck(Local.Me, p) == Sim.DigResult.Ok;
         _cue.Visible = true;
-        _cue.Position = Game.World.HF.Point(p, 0.12f);
+        var home = Game.World.Nests[Local.Me].Pos;
+        float floor = Game.World.HF.Sample(home.X, home.Y) - NestGeometry.Depth + 0.12f;
+        _cue.Position = new Vector3(p.X, floor, p.Y);
         ((ShaderMaterial)_cue.MaterialOverride).SetShaderParameter("color", ok ? new Color(0.55f, 1f, 0.45f, 0.95f) : new Color(1f, 0.35f, 0.25f, 0.95f));
         int node = Sim.DigNodeFor(Local.Me, p);
         _cueNode.Visible = node != int.MinValue;
         if (node != int.MinValue)
         {
-            _cueNode.Position = Game.World.HF.Point(Sim.NodePos(Local.Me, node), 0.12f);
+            var from = Sim.NodePos(Local.Me, node);
+            _cueNode.Position = new Vector3(from.X, floor, from.Y);
             ((ShaderMaterial)_cueNode.MaterialOverride).SetShaderParameter("color", new Color(1f, 0.85f, 0.4f, 0.9f));
         }
     }
@@ -177,9 +168,13 @@ public partial class PlayerInput : Node
             {
                 if (_mode != Mode.None)
                 {
+                    if (_mode == Mode.Dig)
+                    {
+                        if (Game.Interior.ScreenToColony(mb.Position, out var at)) PlaceAt(at);
+                        return;
+                    }
                     if (Cam.ScreenToGround(mb.Position, out var g))
                     {
-                        if (_mode == Mode.Dig) { PlaceAt(new Vector2(g.X, g.Z)); return; }
                         if (_mode == Mode.AttackMove) Issue(new Vector2(g.X, g.Z), mb.Position, true);
                         else Issue(new Vector2(g.X, g.Z), mb.Position, false);
                     }
@@ -410,8 +405,11 @@ public partial class PlayerInput : Node
     bool OnScreen(int id, out Vector2 sp)
     {
         ref var a = ref Sim.Ants[id];
-        var wp = new Vector3(a.Pos.X, a.Height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         sp = Vector2.Zero;
+        if (a.Layer > 0 && (!Game.NestView || a.Layer != Sim.NestLayer(Local.Me))) return false;
+        var nest = a.Layer > 0 ? Game.World.Nests[a.Layer - 1].Pos : Vector2.Zero;
+        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.Depth : a.Height;
+        var wp = new Vector3(a.Pos.X, height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         if (Cam.Cam.IsPositionBehind(wp)) return false;
         sp = Cam.Cam.UnprojectPosition(wp);
         return true;
@@ -447,6 +445,14 @@ public partial class PlayerInput : Node
 
     void ClickSelect(Vector2 screen, bool shift, bool ctrl)
     {
+        // Build mode selects the visible room even when its queen/props occupy the centre.
+        if (Game.NestView && Cam.ScreenToGround(screen, out var surface))
+        {
+            if (new Vector2(surface.X, surface.Z).DistanceTo(Game.World.Nests[Local.Me].Pos) < 1.5f)
+            { ToggleBuild(); return; }
+            int room = PickRoom(screen);
+            if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
+        }
         int id = Pick(screen, true);
         if (id >= 0 && Sim.Ants[id].Type == AntType.Queen) { SelectNest(false); return; }
         if (id >= 0)

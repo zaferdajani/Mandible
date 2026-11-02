@@ -27,6 +27,7 @@ public partial class Hud : CanvasLayer
     Control _pause, _end, _help;
     float _alertT;
     float _refresh;
+    public ColonyCommandHud CommandHud;
 
     public override void _Ready()
     {
@@ -38,6 +39,20 @@ public partial class Hud : CanvasLayer
         Box = new SelectionBox { MouseFilter = Control.MouseFilterEnum.Ignore };
         UiTheme.Place(Box, 0, 0, 1, 1, 0, 0, 0, 0);
         _root.AddChild(Box);
+
+        if (!Game.Lanes)
+        {
+            CommandHud = new ColonyCommandHud { Game = Game };
+            _root.AddChild(CommandHud);
+            Minimap = CommandHud.Map;
+            _alert = UiTheme.Text("", 19, UiTheme.Bold, UiTheme.Gold);
+            _alert.HorizontalAlignment = HorizontalAlignment.Center;
+            _alert.MouseFilter = Control.MouseFilterEnum.Ignore;
+            UiTheme.Place(_alert, 0.5f, 0, 0.5f, 0, -460, 52, 460, 85);
+            _root.AddChild(_alert);
+            BuildHelp();
+            return;
+        }
 
         BuildTopBar();
         if (Game.Lanes) _pop.GetParent<Control>().Visible = false; // no brood to raise in Lane War
@@ -577,7 +592,7 @@ public partial class Hud : CanvasLayer
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            "Your queen lives at the black crater. Keep her alive; destroy the red queen to win.",
+            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
@@ -664,13 +679,13 @@ public partial class Hud : CanvasLayer
     {
         var lines = new[]
         {
-            victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
+            victory ? Game.Sim.Mission != null ? "Your incubator, store, workers and first fighting squad are ready." : "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
             "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
             $"Enemies slain  {me.Killed}   ·   Ants lost  {me.Lost}",
         };
-        _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+        _end = Overlay(victory ? Game.Sim.Mission != null ? "EPISODE COMPLETE" : "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
         _end.Visible = true;
     }
 
@@ -688,6 +703,7 @@ public partial class Hud : CanvasLayer
         if (Game?.Sim == null) return;
         _alertT -= dt;
         _alert.Modulate = new Color(1, 1, 1, Mathf.Clamp(_alertT, 0, 1));
+        if (CommandHud != null) { CommandHud.Refresh((float)delta); return; }
         _refresh -= dt;
         if (_refresh > 0) return;
         _refresh = 0.1f;

@@ -110,7 +110,7 @@ public partial class RtsCamera : Node3D
         _focusTarget.X = Mathf.Clamp(_focusTarget.X, 0, Config.MapSize);
         _focusTarget.Z = Mathf.Clamp(_focusTarget.Z, 0, Config.MapSize);
         // looking into the nest, the camera's focus sinks to chamber depth so the rooms fill the view
-        if (HF != null) _focusTarget.Y = Mathf.Lerp(_focusTarget.Y, HF.Sample(_focusTarget.X, _focusTarget.Z) - (NestView ? 5f : 0f), Mathf.Min(1, dt * 4));
+        if (HF != null) _focusTarget.Y = Mathf.Lerp(_focusTarget.Y, HF.Sample(_focusTarget.X, _focusTarget.Z) - (NestView ? NestGeometry.Depth * 0.5f : 0f), Mathf.Min(1, dt * 4));
         float k = 1 - Mathf.Exp(-dt * 10);
         Focus = Focus.Lerp(_focusTarget, k);
         Distance = Mathf.Lerp(Distance, TargetDistance, 1 - Mathf.Exp(-dt * 8));
@@ -136,7 +136,9 @@ public partial class RtsCamera : Node3D
         Attr.DofBlurNearDistance = d * (NestView ? 0.3f : 0.62f); // and the shaft walls near the camera stay sharp too
         Attr.DofBlurNearTransition = d * (NestView ? 0.15f : 0.35f);
         Attr.DofBlurAmount = Mathf.Lerp(0.09f, 0.035f, t);
-        Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low;
+        // Transparent soil does not write depth. Lens blur would focus on the wrong surface
+        // and smear the entire colony on High/Ultra; build mode needs crisp rooms at every zoom.
+        Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
     }
 
     public bool ScreenToGround(Vector2 screen, out Vector3 hit)

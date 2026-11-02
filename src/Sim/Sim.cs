@@ -184,6 +184,7 @@ public sealed partial class Sim
             if (mode == GameMode.Lanes) { FoundInstantly(c.Team); SetupLaneColony(c); continue; }
             if (fortified) SpawnNestGuardians(c.Team);
         }
+        if (W.FirstNest) BeginExpedition();
         foreach (var camp in W.Camps)
         {
             if (mode == GameMode.Lanes && LaneReserved(camp.Pos)) continue; // the lanes and objective grounds are kept clear; bugs live in the jungle between them
@@ -239,6 +240,7 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ research
     public ResearchResult CanResearch(int team, Upgrade u)
     {
+        if (Mission != null) return ResearchResult.Locked;
         var c = Col[team];
         if (!c.Alive) return ResearchResult.Dead;
         if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
@@ -467,6 +469,7 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ commands
     public void CmdMove(List<int> ids, Vector2 p, bool attack, int layer = 0)
     {
+        if (Mission != null && layer == 0) p = Expedition.Constrain(p);
         if (layer > 0 && (layer > 2 || !Col[layer - 1].Founded)) layer = 0; // no such underground yet
         float spacing = 0;
         foreach (int id in ids) spacing = Mathf.Max(spacing, Ants[id].Size);
@@ -547,10 +550,12 @@ public sealed partial class Sim
     /// The same checks as Enqueue without changing anything (multiplayer predicts results before sending).
     public QueueResult CanEnqueue(int team, ProdKind kind)
     {
+        if (Mission != null && (team != 0 || kind is not (ProdKind.Worker or ProdKind.Soldier))) return QueueResult.Locked;
         var c = Col[team];
         if (!c.Alive) return QueueResult.Dead;
         if (Mode == GameMode.Lanes) return QueueResult.Locked; // the mound sends its waves on its own
         if (!c.Founded || kind == ProdKind.Chamber) return QueueResult.Locked; // no brood before the nest; chambers are dug, not laid
+        if (ChamberCount(team, ChamberKind.Brood, true) == 0) return QueueResult.Locked;
         if (!Config.Unlocked(kind, c.Tier)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
@@ -636,6 +641,7 @@ public sealed partial class Sim
             if (Ants[i].Alive) TickAnt(i, dt);
         Ph.Update(dt);
         TickCorpses(dt);
+        TickExpedition();
     }
 
     void TickColony(Colony c, float dt)
@@ -649,6 +655,8 @@ public sealed partial class Sim
         c.JuiceT = Mathf.Max(0, c.JuiceT - dt);
         c.ProteinT = Mathf.Max(0, c.ProteinT - dt);
         if (!c.Alive || c.Queue.Count == 0) { c.PopBlocked = false; return; }
+        if (!c.Founded || c.QueenId < 0 || !Ants[c.QueenId].Alive || Ants[c.QueenId].Layer != NestLayer(c.Team) || ChamberCount(c.Team, ChamberKind.Brood, true) == 0) return;
+        if (Ants[c.QueenId].Pos.DistanceTo(ChamberPos(c.Team, Royal(c.Team))) > Royal(c.Team).Radius) return;
         var item = c.Queue[0];
         if (item.Kind != ProdKind.Chamber && c.PopUsed + Config.ProdPop(item.Kind) > c.PopCap)
         {
@@ -681,6 +689,11 @@ public sealed partial class Sim
             {
                 if (squad != null) Join(squad, id);
                 c.Produced++;
+                if (Mission != null && c.Team == 0)
+                {
+                    if (type == AntType.Worker) Mission.WorkersHatched++;
+                    if (type == AntType.Soldier) Mission.SoldiersHatched++;
+                }
                 ref var a = ref Ants[id];
                 if (type != AntType.Worker)
                 {
@@ -724,6 +737,7 @@ public sealed partial class Sim
     /// Crumbs fall from the picnic table above, always in mirrored pairs so neither side is favoured.
     void TickShowers()
     {
+        if (Mission != null) return;
         if (Time < _nextShower) return;
         _nextShower = Time + Rng.R(70, 95);
         float S = Config.MapSize;
@@ -1472,6 +1486,9 @@ public sealed partial class Sim
 
     Vector2 WorkerLogic(int i, ref Ant a, UnitStats st, float dt, bool think, ref float speedMul)
     {
+        // Resume an interrupted delivery before gathering another item.
+        if (a.Carrying) a.State = AntState.Return;
+        else if (a.State == AntState.Return) a.State = AntState.Forage;
         // bite whoever is chewing on us
         if (a.Target >= 0 && Valid(a.Target, a.TargetSerial) && a.Pos.DistanceTo(Ants[a.Target].Pos) < 2f) TryBite(i, a.Target, st);
 
@@ -1486,10 +1503,11 @@ public sealed partial class Sim
         if (a.State == AntState.Return)
         {
             a.Deposit -= dt;
-            if (a.Deposit <= 0) { a.Deposit = 0.12f; Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
+            if (a.Deposit <= 0) { a.Deposit = 0.12f; if (a.Layer == 0) Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
             if (a.CarryKind == FoodKind.Seed) speedMul = 0.8f; // seeds are heavy
-            var to = nest - a.Pos;
-            if (to.Length() < 1.8f)
+            var delivery = FoodDeliveryPoint(a.Team);
+            var to = delivery.pos - a.Pos;
+            if (a.Carrying && a.Layer == delivery.layer && to.Length() < (delivery.layer == 0 ? 1.8f : 1.1f))
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
@@ -1510,15 +1528,21 @@ public sealed partial class Sim
                     case FoodKind.Berry: c.JuiceT = Mathf.Min(Config.EffectMax, c.JuiceT + Config.EffectPerDelivery); break;
                     case FoodKind.Corpse: c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery); break;
                 }
-                Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = nest, Team = a.Team });
+                Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team });
                 a.Heading += DMath.Pi;
                 if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
                 else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
                 return Vector2.Zero;
             }
-            // path integration home with a little meander
-            return to.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
+            // Keep the full destination below ground so Layering can follow the
+            // actual gallery tree. Surface travel retains its slight meander.
+            if (a.Layer > 0) return to;
+            var surfaceHome = nest - a.Pos;
+            return surfaceHome.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
         }
+
+        // Leave by the shaft before searching or picking up food on the surface.
+        if (a.Layer > 0) return nest - a.Pos;
 
         if (a.State == AntState.Gather && (a.FoodTarget == null || !a.FoodTarget.Alive))
         {
@@ -1660,7 +1684,7 @@ public sealed partial class Sim
         }
         pos = ClampMap(pos);
         float moved = pos.DistanceTo(a.Pos);
-        a.Pos = pos;
+        a.Pos = Mission != null && a.Layer == 0 ? Expedition.Constrain(pos) : pos;
         a.Gait = (a.Gait + moved / (0.55f * a.Size)) % 1f;
         a.Height = W.HF.Sample(pos.X, pos.Y);
     }

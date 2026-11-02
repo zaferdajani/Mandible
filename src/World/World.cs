@@ -48,6 +48,7 @@ public enum Scatter { Grass, Pebbles, Straw }
 
 public sealed class World
 {
+    public bool FirstNest;
     public Heightfield HF;
     public readonly List<Obstacle> Obstacles = new();
     public readonly List<FoodSource> Food = new();

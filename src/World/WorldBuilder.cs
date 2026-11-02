@@ -5,7 +5,7 @@ using Godot;
 namespace Mandible;
 
 /// Generates a 180°-symmetric backyard battlefield at ant scale.
-public static class WorldBuilder
+public static partial class WorldBuilder
 {
     const float S = Config.MapSize;
     static readonly Vector2 Center = new(S * 0.5f, S * 0.5f);
@@ -13,22 +13,27 @@ public static class WorldBuilder
 
     /// `horizontal`: the colonies face each other across the yard (left and right) instead of corner to corner.
     /// Lane War uses it so the lanes run along a phone held sideways.
-    public static World Build(Node3D parent, uint seed, bool horizontal = false)
+    public static World Build(Node3D parent, uint seed, bool horizontal = false, bool firstNest = false)
     {
-        var w = new World { Root = new Node3D { Name = "World" } };
+        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest };
         parent.AddChild(w.Root);
         var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
         var deco = new Rng(seed ^ 0x5EEDu);      // decoration only: leaves, twigs, grass, litter
         var hf = w.HF = new Heightfield(S, 1f);
 
         BuildTextures(w);
-        var home = horizontal ? new Vector2(46, S * 0.5f) : NestA;
+        var home = firstNest ? Expedition.Clearing : horizontal ? new Vector2(46, S * 0.5f) : NestA;
         BaseHeights(hf, seed, home);
 
         w.Nests[Config.Player] = new Nest { Team = Config.Player, Pos = home, Radius = 9 };
         w.Nests[Config.Enemy] = new Nest { Team = Config.Enemy, Pos = Mirror(home), Radius = 13 };
         // rocks are placed before the soil settles so the ground can sag around them (the rock itself sits on the sagged soil)
         var rocks = PlaceRocks(w, rng);
+        if (firstNest)
+        {
+            rocks.RemoveAll(r => Expedition.Contains(r.P, r.R + 3));
+            w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3));
+        }
         RockDips(hf, rocks);
         Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
@@ -37,6 +42,7 @@ public static class WorldBuilder
         w.IndexObstacles();
         var leaves = PlaceLeaves(w, deco, rocks);
         var twigs = PlaceTwigs(w, deco);
+        if (firstNest) { w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3)); w.IndexObstacles(); }
         var ao = ComputeAO(hf, rocks);
 
         BuildTerrainMesh(w, ao);
@@ -46,8 +52,8 @@ public static class WorldBuilder
         foreach (var r in rocks) BuildRock(w, r);
         BuildGrass(w, deco);
         BuildNestDressing(w, deco);
-        PlaceFood(w, rng);
-        PlaceCamps(w, rng);
+        if (firstNest) BuildExpedition(w, deco);
+        else { PlaceFood(w, rng); PlaceCamps(w, rng); }
         w.IndexObstacles();
         BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);
@@ -166,7 +172,10 @@ public static class WorldBuilder
         hf.ForEachInRadius(c.X, c.Y, 12f, (i, r) =>
         {
             // the excavated ring, its lip a little sharper on the inside, and a soft apron of spoil beyond it
-            hf.H[i] += 2.3f * Mathf.Exp(-Mathf.Pow((r - 3.6f) / (r < 3.6f ? 1.7f : 2.4f), 2)) + 0.35f * Mathf.Exp(-Mathf.Pow((r - 7.5f) / 2.5f, 2)) - 1.9f * Mathf.Exp(-Mathf.Pow(r / 1.35f, 2));
+            // A small entrance and a low apron of excavated sand. A tall crater rim hides the
+            // horizontal colony under it and reads as a quarry when the roof is translucent.
+            hf.H[i] += 0.55f * Mathf.Exp(-Mathf.Pow((r - 2.1f) / (r < 2.1f ? 0.9f : 1.6f), 2))
+                       + 0.12f * Mathf.Exp(-Mathf.Pow((r - 5f) / 2.5f, 2)) - 0.7f * Mathf.Exp(-Mathf.Pow(r / 0.9f, 2));
             hf.Mound[i] = Mathf.Max(hf.Mound[i], Mathf.SmoothStep(10.5f, 3.5f, r));
         });
     }
@@ -176,7 +185,7 @@ public static class WorldBuilder
         hf.ForEachInRadius(c.X, c.Y, 14f, (i, r) =>
         {
             float t = Mathf.Clamp(1 - r / 13.5f, 0, 1);
-            hf.H[i] += 4.6f * Mathf.Pow(t, 1.4f) - 1.5f * Mathf.Exp(-Mathf.Pow(r / 1.3f, 2));
+            hf.H[i] += 1.25f * Mathf.Pow(t, 1.4f) - 0.9f * Mathf.Exp(-Mathf.Pow(r / 1.3f, 2));
             hf.Leaf[i] = 0;
         });
     }
@@ -499,6 +508,8 @@ public static class WorldBuilder
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
         w.TerrainMaterial.SetShaderParameter("normal_c", w.NormalC);
+        w.TerrainMaterial.SetShaderParameter("entrance_a", w.Nests[0].Pos);
+        w.TerrainMaterial.SetShaderParameter("entrance_b", w.Nests[1].Pos);
         w.TerrainMaterials.Add(w.TerrainMaterial);
         var mi = new MeshInstance3D { Mesh = mesh, MaterialOverride = w.TerrainMaterial, Name = "Terrain" };
         w.Root.AddChild(mi);
@@ -918,11 +929,11 @@ public static class WorldBuilder
             if (variant == 0)
             {
                 var c = w.Nests[0].Pos;
-                for (int i = 0; i < 1100; i++)
+                for (int i = 0; i < 180; i++)
                 {
                     float a = rng.R(0, Mathf.Tau), r = 2.2f + Mathf.Abs(rng.R(-1, 1) + rng.R(-1, 1)) * 3.3f;
                     var p = c + MathX.Dir(a) * r;
-                    float s = rng.R(0.1f, 0.38f);
+                    float s = rng.R(0.04f, 0.16f);
                     xf.Add(new Transform3D(new Basis(Vector3.Up, rng.R(0, 6)) * Basis.FromScale(Vector3.One * s), new Vector3(p.X, hf.Sample(p.X, p.Y) + s * 0.15f, p.Y)));
                     cd.Add(new Color(rng.R(0.5f, 1f), rng.F() < 0.1f ? 1 : 0, rng.R(0, 0.3f), rng.F()));
                 }

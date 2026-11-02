@@ -38,6 +38,8 @@ public partial class Main : Node
                 return;
             }
             if (a == "--raidtest") { Capture.RaidTest(this); return; }
+            if (a == "--campaign-test") { ColonyValidation.Campaign(this); return; }
+            if (a == "--transport-test") { FoodTransportValidation.Run(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
@@ -68,9 +70,14 @@ public partial class Main : Node
         ApplyOrientation();
         Audio = new AudioDirector();
         AddChild(Audio);
+        foreach (var a in args)
+            if (a.StartsWith("--nesttest=")) { _ = NestRenderTest.Run(this, a.Substring(11)); return; }
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
+        foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
+        foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--transport-capture=")) _ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
     }
@@ -124,6 +131,14 @@ public partial class Main : Node
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, TutorialMode = true });
+    }
+
+    public void StartSkirmish(int team = 0)
+    {
+        Local.Me = team;
+        Audio.FadeMusic(1);
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
+        Swap(new GameSession { App = this, Diff = Difficulty.Normal, Skirmish = true });
     }
 
     /// Starts a Lane War match against the AI: you steer one hero; creeps and guardians fight the lanes.
@@ -189,7 +204,8 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(sub);
 
         _main = Column(
-            ("Tutorial  ·  start here", () => App.StartTutorial()),
+            ("Episode 1 · The First Nest", () => App.StartTutorial()),
+            ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
             ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
