@@ -64,3 +64,25 @@ and readability, and 3 on light. The fog of war scored 2-3 on every criterion. B
 - `tools/capture.ps1` must still pass all 12 self-tests.
 - Always run Godot with `--audio-driver Dummy`. Run graphical jobs through `D:/MandibleBuilds/godot-run.sh` and
   headless jobs under `timeout`.
+
+## Gate log
+
+**2026-11-02, after the first implementation pass (commit ae906ac). All ten views fail.** Each score is out of 5, in this order: repetition, primitives, scale, material, light, palette, readability.
+
+| View | Scores | What the reviewer would fix first |
+|---|---|---|
+| a-opening | 3 3 3 3 4 4 2 | make the tube read as broken, and the ant trail readable at this size; add soil grain and litter |
+| a-tube-close | 3 3 3 3 4 4 4 | soil grain and litter; glass refraction and highlights |
+| b-yard | 3 3 3 2 3 4 2 | grainy, pebbly soil; denser stones and debris; a visible ant trail |
+| c-level-map | 3 3 3 4 4 4 3 | vary the chamber shapes; legible labels; lighter lower chambers |
+| d-chamber | 2 2 3 2 2 3 3 | carved cavities with relief; varied, translucent brood (the egg ring repeats) |
+| e-food-crumb | (no report) | |
+| e-food-seed | 3 3 2 3 3 4 1 | a bigger, denser pile at this framing, with ants on it |
+| e-food-sugar | 3 3 3 3 4 3 1 | make the source visible (grass hides it); glistening crystals with ants on them |
+| e-food-berry | 3 2 3 2 4 3 2 | glossy, translucent berries in clear view with ants on them |
+| f-fog-of-war | 3 3 3 3 4 4 2 | readable ants; grainier soil; a softer edge |
+
+Common causes, to fix next:
+- The capture camera's depth-of-field blur and the 34-unit base tile flatten the soil grain. Next: a finer second octave of the ground set and less depth-of-field blur on the ground plane.
+- The capture framing for food and the yard is too far out and has no ants in it. Next: frame each food source closer, after letting a few workers reach it.
+- The chamber view (the nest interior, `NestInterior`) still uses the older brood and wall geometry. It needs its own pass.
