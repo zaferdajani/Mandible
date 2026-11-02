@@ -50,10 +50,10 @@ public static partial class WorldBuilder
         BuildSkirt(w);
         foreach (var l in leaves) BuildLeaf(w, l);
         BuildTwigs(w, deco, twigs);
-        BuildGrass(w, deco);
         BuildNestDressing(w, deco);
         if (firstNest) BuildExpedition(w, deco);
         else { PlaceFood(w, rng); PlaceCamps(w, rng); }
+        BuildGrass(w, deco); // after the food, so no grass grows over a pile and hides it
         w.IndexObstacles();
         DressYard(w, deco, rocks, firstNest);
         BuildLitter(w, deco);
@@ -605,6 +605,7 @@ public static partial class WorldBuilder
         void Blade(Vector2 p, float h, float dry)
         {
             if (w.Blocked(p, 0.5f)) return;
+            foreach (var f in w.Food) if (p.DistanceTo(f.Pos) < f.Radius + 4f) return;
             d.Sprig(p, h, dry);
         }
         bool FarFromNests(Vector2 p, float dist)

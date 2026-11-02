@@ -138,7 +138,12 @@ public partial class RtsCamera : Node3D
         Attr.DofBlurAmount = Mathf.Lerp(0.09f, 0.035f, t);
         // Transparent soil does not write depth. Lens blur would focus on the wrong surface
         // and smear the entire colony on High/Ultra; build mode needs crisp rooms at every zoom.
-        Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
+        // Gameplay views stay sharp edge to edge: the tilt-shift blur smeared the soil grain the ground sets carry
+        // (the art gate's first finding). Only the far horizon softens, beyond the play area.
+        Attr.DofBlurNearEnabled = false;
+        Attr.DofBlurFarDistance = d * 2.6f;
+        Attr.DofBlurFarTransition = d * 1.5f;
+        Attr.DofBlurFarEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
     }
 
     public bool ScreenToGround(Vector2 screen, out Vector3 hit)

@@ -65,18 +65,22 @@ public static class FoodArt
 
     static void Crumbs(World w, Rng rng, Pile pile, float size)
     {
+        // one broken chunk of bread, and the scatter of smaller crumbs that came off it as it fell
         var bread = NatureAssets.Kind("food_bread");
-        int n = rng.I(4, 8);
+        int n = rng.I(10, 17);
         for (int i = 0; i < n; i++)
         {
             var p = bread[rng.I(0, bread.Count)];
-            float s = (i == 0 ? size * 2.1f : size * rng.R(0.5f, 1.1f)) / p.Footprint;
-            var m = Cut(p, rng, i == 0 ? 2 : 3, 0.12f, 0.5f, 0);
-            var at = i == 0 ? Vector2.Zero : rng.InDisk(size * 1.1f);
+            bool chunk = i == 0;
+            float across = chunk ? size * 1.4f : size * Mathf.Lerp(0.18f, 0.5f, Mathf.Pow(rng.F(), 1.8f));
+            float s = across / p.Footprint;
+            var m = Cut(p, rng, chunk ? 2 : 3, chunk ? 0.1f : -0.15f, chunk ? 0.45f : 0.2f, 0);
+            // crumbs fan out from the chunk, most close by, a few further
+            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.6f + Mathf.Pow(rng.F(), 1.5f) * 1.4f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
             mi.Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s);
-            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.25f, at.Y);
-            Add(pile, mi, i == 0 ? 0 : (float)i / n, m);
+            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.2f, at.Y);
+            Add(pile, mi, chunk ? 0 : (float)i / n, m);
         }
     }
 
@@ -110,21 +114,25 @@ public static class FoodArt
         // the sticky drop the crystals sit in
         var syrup = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.55f, 0.27f, 0.04f, 0.78f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.04f,
-            MetallicSpecular = 0.9f, RefractionEnabled = true, RefractionScale = 0.05f, RimEnabled = true, Rim = 0.4f,
+            AlbedoColor = new Color(0.36f, 0.16f, 0.02f), Roughness = 0.03f, MetallicSpecular = 1f,
+            ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.0f,
+            BacklightEnabled = true, Backlight = new Color(0.45f, 0.2f, 0.02f),
         };
-        var drop = new MeshInstance3D { Mesh = DropMesh(rng, size * 1.15f), MaterialOverride = syrup };
+        var drop = new MeshInstance3D { Mesh = DropMesh(rng, size * 0.9f, 0.1f), MaterialOverride = syrup };
         Add(pile, drop, 0.6f, null);
         var crystal = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.97f, 0.96f, 0.93f, 0.7f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.12f,
-            MetallicSpecular = 1f, RefractionEnabled = true, RefractionScale = 0.04f, RimEnabled = true, Rim = 0.7f, RimTint = 0.1f,
+            AlbedoColor = new Color(0.98f, 0.97f, 0.94f, 0.82f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.04f,
+            MetallicSpecular = 1f, RefractionEnabled = true, RefractionScale = 0.05f, RimEnabled = true, Rim = 0.8f, RimTint = 0.1f,
+            ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.01f,
+            EmissionEnabled = true, Emission = new Color(1f, 0.97f, 0.9f), EmissionEnergyMultiplier = 0.06f, // the sparkle of facets
+            BacklightEnabled = true, Backlight = new Color(0.5f, 0.48f, 0.42f),
         };
         var cube = CrystalMesh();
         int n = rng.I(8, 15);
         for (int i = 0; i < n; i++)
         {
-            float s = size * rng.R(0.15f, 0.42f) * (i == 0 ? 1.5f : 1);
+            float s = size * rng.R(0.22f, 0.55f) * (i == 0 ? 1.5f : 1);
             var at = rng.InDisk(size * 0.75f);
             var mi = new MeshInstance3D { Mesh = cube, MaterialOverride = crystal, Basis = Tumble(rng) * Basis.FromScale(new Vector3(1, rng.R(0.8f, 1.15f), rng.R(0.85f, 1.2f)) * s), Position = new Vector3(at.X, s * 0.2f, at.Y) };
             Add(pile, mi, (float)i / n, null);
@@ -137,13 +145,20 @@ public static class FoodArt
         var fruit = NatureAssets.Kind("food_lychee");
         if (fruit.Count == 0) return;
         var p = fruit[0];
+        // the scan's photo under a wet, glossy skin that lets red light through
+        var skin = (StandardMaterial3D)p.Material.Duplicate();
+        skin.AlbedoColor = new Color(1.12f, 0.72f, 0.72f);
+        skin.Roughness = 0.38f;
+        skin.ClearcoatEnabled = true; skin.Clearcoat = 0.8f; skin.ClearcoatRoughness = 0.08f;
+        skin.BacklightEnabled = true; skin.Backlight = new Color(0.55f, 0.06f, 0.05f);
+        skin.RimEnabled = true; skin.Rim = 0.25f; skin.RimTint = 0.6f;
         int n = Mathf.Clamp((int)(size * 1.6f), 3, 9);
         for (int i = 0; i < n; i++)
         {
             float d = size * rng.R(0.55f, 0.85f) * (i == 0 ? 1.15f : 1);
             var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.45f, 0.95f);
             var m = i == 1 ? Cut(p, rng, 1, 0.1f, 0.25f, 2) : (ShaderMaterial)null; // one burst open on its pulp
-            var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m ?? p.Material, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * d / p.Footprint), Position = new Vector3(at.X, -d * 0.08f, at.Y) };
+            var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m ?? (Material)skin, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * d / p.Footprint), Position = new Vector3(at.X, -d * 0.08f, at.Y) };
             Add(pile, mi, (float)i / n, m);
         }
         // juice soaked into the soil around the burst one

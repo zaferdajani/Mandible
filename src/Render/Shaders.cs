@@ -478,8 +478,8 @@ void fragment() {
     float g2 = texture(noise_b, uv * 0.41 + 0.7).r;
     // photographed soil (CC0 ground sets, assets/nature/ground), blended by the lie of the land. The base is read
     // twice, at two scales and angles, and the two are mixed by slow noise so its tile never repeats visibly.
-    vec2 ua = uv / 34.0;
-    vec2 ub = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80)) * uv / 23.0 + 0.37;
+    vec2 ua = uv / 26.0;
+    vec2 ub = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80)) * uv / 18.0 + 0.37;
     float mixAB = smoothstep(0.35, 0.65, n2);
     vec3 baseC = mix(texture(g_base_d, ua).rgb, texture(g_base_d, ub).rgb, mixAB);
     vec3 baseN = mix(texture(g_base_n, ua).rgb, texture(g_base_n, ub).rgb, mixAB);
@@ -508,6 +508,14 @@ void fragment() {
         col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
     }
     col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
+    // the grains themselves: a fine octave of the photographed sand, in luminance only so the layer colours stay
+    vec3 fineN = vec3(0.5, 0.5, 1.0);
+    if (detail > 0) {
+        vec2 uf = mat2(vec2(0.31, 0.95), vec2(-0.95, 0.31)) * uv / 6.5 + 0.61;
+        float fl = dot(texture(g_base_d, uf).rgb, vec3(0.3, 0.59, 0.11));
+        col *= clamp(0.45 + fl * 1.35, 0.6, 1.35);
+        fineN = texture(g_base_n, uf).rgb;
+    }
     float quartz = 0.0;
     // excavated sand around the black colony's nest: the same soil, sifted paler
     vec3 sand = baseC * vec3(1.18, 1.12, 1.02) * (0.85 + 0.3 * g2);
@@ -524,7 +532,7 @@ void fragment() {
     ROUGHNESS = clamp(mix(rough, rough * 0.8, clamp(wet, 0.0, 1.0)), 0.4, 1.0);
     SPECULAR = 0.3;
     // the photographed relief on top of the broad undulations of the land
-    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
+    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;
