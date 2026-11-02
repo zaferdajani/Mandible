@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Fallen }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -16,7 +16,7 @@ public sealed class Cmd
     public int[] Serials = System.Array.Empty<int>();
     public Vector2 P;
     public int Target = -1, TargetSerial, FoodId = -1;
-    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind or FallenOrder
+    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind or RemainsOrder
     public byte Layer; // Move / AttackMove: 0 the surface, 1 + team inside that nest (garrison or raid)
 
     public static Cmd Units(CmdKind k, int team, List<int> ids, Sim sim)
@@ -77,7 +77,14 @@ public sealed class Cmd
             case CmdKind.Reinforce: if (ids.Count > 0) sim.CmdReinforce(ids); break;
             case CmdKind.Ability: sim.CmdAbility(Team); break;
             case CmdKind.BuyItem: sim.BuyItem(Team, Arg); break;
-            case CmdKind.Fallen: sim.SetFallen(Team, (FallenOrder)Arg); break;
+            case CmdKind.Remains: sim.SetRemains(Team, (RemainsOrder)Arg); break;
+            case CmdKind.Feast:
+            {
+                var f = sim.W.FoodById(FoodId);
+                if (ids.Count > 0 && f != null && f.Alive) sim.CmdFeast(ids, f);
+                break;
+            }
+            case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;
             case CmdKind.Rally:
                 sim.Col[Team].Rally = P;
                 sim.Col[Team].HasRally = true;

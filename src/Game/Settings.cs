@@ -23,6 +23,18 @@ public static class Settings
     /// Share of the droplets and stains drawn: fewer on Reduced, and fewer on the Low tier phones run.
     public static float GoreBudget => (CombatDetail == Detail.Full ? 1f : 0.4f) * (Gfx == Quality.Low ? 0.45f : 1f);
 
+    /// One-time lessons already shown (bit flags), kept between sessions.
+    public static int Tips;
+    public const int TipEatRemains = 1, TipEvolved = 2;
+    /// True the first time a lesson comes up (and remembers it); false ever after.
+    public static bool FirstTime(int tip)
+    {
+        if ((Tips & tip) != 0) return false;
+        Tips |= tip;
+        Save();
+        return true;
+    }
+
     /// Computers start fullscreen: in a window the mouse slides off the edge instead of scrolling the map.
     public static bool Fullscreen = true;
 
@@ -43,6 +55,7 @@ public static class Settings
         Gfx = (Quality)Mathf.Clamp((int)cfg.GetValue("graphics", "quality", (int)Default()), 0, (int)Quality.Ultra);
         Fullscreen = (bool)cfg.GetValue("display", "fullscreen", true);
         CombatDetail = (Detail)Mathf.Clamp((int)cfg.GetValue("graphics", "combat_detail", 0), 0, 1);
+        Tips = (int)cfg.GetValue("tips", "shown", 0);
     }
 
     public static void Save()
@@ -51,6 +64,7 @@ public static class Settings
         cfg.SetValue("graphics", "quality", (int)Gfx);
         cfg.SetValue("display", "fullscreen", Fullscreen);
         cfg.SetValue("graphics", "combat_detail", (int)CombatDetail);
+        cfg.SetValue("tips", "shown", Tips);
         cfg.Save(Path);
     }
 

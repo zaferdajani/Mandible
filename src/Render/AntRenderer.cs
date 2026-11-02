@@ -120,7 +120,7 @@ public sealed class AntRenderer
     /// Hemolymph, severed parts and the carcasses in pieces; when null the dead are drawn whole as before.
     public Carnage Gore;
     readonly Batch[,] _pieceCargo = new Batch[3, 3]; // carcass pieces in a worker's jaws: head, gaster, legs × black, red, bug chitin
-    readonly Batch _rings, _bars;
+    readonly Batch _rings, _bars, _evoBars;
     readonly Batch _auraGround, _auraHalo;
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
     internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; foreach (var b in _pieceCargo) n += b.Count; return n; } }
@@ -219,6 +219,11 @@ public sealed class AntRenderer
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
+        // the second line of life: how far a fighter has eaten toward its next stage (a hero: its next level)
+        var evoMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
+        evoMat.SetShaderParameter("evo", 1f);
+        _evoBars = new Batch(root, new QuadMesh { Size = Vector2.One }, evoMat, false, "EvolutionBars");
+        _evoBars.Node.SortingOffset = 100;
     }
 
     /// Low tier: the rank and file cast no shadows (hundreds of them, each a few pixels); heroes, the queens and
@@ -283,11 +288,12 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.Begin();
         foreach (var cargo in _broodCargo) cargo.Begin();
         foreach (var cargo in _pieceCargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
+        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
+        var camUp = cam.GlobalTransform.Basis.Y.Normalized();
         var camPos = cam.GlobalPosition;
         var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
@@ -379,15 +385,18 @@ public sealed class AntRenderer
                 float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, st.Size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
+                if (sim.CarrionRules && sim.Eats(a))
+                    _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
-            // veteran chevrons: one gold pip per level above the first
-            if (Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && a.SquadP1 == 0 && a.Level > 1)
+            // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
+            int ranks = sim.CarrionRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
+            if (ranks > 0)
             {
                 float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);
                 var top = o + Vector3.Up * (barY + 0.45f);
-                for (int p = 0; p < a.Level - 1; p++)
+                for (int p = 0; p < ranks; p++)
                 {
-                    var at = top + camRight * (p - (a.Level - 2) * 0.5f) * pip * 1.1f;
+                    var at = top + camRight * (p - (ranks - 1) * 0.5f) * pip * 1.1f;
                     _pips.Add(Basis.FromScale(Vector3.One * pip), at, new Color(a.Team == Local.Me ? 1 : 0, 0, 0, 1));
                 }
             }
@@ -487,7 +496,7 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
         foreach (var cargo in _pieceCargo) cargo.End();
-        _rings.End(); _bars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
+        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
@@ -649,7 +658,7 @@ public sealed class AntRenderer
         flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
         if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
         float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
-        float w = Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0;
+        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(a.Stage, 0, 3);
         if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }

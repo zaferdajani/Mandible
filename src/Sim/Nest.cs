@@ -307,7 +307,11 @@ public sealed partial class Sim
             for (int k = c.Chambers.Count - 1; k >= 0; k--) // FinishDig may add rooms (the founding), so never enumerate here
             {
                 var ch = c.Chambers[k];
-                if (ch.Done >= ch.Work && ch.Work > 0 && !ch.Built) FinishDig(c, ch);
+                if (ch.Done >= ch.Work && ch.Work > 0 && !ch.Built)
+                {
+                    if (ch.Kind == ChamberKind.Royal && !c.Founded && !CanFound(c.Team)) continue; // the founders lack the food or remains to found it
+                    FinishDig(c, ch);
+                }
             }
             if (assign) AssignDiggers(c);
         }
@@ -323,6 +327,7 @@ public sealed partial class Sim
         if (ch.Kind == ChamberKind.Royal && !c.Founded)
         {
             c.Founded = true;
+            if (CarrionRules) { c.Food -= Config.FoundFood; c.Spent += Config.FoundFood; c.Organic -= Config.FoundOrganic; }
             if (Mission == null)
             {
                 if (ChamberCount(c.Team, ChamberKind.Brood, false) == 0) AddChamber(c.Team, ChamberKind.Brood, BroodWork, true);

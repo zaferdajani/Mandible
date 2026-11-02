@@ -88,6 +88,16 @@ public partial class Minimap : Control
     {
         if (_tex == null) return;
         DrawTextureRect(_tex, new Rect2(Vector2.Zero, Size), false);
+        if (Game.Guide?.Target is { } guide)
+        {
+            // where the guide points: a pulsing gold ring with a pin
+            float k = Size.X / Config.MapSize;
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.GetTicksMsec() * 0.006f);
+            var g = guide * k;
+            DrawArc(g, 6f + 4f * pulse, 0, Mathf.Tau, 24, new Color(1f, 0.72f, 0.25f, 0.95f), 2.5f, true);
+            DrawLine(g + new Vector2(0, -16), g + new Vector2(0, -6), new Color(1f, 0.72f, 0.25f), 3f, true);
+            QueueRedraw();
+        }
         if (Game.Lanes)
         {
             // the three lanes, faintly

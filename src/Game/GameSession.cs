@@ -15,6 +15,7 @@ public partial class GameSession : Node3D
     public AntRenderer Ants;
     public Effects Effects;
     public Carnage Gore;
+    public Guidance Guide;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -62,6 +63,7 @@ public partial class GameSession : Node3D
         long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
         Gore = new Carnage(this, World.HF, Effects);
+        Guide = new Guidance(this, World.HF);
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
         Ants.Brood = Interior;
@@ -237,6 +239,7 @@ public partial class GameSession : Node3D
         {
             case QueueResult.Ok: Audio.Ui("ui_queue"); break;
             case QueueResult.NoFood: Hud.Alert("Not enough food", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
+            case QueueResult.NoOrganic: Hud.Alert($"Not enough organic matter: larvae need protein ({Sim.OrganicCost(k):0.#}). Haul home the remains of bugs and enemy ants.", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.QueueFull: Hud.Alert("The brood chamber is full", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
@@ -272,6 +275,7 @@ public partial class GameSession : Node3D
         {
             case ResearchResult.Ok: Audio.Ui("ui_queue"); Hud.Alert($"Research begun: {Config.ResearchName(u, c.T(u) + 1)}", UiTheme.Dim); break;
             case ResearchResult.NoFood: Hud.Alert("Not enough food", bad); Audio.Ui("ui_error"); break;
+            case ResearchResult.NoOrganic: Hud.Alert($"The queen ascends on organic matter: {Sim.QueenOrganic(Local.Me):0} needed. Haul home the remains of bugs and enemy ants.", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Busy: Hud.Alert("The colony is already researching (right-click it to cancel)", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Maxed: Hud.Alert("Already fully developed", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Locked:
@@ -584,6 +588,7 @@ public partial class GameSession : Node3D
         if (!Demo) UpdateGlass(dt);
         if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);
+        if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
         Effects.Update(_paused ? 0 : dt);
         UpdateFood();
         UpdatePheromoneTexture(dt);
@@ -626,6 +631,11 @@ public partial class GameSession : Node3D
     public float NetStall => _stall;
 
     public void Issue(Cmd c) => Orders.Issue(c);
+
+    /// The first lesson of this world, shown once, at the first kill: killing makes no one stronger, eating does.
+    public void EatLesson() => Hud.Banner("Victory alone makes no one stronger", Settings.Touch
+        ? "Eat the remains: select the ant you want to grow, then tap the carcass. Or let the workers haul it home as organic matter for the queen."
+        : "Eat the remains: right-click the carcass with the ant you want to grow. Or let the workers haul it home as organic matter for the queen.", 10f);
 
     void UpdateFood()
     {
@@ -683,6 +693,23 @@ public partial class GameSession : Node3D
                         Effects.Burst(wp, bug ? 22 : 8, 1, bug ? 5 : 3.5f, bug ? 0.3f : 0.16f, 0.7f);
                         Effects.Burst(wp, bug ? 10 : 2, 0, 1.5f, bug ? 1.4f : 0.3f, 1.2f); // a little dust; the hemolymph (Carnage) carries the moment
                         if (bug && !Demo && Audible(e.Pos)) Hud.Alert($"{Config.Of(e.Type).Name} slain! Its carcass is a feast.", new Color(0.85f, 0.7f, 1f));
+                        // the first lesson of this world: killing makes no one stronger, eating does
+                        if (!Demo && !App.TestRun && Sim.CarrionRules && e.Team != Local.Me && e.FoodP1 > 0 && Settings.FirstTime(Settings.TipEatRemains)) EatLesson();
+                    }
+                    break;
+                case EvKind.Evolve:
+                    if (seen)
+                    {
+                        // the moult: a flare of light over the ant, a ring on the soil, a deep note
+                        Effects.Burst(wp + Vector3.Up * 1.2f, 12, 2, 4f, 0.12f, 1.1f);
+                        Effects.Marker(wp, new Color(1f, 0.68f, 0.22f), 1.4f);
+                        if (Audible(e.Pos)) Audio.At("levelup", wp, 2, 0.1f);
+                        if (!Demo && e.Team == Local.Me)
+                        {
+                            string[] roman = { "", "I", "II", "III" };
+                            Hud.Banner($"{Config.Of(e.Type).Name} evolved: Stage {roman[Mathf.Clamp(e.Tier, 0, 3)]}",
+                                $"{Config.StageNames[Mathf.Clamp(e.Tier, 0, 3)]}: {Config.StageGain(e.Tier)}", 4.5f);
+                        }
                     }
                     break;
                 case EvKind.WebShot:

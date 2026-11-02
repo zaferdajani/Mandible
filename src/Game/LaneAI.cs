@@ -92,6 +92,14 @@ public sealed class LaneAI : IColonyAI
             }
         }
 
+        // a hero grows only by eating: with no enemy close, it eats the remains of the creeps that fell around it
+        if (_sim.CarrionRules && Enemies(h.Pos, 10) == 0 && h.Level < Config.HeroMaxLevel)
+        {
+            if (h.Feasting || h.FeastOrder) return;
+            var meal = _sim.BestRemains(_team, h.Pos, 16f, _sim.Cannibal(h));
+            if (meal != null && Sim.RemainsValue(meal) >= 1f) { Order(CmdKind.Feast, id, meal.Pos, -1, meal.Id); return; }
+        }
+
         // fight the enemy hero if it is close and weaker
         if (foe >= 0 && _sim.Ants[foe].Alive && _sim.Ants[foe].Pos.DistanceTo(h.Pos) < 13
             && _sim.Ants[foe].Hp / _sim.Ants[foe].MaxHp < h.Hp / h.MaxHp + 0.1f && !UnderEnemyGuardian(_sim.Ants[foe].Pos))
@@ -128,12 +136,13 @@ public sealed class LaneAI : IColonyAI
 
     void Buy(int item) => Orders.Issue(new Cmd { Kind = CmdKind.BuyItem, Team = (byte)_team, Arg = (byte)item });
 
-    void Order(CmdKind k, int id, Vector2 p, int target = -1)
+    void Order(CmdKind k, int id, Vector2 p, int target = -1, int food = -1)
     {
         _one.Clear();
         _one.Add(id);
         var c = Cmd.Units(k, _team, _one, _sim);
         c.P = p;
+        c.FoodId = food;
         if (target >= 0) { c.Target = target; c.TargetSerial = _sim.Ants[target].Serial; }
         Orders.Issue(c);
     }

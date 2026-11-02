@@ -1,27 +1,90 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace Mandible;
 
-/// What a colony does with its own dead: real ants carry them to a refuse pile outside the nest
-/// (necrophoresis), and many species eat dead nestmates when food runs short.
-public enum FallenOrder : byte { Honour, Recycle }
+/// What a colony's workers do with the remains of other creatures: carry them home as organic matter for the queen
+/// and the brood, or leave them on the ground for the fighters to eat and evolve on. (Their own dead always go to the
+/// midden: a colony gets nothing from its own race.)
+public enum RemainsOrder : byte { Haul, Leave }
 
-/// Carrion: every death leaves a carcass that rots, is carved up and carried home a jawful at a time, dragged
-/// whole by a team of workers when it is too big for one, buried on the midden or eaten, and feasted on by heroes.
+/// Carrion and organic matter. Every death leaves remains. Remains of another kind (wild bugs, the other colony) are
+/// the only source of organic matter, the colony's evolving material: workers drag and carry them home to the reserve
+/// (which pays for the queen's growth and part of every brood), and fighters and heroes evolve only by eating them.
+/// Killing makes no one stronger. A colony's own dead are carried to the midden; only the fire-ant Warlord eats them.
 public sealed partial class Sim
 {
-    /// The burial order, dragging and the morale it brings run in skirmish and multiplayer. The campaign's episodes
-    /// were tuned, scripted fights and all, on a colony that simply ate its dead; they keep that until the new
-    /// campaign opts in (heroes still feast and the dead still lie in pieces there).
+    /// Burial, dragging, morale and the organic economy (evolution by eating, organic costs) run in skirmish, Lane War
+    /// and multiplayer. The campaign's episodes were tuned on a colony that ate its dead and ranked up by killing;
+    /// they keep that until the new campaign opts in (heroes still feast and the dead still lie in pieces there).
     public bool CarrionRules => Mission == null;
 
-
-    public void SetFallen(int team, FallenOrder order)
+    public void SetRemains(int team, RemainsOrder order)
     {
         if (team < 0 || team > 1) return;
-        Col[team].Fallen = order;
+        Col[team].Remains = order;
     }
 
+    // ------------------------------------------------------------------ the API the campaign and the HUD build on
+    /// Organic matter in this colony's reserve.
+    public float Organic(int team) => team is >= 0 and <= 1 ? Col[team].Organic : 0;
+    /// Organic matter a brood of this kind needs on top of its food (0 in the campaign until it opts in).
+    public float OrganicCost(ProdKind k) => CarrionRules ? Config.BroodOrganic(k) : 0;
+    /// Organic matter the queen's next ascension needs (0 in the campaign until it opts in).
+    public float QueenOrganic(int team) => CarrionRules ? Config.QueenOrganic(Col[team].T(Upgrade.Queen) + 1) : 0;
+    /// Whether the founders carry enough food and organic matter to found the nest (the royal chamber waits until they do).
+    public bool CanFound(int team) => !CarrionRules || Col[team].Food >= Config.FoundFood && Col[team].Organic >= Config.FoundOrganic;
+    /// Organic matter these remains still hold (what hauling them home gives, and what eating them teaches).
+    public static float RemainsValue(FoodSource f) => f.Kind == FoodKind.Corpse && f.Alive ? f.Amount * Config.OrganicPerLoad(f.AntType) : 0;
+    /// The fire ants' Warlord, alone among all ants, feeds on its own colony's dead.
+    public bool Cannibal(in Ant a) => a.Team < 2 && a.Type == AntType.Warlord && Col[a.Team].Race == Race.RedFire;
+    /// Remains this ant may eat: another kind's, or its own kind's when it is the cannibal.
+    public bool CanEat(in Ant a, FoodSource f) => f.Kind == FoodKind.Corpse && f.Alive && f.Layer == a.Layer && (f.Team != a.Team || Cannibal(a));
+    /// Remains this colony's workers may carry home as organic matter.
+    public static bool Haulable(FoodSource f, int team) => f.Kind == FoodKind.Corpse && f.Team != team;
+
+    /// The richest remains within reach of `from` that an ant of `team` could eat (cannibal: its own kind's too).
+    public FoodSource BestRemains(int team, Vector2 from, float radius, bool cannibal = false, int layer = 0)
+    {
+        FoodSource best = null;
+        float bestScore = 0;
+        foreach (var f in W.Food)
+        {
+            if (f.Kind != FoodKind.Corpse || !f.Alive || f.Layer != layer || (f.Team == team && !cannibal)) continue;
+            float d = f.Pos.DistanceTo(from);
+            if (d > radius) continue;
+            float score = RemainsValue(f) / (6f + d); // rich and near
+            if (score > bestScore) { bestScore = score; best = f; }
+        }
+        return best;
+    }
+
+    /// Organic matter an ant still needs for its next stage (heroes: to their next level); 0 when it is complete.
+    public float EvolutionNeed(in Ant a)
+    {
+        if (Config.IsHero(a.Type)) return a.Level >= Config.HeroMaxLevel ? 0 : Mathf.Max(0, (NextXp(a) - a.Xp) / Config.HeroXpPerOrganic);
+        if (!Evolves(a)) return 0;
+        return a.Stage >= Config.MaxStage ? 0 : Mathf.Max(0, Config.StageCost(a.Stage + 1) - a.Evo);
+    }
+
+    /// Progress toward the next stage or level, 0..1.
+    public float EvolutionProgress(in Ant a)
+    {
+        if (Config.IsHero(a.Type))
+        {
+            if (a.Level >= Config.HeroMaxLevel) return 1;
+            float lo = Config.XpFor(a.Type, a.Level), hi = NextXp(a);
+            return hi > lo ? Mathf.Clamp((a.Xp - lo) / (hi - lo), 0, 1) : 1;
+        }
+        return a.Stage >= Config.MaxStage ? 1 : Mathf.Clamp(a.Evo / Config.StageCost(a.Stage + 1), 0, 1);
+    }
+
+    /// Colony fighters evolve by eating: soldiers, majors, flyers and gunners (heroes level instead; lane creeps and
+    /// mound guardians are spent, not grown).
+    public bool Evolves(in Ant a) => a.Team < 2 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && !a.Guardian && a.Lane == 0;
+    public bool Eats(in Ant a) => a.Team < 2 && Config.IsWarrior(a.Type) && !a.Guardian && a.Lane == 0;
+
+    // ------------------------------------------------------------------ the midden and morale
     /// The colony's refuse pile: on bare soil a little way out from the nest mouth, on the yard side (rooms are dug
     /// first on the far side), wherever it lies furthest from the galleries already dug.
     public Vector2 Midden(int team)
@@ -46,15 +109,11 @@ public sealed partial class Sim
         return best;
     }
 
-    /// The fallen are part of what a colony eats only when it has said so; every other carcass is fair game.
-    public bool Edible(FoodSource f, int team) => f.Kind != FoodKind.Corpse || f.Team != team || Col[team].Fallen == FallenOrder.Recycle || !CarrionRules;
-
-    /// Bite multiplier from how the colony treats its dead: resolve while it keeps burying them. (Eating them costs brood instead.)
+    /// Bite multiplier from how the colony treats its dead: resolve while it keeps burying them.
     public float MoraleMul(int team)
     {
         if (team > 1 || !CarrionRules) return 1f;
-        var c = Col[team];
-        return c.MournT > 0 ? Config.MournBite : 1f;
+        return Col[team].MournT > 0 ? Config.MournBite : 1f;
     }
 
     Vector2 NestPoint(int team, Vector2 p) { NearestOnNetwork(team, p, out var q, out _); return q; }
@@ -65,14 +124,22 @@ public sealed partial class Sim
         c.MournT = Mathf.Min(Config.MoraleMax, c.MournT + Config.MoraleTime * bodies);
     }
 
-    void Sicken(Colony c) => c.SickT = Mathf.Min(Config.MoraleMax, c.SickT + Config.MoraleTime);
+    /// Remains carried home: organic matter in the reserve (fire ants, the predators, make 25% more of it), and the protein
+    /// keeps the queen laying faster.
+    void StoreRemains(Colony c, AntType from, float loads)
+    {
+        float gain = loads * Config.OrganicPerLoad(from) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.FoodBonus(c.Race) : 1f);
+        c.Organic += gain;
+        c.OrganicGathered += gain;
+        c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery * loads);
+    }
 
+    // ------------------------------------------------------------------ workers at remains
     /// A worker at a carcass: grips it to drag it home with its nestmates, picks up the whole body of a small fallen
     /// nestmate for the midden, or cuts off a jawful. Returns the way to walk (zero when it took its load).
     Vector2 AtCarcass(int i, ref Ant a, FoodSource f, UnitStats st, ref float speedMul)
     {
-        var c = Col[a.Team];
-        bool bury = f.Team == a.Team && c.Fallen == FallenOrder.Honour && CarrionRules;
+        bool bury = f.Team == a.Team && CarrionRules;
         int need = CarrionRules ? Config.HaulNeed(f.AntType) : 0;
         // drag it whole: big enough to need a team, not yet home, and not already in the jaws of the other colony
         var dest = bury ? Midden(a.Team) : NestEntrance(a.Team);
@@ -136,23 +203,39 @@ public sealed partial class Sim
         return true;
     }
 
-    /// An idle hero stands over a carcass and eats: each mouthful heals it and teaches it a little, more from big prey
-    /// and most from a rival hero. Returns true while it feasts (it then stays put).
+    // ------------------------------------------------------------------ eating and evolving
+    /// The player (or the AI) sends fighters and heroes to eat these remains; whoever eats them evolves.
+    public void CmdFeast(List<int> ids, FoodSource f)
+    {
+        foreach (int id in ids)
+        {
+            ref var a = ref Ants[id];
+            if (!a.Alive || !Eats(a) || !CanEat(a, f)) continue;
+            a.FoodTarget = f;
+            a.FeastOrder = true;
+            a.Goal = f.Pos;
+            a.GoalLayer = f.Layer;
+            a.State = AntState.Move;
+            a.Forced = false;
+            a.Target = -1;
+            a.Stuck = 0;
+        }
+    }
+
+    /// A fighter or hero with nothing to fight eats at remains it stands by (or was sent to): each mouthful heals it
+    /// and grows it, more from big prey and most from a rival hero. It stands still while it eats. Returns true while
+    /// it feasts.
     bool Feast(int i, ref Ant a, float dt, bool think, ref Vector2 desired)
     {
-        bool hungry = a.Hp < a.MaxHp * 0.999f || a.Level < Config.HeroMaxLevel;
-        if (!hungry) { a.FoodTarget = null; return false; }
+        bool hero = Config.IsHero(a.Type);
+        if (!CarrionRules && !hero) return false; // the campaign keeps its kill-ranked squads
+        bool growing = hero ? a.Level < Config.HeroMaxLevel : a.Stage < Config.MaxStage && Evolves(a);
+        if (!growing && a.Hp >= a.MaxHp * 0.999f) { a.FoodTarget = null; a.FeastOrder = false; return false; }
         var f = a.FoodTarget;
-        if (f != null && (!f.Alive || f.Kind != FoodKind.Corpse || f.Feasted >= Config.FeastLoads(f.AntType) || !Edible(f, a.Team))) f = a.FoodTarget = null;
+        if (f != null && !CanEat(a, f)) { f = a.FoodTarget = null; a.FeastOrder = false; }
         if (f == null && think)
         {
-            float best = (a.Size * 0.5f + 3f) * (a.Size * 0.5f + 3f);
-            foreach (var g in W.Food)
-            {
-                if (g.Kind != FoodKind.Corpse || !g.Alive || g.Layer != a.Layer || g.Feasted >= Config.FeastLoads(g.AntType) || !Edible(g, a.Team)) continue;
-                float d = g.Pos.DistanceSquaredTo(a.Pos);
-                if (d < best) { best = d; f = g; }
-            }
+            f = BestRemains(a.Team, a.Pos, a.Size * 0.5f + 3f, Cannibal(a), a.Layer);
             a.FoodTarget = f;
         }
         if (f == null) { a.FeastT = 0; return false; }
@@ -160,7 +243,7 @@ public sealed partial class Sim
         float reach = f.Radius + a.Size * 0.4f + 0.4f;
         if (to.Length() > reach)
         {
-            if (a.State == AntState.Hold) { a.FoodTarget = null; return false; } // a hero on guard does not wander off to eat
+            if (a.State == AntState.Hold && !a.FeastOrder) { a.FoodTarget = null; return false; } // a guard does not wander off to eat
             desired = to;
             a.Anchor = f.Pos;
             return false;
@@ -168,21 +251,61 @@ public sealed partial class Sim
         a.Feasting = true;
         a.Anchor = a.Pos;
         a.Heading += MathX.AngleDiff(a.Heading, to.AngleD()) * 0.2f;
-        a.FeastT += dt;
+        bool own = f.Team == a.Team; // the cannibal at its own dead tears into them faster
+        a.FeastT += dt * (own ? Config.DevourPace : 1f);
         desired = Vector2.Zero;
         if (a.FeastT < Config.FeastBite) return true;
         a.FeastT = 0;
         f.Amount -= 1;
         f.Feasted++;
         a.AttackAnim = 1;
-        a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Config.FeastHeal);
-        GrantXp(i, Config.FeastXp(f.AntType) / Config.FeastLoads(f.AntType));
-        if (f.Team == a.Team) Sicken(Col[a.Team]);
-        Events.Add(new SimEvent { Kind = EvKind.Feast, Pos = f.Pos, To = a.Pos, Team = a.Team, Type = f.AntType, FoodP1 = f.Id + 1, Who = i + 1 });
+        a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Config.FeastHeal * (own ? Config.DevourHeal : 1f));
+        Nourish(i, ref a, Config.OrganicPerLoad(f.AntType));
+        Col[a.Team].OrganicEaten += Config.OrganicPerLoad(f.AntType);
+        Events.Add(new SimEvent { Kind = EvKind.Feast, Pos = f.Pos, To = a.Pos, Team = a.Team, Type = f.AntType, FoodP1 = f.Id + 1, Who = i + 1, Amount = own ? 1 : 0 });
         return true;
     }
 
-    /// Carcasses rot, slide along behind the workers dragging them, and are buried or eaten when they get home.
+    /// Organic matter eaten by one ant: a hero learns from it, a fighter evolves.
+    void Nourish(int i, ref Ant a, float organic)
+    {
+        if (Config.IsHero(a.Type)) { GrantXp(i, organic * Config.HeroXpPerOrganic, true); return; }
+        if (!Evolves(a) || a.Stage >= Config.MaxStage) return;
+        a.Evo += organic;
+        while (a.Stage < Config.MaxStage && a.Evo >= Config.StageCost(a.Stage + 1))
+        {
+            a.Evo -= Config.StageCost(a.Stage + 1);
+            a.Stage++;
+            ApplyLevel(ref a);
+            a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.3f); // the moult heals
+            Events.Add(new SimEvent { Kind = EvKind.Evolve, Pos = a.Pos, Team = a.Team, Type = a.Type, Tier = a.Stage, Who = i + 1 });
+        }
+        if (a.Stage >= Config.MaxStage) a.Evo = 0;
+    }
+
+    /// Fighters and heroes brought home are fed from the colony's reserve: the player chooses whether the organic matter
+    /// grows the queen or the army. Only those standing at the nest (or inside it) are fed.
+    public void FeedFromReserve(int team, List<int> ids)
+    {
+        if (!CarrionRules) return;
+        var c = Col[team];
+        var nest = NestEntrance(team);
+        foreach (int id in ids)
+        {
+            ref var a = ref Ants[id];
+            if (!a.Alive || a.Team != team || !Eats(a) || c.Organic < 0.5f) continue;
+            if (a.Layer == 0 && a.Pos.DistanceTo(nest) > Config.ReinforceRadius) continue;
+            float need = EvolutionNeed(a);
+            if (need <= 0) continue;
+            float take = Mathf.Min(need + 0.01f, c.Organic);
+            c.Organic -= take;
+            Nourish(id, ref a, take);
+            Events.Add(new SimEvent { Kind = EvKind.Feast, Pos = a.Pos, To = a.Pos, Team = team, Type = a.Type, Who = id + 1, Amount = 2 });
+        }
+    }
+
+    // ------------------------------------------------------------------ remains over time
+    /// Carcasses rot, slide along behind the workers dragging them, and are buried or stored when they get home.
     void TickCarrion(float dt)
     {
         var list = W.Food;
@@ -200,6 +323,69 @@ public sealed partial class Sim
             else if (f.Alive && f.HaulCount > 0) Drag(f, dt);
             if (!f.Alive) list.RemoveAt(i);
         }
+        // the queen's own body: a trickle that keeps a colony that never hunts from stalling outright
+        foreach (var c in Col)
+            if (c.Alive && CarrionRules && c.Organic < Config.OrganicFloor) c.Organic += Config.OrganicTrickle * dt;
+        if (CarrionRules && Ticks % 60 == 0) foreach (var c in Col) Recruit(c);
+    }
+
+    /// Prey recruitment: a worker that finds big prey runs home laying a trail, and nestmates stream out to it. Here, a
+    /// colony that hauls remains sends foragers to the richest remains any of its ants can see that are short of carriers.
+    void Recruit(Colony c)
+    {
+        if (!c.Alive || c.Remains != RemainsOrder.Haul) return;
+        int team = c.Team;
+        var nest = NestEntrance(team);
+        FoodSource prey = null;
+        float best = 0;
+        foreach (var f in W.Food)
+        {
+            if (f.Kind != FoodKind.Corpse || !f.Alive || f.Layer != 0 || f.Team == team) continue;
+            float d = f.Pos.DistanceTo(nest);
+            if (d > Config.RecruitRange) continue;
+            float value = RemainsValue(f);
+            if (value < 1.5f || !Seen(team, f.Pos)) continue;
+            float score = value / (20f + d);
+            if (score > best) { best = score; prey = f; }
+        }
+        if (prey == null) return;
+        // carriers already on it
+        int already = 0, free = 0, workers = 0;
+        for (int i = 0; i < High; i++)
+        {
+            ref var a = ref Ants[i];
+            if (!a.Alive || a.Team != team || a.Type != AntType.Worker) continue;
+            workers++;
+            if (a.Assigned == prey || a.FoodTarget == prey) already++;
+        }
+        int want = Mathf.Min(Mathf.CeilToInt(prey.Amount), Mathf.Max(Config.HaulNeed(prey.AntType) + 2, 3)) - already;
+        int cap = workers / 3 - already; // the colony keeps most of its foragers on food
+        for (int i = 0; i < High && want > 0 && cap > 0; i++)
+        {
+            ref var a = ref Ants[i];
+            if (!a.Alive || a.Team != team || a.Type != AntType.Worker || a.Layer != 0 || a.Carrying || a.DigP1 > 0) continue;
+            if (a.State != AntState.Forage || a.Pos.DistanceTo(prey.Pos) > Config.RecruitRange) continue;
+            a.Assigned = prey; a.FoodTarget = prey; a.State = AntState.Gather;
+            want--; cap--; free++;
+        }
+    }
+
+    /// Whether any ant of the colony stands close enough to these remains to have found them.
+    bool Seen(int team, Vector2 p)
+    {
+        int r = (int)(Config.RecruitSight / SpatialHash.Cell) + 1;
+        int cx = (int)(p.X / SpatialHash.Cell), cz = (int)(p.Y / SpatialHash.Cell);
+        for (int z = cz - r; z <= cz + r; z++)
+        {
+            if (z < 0 || z >= Hash.N) continue;
+            for (int x = cx - r; x <= cx + r; x++)
+            {
+                if (x < 0 || x >= Hash.N) continue;
+                for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
+                    if (Ants[j].Alive && Ants[j].Team == team && Ants[j].Layer == 0 && Ants[j].Pos.DistanceSquaredTo(p) < Config.RecruitSight * Config.RecruitSight) return true;
+            }
+        }
+        return false;
     }
 
     /// Dragged home: butchered at the nest mouth from now on, or laid on the midden.
@@ -217,7 +403,7 @@ public sealed partial class Sim
         int need = Config.HaulNeed(f.AntType);
         if (need == 0 || f.HaulCount < need || f.Hauled) return;
         int team = f.HaulTeam;
-        bool bury = f.Team == team && Col[team].Fallen == FallenOrder.Honour;
+        bool bury = f.Team == team;
         var dest = bury ? Midden(team) : NestEntrance(team);
         var to = dest - f.Pos;
         float d = to.Length();
@@ -251,15 +437,15 @@ public sealed partial class Sim
         f.Heading += MathX.AngleDiff(f.Heading, dir.AngleD() + DMath.Pi) * Mathf.Min(1, dt * 1.5f); // it comes rear first, the jaws pulling at its head
     }
 
-    /// A carcass inside a nest never reaches the surface foragers: the nurses deal with it where it lies.
+    /// A carcass inside a nest never reaches the surface foragers: the nurses deal with it where it lies. Their own dead go
+    /// out to the midden; an invader's remains are cut up into the reserve.
     void InNest(FoodSource f, float dt)
     {
         int team = f.Layer - 1;
         var c = Col[team];
         if (!c.Alive) return;
-        if (f.Team == team && c.Fallen == FallenOrder.Honour && CarrionRules)
+        if (f.Team == team && CarrionRules)
         {
-            // carried up and out to the midden
             if (f.Age < Config.NestCarryOut) return;
             f.Amount = 0;
             Mourn(c, 1);
@@ -268,12 +454,13 @@ public sealed partial class Sim
         }
         float take = Mathf.Min(f.Amount, Config.NestEatRate * dt);
         f.Amount -= take;
+        if (CarrionRules) { StoreRemains(c, f.AntType, take); return; }
+        // the campaign's colony eats them as food
         float gain = take * Config.FoodValue(FoodKind.Corpse, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.FoodBonus(c.Race) : 1f);
         gain = Mathf.Min(gain, Mathf.Max(0, c.FoodCap - c.Food));
         c.Food += gain;
         c.Gathered += gain;
         c.GatheredBy[(int)FoodKind.Corpse] += gain;
         c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery * take);
-        if (f.Team == team) c.SickT = Mathf.Min(Config.MoraleMax, c.SickT + Config.MoraleTime * take);
     }
 }

@@ -455,7 +455,10 @@ public partial class Hud : CanvasLayer
         string squad = n > 1 ? "\nHatches as a squad that ranks up together and refills at the nest (B)." : "";
         var t = Config.UnitOf(k);
         if (Config.IsHero(t))
-            return $"{what}  [{key}]\n{role}\n{Config.StatLine(t)}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
+        {
+            string sig = Config.Signature(t, Config.RaceOf(Local.Me));
+            return $"{what}  [{key}]\n{role}\n{Config.StatLine(t)}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}{(sig.Length > 0 ? "\n" + sig : "")}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
+        }
         return $"{what}  [{key}]\n{role}{squad}\nEach: HP {s.Hp} · Bite {s.Damage}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
     }
 
@@ -713,6 +716,39 @@ public partial class Hud : CanvasLayer
         _end.Visible = true;
     }
 
+    PanelContainer _banner;
+    Label _bannerTitle, _bannerLine;
+    float _bannerT;
+
+    /// A large line across the upper middle of the screen for the moments that matter (an ant evolving, a first lesson):
+    /// gold Cinzel over a dark band, readable on a landscape phone.
+    public void Banner(string title, string line, float seconds = 4f)
+    {
+        if (_banner == null)
+        {
+            _banner = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            _banner.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.03f, 0.025f, 0.015f, 0.82f), new Color(UiTheme.Gold, 0.55f), 1, 4, 18));
+            var v = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            v.AddThemeConstantOverride("separation", 4);
+            _bannerTitle = UiTheme.Text("", Settings.Mobile ? 40 : 34, UiTheme.Title, UiTheme.Gold);
+            _bannerLine = UiTheme.Text("", Settings.Mobile ? 22 : 18, null, UiTheme.Ink);
+            foreach (var l in new[] { _bannerTitle, _bannerLine })
+            {
+                l.HorizontalAlignment = HorizontalAlignment.Center;
+                l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+                l.MouseFilter = Control.MouseFilterEnum.Ignore;
+                v.AddChild(l);
+            }
+            _banner.AddChild(v);
+            AddChild(_banner);
+            UiTheme.Place(_banner, 0.5f, 0, 0.5f, 0, -520, 96, 520, 96);
+        }
+        _bannerTitle.Text = title;
+        _bannerLine.Text = line;
+        _bannerLine.Visible = line.Length > 0;
+        _bannerT = seconds;
+    }
+
     public void Alert(string text, Color? c = null)
     {
         _alert.Text = text;
@@ -727,6 +763,13 @@ public partial class Hud : CanvasLayer
         if (Game?.Sim == null) return;
         _alertT -= dt;
         _alert.Modulate = new Color(1, 1, 1, Mathf.Clamp(_alertT, 0, 1));
+        if (_banner != null)
+        {
+            _bannerT -= dt;
+            _banner.Visible = _bannerT > 0;
+            _banner.Modulate = new Color(1, 1, 1, Mathf.Clamp(_bannerT * 2, 0, 1));
+            if (CommandHud != null) _banner.Position = new Vector2(_banner.Position.X, CommandHud.TopEdge + 46);
+        }
         if (CommandHud != null)
         {
             CommandHud.Refresh((float)delta);

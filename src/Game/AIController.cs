@@ -77,7 +77,7 @@ public sealed class AIController : IColonyAI
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
-        Fallen(c);
+        Remains(c);
         March();
         Reinforce(c);
         Defend(c);
@@ -85,14 +85,36 @@ public sealed class AIController : IColonyAI
         Creep(c);
     }
 
-    /// The computer's policy on its dead: bury them while the stores are full, eat them whenever food is short (most of a war)
-    /// (with a margin either way so it does not flip back and forth).
-    void Fallen(Colony c)
+    float _nextFeast;
+
+    /// The computer plays by the same rule as the player: only eating makes its army stronger. Workers haul remains home
+    /// (the standing order stays at Haul); idle fighters and heroes near uneaten remains are sent to eat them, and once
+    /// the queen's next ascension is paid for, heroes at home are fed from the reserve.
+    void Remains(Colony c)
     {
-        var want = c.Fallen;
-        if (c.Food < 200 && c.Fallen == FallenOrder.Honour) want = FallenOrder.Recycle;
-        else if (c.Food > 380 && c.Fallen == FallenOrder.Recycle) want = FallenOrder.Honour;
-        if (want != c.Fallen) Orders.Issue(new Cmd { Kind = CmdKind.Fallen, Team = (byte)_team, Arg = (byte)want });
+        if (!_sim.CarrionRules || _sim.Time < _nextFeast) return;
+        _nextFeast = _sim.Time + 3f;
+        var nest = _sim.W.Nests[_team].Pos;
+        var claimed = new Dictionary<int, float>(); // food id -> organic already promised to an eater
+        var heroesHome = new List<int>();
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team != _team || !_sim.Eats(a) || _marching.Contains(i) || a.FeastOrder) continue;
+            if (a.State != AntState.Idle && a.State != AntState.Hold) continue;
+            if (_sim.EvolutionNeed(a) <= 0) continue;
+            if (Config.IsHero(a.Type) && a.Pos.DistanceTo(nest) < Config.ReinforceRadius) heroesHome.Add(i);
+            var f = _sim.BestRemains(_team, a.Pos, 22f, _sim.Cannibal(a), a.Layer);
+            if (f == null) continue;
+            claimed.TryGetValue(f.Id, out float taken);
+            if (taken >= Sim.RemainsValue(f)) continue; // enough mouths on it already
+            claimed[f.Id] = taken + Mathf.Max(2f, _sim.EvolutionNeed(a));
+            var cmd = Cmd.Units(CmdKind.Feast, _team, new List<int> { i }, _sim);
+            cmd.FoodId = f.Id;
+            Orders.Issue(cmd);
+        }
+        if (heroesHome.Count > 0 && c.Organic > _sim.QueenOrganic(_team) + 25f)
+            Orders.Issue(Cmd.Units(CmdKind.FeedReserve, _team, heroesHome, _sim));
     }
 
     /// Battered squads that are not fighting go home to heal and refill.
@@ -225,7 +247,7 @@ public sealed class AIController : IColonyAI
             if (_sim.Time < after * pace) return false;
             var r = R(u);
             if (r == ResearchResult.Ok) return false;
-            return r == ResearchResult.NoFood;
+            return r == ResearchResult.NoFood; // saving food for it (an ascension waiting on organic matter does not hold the food back)
         }
         return false;
     }

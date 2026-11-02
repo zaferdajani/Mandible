@@ -298,6 +298,7 @@ public sealed class Carnage
         DrawBits(sim, ants, visible);
         DrawCarcasses(sim, ants, visible);
         DrawMiddens(sim, ants, visible);
+        DrawLarders(sim, ants);
         _drops.End(); _stains.End();
     }
 
@@ -367,6 +368,36 @@ public sealed class Carnage
             var gone = new List<int>();
             foreach (var id in _looks.Keys) if (!alive.Contains(id)) gone.Add(id);
             foreach (var id in gone) _looks.Remove(id);
+        }
+    }
+
+    /// The organic reserve, stacked where the workers lay it down: in the store chamber (or at the nest mouth before
+    /// there is one), a heap of bug legs, wing cases and enemy heads that grows and shrinks with the reserve.
+    void DrawLarders(Sim sim, AntRenderer ants)
+    {
+        if (!sim.CarrionRules) return;
+        AntType[] kinds = { AntType.Beetle, AntType.Spider, AntType.Wasp, AntType.Worker, AntType.Soldier };
+        for (int team = 0; team < 2; team++)
+        {
+            if (team != Local.Me) continue; // the enemy's stores are out of sight
+            var (pos, layer) = sim.FoodDeliveryPoint(team);
+            int n = Math.Min(36, (int)(sim.Col[team].Organic / 3f));
+            float floor = Floor(sim, layer, pos);
+            for (int k = 0; k < n; k++)
+            {
+                float ang = k * 2.39996f + 0.7f;
+                var at = pos + MathX.Dir(ang) * (0.2f + 0.24f * Mathf.Sqrt(k));
+                var type = kinds[k % kinds.Length];
+                int owner = Config.IsBug(type) ? Config.Wild : 1 - team;
+                float size = (Config.IsBug(type) ? 0.9f : 1.1f) * (0.85f + 0.1f * (k % 3));
+                var b = AntRenderer.Orient(Vector3.Up, ang * 1.9f, size);
+                bool flip = k % 3 != 1;
+                if (flip) b = new Basis(-b.X, -b.Y, b.Z);
+                // a single piece of each: a leg, a head, a gaster or a wing case
+                int mask = (k % 4) switch { 0 => All & ~Leg(k % 6), 1 => All & ~(HeadBit | Antennae), 2 => All & ~GasterBit, _ => All & ~(Leg(k % 6) | Leg((k + 2) % 6)) };
+                float lift = 0.03f * Mathf.Min(k, 14) / 14f;
+                ants.AddDead(owner, type, b, new Vector3(at.X, floor + lift + (flip ? 0.2f : -0.04f) * size, at.Y), new Color((k & 15) + 0.25f, AntRenderer.NeutralLook, mask * 1024f, 0));
+            }
         }
     }
 

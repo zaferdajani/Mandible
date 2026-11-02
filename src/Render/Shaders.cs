@@ -50,6 +50,7 @@ varying float v_hov;
 varying float v_ao;
 varying float v_pale;
 varying float v_etch;
+varying float v_stage;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
@@ -68,7 +69,7 @@ void vertex() {
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
     //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15)
     //       + 1024 * missing parts (bits: legs 0-5, antennae 6-7, head 8, thorax 9, gaster 10) + bite fraction
-    //   w = 64 * acid etching (0..7) + 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    //   w = 512 * evolution stage (0..3) + 64 * acid etching (0..7) + 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
     float xi = floor(INSTANCE_CUSTOM.x);
     float phase = fract(INSTANCE_CUSTOM.x) * TAU;
     float lost = floor(floor(INSTANCE_CUSTOM.z) / 1024.0);
@@ -94,6 +95,8 @@ void vertex() {
     float charge = step(4.0, zi); zi -= charge * 4.0;
     float block = step(2.0, zi);
     float wi = floor(INSTANCE_CUSTOM.w);
+    float stage = floor(wi / 512.0); wi -= stage * 512.0;
+    v_stage = stage;
     float etch = floor(wi / 64.0); wi -= etch * 64.0;
     v_etch = etch / 7.0;
     float kind = mod(wi, 4.0);
@@ -161,6 +164,7 @@ void vertex() {
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
+        q *= 1.0 + 0.16 * stage; // each moult grows heavier jaws
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
@@ -362,6 +366,16 @@ void fragment() {
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
+    if (v_stage > 0.5 && part != 11.0 && part != 14.0) {
+        // an evolved fighter: darker, harder chitin, and the healed scars of the fights it fed on
+        c *= 1.0 - 0.07 * v_stage;
+        // thin healed scratches: a few short lines across the head, thorax and gaster, more with each stage
+        float stroke = smoothstep(0.46, 0.5, abs(fract(v_local.x * 23.0 + v_local.z * 31.0 + v_seed * 0.37) - 0.5));
+        float patch = step(0.86 - 0.05 * v_stage, hash3(floor(v_local * vec3(9.0, 40.0, 9.0))));
+        float body = (part == 0.0 || part == 12.0 || part == 13.0) ? 1.0 : 0.0;
+        c += vec3(0.05, 0.038, 0.026) * stroke * patch * body;
+        rough += 0.05 * v_stage;
+    }
     if (v_etch > 0.0 && part != 11.0 && part != 14.0) {
         // formic acid eats pits into the chitin: dull, rough, faintly yellowed craters
         float pit = step(1.0 - v_etch * 0.45, hash3(floor(v_local * 95.0)));
@@ -799,6 +813,7 @@ void fragment() {
     public const string Bar = @"
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled;
+uniform float evo = 0.0; // 1: the evolution bar under the health bar
 varying float v_hp;
 varying vec3 v_team;
 void vertex() {
@@ -811,6 +826,7 @@ void vertex() {
 void fragment() {
     float edge = step(UV.x, 0.03) + step(0.97, UV.x) + step(UV.y, 0.15) + step(0.85, UV.y);
     vec3 hpc = mix(vec3(0.95, 0.18, 0.1), mix(vec3(0.95, 0.8, 0.15), vec3(0.3, 0.9, 0.25), smoothstep(0.5, 0.8, v_hp)), smoothstep(0.15, 0.5, v_hp));
+    if (evo > 0.5) hpc = mix(vec3(0.62, 0.3, 0.07), vec3(1.0, 0.68, 0.22), v_hp); // deep amber filling to gold
     vec3 col = UV.x < v_hp ? hpc : vec3(0.06, 0.05, 0.04);
     col = mix(col, v_team * 0.35, clamp(edge, 0.0, 1.0));
     ALBEDO = col;

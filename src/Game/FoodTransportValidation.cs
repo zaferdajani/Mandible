@@ -47,11 +47,12 @@ public static class FoodTransportValidation
                 Check(delivery.layer == Sim.NestLayer(team), "Completed storage must receive food underground");
                 sim.Tick(1f / 30);
                 var inside = new bool[5]; var delivered = new bool[5];
-                float expected = 0;
+                float expected = 0, organic0 = sim.Col[team].Organic;
                 for (int kind = 0; kind < 5; kind++)
                 {
                     var ant = sim.Ants[workers[kind]];
                     Check(ant.Carrying && ant.Layer == 0 && ant.CarryKind == (FoodKind)kind, "Pickup did not retain the correct surface cargo");
+                    if ((FoodKind)kind == FoodKind.Corpse && sim.CarrionRules) continue; // remains go to the organic reserve, not the food store
                     expected += Config.FoodValue((FoodKind)kind) * sim.Col[team].FoodMult *
                         (Config.Favoured(sim.Col[team].Race, (FoodKind)kind) ? Config.FoodBonus(sim.Col[team].Race) : 1f);
                 }
@@ -78,6 +79,7 @@ public static class FoodTransportValidation
                 }
                 for (int kind = 0; kind < 5; kind++) Check(delivered[kind], $"Food {kind} never arrived at storage");
                 Check(Mathf.Abs(sim.Col[team].Food - expected) < 0.001f, "Delivery changed the food value or credited twice");
+                Check(!sim.CarrionRules || sim.Col[team].Organic > organic0, "Remains did not reach the organic reserve");
                 for (int tick = 0; tick < 30 * 30; tick++) sim.Tick(1f / 30);
                 foreach (int id in workers) Check(!sim.Ants[id].Carrying && sim.Ants[id].Layer == 0, "Worker did not exit empty handed");
                 Check(Mathf.Abs(sim.Col[team].Food - expected) < 0.001f, "Empty return credited food again");

@@ -768,6 +768,14 @@ public static class Capture
                 long wt = System.Math.Max(1, workerTime[0] + workerTime[1] + workerTime[2] + workerTime[3]);
                 GD.Print($"[simtest]    black worker time: surface laden {100f * workerTime[0] / wt:0}% empty {100f * workerTime[1] / wt:0}% | below laden {100f * workerTime[2] / wt:0}% empty {100f * workerTime[3] / wt:0}% | food/worker-min {60f * sim.Col[0].Gathered / (wt / 30f):0.0}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top} squads {sq0}/{sq1} full {full} ranked {ranked}");
+                string Organic(int t)
+                {
+                    int[] st = new int[Config.MaxStage + 1];
+                    for (int i = 0; i < sim.High; i++) { ref var x = ref sim.Ants[i]; if (x.Alive && x.Team == t && sim.Evolves(x)) st[x.Stage]++; }
+                    var c = sim.Col[t];
+                    return $"organic {c.Organic:0} (hauled {c.OrganicGathered:0} eaten {c.OrganicEaten:0}) queen T{c.T(Upgrade.Queen)} stages {st[0]}/{st[1]}/{st[2]}/{st[3]} buried {c.Buried}";
+                }
+                GD.Print($"[simtest]    black {Organic(0)} | red {Organic(1)}");
                 string Heroes(int team)
                 {
                     var parts = new System.Collections.Generic.List<string>();
