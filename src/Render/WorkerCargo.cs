@@ -24,6 +24,11 @@ void fragment() {
         col=vec3(0.43,0.25,0.055)*(1.0-seam*0.4); rough=0.46;
     }
     else if(food_kind==4) { col=mix(vec3(0.19,0.065,0.022),vec3(0.48,0.27,0.11),smoothstep(0.12,0.22,v_local.y)); rough=0.48; }
+    else if(food_kind>=5) {
+        // brood in a nurse's jaws: a glossy cream egg, or a pale segmented larva
+        col=food_kind==5 ? vec3(0.9,0.8,0.62) : vec3(0.86,0.74,0.53)*(0.9+0.1*sin(v_local.z*190.0));
+        rough=food_kind==5 ? 0.22 : 0.34; BACKLIGHT=col*0.25;
+    }
     else col*=0.76+0.30*n;
     ALBEDO=col; ROUGHNESS=rough; SPECULAR=0.35;
     AO=0.85; AO_LIGHT_AFFECT=0.25;
@@ -33,11 +38,45 @@ void fragment() {
     public static ShaderMaterial Material(FoodKind kind)
     {
         if (Materials.TryGetValue(kind, out var material)) return material;
-        material = new ShaderMaterial { Shader = Shaders.Get(ShaderCode) };
-        material.SetShaderParameter("food_kind", (int)kind);
-        material.SetShaderParameter("neck", AntMesh.Neck[AntType.Worker]);
-        Materials[kind] = material;
+        Materials[kind] = material = Make((int)kind);
         return material;
+    }
+
+    static ShaderMaterial Make(int kind)
+    {
+        var material = new ShaderMaterial { Shader = Shaders.Get(ShaderCode) };
+        material.SetShaderParameter("food_kind", kind);
+        material.SetShaderParameter("neck", AntMesh.Neck[AntType.Worker]);
+        return material;
+    }
+
+    // Brood a nurse carries uses the same grip: the load is weighted to the head, so it pitches and turns with it.
+    static readonly ShaderMaterial[] BroodMaterials = new ShaderMaterial[2];
+    static readonly ArrayMesh[] BroodMeshes = new ArrayMesh[2];
+
+    public static ShaderMaterial BroodMaterial(bool larva) => BroodMaterials[larva ? 1 : 0] ??= Make(larva ? 6 : 5);
+
+    public static ArrayMesh BroodMesh(bool larva)
+    {
+        int i = larva ? 1 : 0;
+        if (BroodMeshes[i] != null) return BroodMeshes[i];
+        var k = new MeshKit();
+        var headPart = new Color(AntMesh.Head / 255f, 0, 0, 1);
+        // the same size as the brood lying in the beds
+        var centre = new Vector3(0, 0.15f, 0.5f);
+        if (!larva)
+            // held crosswise between the mandible tips, the way nurses pinch an egg
+            k.Ellipsoid(centre, Basis.FromScale(new Vector3(0.26f, 0.17f, 0.165f)), 20, 14, headPart, Vector2.Zero, p => 1 + 0.1f * p.X);
+        else
+            // a grub gripped at its middle, both ends curling down
+            for (int s = 0; s < 9; s++)
+            {
+                float t = s / 8f - 0.5f;
+                k.Ellipsoid(centre + new Vector3(t * 0.6f, -0.17f * t * t * 4 + 0.03f, 0.06f * Mathf.Cos(t * 3)),
+                    Basis.FromScale(Vector3.One * (0.15f - 0.06f * Mathf.Abs(t))), 12, 8, headPart, Vector2.Zero);
+            }
+        k.SmoothNormals(0, 0);
+        return BroodMeshes[i] = k.Commit();
     }
 
     public static ArrayMesh Mesh(FoodKind kind)
