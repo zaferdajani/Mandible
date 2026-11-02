@@ -24,7 +24,7 @@ public partial class Hud : CanvasLayer
     readonly List<Button> _cmd = new();
     public Minimap Minimap;
     public SelectionBox Box;
-    Control _pause, _end, _help;
+    Control _pause, _end, _help, _brief;
     float _alertT;
     float _refresh;
     public ColonyCommandHud CommandHud;
@@ -592,7 +592,7 @@ public partial class Hud : CanvasLayer
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : "Keep your queen alive and destroy the enemy queen to win.",
+            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Episode {Game.Episode}: follow the steps on the objective card; the win is killing the red queen in her royal chamber. Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
@@ -648,7 +648,7 @@ public partial class Hud : CanvasLayer
 
     public void TogglePause()
     {
-        if (_end != null && _end.Visible) return;
+        if (_end != null && _end.Visible || _brief != null && _brief.Visible) return;
         if (_pause == null)
         {
             _pause = Overlay(Game.Net == null ? "PAUSED" : "MENU", new[] { Game.Net == null ? "The colony waits." : "The battle goes on: multiplayer games cannot pause." },
@@ -673,19 +673,42 @@ public partial class Hud : CanvasLayer
         foreach (var c in n.GetChildren()) Relabel(c);
     }
 
-    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || _help.Visible;
+    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || (_brief?.Visible ?? false) || _help.Visible;
+
+    /// The episode's opening card: the story so far and what is at stake. The colony waits until Begin.
+    public void ShowBriefing(int episode)
+    {
+        var lines = new System.Collections.Generic.List<string>(CampaignEpisodes.Intro(episode));
+        lines.Add("");
+        if (episode > 1) lines.Add($"Victory: {Game.Sim.Mission.Goal.TrimEnd('.').ToLowerInvariant()}.");
+        lines.Add(episode == 4 ? "You lose if your queen dies or the princesses fly (30 minutes)." : "You lose if your queen dies.");
+        _brief = Overlay($"EPISODE {episode}  ·  {CampaignEpisodes.Name(episode).ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
+        _brief.Visible = true;
+        Game.SetPaused(true);
+    }
+
+    public bool BriefingOpen => _brief?.Visible ?? false;
+    public void CloseBriefing() { if (_brief != null) _brief.Visible = false; Game.SetPaused(false); }
 
     public void ShowEnd(bool victory, Colony me, Colony foe, float time)
     {
+        var mission = Game.Campaign ? Game.Sim.Mission : null;
         var lines = new[]
         {
-            victory ? Game.Sim.Mission != null ? "Your incubator, store, workers and first fighting squad are ready." : "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
-            "",
+            mission != null ? victory ? CampaignEpisodes.Outro(Game.Episode) : mission.LossReason : victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
+            mission is { Episode: > 1 } && victory ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
             $"Enemies slain  {me.Killed}   ·   Ants lost  {me.Lost}",
         };
-        _end = Overlay(victory ? Game.Sim.Mission != null ? "EPISODE COMPLETE" : "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+        if (mission != null)
+        {
+            int next = Game.Episode + 1;
+            _end = victory && next <= CampaignEpisodes.Count
+                ? Overlay("EPISODE COMPLETE", lines, ($"Episode {next}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()))
+                : Overlay(victory ? "CAMPAIGN COMPLETE" : "EPISODE FAILED", lines, (victory ? "Replay" : "Try Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+        }
+        else _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
         _end.Visible = true;
     }
 

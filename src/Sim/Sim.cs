@@ -41,6 +41,7 @@ public struct Ant
     // lane war
     public bool Guardian;             // an immobile mound guardian (lane tower)
     public bool Boss;                 // the Old Stag: Lane War's neutral boss, roused rather than killed
+    public bool Raider;               // campaign: a wild bug sent from its lair to break into the player's nest
     public byte Lane, LaneStep;       // lane creep: lane index + 1 and the waypoint it is heading for
     public bool Manual;               // a player-steered hero: its ability fires only on command
     public float CastReq;             // seconds left on a pending ability command
@@ -233,7 +234,7 @@ public sealed partial class Sim
             a.Size *= 1 + 0.12f * q;
         }
         if (a.Guardian) ApplyGuardianStats(ref a);
-        if (a.Boss) { a.MaxHp *= Lane.BossHp; a.DmgMul *= Lane.BossDmg; a.Size *= 1.35f; }
+        if (a.Boss) { a.MaxHp *= Mode == GameMode.Lanes ? Lane.BossHp : Expedition.StagHp; a.DmgMul *= Lane.BossDmg; a.Size *= 1.35f; }
         if (Mode == GameMode.Lanes && a.Team < 2) ApplyLaneStats(ref a);
         a.Hp = a.MaxHp * frac;
     }
@@ -241,8 +242,8 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ research
     public ResearchResult CanResearch(int team, Upgrade u)
     {
-        if (Mission != null) return ResearchResult.Locked;
         var c = Col[team];
+        if (Mission != null && (team == 0 ? !Mission.AllowsResearch(u, c.T(u) + 1) : Mission.Episode < 3)) return ResearchResult.Locked;
         if (!c.Alive) return ResearchResult.Dead;
         if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
         if (!c.Founded) return ResearchResult.Locked;
@@ -470,7 +471,7 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ commands
     public void CmdMove(List<int> ids, Vector2 p, bool attack, int layer = 0)
     {
-        if (Mission != null && layer == 0) p = Expedition.Constrain(p);
+        if (Mission?.Confined == true && layer == 0) p = Expedition.Constrain(p);
         if (layer > 0 && (layer > 2 || !Col[layer - 1].Founded)) layer = 0; // no such underground yet
         float spacing = 0;
         foreach (int id in ids) spacing = Mathf.Max(spacing, Ants[id].Size);
@@ -551,7 +552,7 @@ public sealed partial class Sim
     /// The same checks as Enqueue without changing anything (multiplayer predicts results before sending).
     public QueueResult CanEnqueue(int team, ProdKind kind)
     {
-        if (Mission != null && (team != 0 || kind is not (ProdKind.Worker or ProdKind.Soldier))) return QueueResult.Locked;
+        if (Mission != null && (team == 0 ? !Mission.AllowsProd(kind) : Mission.Episode < 3)) return QueueResult.Locked;
         var c = Col[team];
         if (!c.Alive) return QueueResult.Dead;
         if (Mode == GameMode.Lanes) return QueueResult.Locked; // the mound sends its waves on its own
@@ -642,7 +643,7 @@ public sealed partial class Sim
             if (Ants[i].Alive) TickAnt(i, dt);
         Ph.Update(dt);
         TickCorpses(dt);
-        TickExpedition();
+        TickExpedition(dt);
     }
 
     void TickColony(Colony c, float dt)
@@ -738,7 +739,7 @@ public sealed partial class Sim
     /// Crumbs fall from the picnic table above, always in mirrored pairs so neither side is favoured.
     void TickShowers()
     {
-        if (Mission != null) return;
+        if (Mission?.Confined == true) return;
         if (Time < _nextShower) return;
         _nextShower = Time + Rng.R(70, 95);
         float S = Config.MapSize;
@@ -926,7 +927,7 @@ public sealed partial class Sim
                 {
                     int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
                     if (e >= 0) { Engage(ref a, e, AntState.AttackMove); break; }
-                    if (a.Team < 2 && a.Layer == 0 && RaidNest(ref a)) break;
+                    if ((a.Team < 2 || a.Raider) && a.Layer == 0 && RaidNest(ref a)) break;
                 }
                 desired = a.Goal - a.Pos;
                 // lane creeps pass through their waypoints rather than having to stand on them (crowds jostle)
@@ -939,7 +940,7 @@ public sealed partial class Sim
                 if (desired.Length() < 0.9f)
                 {
                     // arrived at an enemy mound with nobody left outside: break in rather than stand about
-                    if (a.Team < 2 && a.Layer == 0 && RaidNest(ref a)) { desired = a.Goal - a.Pos; break; }
+                    if ((a.Team < 2 || a.Raider) && a.Layer == 0 && RaidNest(ref a)) { desired = a.Goal - a.Pos; break; }
                     desired = Vector2.Zero; a.Anchor = a.Pos; a.State = AntState.Idle;
                 }
                 break;
@@ -985,7 +986,7 @@ public sealed partial class Sim
                 break;
         }
 
-        if (a.Team < 2) desired = Layering(ref a, desired);
+        if (a.Team < 2 || a.Raider) desired = Layering(ref a, desired);
         Move(i, ref a, st, desired, speedMul, dt);
     }
 
@@ -1685,7 +1686,7 @@ public sealed partial class Sim
         }
         pos = ClampMap(pos);
         float moved = pos.DistanceTo(a.Pos);
-        a.Pos = Mission != null && a.Layer == 0 ? Expedition.Constrain(pos) : pos;
+        a.Pos = Mission?.Confined == true && a.Layer == 0 ? Expedition.Constrain(pos) : pos;
         a.Gait = (a.Gait + moved / (0.55f * a.Size)) % 1f;
         a.Height = W.HF.Sample(pos.X, pos.Y);
     }

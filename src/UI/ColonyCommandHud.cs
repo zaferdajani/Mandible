@@ -40,7 +40,7 @@ public partial class ColonyCommandHud : Control
         _atlas = GD.Load<Texture2D>("res://assets/ui/colony-reference.png");
         _canvas = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(1672, 941) }; AddChild(_canvas);
         Text(_canvas, "MANDIBLE", 22, 3, 280, 39, 27, true, Gold);
-        Text(_canvas, Game.TutorialMode ? "THE FIRST NEST" : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 23, 38, 260, 18, 12, false, UiTheme.Dim);
+        Text(_canvas, Game.Campaign ? CampaignEpisodes.Name(Game.Episode).ToUpperInvariant() : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 23, 38, 260, 18, 12, false, UiTheme.Dim);
         BuildResources(); BuildRoomList(); BuildBottom();
         _network = Text(_canvas, "", 320, 52, 650, 20, 12);
         var mapFrame = Panel(_canvas, 14, 651, 254, 267);
@@ -256,7 +256,7 @@ public partial class ColonyCommandHud : Control
         _chambers.Visible = Game.NestView;
         foreach (var (button, kind, status) in _rooms)
         {
-            bool episodeLock = sim.Mission != null && (kind is not (ChamberKind.Brood or ChamberKind.Storage));
+            bool episodeLock = sim.Mission != null && (!sim.Mission.AllowsChamber(kind) || RoomUpgrade(kind) is { } lu && !sim.Mission.AllowsResearch(lu, c.T(lu) + 1));
             if (RoomUpgrade(kind) is { } u)
             {
                 bool complete = c.T(u) >= Config.MaxTier(u);
@@ -272,13 +272,13 @@ public partial class ColonyCommandHud : Control
             var availability = sim.CanEnqueue(Local.Me, k);
             b.Disabled = availability != QueueResult.Ok;
             b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : b.Disabled ? 0.65f : 1f);
-            b.TooltipText = sim.Mission != null && k is not (ProdKind.Worker or ProdKind.Soldier) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
+            b.TooltipText = sim.Mission != null && !sim.Mission.AllowsProd(k) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
         }
         foreach (var (b, u, status) in _research)
         {
             b.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             bool active = c.Researching && c.ResearchKind == u;
-            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null ? "Later episode" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
+            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "Later episode" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
             b.TooltipText = active ? "Right-click to cancel research and refund food." : Sim.ChamberName(Sim.KindOf(u));
         }
         RefreshSelection(c); RefreshQueue(c);

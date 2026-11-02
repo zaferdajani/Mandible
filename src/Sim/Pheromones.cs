@@ -71,6 +71,7 @@ public sealed class SpatialHash
         N = (int)(Config.MapSize / Cell) + 1;
         Head = new int[N * N];
         Next = new int[capacity];
+        Clear(); // empty until the first tick builds it: a renderer reading it before then must not walk cell 0's zeros forever
     }
 
     public void Clear() { System.Array.Fill(Head, -1); }
