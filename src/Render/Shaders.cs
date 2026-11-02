@@ -144,6 +144,7 @@ void vertex() {
         // jaws gape on the bite; held open on sentry; a slow gnash at rest; wide on a charge
         float open = bite * 0.55 + sin(TIME * 3.0 + id) * (0.04 + 0.06 * hero) + charge * 0.45
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
+        if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
@@ -947,9 +948,11 @@ render_mode cull_CULL;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_c : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float ground_y = 0.0;   // world height of the nest entrance
+uniform sampler2D soil_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float shade = 1.0;      // how much of the sun this surface can see
 uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
 uniform bool cavity_surface = false;
+uniform bool flat_lighting = false; // Low tier: stable directional light without screen-space buffers
 uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
 uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roots and grooves, 2 finer grain
 varying vec3 wpos;
@@ -1000,10 +1003,20 @@ void fragment() {
     // a trodden floor darkens toward the foot of the wall, so the cavity reads as a depression
     if (grooves < 0.01) { float rr = length(UV - 0.5) * 2.0; col *= 1.0 - 0.42 * smoothstep(0.5, 1.0, rr); }
     if (cavity_surface) {
-        // Broad dark floor and shaded inner bank; no bright raised rims around separate bowls.
-        float bank = smoothstep(-0.8, 0.1, UV.x);
-        col = mix(vec3(0.16, 0.085, 0.035), vec3(0.29, 0.18, 0.085), bank) * (0.78 + 0.36 * g2);
-        col *= 1.0 - 0.32 * exp(-pow((UV.x + 0.25) / 0.35, 2.0));
+        // Triplanar photographic soil keeps grain continuous across the floor and banks.
+        vec3 weights = pow(an, vec3(4.0)); weights /= max(dot(weights, vec3(1.0)), 0.001);
+        vec3 tx = texture(soil_albedo, wpos.yz * 0.17).rgb;
+        vec3 ty = texture(soil_albedo, wpos.xz * 0.17).rgb;
+        vec3 tz = texture(soil_albedo, wpos.xy * 0.17).rgb;
+        col = tx * weights.x + ty * weights.y + tz * weights.z;
+        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.58) * vec3(0.55,0.53,0.50);
+        col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
+        col *= 0.87 + 0.20 * g;
+        float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
+        col *= 1.0 - 0.32 * crevice;
+        if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
+        AO = 1.0 - 0.45 * crevice;
+        AO_LIGHT_AFFECT = 0.5;
     }
     ALBEDO = col * shade;
     ROUGHNESS = 0.96 - t2 * 0.08;
@@ -1011,6 +1024,16 @@ void fragment() {
     vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
     NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
+    if (cavity_surface && !flat_lighting) {
+        vec2 suv = (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.17;
+        vec2 px = 1.0 / vec2(textureSize(soil_albedo, 0));
+        float l = dot(texture(soil_albedo, suv - vec2(px.x, 0.0)).rgb, vec3(0.3333));
+        float r = dot(texture(soil_albedo, suv + vec2(px.x, 0.0)).rgb, vec3(0.3333));
+        float d = dot(texture(soil_albedo, suv - vec2(0.0, px.y)).rgb, vec3(0.3333));
+        float u = dot(texture(soil_albedo, suv + vec2(0.0, px.y)).rgb, vec3(0.3333));
+        NORMAL_MAP = normalize(vec3((l-r) * 3.2, (d-u) * 3.2, 1.0)) * 0.5 + 0.5;
+        NORMAL_MAP_DEPTH = 0.8;
+    }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
 }
 ";

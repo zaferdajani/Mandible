@@ -39,6 +39,7 @@ public partial class Main : Node
             }
             if (a == "--raidtest") { Capture.RaidTest(this); return; }
             if (a == "--campaign-test") { ColonyValidation.Campaign(this); return; }
+            if (a == "--transport-test") { FoodTransportValidation.Run(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
@@ -75,6 +76,8 @@ public partial class Main : Node
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
+        foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--transport-capture=")) _ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
     }

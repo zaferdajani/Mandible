@@ -474,11 +474,30 @@ public sealed partial class Sim
     }
 
     // ------------------------------------------------------------------ layers
+    /// Food stays in the worker's jaws until it reaches a completed store. During
+    /// founding the royal chamber is the temporary larder; before digging, use the entrance.
+    public (Vector2 pos, byte layer) FoodDeliveryPoint(int team)
+    {
+        var entrance = W.Nests[team].Pos;
+        if (Mode == GameMode.Lanes || !Col[team].Founded) return (entrance, 0);
+        NestChamber target = null;
+        float best = float.MaxValue;
+        foreach (var ch in Col[team].Chambers)
+        {
+            if (ch.Kind != ChamberKind.Storage || !ch.Built) continue;
+            float distance = ch.Offset.LengthSquared();
+            if (distance < best) { target = ch; best = distance; }
+        }
+        target ??= Royal(team);
+        return target != null && target.Built ? (ChamberPos(team, target), (byte)NestLayer(team)) : (entrance, (byte)0);
+    }
+
     int WantLayer(ref Ant a)
     {
         switch (a.State)
         {
-            case AntState.Forage: case AntState.Gather: case AntState.Return: return 0;
+            case AntState.Forage: case AntState.Gather: return 0;
+            case AntState.Return: return FoodDeliveryPoint(a.Team).layer;
             case AntState.Move: case AntState.AttackMove: case AntState.Dig: return a.GoalLayer;
             case AntState.Engage: return Valid(a.Target, a.TargetSerial) ? Ants[a.Target].Layer : a.Layer;
             default: return a.Layer;

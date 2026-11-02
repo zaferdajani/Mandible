@@ -113,7 +113,9 @@ public sealed class AntRenderer
         if (at.HasValue) { r.LookAt = at.Value; r.LookUntil = _now + len; }
     }
     readonly Batch[,] _dead = new Batch[3, 13];
-    readonly Batch _crumbs, _rings, _bars;
+    readonly Batch[] _cargo = new Batch[5];
+    readonly Batch _rings, _bars;
+    internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
     public bool ShowAllBars;
 
@@ -190,9 +192,8 @@ public sealed class AntRenderer
         _pips.Node.SortingOffset = 101;
         _labelRoot = new Node3D { Name = "Labels" };
         root.AddChild(_labelRoot);
-        var crumbMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Food) };
-        crumbMat.SetShaderParameter("kind", 0);
-        _crumbs = new Batch(root, AntMesh.Crumb(), crumbMat, false, "Crumbs");
+        for (int kind = 0; kind < _cargo.Length; kind++)
+            _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind), WorkerCargo.Material((FoodKind)kind), false, $"Carried{(FoodKind)kind}");
 
         var ringMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Ring) };
         ringMat.SetShaderParameter("color", new Color(0.55f, 1.0f, 0.45f, 0.95f));
@@ -261,7 +262,8 @@ public sealed class AntRenderer
         foreach (var b in _live) b?.Begin();
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
-        _crumbs.Begin(); _rings.Begin(); _bars.Begin(); _pips.Begin();
+        foreach (var cargo in _cargo) cargo.Begin();
+        _rings.Begin(); _bars.Begin(); _pips.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
@@ -310,11 +312,11 @@ public sealed class AntRenderer
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
                 _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
-            if (a.Carrying)
+            if (a.Carrying && a.Type == AntType.Worker)
             {
-                var fwd = b.Z.Normalized();
-                var co = o + fwd * 0.38f * st.Size + up * 0.11f * st.Size;
-                _crumbs.Add(Basis.FromScale(Vector3.One * st.Size * 0.9f), co, new Color(0, 0, 0, 0));
+                // The same transform and head animation as this worker keep the
+                // load clamped in its jaws on slopes, in tunnels and while turning.
+                _cargo[(int)a.CarryKind].Add(b, o, data);
             }
             if (a.Selected)
                 _rings.Add(Basis.FromScale(Vector3.One * st.Size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
@@ -429,7 +431,8 @@ public sealed class AntRenderer
         foreach (var b in _live) b?.End();
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
-        _crumbs.End(); _rings.End(); _bars.End(); _pips.End();
+        foreach (var cargo in _cargo) cargo.End();
+        _rings.End(); _bars.End(); _pips.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
@@ -494,7 +497,7 @@ public sealed class AntRenderer
             at = t.Pos;
             wantPitch = Mathf.Clamp((t.Alt - a.Alt) * 0.3f, -0.3f, 0.5f) - 0.1f;
         }
-        else if (a.Carrying && a.Team < 2) at = sim.W.Nests[a.Team].Pos;
+        else if (a.Carrying && a.Team < 2) at = a.Layer > 0 ? sim.FoodDeliveryPoint(a.Team).pos : sim.W.Nests[a.Team].Pos;
         else if ((a.State == AntState.Forage || a.State == AntState.Gather) && a.FoodTarget != null) { at = a.FoodTarget.Pos; wantPitch = -0.15f; }
         else if (a.State == AntState.Move || a.State == AntState.AttackMove) at = a.Goal;
         else if (a.State == AntState.Hold) { direct = true; wantYaw = Mathf.Sin(_now * 0.8f + r.Serial) * 0.7f; wantPitch = 0.25f; }

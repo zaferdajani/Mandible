@@ -45,11 +45,14 @@ public sealed partial class NestInterior
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
 
     /// One shared Earth shader per culling mode; a material per surface role, tuned by how much sun it sees.
-    ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back)
+    ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back, bool cavity = false)
     {
-        var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", back ? "cull_back" : "cull_disabled")) };
+        var mode = cavity ? "cull_disabled, shadows_disabled" : back ? "cull_back" : "cull_disabled";
+        var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", mode)) };
+        m.SetShaderParameter("cavity_surface", cavity);
         m.SetShaderParameter("noise_b", _g.World.NoiseB);
         m.SetShaderParameter("normal_c", _g.World.NormalC);
+        m.SetShaderParameter("soil_albedo", GD.Load<Texture2D>("res://assets/materials/nest-soil-albedo.png"));
         m.SetShaderParameter("ground_y", gy);
         m.SetShaderParameter("shade", shade);
         m.SetShaderParameter("bounce", bounce);
@@ -65,11 +68,9 @@ public sealed partial class NestInterior
         var n = new Node3D { Name = $"Nest{team}", Position = new Vector3(nest.X, gy, nest.Y) };
         _root.AddChild(n);
         _nest[team] = n;
-        var earth = Soil(gy, 0.66f, 0.28f, 0.45f, false);
+        var earth = Soil(gy, 0.94f, 0.12f, 0.45f, false, true);
         // The soil roof is a cutaway presentation. Its physical shadow map cannot
         // light the exposed underground floor: the bank shader supplies that shading.
-        earth.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", "cull_disabled, shadows_disabled"));
-        earth.SetShaderParameter("cavity_surface", true);
         _excavation[team] = new MeshInstance3D
         {
             Name = "ConnectedExcavation", MaterialOverride = earth,
@@ -134,7 +135,17 @@ public sealed partial class NestInterior
     public void ApplyQuality()
     {
         int d = Settings.TerrainDetail;
-        foreach (var m in _soils) m.SetShaderParameter("detail", d);
+        foreach (var m in _soils)
+        {
+            m.SetShaderParameter("detail", d);
+            if (!m.GetShaderParameter("cavity_surface").AsBool()) continue;
+            bool low = Settings.Gfx == Settings.Quality.Low;
+            // The Low cutaway supplies its own inexpensive directional shading;
+            // it does not depend on lighting buffers rebuilt when MSAA/SSAO change.
+            m.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", low ? "cull_disabled, unshaded" : "cull_disabled, shadows_disabled"));
+            m.SetShaderParameter("flat_lighting", low);
+            m.SetShaderParameter("shade", low ? 1.55f : 0.94f);
+        }
         for (int team = 0; team < 2; team++) _meshRevision[team] = -1;
         _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
     }
@@ -316,7 +327,7 @@ public sealed partial class NestInterior
         int count = ch.Kind switch
         {
             ChamberKind.Brood => ch.Built ? 6 + System.Math.Min(18, col.Queue.Count * 4) : 0,
-            ChamberKind.Storage => ch.Built ? (int)(fill * 14) : 0,
+            ChamberKind.Storage => ch.Built ? 1 + (int)(fill * 14) : 0,
             ChamberKind.Royal => ch.Built ? 12 + 5 * ch.Tier : 0,
             _ => ch.Built ? 4 + 2 * ch.Tier : 0,
         };

@@ -1486,6 +1486,9 @@ public sealed partial class Sim
 
     Vector2 WorkerLogic(int i, ref Ant a, UnitStats st, float dt, bool think, ref float speedMul)
     {
+        // Resume an interrupted delivery before gathering another item.
+        if (a.Carrying) a.State = AntState.Return;
+        else if (a.State == AntState.Return) a.State = AntState.Forage;
         // bite whoever is chewing on us
         if (a.Target >= 0 && Valid(a.Target, a.TargetSerial) && a.Pos.DistanceTo(Ants[a.Target].Pos) < 2f) TryBite(i, a.Target, st);
 
@@ -1500,10 +1503,11 @@ public sealed partial class Sim
         if (a.State == AntState.Return)
         {
             a.Deposit -= dt;
-            if (a.Deposit <= 0) { a.Deposit = 0.12f; Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
+            if (a.Deposit <= 0) { a.Deposit = 0.12f; if (a.Layer == 0) Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
             if (a.CarryKind == FoodKind.Seed) speedMul = 0.8f; // seeds are heavy
-            var to = nest - a.Pos;
-            if (to.Length() < 1.8f)
+            var delivery = FoodDeliveryPoint(a.Team);
+            var to = delivery.pos - a.Pos;
+            if (a.Carrying && a.Layer == delivery.layer && to.Length() < (delivery.layer == 0 ? 1.8f : 1.1f))
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
@@ -1524,15 +1528,21 @@ public sealed partial class Sim
                     case FoodKind.Berry: c.JuiceT = Mathf.Min(Config.EffectMax, c.JuiceT + Config.EffectPerDelivery); break;
                     case FoodKind.Corpse: c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery); break;
                 }
-                Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = nest, Team = a.Team });
+                Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team });
                 a.Heading += DMath.Pi;
                 if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
                 else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
                 return Vector2.Zero;
             }
-            // path integration home with a little meander
-            return to.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
+            // Keep the full destination below ground so Layering can follow the
+            // actual gallery tree. Surface travel retains its slight meander.
+            if (a.Layer > 0) return to;
+            var surfaceHome = nest - a.Pos;
+            return surfaceHome.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
         }
+
+        // Leave by the shaft before searching or picking up food on the surface.
+        if (a.Layer > 0) return nest - a.Pos;
 
         if (a.State == AntState.Gather && (a.FoodTarget == null || !a.FoodTarget.Alive))
         {

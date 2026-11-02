@@ -41,7 +41,9 @@ public sealed class NestGeometry
             var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent].Offset : Vector2.Zero;
             var (w, _, d) = RoomSize(ch);
             float p = Progress(ch);
-            Add(parent, ch.Offset, w * p, d * p, 0.7f + 0.4f * p);
+            // The flat walking strip must contain the simulation's 0.9-unit
+            // lateral allowance plus the worker and its load, before the banks rise.
+            Add(parent, ch.Offset, w * p, d * p, 1.15f + 0.6f * p);
         }
         bool changed = count != Count;
         for (int i = 0; i < count * Stride; i++) changed |= _next[i] != Network[i];
