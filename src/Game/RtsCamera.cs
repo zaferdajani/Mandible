@@ -77,9 +77,6 @@ public partial class RtsCamera : Node3D
     public override void _Process(double delta)
     {
         float dt = (float)delta;
-        // the lens keeps its 42 degrees across the narrow side: an upright phone sees as wide a strip of the yard
-        // as a landscape screen sees tall, and more of the ground ahead instead of a keyhole
-        Cam.KeepAspect = Settings.Portrait ? Camera3D.KeepAspectEnum.Width : Camera3D.KeepAspectEnum.Height;
         if (UserControl)
         {
             var move = Vector2.Zero;

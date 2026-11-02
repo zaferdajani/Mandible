@@ -68,6 +68,7 @@ public sealed class AIController : IColonyAI
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
+        March();
         Reinforce(c);
         Defend(c);
         Raid(c);
@@ -78,10 +79,13 @@ public sealed class AIController : IColonyAI
     void Reinforce(Colony c)
     {
         var nest = _sim.W.Nests[_team].Pos;
+        var foe = _sim.W.Nests[1 - _team].Pos;
         foreach (var s in _sim.Squads)
         {
             if (s.Team != _team || !s.Alive || s.Recalled || s.Count * 2 > s.Size) continue;
-            if (_sim.Centroid(s).DistanceTo(nest) < Config.ReinforceRadius) continue;
+            var at = _sim.Centroid(s);
+            if (at.DistanceTo(nest) < Config.ReinforceRadius) continue;
+            if (at.DistanceTo(foe) < SiegeRadius) continue; // a siege is not abandoned to refill: the queen is the prize
             bool fighting = false;
             foreach (int m in s.Members) if (_sim.Ants[m].State == AntState.Engage) { fighting = true; break; }
             if (fighting) continue;
@@ -102,7 +106,7 @@ public sealed class AIController : IColonyAI
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type)) continue;
+            if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type) || _marching.Contains(i)) continue; // a marching raid is not diverted
             if (a.State == AntState.Idle || a.State == AntState.Move)
             {
                 _tmp.Add(i);
@@ -137,7 +141,7 @@ public sealed class AIController : IColonyAI
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
-            if (a.Alive && a.Team == _team && Config.IsWarrior(a.Type) && a.State == AntState.Idle && a.Pos.DistanceTo(nest) > 60) _stray.Add(i);
+            if (a.Alive && a.Team == _team && Config.IsWarrior(a.Type) && a.State == AntState.Idle && a.Pos.DistanceTo(nest) > 60 && !_marching.Contains(i)) _stray.Add(i);
         }
         var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();
         if (_stray.Count > 0) Move(_stray, nest + toCenter * 14, false);
@@ -228,6 +232,80 @@ public sealed class AIController : IColonyAI
         if (_tmp.Count > 0) Move(_tmp, _sim.Ants[threat].Pos, true);
     }
 
+    const float SiegeRadius = 35;    // squads this close to the enemy mound stay and fight it out
+    const float FinalAssault = 1080; // from 18 minutes no home guard is held back
+    readonly List<int> _marching = new();
+    float _marchUntil;
+    Vector2 _waypoint;
+    int _leg; // 0: to the waypoint, 1: to the staging ground before the mound
+
+    /// The way to the enemy nest that keeps clear of wild lairs: straight when nothing guards the line, otherwise
+    /// swung out to one side through the gap with the most room. Walking a raid straight through the lairs in the
+    /// middle of the yard used to cost every wave half its ants before it ever saw the enemy mound.
+    Vector2 RaidWaypoint(Vector2 from, Vector2 to)
+    {
+        var mid = (from + to) * 0.5f;
+        var side = (to - from).Normalized().Orthogonal();
+        Vector2 best = mid;
+        float bestRoom = -1, bestLength = float.MaxValue;
+        for (int k = 0; k <= 12; k++)
+        {
+            float offset = (k % 2 == 0 ? 1 : -1) * 25 * ((k + 1) / 2); // 0, -25, +25, -50, +50 ...
+            var wp = mid + side * offset;
+            if (wp.X < 20 || wp.Y < 20 || wp.X > Config.MapSize - 20 || wp.Y > Config.MapSize - 20) continue;
+            float room = float.MaxValue;
+            foreach (var camp in _sim.W.Camps)
+                if (CampGuarded(camp)) room = Mathf.Min(room, Mathf.Min(SegmentDistance(camp.Pos, from, wp), SegmentDistance(camp.Pos, wp, to)));
+            room = Mathf.Min(room, ClearRoom);
+            float length = from.DistanceTo(wp) + wp.DistanceTo(to);
+            if (room > bestRoom + 0.01f || (room >= bestRoom - 0.01f && length < bestLength)) { best = wp; bestRoom = room; bestLength = length; }
+        }
+        return best;
+    }
+    const float ClearRoom = 30; // a lair this far off the path leaves a passing raid alone
+
+    bool CampGuarded(Camp camp)
+    {
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var b = ref _sim.Ants[i];
+            if (b.Alive && b.Team == Config.Wild && b.Anchor.DistanceTo(camp.Pos) < 8) return true;
+        }
+        return false;
+    }
+
+    static float SegmentDistance(Vector2 p, Vector2 a, Vector2 b)
+    {
+        var ab = b - a;
+        float t = Mathf.Clamp((p - a).Dot(ab) / Mathf.Max(1e-4f, ab.LengthSquared()), 0, 1);
+        return p.DistanceTo(a + ab * t);
+    }
+
+    /// A raid marches past the lairs to its waypoint, then to a staging ground short of the enemy mound, gathering
+    /// at each (or moving on after a while), and attacks from there.
+    void March()
+    {
+        if (_marching.Count == 0) return;
+        _marching.RemoveAll(id => !_sim.Ants[id].Alive || _sim.Ants[id].Team != _team);
+        if (_marching.Count == 0) return;
+        var centre = Vector2.Zero;
+        foreach (int id in _marching) centre += _sim.Ants[id].Pos;
+        centre /= _marching.Count;
+        if (centre.DistanceTo(_waypoint) > 18 && _sim.Time < _marchUntil) return;
+        var foe = _sim.W.Nests[1 - _team].Pos;
+        if (_leg == 0)
+        {
+            // on to a staging ground short of the mound, still marching past the lairs rather than fighting them
+            _leg = 1;
+            _waypoint = foe + (_waypoint - foe).Normalized() * 40;
+            _marchUntil = _sim.Time + 45;
+            Move(_marching, _waypoint, false);
+            return;
+        }
+        Move(_marching, foe, true);
+        _marching.Clear();
+    }
+
     void Raid(Colony c)
     {
         if (Passive || _sim.Time < _nextWave) return;
@@ -250,13 +328,22 @@ public sealed class AIController : IColonyAI
             ref var b = ref _sim.Ants[i];
             if (b.Alive && b.Team == 1 - _team && Config.IsWarrior(b.Type)) enemyArmy += Config.Of(b.Type).Pop;
         }
-        bool stronger = overdue && army >= 8 && army >= enemyArmy * 1.2f;
-        if (army < _waveSize && !(overdue && army >= _waveSize * 0.6f) && !stronger) return;
+        // A mound is won only with a clear edge: its defenders fight beside the queen and refill from her brood.
+        // Go when the wave is ready and outnumbers the rival's whole army, at once when the rival is clearly
+        // beaten down, or when overdue with at least an even army; never feed small waves into a defended nest.
+        bool ready = army >= _waveSize && army >= enemyArmy * 1.3f;
+        bool press = army >= 12 && army >= enemyArmy * 1.6f;
+        bool even = overdue && army >= 12 && army >= enemyArmy;
+        if (!ready && !press && !even) return;
         var target = _sim.W.Nests[1 - _team].Pos;
-        // keep a small home guard
-        int guard = _tmp.Count / 6;
+        // keep a small home guard until the late game, when the war is decided at a mound
+        int guard = _sim.Time >= FinalAssault ? 0 : _tmp.Count / 6;
         _tmp.RemoveRange(0, guard);
-        Move(_tmp, target, true);
+        _waypoint = RaidWaypoint(nest, target);
+        Move(_tmp, _waypoint, false);
+        _leg = 0;
+        _marching.Clear(); _marching.AddRange(_tmp);
+        _marchUntil = _sim.Time + 60;
         _waveSize = Mathf.Min(60, _waveSize + (_diff == Difficulty.Hard ? 6 : 4));
         _nextWave = _sim.Time + (_diff == Difficulty.Easy ? 110 : 75);
     }

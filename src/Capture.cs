@@ -749,6 +749,14 @@ public static class Capture
                     { if (sim.Ants[i].Team == 0) v0++; else v1++; top = System.Math.Max(top, sim.Ants[i].Level); }
                 int sq0 = 0, sq1 = 0, full = 0, ranked = 0;
                 foreach (var sq in sim.Squads) if (sq.Alive) { if (sq.Team == 0) sq0++; else sq1++; if (sq.Count == sq.Size) full++; if (sq.Level > 1) ranked++; }
+                string Siege(int t)
+                {
+                    var foe = sim.W.Nests[1 - t].Pos; int near = 0, below = 0;
+                    for (int i = 0; i < sim.High; i++) { ref var x = ref sim.Ants[i]; if (x.Alive && x.Team == t && Config.IsWarrior(x.Type) && x.Pos.DistanceTo(foe) < 25) { near++; if (x.Layer > 0) below++; } }
+                    int q = sim.Col[1 - t].QueenId;
+                    return $"{near} at foe mound ({below} below), foe queen {(q >= 0 && sim.Ants[q].Alive ? sim.Ants[q].Hp : 0):0}";
+                }
+                GD.Print($"[simtest]    siege black: {Siege(0)} | red: {Siege(1)}");
                 long wt = System.Math.Max(1, workerTime[0] + workerTime[1] + workerTime[2] + workerTime[3]);
                 GD.Print($"[simtest]    black worker time: surface laden {100f * workerTime[0] / wt:0}% empty {100f * workerTime[1] / wt:0}% | below laden {100f * workerTime[2] / wt:0}% empty {100f * workerTime[3] / wt:0}% | food/worker-min {60f * sim.Col[0].Gathered / (wt / 30f):0.0}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top} squads {sq0}/{sq1} full {full} ranked {ranked}");

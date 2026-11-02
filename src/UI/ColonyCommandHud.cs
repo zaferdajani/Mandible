@@ -9,13 +9,13 @@ namespace Mandible;
 /// minimap, selection and all world geometry remain live game systems.
 /// The interface is built from blocks (top bar, chamber list, minimap, selection, cards, commands). On a
 /// computer in landscape they sit exactly where the reference puts them and the whole canvas scales as one.
-/// On a phone, and on any screen held upright, each block is pinned to the screen edges at its own scale,
-/// and phones get finger-sized buttons (at least 44 px), no key hints and a long press for right-click.
+/// On a phone or tablet (always held sideways) each block is pinned to the screen edges at its own scale,
+/// with finger-sized buttons (at least 44 px), no key hints and a long press for right-click.
 public partial class ColonyCommandHud : Control
 {
     public GameSession Game;
     public Minimap Map;
-    /// Where the HUD sits in the flexible layouts, so the episode card and alerts can stay clear of it.
+    /// Where the HUD sits in the touch layout, so the episode card and alerts can stay clear of it.
     public bool Flexible { get; private set; }
     public float TopEdge { get; private set; } = 44;
     public float BottomEdge { get; private set; } = 600;
@@ -58,7 +58,7 @@ public partial class ColonyCommandHud : Control
         BuildResources(); BuildRoomList(); BuildBottom();
         _network = Text(_canvas, "", 320, 52, 650, 20, 12);
         _mapFrame = Panel(_canvas, 14, 651, 254, 267);
-        Map = new Minimap { Game = Game, MouseFilter = MouseFilterEnum.Stop, ClipContents = true }; // an upright phone's tall view cone would reach past the frame
+        Map = new Minimap { Game = Game, MouseFilter = MouseFilterEnum.Stop };
         At(Map, 5, 5, 244, 257); _mapFrame.AddChild(Map);
         RebuildCards();
     }
@@ -73,12 +73,11 @@ public partial class ColonyCommandHud : Control
     static void Place(Control block, float x, float y, float scale)
     { block.Position = new Vector2(x, y); block.Scale = Vector2.One * scale; }
 
-    /// Computer in landscape: the reference composition, scaled as one. Phones and upright screens: blocks pinned
-    /// to the edges, the bottom rows first, then the top bar and the minimap (or the chamber list in build mode),
-    /// each as large as the screen allows.
+    /// Computer: the reference composition, scaled as one. Phones and tablets: blocks pinned to the edges, the
+    /// bottom row first, then the top bar and the minimap (or the chamber list in build mode), as large as fits.
     void Arrange(Vector2 viewport)
     {
-        Flexible = _touch || viewport.Y > viewport.X;
+        Flexible = _touch;
         _title.Visible = !Flexible;
         if (!Flexible)
         {
@@ -97,19 +96,8 @@ public partial class ColonyCommandHud : Control
         _selectionPanel.Size = _selectionSize; _cardsPanel.Visible = true;
         const float m = 12, gap = 10;
         float bottom = viewport.Y - m, k;
-        bool upright = viewport.Y > viewport.X;
-        if (upright)
         {
-            // cards across the full width, selection and commands side by side beneath them
-            k = Mathf.Min(Mathf.Min((viewport.X - 2 * m) / _cardsSize.X, (viewport.X - 2 * m - gap) / (_selectionSize.X + _commandsSize.X)), viewport.Y * 0.17f / _cardsSize.Y);
-            Place(_selectionBlock, m, bottom - _selectionSize.Y * k, k);
-            Place(_commandsBlock, viewport.X - m - _commandsSize.X * k, bottom - _commandsSize.Y * k, k);
-            float rowTop = bottom - Mathf.Max(_selectionSize.Y, _commandsSize.Y) * k - gap;
-            Place(_cardsBlock, (viewport.X - _cardsSize.X * k) / 2, rowTop - _cardsSize.Y * k, k);
-        }
-        else
-        {
-            // on its side: one row along the bottom edge; on a narrow screen the commands step up above the cards
+            // one row along the bottom edge; on a narrower screen (a 4:3 tablet) the commands step up above the cards
             float row = _selectionSize.X + _cardsSize.X + _commandsSize.X + 2 * gap;
             k = Mathf.Min(Mathf.Min((viewport.X - 2 * m) / row, viewport.Y * 0.34f / _cardsSize.Y), 1.25f);
             if (k * MinButton < 44)
@@ -132,12 +120,12 @@ public partial class ColonyCommandHud : Control
         Place(_resources, viewport.X - m - _resourcesSize.X * top, m, top);
         TopEdge = m + _resourcesSize.Y * top;
         Place(_network, viewport.X - m - _resourcesSize.X * top, TopEdge + 4, top);
-        float y = upright ? TopEdge + gap : m, mapScale = k * (upright ? 0.75f : 0.85f);
-        Place(_mapFrame, m, y, mapScale);
-        Place(_chambers, m, y, k * (upright ? 0.8f : 0.95f));
+        float mapScale = k * 0.85f;
+        Place(_mapFrame, m, m, mapScale);
+        Place(_chambers, m, m, k * 0.95f);
         _mapFrame.Visible = !Game.NestView; // the chamber list takes its corner in build mode
-        MapRect = new Rect2(m, y, new Vector2(254, 267) * mapScale);
-        GuideScale = upright ? Mathf.Min(k, (viewport.X - MapRect.End.X - gap - m) / 440f) : Mathf.Min(k, 1.15f);
+        MapRect = new Rect2(m, m, new Vector2(254, 267) * mapScale);
+        GuideScale = Mathf.Min(k, 1.15f);
     }
     float MinButton => _touch ? 46 : 26; // the shortest button in the blocks (the tabs), before scaling
 

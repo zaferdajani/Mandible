@@ -78,7 +78,7 @@ In Lane War the hero's special fires on **Q**; in Colony War heroes cast it them
 
 ## Phones and tablets
 
-The game follows device rotation. The new Colony Command HUD currently scales its desktop layout uniformly; its touch and portrait usability has not been validated. Lane War retains its existing layout.
+Phones and tablets play in landscape only. The screen flips when the device is turned over, but it never rotates to portrait. On a phone or tablet, the Colony Command HUD is laid out for fingers: the panels sit against the screen edges, every button is at least 44 px, key hints are hidden, and a long press does what a right-click does (cancel research or the last queued batch). In build mode, the chamber list replaces the minimap in the top-left corner. Tap the nest hole or **Build** to open or close the nest. A tap on the hole or on a room works even while ants are selected. The layout has been checked at 2400×1080, 1920×1080 and 1334×750 phone sizes and on a 2048×1536 tablet (`--layout=<dir> --mobile`, see [validation frames](docs/validation/phone)). Lane War keeps its existing layout.
 
 ## Multiplayer (LAN and internet, Windows / macOS / Android / iOS)
 

@@ -91,7 +91,7 @@ public partial class Main : Node
     void ApplyOrientation()
     {
         var size = GetTree().Root.Size;
-        bool portrait = size.Y > size.X;
+        bool portrait = size.Y > size.X && !Settings.Mobile; // phones and tablets are locked to landscape; only a desktop window can stand upright
         Settings.Portrait = portrait;
         GetTree().Root.ContentScaleSize = portrait ? new Vector2I(1440, 810) : new Vector2I(1920, 1080);
     }

@@ -46,7 +46,7 @@ public partial class ExpeditionGuide : PanelContainer
         }
     }
 
-    /// On phones and upright screens the card sits under the top bar, clear of the minimap, as large as fits.
+    /// On phones and tablets the card sits under the top bar, opposite the minimap, as large as fits.
     void Arrange()
     {
         var hud = Game.Hud.CommandHud;

@@ -9,7 +9,7 @@ public static class Settings
     public static Quality Gfx = Default();
     public static bool Mobile => ForceMobile || OS.HasFeature("mobile");
     public static bool ForceMobile; // --mobile: a desktop test run lays out and scales the UI as a phone does
-    public static bool Portrait; // the screen is taller than wide (a phone held upright)
+    public static bool Portrait; // a desktop window taller than wide (phones and tablets are locked to landscape)
     public static bool Touch => Mobile || DisplayServer.IsTouchscreenAvailable();
     const string Path = "user://settings.cfg";
 
