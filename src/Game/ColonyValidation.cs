@@ -420,7 +420,18 @@ public static class ColonyValidation
             Check(g.Sim.Col[0].Researching, "Research portrait did not start an upgrade");
             await Wait(); await Click(742, 775, MouseButton.Right);
             Check(!g.Sim.Col[0].Researching && g.Sim.Col[0].Food == researchFood, "Research cancellation did not refund food");
-            GD.Print("[command-capture] PASS live tabs, portrait queue, worker selection, underground placement, surface, episode opening, campaign list, episode 2-4 briefings and objectives, research start/cancel/refund");
+            // heroes wear their own portraits: a selected Warlord's bust beside the Heroes tab, then an inspected enemy Matron
+            await Click(1090, 701);
+            var heroAt = g.World.Nests[0].Pos + new Vector2(0, 6);
+            int warlord = g.Sim.Spawn(0, AntType.Warlord, heroAt, 0, 6);
+            g.Input.Selection.Clear(); g.Input.Selection.Add(warlord);
+            await Shot("13-hero-selected");
+            Check(g.Hud.CommandHud.SelectedArt == HeroArt.Bust(AntType.Warlord, 0), "Selected Warlord did not show its own portrait");
+            int matron = g.Sim.Spawn(1, AntType.Matron, heroAt + new Vector2(3, 0), 0, 6);
+            g.Input.Selection.Clear(); g.Input.Inspect = matron; g.Input.InspectSerial = g.Sim.Ants[matron].Serial;
+            await Shot("14-enemy-hero-inspected");
+            Check(g.Hud.CommandHud.SelectedArt == HeroArt.Bust(AntType.Matron, 1), "Inspected enemy Matron did not show the red colony's portrait");
+            GD.Print("[command-capture] PASS live tabs, portrait queue, worker selection, underground placement, surface, episode opening, campaign list, episode 2-4 briefings and objectives, research start/cancel/refund and hero portraits");
             app.GetTree().Quit();
         }
         catch (Exception e) { GD.PushError("[command-capture] FAIL " + e); app.GetTree().Quit(1); }

@@ -14,6 +14,7 @@ public partial class ColonyCommandHud : Control
     Control _canvas, _chambers, _cards;
     Label _food, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
     TextureRect _selectedArt, _queueArt, _nextArt;
+    public Texture2D SelectedArt => _selectedArt.Texture;
     ProgressBar _health, _queueProgress;
     readonly List<(Button button, ProdKind kind)> _units = new();
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
@@ -76,6 +77,7 @@ public partial class ColonyCommandHud : Control
     }
     Texture2D UnitArt(ProdKind kind)
     {
+        if (Config.IsHeroKind(kind) && HeroArt.Card(Config.UnitOf(kind), Local.Me) is { } hero) return hero;
         int i = Array.IndexOf(Units, kind);
         if (i < 0) i = kind == ProdKind.Warlord ? 2 : kind == ProdKind.Matron ? 4 : 3;
         return Region(new Rect2(685 + i * 133, 750, 125, 64));
@@ -299,8 +301,10 @@ public partial class ColonyCommandHud : Control
         foreach (int id in input.Selection) if (Game.Sim.Ants[id].Alive) { var a = Game.Sim.Ants[id]; type = a.Type; hp += a.Hp; max += a.MaxHp; n++; }
         _selection.Text = n > 0 ? n == 1 ? Config.Of(type).Name : $"{n} ANTS SELECTED" : "THE COLONY";
         _health.Value = n > 0 ? hp / Mathf.Max(1, max) : 1;
-        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, _ => ProdKind.Worker };
-        _selectedArt.Texture = n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
+        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+            AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker };
+        // a selected hero shows its own upright bust; the wide card art serves the queue and the Heroes tab
+        _selectedArt.Texture = n > 0 && Config.IsHero(type) && HeroArt.Bust(type, Local.Me) is { } bust ? bust : n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
         _counts.Text = n > 0 ? $"{hp:0} / {max:0} health" : $"Workers {c.Count[0]}  ·  Soldiers {c.Count[1]}";
         _detail.Text = n > 0 ? "Right-click to move or attack. Workers gather food and dig chambers." : "Select ants to command them. Click a chamber to inspect it. N opens the nest.";
         if (input.InspectFood is { Alive: true } food && n == 0) { _selection.Text = Config.FoodName(food.Kind); _counts.Text = $"{food.Amount:0} loads remaining"; _detail.Text = Config.FoodEffectShort(food.Kind); }
@@ -308,6 +312,7 @@ public partial class ColonyCommandHud : Control
         {
             var enemy = Game.Sim.Ants[input.Inspect];
             _selection.Text = Config.Of(enemy.Type).Name;
+            if (Config.IsHero(enemy.Type) && HeroArt.Bust(enemy.Type, enemy.Team) is { } enemyBust) _selectedArt.Texture = enemyBust;
             _health.Value = enemy.Hp / enemy.MaxHp;
             _counts.Text = $"{enemy.Hp:0} / {enemy.MaxHp:0} health";
             _detail.Text = enemy.Team == Config.Wild ? "Wild insect. Defeat it for experience and protein." : "Enemy colony. Select your attackers and right-click to attack.";
