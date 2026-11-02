@@ -116,14 +116,14 @@ public partial class ExpeditionGuide : PanelContainer
     float _desktopBottom;
 
     /// The objectives are written for mouse and keyboard; on a touch screen the same steps are taps.
-    static string ForTouch(string text)
+    public static string ForTouch(string text)
     {
         foreach (var (mouse, touch) in TouchWords) text = text.Replace(mouse, touch);
         return text;
     }
     static readonly (string, string)[] TouchWords =
     {
-        ("Press F2 to select your attackers. Right-click the red ants ahead, or press A and click beyond them.", "Tap Army to select your attackers, then tap the red ants ahead, or tap Attack and then the ground beyond them."),
+        ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
         ("right-click the food clearing", "tap the food clearing"),
         ("Press F3 to select workers, then click Dig entrance below.", "Tap Workers to select them, then tap Dig entrance below."),
         ("Press N, choose Brood Chamber, then click beside the royal chamber.", "Tap Build, choose Brood Chamber, then tap beside the royal chamber."),
@@ -144,9 +144,14 @@ public partial class ExpeditionGuide : PanelContainer
         ("(F2, then right-click them)", "(tap Army, then tap them)"),
         ("(F2, right-click near her)", "(tap Army, then tap near her)"),
         ("Select the whole army (F2, F4 for flyers) and attack-move to the gold ring past the middle.", "Tap Army, then Attack and the gold ring past the middle."),
-        ("majors can hatch (C)", "majors can hatch"),
-        ("attack-move onto them", "tap Attack and then the ground beyond them"),
+        ("Majors can hatch now (C)", "Majors can hatch now"),
+        ("press X (or the Soldier card)", "tap the Soldier card"),
+        // the briefing's lessons (Reveal.Systems)
         ("Hatch workers (Z)", "Hatch workers"),
+        ("giant workers (C)", "giant workers"),
+        ("the Warlord (Y)", "the Warlord"),
+        ("flying ants (F) and acid gunners (D)", "flying ants and acid gunners"),
+        ("attack-move onto them", "tap Attack and then the ground beyond them"),
         ("Hatch more (Z)", "Hatch more"),
         ("(Y for the Warlord)", "(the Warlord first)"),
         ("Open the Chambers tab (N), choose Storage and click beside a connected room. Every store", "Open the Chambers tab, choose Storage and tap beside a connected room. Every store"),

@@ -242,6 +242,7 @@ public partial class GameSession : Node3D
     // ------------------------------------------------------------- api for UI/input
     public void TryEnqueue(ProdKind k)
     {
+        if (Sim.Mission is { } story && !story.AllowsProd(k)) return; // not introduced yet: in the campaign its key does nothing
         var r = Sim.CanEnqueue(Local.Me, k);
         if (r == QueueResult.Ok) Issue(new Cmd { Kind = CmdKind.Enqueue, Team = (byte)Local.Me, Arg = (byte)k });
         switch (r)
@@ -252,7 +253,7 @@ public partial class GameSession : Node3D
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.Locked:
-                Hud.Alert(Sim.Mission != null && !Sim.Mission.AllowsProd(k) ? $"{Config.ProdName(k)} is introduced in a later episode. Try it now in Skirmish." : Sim.ChamberCount(Local.Me, ChamberKind.Brood, true) == 0 ? "Build a brood chamber (incubator) before hatching ants." : LockReason(k), new Color(1, 0.5f, 0.35f));
+                Hud.Alert(Sim.ChamberCount(Local.Me, ChamberKind.Brood, true) == 0 ? "Build a brood chamber (incubator) before hatching ants." : LockReason(k), new Color(1, 0.5f, 0.35f));
                 Audio.Ui("ui_error");
                 break;
         }
@@ -268,6 +269,7 @@ public partial class GameSession : Node3D
 
     public void TryResearch(Upgrade u, Vector2? at = null)
     {
+        if (Sim.Mission is { } story && !story.ShowsResearch(u)) return; // not introduced yet
         var r = Sim.CanResearch(Local.Me, u);
         var c = Sim.Col[Local.Me];
         var bad = new Color(1, 0.5f, 0.35f);
@@ -286,7 +288,7 @@ public partial class GameSession : Node3D
             case ResearchResult.Busy: Hud.Alert("The colony is already researching (right-click it to cancel)", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Maxed: Hud.Alert("Already fully developed", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Locked:
-                Hud.Alert(Sim.Mission != null && !Sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "This research is introduced in a later episode. Try it now in Skirmish." : $"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
+                Hud.Alert(Sim.Mission != null && !Sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "Its next rank comes later in the story." : $"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
                 Audio.Ui("ui_error");
                 break;
         }

@@ -406,7 +406,20 @@ public static class LevelValidation
             foreach (var (name, _) in Reveal.NewIn(n)) introduced.Add(name);
             Close();
         }
-        GD.Print($"[campaign-test] PASS gradual reveal: every caste, hero, chamber, research rank and wild bug appears only from its chapter; red colony from Chapter {Reveal.RedColony}, first queen kill in Chapter {Reveal.FirstQueenKill}; {introduced.Count} lessons introduced after Chapter 1");
+        // what a save has met: the Field Guide, the red colony's card and the star unlocks' names
+        const string guide = "user://campaign_reveal.cfg";
+        CampaignProgress.UsePath(guide); CampaignProgress.Reset();
+        var matron = Array.Find(Levels.Unlocks, u => u.Perk == Perk.Matron);
+        Check(CampaignProgress.Met(AntType.Worker) && CampaignProgress.Met(AntType.Beetle) && !CampaignProgress.Met(AntType.Spider) && !CampaignProgress.Met(AntType.Gunner) && !CampaignProgress.MetRedColony,
+            "A fresh save's Field Guide lists more than the broken tube");
+        Check(CampaignProgress.UnlockName(matron) != matron.Name, "A star unlock named the Acid Matron before she was met");
+        for (int n = 1; n <= 3; n++) CampaignProgress.Record(Levels.IdAt(n), 1, 300);
+        Check(CampaignProgress.Frontier == 4 && CampaignProgress.MetRedColony && CampaignProgress.Met(AntType.Spider) && !CampaignProgress.Met(AntType.Wasp), "Act I's end did not open the red colony and spiders (alone) in the guide");
+        CampaignProgress.MetEverything();
+        Check(CampaignProgress.Met(AntType.StagBeetle) && CampaignProgress.UnlockName(matron) == matron.Name, "A Skirmish or Lane War game did not open the whole Field Guide");
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(guide));
+        CampaignProgress.UsePath("user://campaign.cfg");
+        GD.Print($"[campaign-test] PASS gradual reveal: every caste, hero, chamber, research rank and wild bug appears only from its chapter, the Field Guide and star unlocks name only what the save has met; red colony from Chapter {Reveal.RedColony}, first queen kill in Chapter {Reveal.FirstQueenKill}; {introduced.Count} lessons introduced after Chapter 1");
     }
 
     /// `--tube-capture=<dir>`: level 1's broken tube from the opening camera, close up and from the alley.

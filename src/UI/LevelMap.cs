@@ -86,7 +86,7 @@ public partial class LevelMap : Control
         var next = Levels.NextUnlock(stars);
         int prev = 0;
         foreach (var u in Levels.Unlocks) if (u.Stars <= stars) prev = u.Stars;
-        _nextLabel.Text = next == null ? "Every unlock earned: the Eternal Mother" : $"Next unlock at {next.Stars} stars:  {next.Name}";
+        _nextLabel.Text = next == null ? "Every unlock earned: the Eternal Mother" : $"Next unlock at {next.Stars} stars:  {CampaignProgress.UnlockName(next)}";
         _nextBar.Value = next == null ? 1 : (stars - prev) / (float)Mathf.Max(1, next.Stars - prev);
         QueueRedraw();
     }
@@ -109,7 +109,8 @@ public partial class LevelMap : Control
         var name = UiTheme.Text(info.Name, 36, UiTheme.Title, open ? UiTheme.Gold : UiTheme.Dim);
         name.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         v.AddChild(name);
-        v.AddChild(new Pill { Text = "NEW  ·  " + info.Novelty, Fill = open ? new Color(0.45f, 0.3f, 0.1f) : new Color(0.2f, 0.16f, 0.12f) });
+        // a locked level keeps what it introduces to itself until it opens (the campaign reveals the game gradually)
+        v.AddChild(new Pill { Text = open ? "NEW  ·  " + info.Novelty : "LOCKED  ·  WHAT IT BRINGS IS STILL UNDER THE SOIL", Fill = open ? new Color(0.45f, 0.3f, 0.1f) : new Color(0.2f, 0.16f, 0.12f) });
         var blurb = UiTheme.Text(open ? info.Blurb : $"Win Level {_selected - 1} to open this level.", 17, null, UiTheme.Ink);
         blurb.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         v.AddChild(blurb);

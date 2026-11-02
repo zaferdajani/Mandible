@@ -37,6 +37,13 @@ public static class CampaignProgress
     /// The red fire ants as a colony: met at the start of Act II, or in any Skirmish or Lane War.
     public static bool MetRedColony { get { Ensure(); return _openModes || Frontier >= Reveal.RedColony; } }
 
+    /// A star unlock's name, kept secret while it would name a caste or hero the player has not met yet.
+    public static string UnlockName(Levels.Unlock u)
+    {
+        var type = u.Perk switch { Perk.Matron => AntType.Matron, Perk.Marshal => AntType.Marshal, Perk.Gunner => AntType.Gunner, Perk.Flyer => AntType.Flyer, _ => AntType.Worker };
+        return Met(type) ? u.Name : $"a {u.Kind.ToLowerInvariant()} not yet met";
+    }
+
     public static void MetEverything() { Ensure(); if (_openModes) return; _openModes = true; Save(); }
 
     /// The level's stars as bits: 1 the win, 2 and 4 its optional goals.

@@ -723,7 +723,7 @@ public partial class Hud : CanvasLayer
         body.AddChild(tag); body.MoveChild(tag, 1);
         // what this chapter introduces, one lesson at a time (Reveal)
         var lessons = new List<string>();
-        foreach (var (name, text) in Reveal.NewIn(info.Number)) lessons.Add($"{name}: {text}");
+        foreach (var (name, text) in Reveal.NewIn(info.Number)) lessons.Add($"{name}: {(Settings.Mobile ? ExpeditionGuide.ForTouch(text) : text)}");
         if (lessons.Count > 0)
         {
             var news = UiTheme.Text(string.Join("\n", lessons), 14, UiTheme.Bold, UiTheme.Ink);
@@ -826,9 +826,9 @@ public partial class Hud : CanvasLayer
         body.AddChild(list); body.MoveChild(list, body.GetChildCount() - 3);
         int total = CampaignProgress.TotalStars;
         string unlock = "";
-        foreach (var u in Levels.Unlocks) if (u.Stars > Game.StarsBefore && u.Stars <= total) unlock += (unlock == "" ? "" : "  ·  ") + $"{u.Kind}: {u.Name}";
+        foreach (var u in Levels.Unlocks) if (u.Stars > Game.StarsBefore && u.Stars <= total) unlock += (unlock == "" ? "" : "  ·  ") + $"{u.Kind}: {CampaignProgress.UnlockName(u)}";
         var next = Levels.NextUnlock(total);
-        var line = UiTheme.Text(unlock != "" ? $"UNLOCKED  ·  {unlock}" : next != null ? $"{total} stars  ·  {next.Name} at {next.Stars}" : $"{total} stars  ·  every unlock earned", 16, UiTheme.Bold, unlock != "" ? new Color(0.6f, 1f, 0.55f) : UiTheme.Gold);
+        var line = UiTheme.Text(unlock != "" ? $"UNLOCKED  ·  {unlock}" : next != null ? $"{total} stars  ·  {CampaignProgress.UnlockName(next)} at {next.Stars}" : $"{total} stars  ·  every unlock earned", 16, UiTheme.Bold, unlock != "" ? new Color(0.6f, 1f, 0.55f) : UiTheme.Gold);
         line.HorizontalAlignment = HorizontalAlignment.Center;
         line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         body.AddChild(line); body.MoveChild(line, body.GetChildCount() - 3);

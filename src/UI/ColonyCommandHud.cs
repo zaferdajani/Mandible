@@ -413,7 +413,7 @@ public partial class ColonyCommandHud : Control
             var availability = sim.CanEnqueue(Local.Me, k);
             b.Disabled = availability != QueueResult.Ok;
             b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : b.Disabled ? 0.65f : 1f);
-            b.TooltipText = sim.Mission != null && !sim.Mission.AllowsProd(k) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
+            b.TooltipText = $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
         }
         foreach (var (b, u, status) in _research)
         {
