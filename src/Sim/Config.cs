@@ -333,8 +333,10 @@ public static class Config
     // ------------------------------------------------------------------ food
     public const float EffectPerDelivery = 1.2f; // seconds of colony effect added per load delivered
     public const float EffectMax = 30f;
+    public const float GalleryPace = 1.4f;       // workers hurry through their own nest's galleries: short, smooth and scent-marked
 
-    public static float FoodValue(FoodKind k) => k switch { FoodKind.Seed => 6f, FoodKind.Berry or FoodKind.Sugar => 5f, _ => 4f };
+    // Loads are carried all the way down to a store (0.10), so each is a full jawful: a fifth more than at 0.9.
+    public static float FoodValue(FoodKind k) => k switch { FoodKind.Seed => 7f, FoodKind.Berry or FoodKind.Sugar => 6f, _ => 5f };
     public static string FoodName(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",

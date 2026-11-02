@@ -28,6 +28,7 @@ public partial class Main : Node
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
             if (a.StartsWith("--layout=")) _layout = a.Substring(9);
+            if (a == "--mobile") Settings.ForceMobile = true;
             if (a.StartsWith("--gfx=")) _gfx = a.Substring(6); // test runs: start on this graphics tier
             if (a.StartsWith("--simtest="))
             {

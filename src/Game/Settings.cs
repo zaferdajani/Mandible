@@ -7,12 +7,13 @@ public static class Settings
 {
     public enum Quality { Low, Medium, High, Ultra }
     public static Quality Gfx = Default();
-    public static bool Mobile => OS.HasFeature("mobile");
+    public static bool Mobile => ForceMobile || OS.HasFeature("mobile");
+    public static bool ForceMobile; // --mobile: a desktop test run lays out and scales the UI as a phone does
     public static bool Portrait; // the screen is taller than wide (a phone held upright)
     public static bool Touch => Mobile || DisplayServer.IsTouchscreenAvailable();
     const string Path = "user://settings.cfg";
 
-    static Quality Default() => OS.HasFeature("mobile") ? Quality.Low : Quality.High;
+    static Quality Default() => Mobile ? Quality.Low : Quality.High;
 
     /// Computers start fullscreen: in a window the mouse slides off the edge instead of scrolling the map.
     public static bool Fullscreen = true;

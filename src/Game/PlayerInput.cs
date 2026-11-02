@@ -26,7 +26,9 @@ public partial class PlayerInput : Node
         _digUpgrade = upgrade;
         if (!Game.NestView) Game.ToggleNestView();
         Input.SetDefaultCursorShape(Input.CursorShape.Cross);
-        Game.Hud.Alert($"Click where to dig the {Sim.ChamberName(k).ToLower()}: within {Sim.MaxTunnel:0} of the entrance or another room (Esc cancels)", UiTheme.Gold);
+        Game.Hud.Alert(Settings.Mobile
+            ? $"Tap where to dig the {Sim.ChamberName(k).ToLower()}: within {Sim.MaxTunnel:0} of the entrance or another room (tap Build to cancel)"
+            : $"Click where to dig the {Sim.ChamberName(k).ToLower()}: within {Sim.MaxTunnel:0} of the entrance or another room (Esc cancels)", UiTheme.Gold);
     }
 
     /// Places the room being planned at a ground point.
@@ -48,6 +50,18 @@ public partial class PlayerInput : Node
 
     /// The chamber under a screen point (by its dug footprint), or -1.
     int PickRoom(Vector2 screen) => Game.NestView ? Game.Interior.PickRoom(screen) : -1;
+
+    /// Is the screen point on our entrance hole? A fingertip is wider than the hole seen from a zoomed-out
+    /// camera, so a touch also counts anywhere within FingerRadius pixels of it.
+    bool OnHole(Vector2 screen, Vector2 ground, float radius, bool touch)
+    {
+        var hole = Game.World.Nests[Local.Me].Pos;
+        if (ground.DistanceTo(hole) < radius) return true;
+        if (!touch || Game.Lanes) return false;
+        var at = new Vector3(hole.X, Game.World.HF.Sample(hole.X, hole.Y), hole.Y);
+        return !Cam.Cam.IsPositionBehind(at) && Cam.Cam.UnprojectPosition(at).DistanceTo(screen) < FingerRadius;
+    }
+    const float FingerRadius = 30; // canvas pixels: about a fingertip on a phone held at arm's length
 
     /// The placement cue: a ring the size of a room under the cursor, green where it may be dug and red where
     /// not, and a small gold ring on the node its gallery would start from.
@@ -206,13 +220,15 @@ public partial class PlayerInput : Node
                 {
                     bool touch = mb.Device == InputEvent.DeviceIdEmulation;
                     bool hasOrders = Selection.Count > 0 || NestSelected;
-                    if (touch && hasOrders && Pick(mb.Position, true) < 0 && Cam.ScreenToGround(mb.Position, out var tg))
+                    // the hole and (in build mode) the rooms answer a tap even while ants are selected
+                    bool nestTap = touch && !Game.Lanes && Cam.ScreenToGround(mb.Position, out var hg) && (OnHole(mb.Position, new Vector2(hg.X, hg.Z), 2.6f, true) || PickRoom(mb.Position) >= 0);
+                    if (touch && hasOrders && !nestTap && Pick(mb.Position, true) < 0 && Cam.ScreenToGround(mb.Position, out var tg))
                     {
                         // a finger has no right button: tap = smart order, long press = attack-move
                         bool longPress = Time.GetTicksMsec() - _pressMs > 450;
                         Issue(new Vector2(tg.X, tg.Z), mb.Position, longPress, true);
                     }
-                    else ClickSelect(mb.Position, mb.ShiftPressed, mb.CtrlPressed);
+                    else ClickSelect(mb.Position, mb.ShiftPressed, mb.CtrlPressed, touch);
                 }
             }
         }
@@ -443,12 +459,12 @@ public partial class PlayerInput : Node
         return best;
     }
 
-    void ClickSelect(Vector2 screen, bool shift, bool ctrl)
+    void ClickSelect(Vector2 screen, bool shift, bool ctrl, bool touch = false)
     {
         // Build mode selects the visible room even when its queen/props occupy the centre.
         if (Game.NestView && Cam.ScreenToGround(screen, out var surface))
         {
-            if (new Vector2(surface.X, surface.Z).DistanceTo(Game.World.Nests[Local.Me].Pos) < 1.5f)
+            if (OnHole(screen, new Vector2(surface.X, surface.Z), 1.5f, touch))
             { ToggleBuild(); return; }
             int room = PickRoom(screen);
             if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
@@ -466,7 +482,7 @@ public partial class PlayerInput : Node
         if (Cam.ScreenToGround(screen, out var g))
         {
             float dn = new Vector2(g.X, g.Z).DistanceTo(Game.World.Nests[Local.Me].Pos);
-            if (dn < 2.6f && !Game.Lanes) { ToggleBuild(); return; }
+            if (!Game.Lanes && OnHole(screen, new Vector2(g.X, g.Z), 2.6f, touch)) { ToggleBuild(); return; }
             int room = PickRoom(screen);
             if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
             if (dn < 7) { SelectNest(false); return; }

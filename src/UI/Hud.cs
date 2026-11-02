@@ -182,6 +182,7 @@ public partial class Hud : CanvasLayer
 
     /// Extra screen furniture such as the tutorial card.
     public void AddPanel(Control c) => _root.AddChild(c);
+    public Control EpisodeCard; // Episode 1's objective card, when one is shown
 
     PanelContainer _selPanel;
     bool _portraitLayout;
@@ -610,12 +611,14 @@ public partial class Hud : CanvasLayer
         }, ("Close", () => _help.Visible = false));
     }
 
+    readonly List<Control> _overlays = new();
     Control Overlay(string title, string[] lines, params (string, Action)[] buttons)
     {
         var dim = new ColorRect { Color = new Color(0, 0, 0, 0.55f), Visible = false };
         UiTheme.Place(dim, 0, 0, 1, 1, 0, 0, 0, 0);
         var p = new PanelContainer();
         UiTheme.Place(p, 0.5f, 0.5f, 0.5f, 0.5f, -430, -260, 430, 260);
+        _overlays.Add(p);
         var v = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         v.AddThemeConstantOverride("separation", 10);
         var t = UiTheme.Text(title, 34, UiTheme.Title, UiTheme.Gold);
@@ -703,7 +706,21 @@ public partial class Hud : CanvasLayer
         if (Game?.Sim == null) return;
         _alertT -= dt;
         _alert.Modulate = new Color(1, 1, 1, Mathf.Clamp(_alertT, 0, 1));
-        if (CommandHud != null) { CommandHud.Refresh((float)delta); return; }
+        if (CommandHud != null)
+        {
+            CommandHud.Refresh((float)delta);
+            // phones and upright screens: the alert sits just above the bottom panels, clear of the map and the episode card
+            bool flexible = CommandHud.Flexible;
+            _alert.AutowrapMode = flexible ? TextServer.AutowrapMode.WordSmart : TextServer.AutowrapMode.Off;
+            _alert.VerticalAlignment = flexible ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+            if (flexible) UiTheme.Place(_alert, 0, 0, 1, 0, 24, CommandHud.BottomEdge - 74, -24, CommandHud.BottomEdge - 12);
+            else UiTheme.Place(_alert, 0.5f, 0, 0.5f, 0, -460, 52, 460, 85);
+            // menus fill an upright screen's width instead of floating small in the middle
+            var screen = _root.GetViewportRect().Size;
+            float grow = screen.Y > screen.X ? Mathf.Clamp((screen.X - 24) / 860, 1, 1.25f) : 1;
+            foreach (var o in _overlays) { o.PivotOffset = o.Size / 2; o.Scale = Vector2.One * grow; }
+            return;
+        }
         _refresh -= dt;
         if (_refresh > 0) return;
         _refresh = 0.1f;

@@ -1638,6 +1638,7 @@ public sealed partial class Sim
             float turn = (a.Type == AntType.Major ? 5f : 8f) * dt;
             a.Heading += Mathf.Clamp(diff, -turn, turn);
             if (a.Type == AntType.Worker && a.Team < 2 && Col[a.Team].SugarT > 0) speedMul *= 1.15f; // sugar energy
+            if (a.Type == AntType.Worker && a.Team < 2 && a.Layer == NestLayer(a.Team)) speedMul *= Config.GalleryPace;
             targetSpeed = st.Speed * a.SpeedMul * (a.BuffT > 0 ? 1.2f : 1f) * speedMul * (Mathf.Abs(diff) > 1.3f ? 0.35f : 1f);
         }
         a.Speed = Mathf.MoveToward(a.Speed, targetSpeed, st.Speed * dt * 6);
