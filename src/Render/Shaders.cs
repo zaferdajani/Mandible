@@ -571,6 +571,42 @@ void fragment() {
 
     /// Fallen leaves: real scanned leaves (ambientCG Leaf001-003, CC0) in one atlas, cut out by their own outline and
     /// dried from green through yellow to brown by age, keeping the photo's veins and blemishes.
+    /// Cotton wool: a mass of fine strands, off-white and a little soiled where it touched the sand, with a soft
+    /// fuzz at the silhouette and light passing through.
+    public const string Cotton = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+void fragment() {
+    float f1 = texture(noise_b, lp.xy * vec2(7.0, 1.3) + lp.z * 0.7).r;
+    float f2 = texture(noise_b, lp.zy * vec2(1.2, 8.0) + 0.37).r;
+    float f3 = texture(noise_b, (lp.xz + lp.y) * vec2(11.0, 2.0) + 0.71).r;
+    float strands = smoothstep(0.45, 0.85, max(max(f1, f2), f3));
+    vec3 col = vec3(0.7, 0.67, 0.6) * (0.6 + 0.5 * strands);
+    col = mix(col, vec3(0.56, 0.46, 0.34), smoothstep(-0.3, -1.1, lp.y) * 0.55);   // soiled underneath
+    float fz = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.5);
+    ALBEDO = col + fz * 0.1;
+    ROUGHNESS = 1.0;
+    SPECULAR = 0.15;
+    BACKLIGHT = vec3(0.42, 0.38, 0.3);
+    NORMAL_MAP = normalize(vec3((f1 - 0.5) * 0.9, (f3 - 0.5) * 0.9, 1.0)) * 0.5 + 0.5;
+}
+";
+
+    /// The collector's paper label on the tube: the scanned label, lines along the tube, a little translucent paper.
+    public const string TubeLabel = @"
+shader_type spatial;
+render_mode cull_back;
+uniform sampler2D label : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+void fragment() {
+    ALBEDO = texture(label, vec2(UV.y, 1.0 - UV.x)).rgb;
+    ROUGHNESS = 0.85;
+    SPECULAR = 0.25;
+    BACKLIGHT = ALBEDO * 0.25;
+}
+";
+
     public static readonly string Leaf = @"
 shader_type spatial;
 render_mode cull_disabled;
