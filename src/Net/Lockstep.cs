@@ -13,7 +13,7 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-11"; // 11: the level system (Levels.cs; 10 is PR #5)
+    const string Version = "mandible-mp-12"; // 12: the level system (Levels.cs) on top of PR #5's economy and race balance
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }

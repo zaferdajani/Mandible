@@ -177,7 +177,7 @@ public sealed partial class Sim
         {
             ref var q = ref Ants[c.QueenId];
             q.Layer = (byte)NestLayer(team);
-            q.Pos = q.PrevPos = ChamberPos(team, Royal(team));
+            q.Pos = q.PrevPos = QueenSpot(team);
             q.Anchor = q.Pos;
         }
     }
@@ -558,11 +558,33 @@ public sealed partial class Sim
             if (a.Pos.DistanceTo(entrance) < 1.5f) { a.Layer = (byte)NestLayer(a.Team); a.PrevPos = a.Pos; Events.Add(new SimEvent { Kind = EvKind.QueenInside, Pos = entrance, Team = a.Team }); return Vector2.Zero; }
             return entrance - a.Pos;
         }
-        var to = royal - a.Pos;
-        if (to.Length() < 0.8f) return Vector2.Zero;
-        var step = RouteStep(a.Team, a.Pos, royal);
+        var spot = QueenSpot(a.Team);
+        var to = spot - a.Pos;
+        if (to.Length() < 0.3f) return Vector2.Zero;
+        var step = RouteStep(a.Team, a.Pos, spot);
         return step - a.Pos;
     }
+
+    /// Where the queen rests: towards the back wall of her chamber, as far as she can get from every gallery
+    /// mouth. At the centre (or short of it, in the entrance gallery) her body corked the room, and every
+    /// worker passing through to a brood chamber dug beyond it circled behind her instead of getting out.
+    public Vector2 QueenSpot(int team)
+    {
+        var royal = Royal(team);
+        var centre = ChamberPos(team, royal);
+        Vector2 best = centre;
+        float bestFacing = float.MaxValue;
+        for (int k = 0; k < 16; k++)
+        {
+            var dir = MathX.Dir(k * DMath.Tau / 16);
+            float facing = dir.Dot((NodePos(team, royal.Parent) - centre).Normalized()); // how squarely she would face a gallery
+            foreach (var ch in Col[team].Chambers)
+                if (ch.Parent == royal.Id) facing = Mathf.Max(facing, dir.Dot((ChamberPos(team, ch) - centre).Normalized()));
+            if (facing < bestFacing) { bestFacing = facing; best = centre + dir * QueenRest; }
+        }
+        return best;
+    }
+    const float QueenRest = 1.2f; // her body (about 1 unit across the middle) then just touches the wall of a 2.2 chamber
 
     /// Visual depth of a point on a nest's underground layer: galleries slope from their parent node's
     /// depth to their room's depth; the entrance is at zero. Rendering only.

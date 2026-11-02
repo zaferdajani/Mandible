@@ -47,7 +47,7 @@ Build warnings remain for pre-existing member hiding/unused variable and unavail
 
 The user's requested exact visual match is **not complete**. Compare the supplied reference with the actual captures: room silhouettes and placement, terrain/lighting, ant population and activity within rooms, detailed organic props, panel trim, typography, command icons, hero portraits and minimap composition still differ. Hero cards currently reuse ordinary caste portraits. Do not present the supplied reference as an actual game screenshot or claim pixel-level equivalence.
 
-Episodes 2-4 and saved campaign progress are implemented (see below). Dedicated egg transport/hatching animation is handled separately. Test long matches, defeat/restart cases, multiplayer with this branch on both peers, mobile/touch/portrait layouts, all graphics tiers and export builds before release. The new HUD currently scales the desktop composition uniformly.
+Episodes 2-4 and saved campaign progress are implemented (see below). Dedicated egg transport/hatching animation is handled separately. Test long matches, defeat/restart cases, multiplayer with this branch on both peers, touch input on a real phone or tablet, all graphics tiers and export builds before release. On computers the HUD scales the reference composition as one; phones and tablets (landscape only) use a touch layout with the panels pinned to the screen edges.
 
 GitHub reads worked, but the connector reported unavailable after reconnecting and local push authentication failed with Windows credential access denied. This work is handed off as a local branch, a Git bundle, source ZIP, logs and actual screenshots. No remote branch, PR merge or release is claimed.
 

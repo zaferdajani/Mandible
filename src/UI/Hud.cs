@@ -182,6 +182,7 @@ public partial class Hud : CanvasLayer
 
     /// Extra screen furniture such as the tutorial card.
     public void AddPanel(Control c) => _root.AddChild(c);
+    public Control EpisodeCard; // Episode 1's objective card, when one is shown
 
     PanelContainer _selPanel;
     bool _portraitLayout;
@@ -777,7 +778,17 @@ public partial class Hud : CanvasLayer
         if (Game?.Sim == null) return;
         _alertT -= dt;
         _alert.Modulate = new Color(1, 1, 1, Mathf.Clamp(_alertT, 0, 1));
-        if (CommandHud != null) { CommandHud.Refresh((float)delta); return; }
+        if (CommandHud != null)
+        {
+            CommandHud.Refresh((float)delta);
+            // phones and tablets: the alert sits just above the bottom panels, clear of the map and the episode card
+            bool flexible = CommandHud.Flexible;
+            _alert.AutowrapMode = flexible ? TextServer.AutowrapMode.WordSmart : TextServer.AutowrapMode.Off;
+            _alert.VerticalAlignment = flexible ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+            if (flexible) UiTheme.Place(_alert, 0, 0, 1, 0, 24, CommandHud.BottomEdge - 74, -24, CommandHud.BottomEdge - 12);
+            else UiTheme.Place(_alert, 0.5f, 0, 0.5f, 0, -460, 52, 460, 85);
+            return;
+        }
         _refresh -= dt;
         if (_refresh > 0) return;
         _refresh = 0.1f;

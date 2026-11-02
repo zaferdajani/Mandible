@@ -308,11 +308,12 @@ public static class Config
 
     public const float BlackTrailMul = 1.35f;     // longer-lasting, stronger recruitment trails
     public const float BlackWorkerBrood = 1.4f;   // huge colonies: workers hatch 40% faster
+    public const float BlackSquadBrood = 1.12f;   // ...and their fighting squads as fast as the fire ants' many-queened brood
     public const float BlackWarriorHp = 1.0f;    // small-bodied, stingless
     public const float BlackAcidMul = 1.3f;       // formic acid: gunners hit 30% harder
     public const float RedTrailMul = 0.85f;
-    public const float RedVenomDps = 0.25f;       // venom: share of a bite dealt again per second for 3 s
-    public const float RedHomeDamage = 1.15f;     // the mound boils over: +15% damage near home
+    public const float RedVenomDps = 0.20f;       // venom: share of a bite dealt again per second for 3 s
+    public const float RedHomeDamage = 1.10f;     // the mound boils over: +10% damage near home
     public const float RedGunnerMul = 0.75f;      // no acid gland: weak spitters
     public const float RedBrood = 1.12f;          // several queens per mound: all brood 12% faster
     /// Carbohydrates feed the black colony's honeydew economy; flesh and seeds the red predators.
@@ -325,8 +326,8 @@ public static class Config
     public static string RaceLatin(Race r) => r == Race.BlackGarden ? "Lasius niger" : "Solenopsis invicta";
     public static string RaceMotto(Race r) => r == Race.BlackGarden ? "The Garden Legion: numbers, trails and honeydew" : "The Fire Swarm: venom, fury and flesh";
     public static string[] RaceStrengths(Race r) => r == Race.BlackGarden
-        ? new[] { "Workers hatch 40% faster: the largest colonies in the yard", "Trail masters: 35% stronger pheromone trails recruit foragers faster", "Honeydew farmers: sugar, fruit and crumbs worth 20% more", "Formic acid: gunners spit 30% harder" }
-        : new[] { "Venom sting: soldiers, majors and heroes poison what they bite", "Mound fury: warriors deal 15% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
+        ? new[] { "Huge colonies: workers hatch 40% faster, fighting squads 12% faster", "Trail masters: 35% stronger pheromone trails recruit foragers faster", "Honeydew farmers: sugar, fruit and crumbs worth 20% more", "Formic acid: gunners spit 30% harder" }
+        : new[] { "Venom sting: soldiers, majors and heroes poison what they bite", "Mound fury: warriors deal 10% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
     public static string[] RaceWeaknesses(Race r) => r == Race.BlackGarden
         ? new[] { "Stingless: warriors have no venom, only their bite", "Protein (corpses, seeds) gives no bonus" }
         : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
@@ -334,8 +335,13 @@ public static class Config
     // ------------------------------------------------------------------ food
     public const float EffectPerDelivery = 1.2f; // seconds of colony effect added per load delivered
     public const float EffectMax = 30f;
+    public const float GalleryPace = 1.4f;       // workers hurry through their own nest's galleries: short, smooth and scent-marked
 
-    public static float FoodValue(FoodKind k) => k switch { FoodKind.Seed => 6f, FoodKind.Berry or FoodKind.Sugar => 5f, _ => 4f };
+    // Loads are carried all the way down to a store (0.10), so each is a full jawful: a fifth more than at 0.9.
+    // The campaign episodes were balanced, scripted raids and all, on the old loads and keep them.
+    public static float FoodValue(FoodKind k, bool campaign = false) => campaign
+        ? k switch { FoodKind.Seed => 6f, FoodKind.Berry or FoodKind.Sugar => 5f, _ => 4f }
+        : k switch { FoodKind.Seed => 7f, FoodKind.Berry or FoodKind.Sugar => 6f, _ => 5f };
     public static string FoodName(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",
