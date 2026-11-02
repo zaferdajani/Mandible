@@ -56,4 +56,74 @@ public static class NestArtValidation
         }
         catch (Exception e) { GD.PushError("[interior-capture] FAIL " + e); app.GetTree().Quit(1); }
     }
+
+    /// --brood-capture=<dir>: waits in a live game for the queen to lay, a nurse to carry an egg and an ant to hatch,
+    /// freezes each moment and captures it, and checks that the beds follow the queue and the jaws hold what is carried.
+    public static async Task Brood(Main app, string directory)
+    {
+        static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
+        try
+        {
+            DirAccess.MakeDirRecursiveAbsolute(directory);
+            app.StartSkirmish(); var game = app.Session;
+            game.SetNestView(true); game.Hud.Visible = false;
+            game.Camera.UserControl = false; game.Camera.NestView = true; game.Camera.SetYaw(0, true);
+            var sim = game.Sim; var colony = sim.Col[0]; var brood = game.Interior;
+            var royal = sim.ChamberPos(0, sim.Royal(0));
+            game.Camera.JumpTo(royal, 30);
+            async Task Frame() => await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            async Task<bool> Until(Func<bool> done, float seconds)
+            {
+                ulong end = Time.GetTicksMsec() + (ulong)(seconds * 1000);
+                while (Time.GetTicksMsec() < end) { if (done()) return true; await Frame(); }
+                return done();
+            }
+            async Task Shot(string name, Vector2 at, float distance)
+            {
+                game.SetPaused(true); game.Camera.JumpTo(at, distance);
+                await app.ToSignal(app.GetTree().CreateTimer(1.2), SceneTreeTimer.SignalName.Timeout);
+                await Frame();
+                Check(game.Ants.VisibleBroodCargo == brood.NursesCarrying, "Brood in the jaws does not match the nurses carrying");
+                using var im = app.GetViewport().GetTexture().GetImage();
+                Check(im.SavePng(directory.PathJoin(name + ".png")) == Error.Ok, "Brood capture failed");
+                var held = brood.BroodHeld;
+                GD.Print($"[brood-capture] {name}; nurses {brood.NurseCount} ({brood.NursesCarrying} carrying), laid waiting {brood.LaidWaiting}, beds {held.eggs} eggs / {held.larvae} larvae / {held.cocoons} cocoons, queue {colony.Queue.Count}, fps {Engine.GetFramesPerSecond()}");
+                game.SetPaused(false);
+            }
+            colony.Queue.Clear();
+            float warm = sim.Time + 3; // the first frames compile shaders
+            await Until(() => sim.Time > warm, 90);
+            var empty = brood.BroodHeld;
+            Check(brood.NurseCount > 0, $"No nurses in a founded colony with a nursery (founded {colony.Founded}, brood rooms {sim.ChamberCount(0, ChamberKind.Brood, true)}, workers {colony.Count[(int)AntType.Worker]})");
+            colony.Food = 5000;
+            for (int i = 0; i < 4; i++) sim.Enqueue(0, ProdKind.Worker);
+            sim.Enqueue(0, ProdKind.Soldier);
+            for (int i = 0; i < 3; i++) sim.Enqueue(0, ProdKind.Worker);
+            warm = sim.Time + 0.3f;
+            await Until(() => sim.Time > warm, 10);
+            var queued = brood.BroodHeld;
+            Check(queued.eggs > empty.eggs, $"Beds did not fill with the queue: {empty.eggs} -> {queued.eggs} eggs");
+            GD.Print($"[brood-capture] beds follow the queue: {empty.eggs}/{empty.larvae}/{empty.cocoons} empty -> {queued.eggs}/{queued.larvae}/{queued.cocoons} with {colony.Queue.Count} queued");
+            Check(await Until(() => brood.SinceLaid > 0.5f && brood.SinceLaid < 0.62f, 25), "The queen never laid");
+            await Shot("01-queen-laying", brood.LastLaid, 8);
+            Check(await Until(() => brood.CarryingEgg != null, 60), "No nurse ever carried a laid egg to a nursery");
+            await Shot("02-nurse-carrying-egg", brood.CarryingEgg.Value, 7);
+            colony.Food = 5000;
+            for (int i = 0; i < 3; i++) sim.Enqueue(0, ProdKind.Worker); // the carry may have taken the whole queue
+            Check(await Until(() => brood.Emerging is { age: > 0.8f and < 1.1f }, 40), "No ant hatched in a nursery");
+            var hatch = brood.Emerging.Value.pos;
+            await Shot("03-hatch-emerging", hatch, 5.5f);
+            Check(await Until(() => brood.Emerging == null || brood.Emerging.Value.age > 2.4f, 5), "Emergence never finished");
+            await Shot("04-callow-walking", hatch, 8);
+            await Shot("05-nursery-overview", sim.ChamberPos(0, sim.ChamberOf(0, ChamberKind.Brood)), 20);
+            Settings.Gfx = Settings.Quality.Low; game.ApplyQuality();
+            await Until(() => false, 1f);
+            Check(brood.NurseCount <= 2, "Low quality animates too many nurses");
+            await Shot("06-low-quality", sim.ChamberPos(0, sim.ChamberOf(0, ChamberKind.Brood)), 20);
+            Settings.Gfx = Settings.Quality.High; game.ApplyQuality();
+            GD.Print("[brood-capture] PASS laying, nurse carrying, hatch emergence, beds follow the queue, Low tier (visual review required)");
+            app.GetTree().Quit();
+        }
+        catch (Exception e) { GD.PushError("[brood-capture] FAIL " + e); app.GetTree().Quit(1); }
+    }
 }
