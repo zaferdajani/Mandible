@@ -83,7 +83,11 @@ public static class ArtValidation
                 {
                     if (f.Kind != kind || !f.Alive) continue;
                     // a pile still mostly whole, with workers at it, near home
-                    int n = (int)(f.Amount / f.Max * 300) + AntsNear(f.Pos, f.Radius + 5) * 60 - (int)f.Pos.DistanceTo(home);
+                    // ... and out of the long grass along the yard's rim, which would stand between the camera and the pile
+                    float rim = Mathf.Min(Mathf.Min(f.Pos.X, Config.MapSize - f.Pos.X), Mathf.Min(f.Pos.Y, Config.MapSize - f.Pos.Y));
+                    var hf = g.World.HF;
+                    bool covered = hf.Bilinear(hf.H, f.Pos.X, f.Pos.Y) - hf.Bilinear(hf.Ground, f.Pos.X, f.Pos.Y) > 0.15f; // under a stick or a leaf
+                    int n = (int)(f.Amount / f.Max * 300) + AntsNear(f.Pos, f.Radius + 5) * 60 - (int)f.Pos.DistanceTo(home) + (rim > 45 ? 200 : 0) - (covered ? 1000 : 0);
                     if (n > most) { most = n; best = f; }
                 }
                 return best;
@@ -97,7 +101,7 @@ public static class ArtValidation
             {
                 var f = Busiest(kind);
                 if (f == null) continue;
-                g.Camera.JumpTo(f.Pos, 24 + f.Radius * 1.5f); await Shot("e-food-" + kind.ToString().ToLowerInvariant(), 1.5f);
+                g.Camera.JumpTo(f.Pos, 38 + f.Radius * 1.5f); await Shot("e-food-" + kind.ToString().ToLowerInvariant(), 1.5f);
             }
 
             // D: the chambers through the glass earth

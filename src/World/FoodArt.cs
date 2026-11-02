@@ -67,14 +67,14 @@ public static class FoodArt
     {
         // one broken chunk of bread, and the scatter of smaller crumbs that came off it as it fell
         var bread = NatureAssets.Kind("food_bread");
-        int n = rng.I(10, 17);
+        int n = rng.I(7, 12);
         for (int i = 0; i < n; i++)
         {
             var p = bread[rng.I(0, bread.Count)];
             bool chunk = i == 0;
-            float across = chunk ? size * 1.4f : size * Mathf.Lerp(0.18f, 0.5f, Mathf.Pow(rng.F(), 1.8f));
+            float across = chunk ? size * 1.6f : size * Mathf.Lerp(0.35f, 0.85f, Mathf.Pow(rng.F(), 1.4f));
             float s = across / p.Footprint;
-            var m = Cut(p, rng, chunk ? 2 : 3, chunk ? 0.1f : 0.08f, chunk ? 0.45f : 0.4f, 0); // every crumb keeps most of itself
+            var m = Cut(p, rng, chunk ? 2 : rng.I(1, 3), chunk ? 0.1f : 0.15f, chunk ? 0.45f : 0.45f, 0); // every crumb keeps most of itself, crust and all
             // crumbs fan out from the chunk, most close by, a few further
             var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.6f + Mathf.Pow(rng.F(), 1.5f) * 1.4f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
@@ -86,7 +86,7 @@ public static class FoodArt
 
     static void Seeds(World w, Rng rng, Pile pile, float size)
     {
-        int n = (int)(size * rng.R(6, 9));
+        int n = (int)(size * rng.R(5, 7));
         var seedMesh = SeedMesh();
         for (int i = 0; i < n; i++)
         {
@@ -97,7 +97,7 @@ public static class FoodArt
             m.SetShaderParameter("outside", grass ? 2 : 1);
             m.SetShaderParameter("inside", 3);
             if (split) m.SetShaderParameter("cut0", new Vector4(0, 1, 0, 0.02f)); // the shell lies open on its kernel
-            float len = grass ? rng.R(0.35f, 0.5f) : rng.R(0.6f, 0.95f);
+            float len = grass ? rng.R(0.7f, 1.0f) : rng.R(1.3f, 1.8f); // a sunflower seed is about an ant and a half long
             var mi = new MeshInstance3D { Mesh = seedMesh, MaterialOverride = m };
             // seeds heap: denser and higher in the middle
             var at = rng.InDisk(size * 0.9f) * Mathf.Sqrt(rng.F());
@@ -111,30 +111,33 @@ public static class FoodArt
 
     static void Sugar(World w, Rng rng, Pile pile, float size)
     {
-        // the sticky drop the crystals sit in
-        var syrup = new StandardMaterial3D
+        // spilled sugar: a few cubes, one crumbling, loose grains around them, all on a dark wet stain where the syrup
+        // soaked into the soil
+        var stainMat = new StandardMaterial3D { AlbedoColor = new Color(0.24f, 0.11f, 0.03f, 0.75f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.08f, MetallicSpecular = 0.7f };
+        Add(pile, new MeshInstance3D { Mesh = DropMesh(rng, size * 1.2f, 0.015f), MaterialOverride = stainMat, Position = new Vector3(0, 0.02f, 0) }, 0.8f, null);
+        var sugar = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.55f, 0.27f, 0.04f), Roughness = 0.12f, MetallicSpecular = 0.55f,
-            BacklightEnabled = true, Backlight = new Color(0.45f, 0.2f, 0.02f),
+            AlbedoColor = new Color(0.93f, 0.92f, 0.89f), Roughness = 0.45f, MetallicSpecular = 0.7f,
+            BacklightEnabled = true, Backlight = new Color(0.45f, 0.43f, 0.38f),
+            Uv1Triplanar = true, Uv1Scale = new Vector3(3, 3, 3), // the grains of a pressed cube, in relief only
+            NormalEnabled = true, NormalTexture = NatureAssets.Texture("ground/gravelly_sand_nor"), NormalScale = 1.5f,
         };
-        var drop = new MeshInstance3D { Mesh = DropMesh(rng, size * 0.9f, 0.1f), MaterialOverride = syrup };
-        Add(pile, drop, 0.6f, null);
-        var crystal = new StandardMaterial3D
-        {
-            AlbedoColor = new Color(0.98f, 0.97f, 0.94f, 0.82f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.04f,
-            MetallicSpecular = 1f, RefractionEnabled = true, RefractionScale = 0.05f, RimEnabled = true, Rim = 0.8f, RimTint = 0.1f,
-            ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.01f,
-            EmissionEnabled = true, Emission = new Color(1f, 0.97f, 0.9f), EmissionEnergyMultiplier = 0.06f, // the sparkle of facets
-            BacklightEnabled = true, Backlight = new Color(0.5f, 0.48f, 0.42f),
-        };
+        var granule = (StandardMaterial3D)sugar.Duplicate(); granule.NormalEnabled = false; granule.Roughness = 0.1f;
         var cube = CrystalMesh();
-        int n = rng.I(8, 15);
-        for (int i = 0; i < n; i++)
+        int cubes = rng.I(2, 4);
+        for (int i = 0; i < cubes; i++)
         {
-            float s = size * rng.R(0.22f, 0.55f) * (i == 0 ? 1.5f : 1);
-            var at = rng.InDisk(size * 0.75f);
-            var mi = new MeshInstance3D { Mesh = cube, MaterialOverride = crystal, Basis = Tumble(rng) * Basis.FromScale(new Vector3(1, rng.R(0.8f, 1.15f), rng.R(0.85f, 1.2f)) * s), Position = new Vector3(at.X, s * 0.2f, at.Y) };
-            Add(pile, mi, (float)i / n, null);
+            float s = size * rng.R(0.55f, 0.75f);
+            var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.6f, 1.0f);
+            var mi = new MeshInstance3D { Mesh = cube, MaterialOverride = sugar, Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.15f, 0.15f)) * Basis.FromScale(new Vector3(1, i == cubes - 1 ? 0.55f : 0.95f, 1) * s), Position = new Vector3(at.X, s * 0.4f, at.Y) };
+            Add(pile, mi, (float)i / cubes * 0.7f, null);
+        }
+        int grains = (int)(size * 14);
+        for (int i = 0; i < grains; i++)
+        {
+            float s = size * rng.R(0.05f, 0.12f);
+            var at = rng.InDisk(size * 1.3f);
+            Add(pile, new MeshInstance3D { Mesh = cube, MaterialOverride = granule, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s), Position = new Vector3(at.X, s * 0.3f, at.Y) }, 0.3f + 0.7f * i / grains, null);
         }
     }
 
