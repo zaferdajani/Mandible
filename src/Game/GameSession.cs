@@ -25,7 +25,9 @@ public partial class GameSession : Node3D
     public IOrders Orders;
     public bool AutoPlayLocal;    // network self-test: an AI plays our colony through the network
     public GameMode Mode = GameMode.Colony;
-    public bool TutorialMode;     // Episode 1: the guided colony founding
+    public int Episode;           // campaign episode 1-4 (0: not a campaign game)
+    public bool TutorialMode => Episode == 1; // Episode 1: the guided colony founding
+    public bool Campaign => Episode > 0;
     public bool Skirmish;
     public AntType[] Heroes = { AntType.Warlord, AntType.Warlord }; // Lane War hero of each team
     public bool Lanes => Mode == GameMode.Lanes;
@@ -52,6 +54,7 @@ public partial class GameSession : Node3D
         long tWorld = sw.ElapsedMilliseconds;
         Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
         if (Skirmish) Sim.BeginSkirmish();
+        if (Episode > 1) Sim.BeginEpisode(Episode);
         Orders = Net != null ? Net : new DirectOrders(Sim);
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
@@ -60,7 +63,9 @@ public partial class GameSession : Node3D
         Interior = new NestInterior(this);
         Ants.Brood = Interior;
         BuildLighting();
-        if (Lanes) { BuildLaneDressing(); BuildObjectiveDressing(); }
+        if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
+        if (Episode == 2) BuildHerdDressing();
+        if (Episode == 4) BuildStagDressing();
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
 
         Camera = new RtsCamera { HF = World.HF, UserControl = !Demo, EdgeScroll = !Demo && !Settings.Mobile && !App.TestRun }; // touch laptops still have a mouse; test runs leave the cursor wherever it is
@@ -95,7 +100,9 @@ public partial class GameSession : Node3D
             }
             else
             {
-                if (Net == null && !TutorialMode) _ai.Add(new AIController(Sim, Local.Foe, Diff));
+                // the campaign's rival keeps its own mound; the episode script sends its raids
+                if (Net == null && !Campaign) _ai.Add(new AIController(Sim, Local.Foe, Diff));
+                if (Net == null && Episode >= 3) _ai.Add(AIController.CampaignRival(Sim));
                 if (AutoPlayLocal) _ai.Add(new AIController(Sim, Local.Me, Difficulty.Normal) { Orders = Orders });
             }
             if (Net != null)
@@ -106,10 +113,11 @@ public partial class GameSession : Node3D
             AddChild(Input);
             Hud = new Hud { Game = this };
             AddChild(Hud);
-            if (TutorialMode)
+            if (Campaign)
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
-                Hud.Alert("Episode 1: select the attackers with F2", UiTheme.Gold);
+                Hud.Alert(TutorialMode ? "Episode 1: select the attackers with F2" : $"Episode {Episode}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
+                Hud.ShowBriefing(Episode);
             }
             else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
             else Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
@@ -230,7 +238,7 @@ public partial class GameSession : Node3D
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.Locked:
-                Hud.Alert(Sim.Mission != null ? "Episode 1: build an incubator, then hatch workers and soldiers. Other castes unlock in later episodes." : Sim.ChamberCount(Local.Me, ChamberKind.Brood, true) == 0 ? "Build a brood chamber (incubator) before hatching ants." : LockReason(k), new Color(1, 0.5f, 0.35f));
+                Hud.Alert(Sim.Mission != null && !Sim.Mission.AllowsProd(k) ? $"{Config.ProdName(k)} is introduced in a later episode. Try it now in Skirmish." : Sim.ChamberCount(Local.Me, ChamberKind.Brood, true) == 0 ? "Build a brood chamber (incubator) before hatching ants." : LockReason(k), new Color(1, 0.5f, 0.35f));
                 Audio.Ui("ui_error");
                 break;
         }
@@ -264,7 +272,7 @@ public partial class GameSession : Node3D
             case ResearchResult.Busy: Hud.Alert("The colony is already researching (right-click it to cancel)", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Maxed: Hud.Alert("Already fully developed", bad); Audio.Ui("ui_error"); break;
             case ResearchResult.Locked:
-                Hud.Alert(Sim.Mission != null ? "This chamber is introduced in a later episode. Try it now in Skirmish." : $"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
+                Hud.Alert(Sim.Mission != null && !Sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "This research is introduced in a later episode. Try it now in Skirmish." : $"The queen must first become {Config.QueenTitles[Config.QueenNeeded(u, c.T(u) + 1)]} (Royal Jelly, Q)", bad);
                 Audio.Ui("ui_error");
                 break;
         }
@@ -366,8 +374,8 @@ public partial class GameSession : Node3D
 
     Node3D _herd;
 
-    /// The objective grounds: an aphid-laden stem in the pasture and the Old Stag's fallen log.
-    void BuildObjectiveDressing()
+    /// The objective grounds: an aphid-laden stem in the pasture...
+    void BuildHerdDressing()
     {
         var hf = World.HF;
         var p = Sim.Pasture;
@@ -398,7 +406,12 @@ public partial class GameSession : Node3D
         _herd.AddChild(new MultiMeshInstance3D { Multimesh = aphid, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.9f, 0.5f), Roughness = 0.6f } });
         _herd.Visible = false;
         AddChild(_herd);
+    }
 
+    /// ...and the Old Stag's fallen log.
+    void BuildStagDressing()
+    {
+        var hf = World.HF;
         var l = Sim.StagLair;
         var away = (l - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
         var along = new Vector2(-away.Y, away.X);
@@ -549,7 +562,7 @@ public partial class GameSession : Node3D
     public void Restart()
     {
         if (Net != null) QuitToMenu();
-        else if (TutorialMode) App.StartTutorial();
+        else if (Campaign) App.StartEpisode(Episode);
         else if (Skirmish) App.StartSkirmish(Local.Me);
         else if (Lanes) App.StartLanes(Diff, Local.Me, Heroes[Local.Me]);
         else App.StartBattle(Diff, Local.Me);
@@ -801,14 +814,15 @@ public partial class GameSession : Node3D
                     if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone hero among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
                     break;
                 case EvKind.HerdMilked:
-                    if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your hero milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy hero milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
+                    if (!Demo && Campaign) Hud.Alert($"The aphid herd is yours: +{Expedition.HerdFood:0} food. Leave two ants with it for honeydew.", new Color(0.6f, 1f, 0.55f));
+                    else if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your hero milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy hero milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
                     if (!Demo && e.Team == Local.Me) Audio.Ui("research", -4);
                     break;
                 case EvKind.StagWakes:
                     if (!Demo) { Hud.Alert("The Old Stag has woken under its log in the lower undergrowth. Fell it and it will march for you.", new Color(1f, 0.75f, 0.4f)); Audio.Ui("ui_ready", -2); }
                     break;
                 case EvKind.StagRoused:
-                    if (!Demo) Hud.Alert(e.Team == Local.Me ? "The Old Stag marches for your colony! Follow it down the lane." : "The Old Stag marches against you! Hold the lane.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.5f, 0.35f));
+                    if (!Demo) Hud.Alert(e.Team == Local.Me ? Campaign ? "The Old Stag fights for you now! Select it and lead it at the red guardians: it shatters them." : "The Old Stag marches for your colony! Follow it down the lane." : "The Old Stag marches against you! Hold the lane.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.5f, 0.35f));
                     if (!Demo) Audio.Ui(e.Team == Local.Me ? "ui_ready" : "ui_error", -2);
                     break;
                 case EvKind.ProdDone:
@@ -911,6 +925,7 @@ public partial class GameSession : Node3D
         if (_ended || Demo || Sim.Winner < 0) return;
         _ended = true;
         bool win = Sim.Winner == Local.Me;
+        if (win && Campaign && Sim.Mission != null) CampaignProgress.Complete(Episode);
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");
         Camera.PanTo(World.Nests[win ? Local.Foe : Local.Me].Pos);

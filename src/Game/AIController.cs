@@ -60,6 +60,15 @@ public sealed class AIController : IColonyAI
         _nextWave = _firstWave;
     }
 
+    /// The campaign's red colony (Episodes 3 and 4): it hatches, researches and defends its mound, but the
+    /// episode script, not this AI, decides when it raids.
+    public static AIController CampaignRival(Sim sim)
+    {
+        var ai = new AIController(sim, Config.Enemy, Difficulty.Easy) { Passive = true };
+        sim.Col[Config.Enemy].FoodMult = Sim.RivalFoodMult(sim.Mission.Episode);
+        return ai;
+    }
+
     public void Tick(float dt)
     {
         _timer += dt;
