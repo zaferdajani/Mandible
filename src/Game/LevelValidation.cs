@@ -286,6 +286,25 @@ public static class LevelValidation
             app.Menu.Map.Select(4); await Shot("L02-level-map-hollow-log");
             app.Menu.Map.Select(11); await Shot("L03-level-map-locked");
             app.Menu.Map.ToggleLook(); await Shot("L04-colony-banner");
+            app.Menu.Map.ToggleLook();
+            // the story: the opening comic panel by panel, then level 1's path where the tube broke
+            GameSession.ForceStory = true;
+            app.StartEpisode(1);
+            var story = app.Session.Hud.Story;
+            Check(app.Session.Hud.StoryOpen && !app.Session.Hud.BriefingOpen, "Level 1 did not open with its comic");
+            for (int i = 1; i <= 4; i++) { await Shot($"L04-comic-opening-{i}", 2); if (i < 4) story.Advance(); }
+            story.Advance();
+            await Wait(1);
+            Check(!app.Session.Hud.StoryOpen && app.Session.Hud.BriefingOpen, "The comic did not hand over to the briefing");
+            app.Session.Hud.CloseBriefing(); app.Session.SetPaused(true);
+            app.Session.Camera.JumpTo(Expedition.Start + new Vector2(-4, 0), 26);
+            await Shot("L04-level1-tube", 3);
+            app.Session.Camera.JumpTo(new Vector2(82, 256), 44);
+            await Shot("L04-level1-alley", 2);
+            app.StartEpisode(10);
+            Check(app.Session.Hud.StoryOpen, "Level 7 did not open with its comic beat");
+            await Shot("L04-comic-beat-hornet", 2);
+            GameSession.ForceStory = false;
             foreach (var (id, name) in new[] { (5, "sweet-rain"), (7, "matrons-road"), (12, "empress") })
             {
                 app.StartEpisode(id); var g = app.Session;
@@ -299,10 +318,10 @@ public static class LevelValidation
                 g.Hud.CloseBriefing();
                 for (int i = 0; i < seconds * 30; i++) g.Sim.Tick(1f / 30);
                 g.SetPaused(true);
-                if (id is 8 or 9) g.Ants.VisibleToPlayer = _ => true; // the frame only: show the posts and lairs a scout would find
+                if (id is 8 or 9 or 10) g.Ants.VisibleToPlayer = _ => true; // the frame only: show the posts and lairs a scout would find
                 var m = g.Sim.Mission;
                 var at = id switch { 6 => m.WaveBugs.Count > 0 ? m.MarkerPos : m.WaveFrom, 7 => g.Sim.Ants[m.EscortId].Pos, 10 => m.WaveFrom, _ => m.GroupPos[0] };
-                g.Camera.JumpTo(at, id == 6 ? 46 : 40);
+                g.Camera.JumpTo(at, id == 6 ? 46 : id == 10 ? 30 : 40);
                 await Shot($"L10-play-level{Levels.NumberOf(id):00}-{name}", 3);
             }
             // a won level's result card and a lost one's
@@ -336,12 +355,13 @@ public static class LevelValidation
         int fresh = CampaignProgress.Record(1, 1 | 4, 400);
         Check(fresh == 5, "New stars not reported");
         CampaignProgress.Load();
-        Check(CampaignProgress.Completed(1) && CampaignProgress.Unlocked(2) && !CampaignProgress.Unlocked(5) && CampaignProgress.Next == 2 && CampaignProgress.StarCount(1) == 2, "Level 1 win and stars not saved and reloaded");
+        int second = Levels.IdAt(2), third = Levels.IdAt(3), fourth = Levels.IdAt(4);
+        Check(CampaignProgress.Completed(1) && CampaignProgress.Unlocked(second) && !CampaignProgress.Unlocked(third) && CampaignProgress.Next == second && CampaignProgress.StarCount(1) == 2, "Level 1 win and stars not saved and reloaded");
         fresh = CampaignProgress.Record(1, 1 | 2, 600);
         Check(fresh == 2 && CampaignProgress.StarCount(1) == 3 && CampaignProgress.Best(1) == 400, "Stars or best time not merged across replays");
-        // Level 3 on the map is Sweet Rain (id 5): it opens after Level 2, before the Rival Colony (id 3)
-        CampaignProgress.Record(2, 1, 900);
-        Check(CampaignProgress.Unlocked(5) && !CampaignProgress.Unlocked(6) && !CampaignProgress.Unlocked(3) && CampaignProgress.Next == 5, "Map order not followed");
+        // the map's order, not the ids, decides what opens next
+        CampaignProgress.Record(second, 1, 900);
+        Check(CampaignProgress.Unlocked(third) && !CampaignProgress.Unlocked(fourth) && CampaignProgress.Next == third, "Map order not followed");
         Check(Levels.PerksFor(CampaignProgress.TotalStars) == Perk.None && CampaignProgress.EmblemOpen(1) && !CampaignProgress.ColourOpen(1), "Unlock thresholds wrong at 4 stars");
         CampaignProgress.Choose(1, 1); // the colour is locked, the emblem open
         CampaignProgress.Load();
@@ -358,7 +378,7 @@ public static class LevelValidation
         old.SetValue("campaign", "episode1", true); old.SetValue("campaign", "episode2", true);
         old.Save(path);
         CampaignProgress.Load();
-        Check(CampaignProgress.Completed(1) && CampaignProgress.Completed(2) && !CampaignProgress.Completed(3) && CampaignProgress.Next == 5 && CampaignProgress.TotalStars == 2, "Old episode progress did not migrate");
+        Check(CampaignProgress.Completed(1) && CampaignProgress.Completed(2) && !CampaignProgress.Completed(3) && CampaignProgress.Next == second && CampaignProgress.TotalStars == 2, "Old episode progress did not migrate");
         DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
         CampaignProgress.UsePath("user://campaign.cfg");
         GD.Print("[campaign-test] PASS map progress: unlock order, stars kept across replays, best times, unlock thresholds, colony look, old episode keys");

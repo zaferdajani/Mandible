@@ -12,40 +12,9 @@ public static class CampaignEpisodes
 
     public static string Blurb(int ep) => Levels.Info(ep).Blurb;
 
-    public static string[] Intro(int ep) => ep switch
-    {
-        1 => new[]
-        {
-            "A young queen and her escort leave the old colony beneath the hedge. Past the grass alley lies a clearing rich in seeds.",
-            "Clear the path, settle her underground and raise the first brood. Somewhere across the yard a red queen is doing the same: one day your army will have to end her.",
-        },
-        2 => new[]
-        {
-            "The spring rain has passed and the yard is waking. Your nest is young: one royal chamber, one incubator and nowhere to keep a harvest.",
-            "Dig a store, take the aphid herd on the clover stem from the ground beetle that grazes beside it, and fill your galleries before the lair bugs notice how fat you have grown.",
-            "Across the yard a young red queen has just dug in. Grow strong enough to march down her shaft and end her before her colony grows.",
-        },
-        3 => new[]
-        {
-            "Across the yard a colony of red fire ants has raised its thatch. Their foragers walk your trails, and an outpost of mound guards watches the middle ground.",
-            "Send a scout to see what you face, hold your mound when they answer, grow stronger in the forge or with royal jelly and tear their outpost down. Then go down their shaft and kill the red queen.",
-        },
-        4 => new[]
-        {
-            "The evening air is warm and still: tonight the red colony's winged princesses take their nuptial flight. If they fly, red queens will seed the whole garden.",
-            "Raise a hero, wake the Old Stag that sleeps by the great raspberry and turn its fury on the red mound. Break the guardians that shield their queen, and end her line before the flight leaves the nest.",
-        },
-        _ => Levels.Intro(ep),
-    };
+    public static string[] Intro(int ep) => Levels.Intro(ep);
 
-    public static string Outro(int ep) => ep switch
-    {
-        1 => "Your incubator, store, workers and first fighting squad are ready. Far across the yard, a red queen has dug in too.",
-        2 => "The young red queen is dead and her nest lies empty. But a far larger red colony has noticed you.",
-        3 => "The red queen is dead and the middle ground is yours. But her sister colony across the garden is raising winged princesses for the warm evening to come.",
-        4 => "The red queen is dead and her princesses never flew. But across the garden, other red mounds still stand.",
-        _ => Levels.Outro(ep),
-    };
+    public static string Outro(int ep) => Levels.Outro(ep);
 }
 
 public sealed partial class Expedition
@@ -81,7 +50,7 @@ public sealed partial class Expedition
     /// The episode's main victory, always on show: every step leads here.
     public string Goal => IsLevel ? LevelGoal : Episode switch
     {
-        1 => "Found the nest. One day its army will march on the red queen.",
+        1 => "Found the Glass Queen's nest. One day its army will march on the red queens.",
         2 => "Kill the young red queen in her royal chamber.",
         _ => "Kill the red queen in her royal chamber.",
     };

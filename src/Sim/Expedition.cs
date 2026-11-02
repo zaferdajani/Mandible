@@ -51,7 +51,7 @@ public sealed partial class Expedition
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
         ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food.",
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
-        _ => "Episode complete. The Foraging Season is now open in the campaign list; Skirmish lets you try the complete roster now.",
+        _ => "Level complete. Sweet Rain is now open on the colony map; Skirmish lets you try the complete roster now.",
     };
     public Vector2 Marker => Episode > 1 ? MarkerPos : Stage == ExpeditionStage.ClearTrail ? Ambush : Clearing;
 }

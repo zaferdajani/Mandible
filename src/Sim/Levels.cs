@@ -26,13 +26,14 @@ public sealed class LevelInfo
     public int Number => Levels.NumberOf(Id);
 }
 
-/// The level sequence: four seasons of three, Episodes 1-4 re-slotted among the new levels.
+/// The level sequence: one story in four acts of three levels, Episodes 1-4 re-slotted among the new levels.
 public static class Levels
 {
     public const int Count = 12;
-    public static readonly int[] Order = { 1, 2, 5, 6, 3, 7, 8, 9, 4, 10, 11, 12 };
-    public static readonly string[] Seasons = { "Spring", "Summer", "Autumn", "Late Summer" };
-    public static readonly string[] SeasonThemes = { "Founding", "Rivals", "Wings", "The Empress" };
+    public static readonly int[] Order = { 1, 5, 2, 6, 3, 7, 10, 8, 9, 4, 11, 12 };
+    /// The four acts of the colony's story (LevelInfo.Season is the act).
+    public static readonly string[] Seasons = { "Act I", "Act II", "Act III", "Act IV" };
+    public static readonly string[] SeasonThemes = { "The Broken Tube", "Red Neighbours", "Hard Times", "The Ember Empress" };
 
     public static int NumberOf(int id) => System.Array.IndexOf(Order, id) + 1;
     public static int IdAt(int number) => number >= 1 && number <= Count ? Order[number - 1] : 0;
@@ -43,25 +44,25 @@ public static class Levels
     static readonly LevelInfo[] _all =
     {
         new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "The basics: lead, found, build, hatch", Rival = RivalKind.None,
-            Blurb = "Escort a young queen down the grass alley and found her nest.",
+            Blurb = "The tube is broken. Lead the Glass Queen down the grass alley and found her nest.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 3f, "Lose no more than 3 ants") } },
         new() { Id = 2, Season = 0, Name = "The Foraging Season", Novelty = "The aphid herd, a lair raid, the first queen", Rival = RivalKind.Young, RivalFood = 0.35f,
-            Blurb = "Dig a store, win the aphid herd, drive off a lair raid, kill a young red queen.",
+            Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, Cinder's daughter.",
             Stars = new[] { (StarGoal.Time, 1080f, Under(18)), (StarGoal.AllSteps, 0f, "Finish every step before the queen falls") } },
-        new() { Id = 3, Season = 1, Name = "The Rival Colony", Novelty = "Scouting, research and an outpost", Rival = RivalKind.Grown, RivalFood = 0.6f,
-            Blurb = "Scout the red mound, hold your own, break their outpost, kill their queen.",
+        new() { Id = 3, Season = 1, Name = "Queen Cinder", Novelty = "Scouting, research and an outpost", Rival = RivalKind.Grown, RivalFood = 0.6f,
+            Blurb = "Scout Queen Cinder's mound, hold your own, break her outpost and end her.",
             Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
-        new() { Id = 4, Season = 2, Name = "The Nuptial Flight", Novelty = "Heroes, the Old Stag and a deadline", Rival = RivalKind.Grown,
+        new() { Id = 4, Season = 3, Name = "The Nuptial Flight", Novelty = "Heroes, the Old Stag and a deadline", Rival = RivalKind.Grown,
             Blurb = "Raise a hero, win over the Old Stag and end the red line before the flight.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Stag, 0f, "The Old Stag survives to the end") } },
         new() { Id = 5, Season = 0, Name = "Sweet Rain", Novelty = "Food effects and a storm deadline", Rival = RivalKind.None, Seed = 20261105,
             Blurb = "Taste honeydew, haul protein and fill the galleries before the storm.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.AllFood, 0f, "Carry home seeds, fruit, honeydew and protein") } },
-        new() { Id = 6, Season = 1, Name = "The Hollow Log", Novelty = "Defence: wasps, spiders and the Hornet Mother", Rival = RivalKind.None, Seed = 20261106,
+        new() { Id = 6, Season = 1, Name = "The Hollow Log", Novelty = "Defence: wasps, spiders and a hornet captain", Rival = RivalKind.None, Seed = 20261106,
             Blurb = "Raise majors and hold the nest against five raids from the hollow log.",
             Stars = new[] { (StarGoal.Lost, 30f, "Lose no more than 30 ants"), (StarGoal.QueenHp, 0.7f, "Your queen never drops below 70%") } },
         new() { Id = 7, Season = 1, Name = "The Matron's Road", Novelty = "Escort: an Acid Matron hero", Rival = RivalKind.Young, Seed = 20261107, RivalFood = 0.4f,
-            Blurb = "Find a wounded Acid Matron, bring her home through bug country, then strike.",
+            Blurb = "Vetch, the tube's Acid Matron, is alive. Bring her home through bug country, then strike.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Escort, 0f, "The Matron lives to the end") } },
         new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "Economy puzzle: the lairs are the larder", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
             Blurb = "The yard is bare. Hunt the bug lairs for their feasts and outlast the red colony.",
@@ -69,72 +70,102 @@ public static class Levels
         new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Flying ants, acid gunners, watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
             Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
-        new() { Id = 10, Season = 3, Name = "The Hornet Mother", Novelty = "A boss with her own nest who raids you", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
-            Blurb = "A great hornet raids both colonies. Slay her in her nest, then the red queen.",
+        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "A boss with her own nest who raids you", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
+            Blurb = "The Hornet Mother raids from her paper nest. Raise Burr as a Warlord and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
         new() { Id = 11, Season = 3, Name = "The Long March", Novelty = "Time pressure: eight minutes, one army", Rival = RivalKind.Awake, Seed = 20261111,
             Blurb = "A strike army, an awake red colony and eight minutes before their mound seals.",
             Stars = new[] { (StarGoal.Time, 240f, Under(4)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
-        new() { Id = 12, Season = 3, Name = "Empress of the Garden", Novelty = "The finale: every tool against an awake Empress", Rival = RivalKind.Empress, Seed = 20261112,
+        new() { Id = 12, Season = 3, Name = "The Ember Empress", Novelty = "The finale: every tool against an awake Empress", Rival = RivalKind.Empress, Seed = 20261112,
             Blurb = "Both mounds fortified, the Old Stag awake and an Empress who raids. End her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.QueenHp, 0.5f, "Your queen never drops below 50%") } },
     };
 
+    // ------------------------------------------------------------------ the story
+    // One colony's journey in four acts. The Glass Queen was carried in a collector's tube until it fell from his
+    // backpack and broke on a woodland path. Burr is the tube's eldest soldier (later the colony's Warlord); Vetch
+    // its Acid Matron, lost in the fall. The red fire ants are Queen Cinder's line: her daughter Ashling, then
+    // Cinder herself, then her mother, the Ember Empress. Comic beats between levels: src/UI/Comic.cs.
+
     public static string[] Intro(int id) => id switch
     {
+        1 => new[]
+        {
+            "The Giant never noticed. His collecting tube slipped from the backpack, struck the stones by the path and burst.",
+            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers. Clear the grass alley, lead her to the clearing rich in seeds and dig her a home.",
+        },
         5 => new[]
         {
-            "Warm rain has passed and the yard is glistening: honeydew on the clover, berries split open, beetles drowsy in the wet grass.",
-            "Every food does something for the colony. Carry each kind home and learn what it gives you, then fill the galleries before the next storm floods the yard.",
+            "Warm rain has passed over the woods. Honeydew glistens on the clover, berries have split open and beetles doze in the wet grass.",
+            "The Glass Queen needs a full larder before the next storm. Learn what every food gives the colony, and fill the galleries before the sky breaks again.",
+        },
+        2 => new[]
+        {
+            "Red fire ants have dug in across the clearing. Their young queen, Ashling, is a daughter of the great Queen Cinder, and her foragers already walk your trails.",
+            "Dig a store, win the aphid herd from the beetle that grazes beside it and drive off the lair bugs. Then march down Ashling's shaft before her colony grows.",
         },
         6 => new[]
         {
-            "A rotting log at the edge of the yard has filled with wasps and spiders. They have smelled the queen's brood.",
-            "Raise majors, keep your soldiers close to home and break every raid. The last one will be led by the Hornet Mother herself.",
+            "Wasps and spiders nest in a rotting log at the edge of the clearing, and they have smelled the Glass Queen's brood.",
+            "Raise majors, keep Burr's soldiers close to home and break every raid. The last raid is led by a hornet captain, one of the Hornet Mother's own daughters.",
+        },
+        3 => new[]
+        {
+            "Queen Cinder has come for her daughter's killers. Her red mound rises across the clearing, her foragers strip your trails and her guards hold the middle ground.",
+            "Send a scout, hold the nest when she answers, grow stronger and break her outpost. Then go down her shaft and end Queen Cinder.",
         },
         7 => new[]
         {
-            "A scout came home with news: an Acid Matron of a fallen sister colony is alive, wounded, far across the yard.",
-            "Find her and bring her home through bug country. Keep her alive: with her acid beside you, the young red queen across the yard will not last long.",
-        },
-        8 => new[]
-        {
-            "No rain for weeks. The seed caches are gone and the berries have dried to husks. The only feasts left are the bugs themselves.",
-            "Hunt the lairs: every beetle and spider your army brings down is a meal your workers can haul home. The red colony is starving too. Outlast it, then end its queen.",
-        },
-        9 => new[]
-        {
-            "The red queen has grown cautious. Three watch posts of rooted guards stand around her mound, and while any of them stands she cannot be harmed.",
-            "Grow wings. Flying ants cross the yard fast and acid gunners burn guards from range: burn the posts, then send everything down the shaft.",
+            "A scout came home running: Vetch is alive. The tube's old Acid Matron was thrown clear when the glass broke, and she has hidden in bug country ever since, wounded.",
+            "Find her and bring her home. Keep her alive: with her acid beside Burr's soldiers, the young red queen who settled in Cinder's ruins will not last long.",
         },
         10 => new[]
         {
-            "A hornet as big as a beetle has built a paper nest in the yard. She sends her daughters at every colony she can smell, and yours is closest.",
-            "Survive her first raid, raise a hero and take the fight to her nest. With her gone the red colony stands alone.",
+            "The Hornet Mother has found you. From her paper nest in the woods she sends her daughters at every colony she can smell, and yours is the closest.",
+            "Survive her first raid, then raise old Burr as a Warlord to lead the army. Take the fight to her nest; with her gone, the red colony across the clearing stands alone.",
+        },
+        8 => new[]
+        {
+            "No rain for weeks. The seed caches are gone and the berries have dried to husks. The only feasts left in the woods are the bugs themselves.",
+            "Hunt the lairs: every beetle and spider Burr's army brings down is a meal for the workers to haul home. The red colony is starving too. Outlast it, then end its queen.",
+        },
+        9 => new[]
+        {
+            "The Ember Empress has sent a cautious daughter to the clearing. Three watch posts of rooted guards stand around her mound, and while any of them stands she cannot be harmed.",
+            "The Glass Queen is an Empress herself now, and her colony can grow wings. Flying ants cross the clearing fast and acid gunners burn guards from range: burn the posts, then go down the shaft.",
+        },
+        4 => new[]
+        {
+            "The evening air is warm and still. Tonight the Ember Empress's winged princesses take their nuptial flight: if they fly, red queens will seed every corner of the woods.",
+            "Raise a hero, wake the Old Stag that sleeps by the great raspberry and turn its fury on the red mound. Break the guardians that shield its queen and end her line before the flight.",
         },
         11 => new[]
         {
-            "Autumn is coming. The red colony is sealing its mound for the winter: in eight minutes no army will get in.",
-            "You have one strike army and no time to grow another. March, break the gate guards and kill the queen before the seal.",
+            "Autumn is coming. The Ember Empress is sealing her outer mound for the winter: in eight minutes no army will get in.",
+            "Burr leads one strike army and there is no time to grow another. March, break the gate guards and kill the mound's queen before the seal.",
         },
         12 => new[]
         {
-            "The red Empress rules every mound across the garden. Her colony is awake, fortified and hungry, and her raids will come whether you are ready or not.",
-            "Everything you have learned is yours to use: heroes, wings, acid and the Old Stag sleeping by the raspberry. End her, and the garden is yours.",
+            "The Ember Empress herself is awake, fortified and hungry, and her raids will come whether you are ready or not.",
+            "Everything the colony has learned since the glass broke is yours: Burr and the heroes, wings, acid and the Old Stag sleeping by the raspberry. End her, and the woods are yours.",
         },
         _ => System.Array.Empty<string>(),
     };
 
     public static string Outro(int id) => id switch
     {
-        5 => "The galleries are full and dry. When the storm broke, your colony slept on a fat harvest.",
-        6 => "The Hornet Mother is dead and the hollow log is quiet. Your majors have become legends of the brood chambers.",
-        7 => "The red queen is dead and the Acid Matron sleeps in your royal chamber, healed. Two colonies' memories now walk your tunnels.",
-        8 => "The red queen starved and fell. When the rain returned, it found only your colony to feed.",
-        9 => "The watch posts are ash and the red queen is dead. Your winged ants rule the air above the yard.",
-        10 => "The paper nest is torn open and the red queen is dead. The garden's two great hunters are gone.",
-        11 => "You reached her before the seal. The red queen is dead and your army comes home before the first frost.",
-        12 => "The Empress is dead. Every mound beneath the grass belongs to your colony now.",
+        1 => "The first nest is dug and the first brood is hatching. Burr counts his soldiers and looks east, where red ants have been seen.",
+        5 => "The storm breaks over a full larder. Deep in the dry galleries the brood grows fat, and Burr's scouts bring news of red ants nearby.",
+        2 => "Ashling is dead and her nest lies empty. Somewhere in the woods, Queen Cinder has heard of the black ants from the glass.",
+        6 => "The hornet captain is dead and the log is quiet. But a daughter that size means a mother somewhere bigger still.",
+        3 => "Queen Cinder is dead. Among her guards your soldiers find a mark they do not know: the sign of the Ember Empress, Cinder's mother.",
+        7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed. The two oldest survivors of the tube are together again.",
+        10 => "The paper nest is torn open and the Hornet Mother is dead. Burr wears her sting scar with pride.",
+        8 => "The red queen starved and fell. When the rain came back, it found only the Glass Queen's colony to feed.",
+        9 => "The watch posts are ash and another red queen is dead. Your winged ants have seen the Empress's great mound beyond the woods.",
+        4 => "The princesses never flew. Only the Ember Empress's own mounds are left in the woods.",
+        11 => "Burr's army reached the mound before the seal. Its queen is dead, and the Empress's chamber lies beneath the last hill.",
+        12 => "The Ember Empress is dead. In the deepest chamber the Glass Queen lays her eggs beside a shard of the tube that brought her here.",
         _ => "",
     };
 
@@ -247,7 +278,7 @@ public sealed partial class Expedition
     string LevelGoal => Info.Rival switch
     {
         RivalKind.None => Episode == 5 ? "Fill the galleries before the storm." : "Break every raid from the hollow log.",
-        RivalKind.Empress => "Kill the red Empress in her royal chamber.",
+        RivalKind.Empress => "Kill the Ember Empress in her royal chamber.",
         _ => "Kill the red queen in her royal chamber.",
     };
 
@@ -392,7 +423,7 @@ public sealed partial class Sim
                 m.WaveAt = 75; m.WaveGap = 80;
                 Add(Expedition.Obj.Hatch, "Raise majors", "The queen is a Matriarch: majors can hatch (C). Raise three more before the raids grow. Majors: {0}/{1}.", a: (int)AntType.Major, b: 6);
                 Add(Expedition.Obj.Waves, "Hold the nest", "Raiders dive straight down your shaft for the queen. Keep your army by the mound and attack-move onto them. Raids beaten: {0}/{1}.", b: 4);
-                Add(Expedition.Obj.Waves, "Slay the Hornet Mother", "The Hornet Mother leads the last raid: she stings hard and flies off between strikes. Surround her. Raiders left: {0}.", b: 5);
+                Add(Expedition.Obj.Waves, "Slay the hornet captain", "A hornet captain, the Hornet Mother's own daughter, leads the last raid: she stings hard and flies off between strikes. Surround her. Raiders left: {0}.", b: 5);
                 break;
             case 7: // The Matron's Road: escort
                 SettleColony(0, brood: 2, stores: 1);
@@ -510,7 +541,7 @@ public sealed partial class Sim
                     m.WaveAt = 120; m.WaveGap = 160;
                 }
                 Add(Expedition.Obj.Waves, "Beat the first hornet raid", "The Hornet Mother sends her daughters at your mound. Keep the army home and break the raid. Raiders left: {0}.", b: 1);
-                Add(Expedition.Obj.Hero, "Raise a hero", "Open the Heroes tab and raise a hero (Y for the Warlord). A hero levels fast and fights with special moves.");
+                Add(Expedition.Obj.Hero, "Raise Burr as a Warlord", "Open the Heroes tab and raise the Warlord (Y): old Burr, grown into a hero. A hero levels fast and fights with special moves.");
                 Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Take the army to the paper nest (gold ring) and kill her. While she lives the raids keep coming. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
@@ -561,7 +592,7 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Hero, "Raise a hero", "Open the Heroes tab and raise a hero. The Empress's raids will come on their own: keep soldiers home.");
                 Add(Expedition.Obj.Group, "Rouse the Old Stag", "Beat the Old Stag by the great raspberry with your whole army and it joins you. Its bite shatters mound guards. Its strength: {0}%.", b: -4);
                 Add(Expedition.Obj.Group, "Break the guardians", "While her mound guardians stand the Empress cannot be harmed. Lead the Old Stag at them. Guardians left: {0}.", b: -3);
-                Add(Expedition.Obj.KillQueen, "Kill the Empress", "The way is open. Send everything down the red shaft and end her.");
+                Add(Expedition.Obj.KillQueen, "Kill the Ember Empress", "The way is open. Send everything down the red shaft and end her.");
                 break;
         }
         foreach (var c in Col) { c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop; }

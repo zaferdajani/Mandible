@@ -637,6 +637,11 @@ public static class Capture
         await Wait(1);
         await Shot("layout_banner");
         AuditLayout(app, "banner", app.Menu);
+        app.Menu.Map.ToggleLook();
+        app.Menu.Map.PlayStory(Comic.For(1), Levels.Info(1));
+        await Wait(2);
+        await Shot("layout_comic");
+        AuditLayout(app, "comic", app.Menu);
         app.StartEpisode(7);
         await Wait(3);
         await Shot("layout_level_briefing");

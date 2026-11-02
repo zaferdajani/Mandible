@@ -27,6 +27,7 @@ public partial class GameSession : Node3D
     public GameMode Mode = GameMode.Colony;
     public int Episode;           // campaign level id 1-12 (Levels.Order places it on the map; 0: not a campaign game)
     public int Stars, NewStars, StarsBefore; // the result of a won level
+    public static bool ForceStory;               // tests: show the comic beat even in a test run
     public bool TutorialMode => Episode == 1; // Episode 1: the guided colony founding
     public bool Campaign => Episode > 0;
     public bool Skirmish;
@@ -122,7 +123,13 @@ public partial class GameSession : Node3D
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
                 Hud.Alert(TutorialMode ? Settings.Mobile ? "Level 1: tap Army to select the attackers" : "Level 1: select the attackers with F2" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
-                Hud.ShowBriefing(Episode);
+                var beat = Comic.For(Episode);
+                if (beat != null && (ForceStory || !CampaignProgress.StorySeen(Episode) && !App.TestRun))
+                {
+                    var info = Levels.Info(Episode);
+                    Hud.ShowStory(beat, $"{Levels.Seasons[info.Season].ToUpperInvariant()}  ·  {Levels.SeasonThemes[info.Season].ToUpperInvariant()}", () => { CampaignProgress.SeeStory(Episode); Hud.ShowBriefing(Episode); });
+                }
+                else Hud.ShowBriefing(Episode);
             }
             else if (Lanes) Hud.Alert($"Lane War: guide your {Config.Of(Heroes[Local.Me]).Name} down the lanes. Break the guardians, then kill the enemy queen.");
             else Hud.Alert(Net == null ? $"You lead the {Local.ColonyName(Local.Me)}. Destroy the {Local.ColonyName(Local.Foe)}' queen." : $"You lead the {Local.ColonyName(Local.Me)}. Destroy {Net.PeerName}'s queen.");
@@ -441,27 +448,36 @@ public partial class GameSession : Node3D
         }
         else
         {
-            // a grey-tan paper nest hanging from a bent grass stalk, layered like old wasp paper
-            var stalk = new StandardMaterial3D { AlbedoColor = new Color(0.5f, 0.45f, 0.2f), Roughness = 0.9f };
-            root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.18f, BottomRadius = 0.35f, Height = 11f, RadialSegments = 8, Rings = 1 }, MaterialOverride = stalk, Position = new Vector3(2.5f, 5.5f, 0), Rotation = new Vector3(0, 0, 0.22f) });
+            // a hornet's paper nest hung from a bent stalk: banded shells of chewed wood that swell, then taper to a
+            // point, scalloped ridges where each layer overlaps the next, and a dark lipped entrance at the bottom
+            var stalk = new StandardMaterial3D { AlbedoColor = new Color(0.52f, 0.42f, 0.2f), Roughness = 0.9f };
+            root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.16f, BottomRadius = 0.3f, Height = 13f, RadialSegments = 8, Rings = 1 }, MaterialOverride = stalk, Position = new Vector3(2.6f, 8.6f, 0), Rotation = new Vector3(0, 0, 0.28f) });
             var prng = new Rng(Seed ^ 0x9A9E5u);
-            for (int i = 0; i < 9; i++)
+            var tones = new[] { new Color(0.56f, 0.44f, 0.3f), new Color(0.7f, 0.58f, 0.42f), new Color(0.62f, 0.48f, 0.32f), new Color(0.76f, 0.64f, 0.46f) };
+            const int layers = 13;
+            for (int i = 0; i < layers; i++)
             {
-                // overlapping shells of chewed wood pulp, banded grey-brown and tan, swelling then narrowing to the stalk
-                float t = i / 8f;
-                float rad = 2.5f * Mathf.Sin(Mathf.Pi * (0.18f + 0.78f * t)) + 0.4f;
-                var tone = i % 2 == 0 ? new Color(0.55f, 0.47f, 0.36f) : new Color(0.68f, 0.58f, 0.43f);
-                var paper = new StandardMaterial3D { AlbedoColor = tone.Darkened(prng.R(0, 0.12f)), Roughness = 1 };
+                float t = i / (float)(layers - 1);                      // 0 at the bottom tip, 1 at the stalk
+                float rad = 2.7f * Mathf.Pow(Mathf.Sin(Mathf.Pi * Mathf.Clamp(0.08f + 0.86f * t, 0, 1)), 0.8f) + 0.25f;
+                float y = 3.0f + t * 6.2f;
+                var paper = new StandardMaterial3D { AlbedoColor = tones[(i + prng.I(0, 2)) % tones.Length].Darkened(prng.R(0, 0.08f)), Roughness = 1 };
+                var at = new Vector3(0.8f + prng.R(-0.15f, 0.15f), y, prng.R(-0.15f, 0.15f));
                 root.AddChild(new MeshInstance3D
                 {
-                    Mesh = new SphereMesh { Radius = rad, Height = 1.3f, RadialSegments = 12, Rings = 4 },
-                    MaterialOverride = paper,
-                    Position = new Vector3(0.8f + prng.R(-0.25f, 0.25f), 2.3f + i * 0.62f, prng.R(-0.25f, 0.25f)),
-                    Rotation = new Vector3(prng.R(-0.15f, 0.15f), prng.R(0, 6), prng.R(-0.15f, 0.15f)),
-                    Scale = new Vector3(1, 1, prng.R(0.85f, 1.1f)),
+                    Mesh = new SphereMesh { Radius = rad, Height = 0.95f, RadialSegments = 18, Rings = 4 }, MaterialOverride = paper, Position = at,
+                    Rotation = new Vector3(prng.R(-0.12f, 0.12f), prng.R(0, 6), prng.R(-0.12f, 0.12f)), Scale = new Vector3(1, 1, prng.R(0.88f, 1.06f)),
+                });
+                // the scalloped lip where this shell overlaps the one below
+                root.AddChild(new MeshInstance3D
+                {
+                    Mesh = new TorusMesh { InnerRadius = rad * 0.93f, OuterRadius = rad * 1.04f, Rings = 18, RingSegments = 6 },
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = paper.AlbedoColor.Darkened(0.25f), Roughness = 1 }, Position = at - new Vector3(0, 0.38f, 0),
+                    Rotation = new Vector3(prng.R(-0.08f, 0.08f), 0, prng.R(-0.08f, 0.08f)),
                 });
             }
-            root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.6f, Height = 1.0f, RadialSegments = 10, Rings = 4 }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.05f, 0.03f) }, Position = new Vector3(0.8f, 2.5f, 0) });
+            // the entrance: a dark hole ringed by a thickened lip at the tip
+            root.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.42f, Height = 0.6f, RadialSegments = 12, Rings = 4 }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.07f, 0.04f, 0.02f) }, Position = new Vector3(0.8f, 2.55f, 0) });
+            root.AddChild(new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = 0.4f, OuterRadius = 0.62f, Rings = 16, RingSegments = 6 }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.5f, 0.38f, 0.25f), Roughness = 1 }, Position = new Vector3(0.8f, 2.68f, 0) });
         }
     }
 

@@ -1,6 +1,6 @@
 # Level design: twelve levels under the grass
 
-This is the study and the plan behind Mandible's level system: a map of twelve levels across four seasons, one to
+This is the study and the plan behind Mandible's level system: twelve levels telling one story in four acts, one to
 three stars per level from optional goals, and unlocks earned with stars. It sits on top of the campaign
 framework from PR #6 (Episodes 1-4, `src/Sim/Campaign.cs`). Those four episodes are re-slotted into the sequence, not
 duplicated.
@@ -105,38 +105,43 @@ copied: no level, name, character or text from any of these games appears in Man
 7. **Short, readable levels.** The par times are 9 to 25 minutes, most around 15. The objective card always shows the
    main goal, the current step, the whole list and the stakes, so a player who comes back after a pause knows at once
    what to do.
-8. **Story in a few lines.** Two or three sentences before and after each level, from the colony's point of view. It
-   is skippable with one press.
+8. **One story, shown not told.** One colony's journey from a broken collector's tube to the Empress's chamber, with recurring characters. A cinematic panel opens each level and can be skipped with one press; two or three lines brief it and one closes it.
 9. **Replay anything.** Every unlocked level can be replayed at any time. Continue opens the first unfinished one.
-10. **A map you want to finish.** The level map is a sunny stretch of yard with an ant trail winding through four
-    seasons. Unearned stars show as empty sockets, and the trail beyond the next level is still unwalked.
+10. **A map you want to finish.** The level map is the colony's own nest, dug deeper with every win. Unearned stars
+    show as empty sockets, and the chambers beyond the next level are still undug soil.
 11. **No fail-forward traps.** Choices in a level never carry into the next, so no early choice can make a later level
     unwinnable (the They Are Billions lesson).
 12. **Landscape on every device, warm sand everywhere.** The map, briefings and result cards are composed for
     landscape and use the warm sand-and-amber palette, never grey.
 
-## 4. The level plan
+## 4. The level plan: one story in four acts
 
-Four seasons of three levels. "Ep" marks a re-slotted PR #6 episode; the internal scenario ids stay 1-4 so their
-code does not move, and new levels use ids 5-12. The order on the map is the table below.
+The owner's premise holds the levels together. A collector carries a glass tube of black garden ants in his backpack: a queen (the **Glass Queen**), her eldest soldier **Burr** and his soldiers, a handful of workers, and the old Acid Matron **Vetch**. The tube falls out on a woodland path and breaks, and the queen leads her colony into the woods. Every level is a chapter of their survival.
 
-| # | Season | Level | Novelty | Rival | Win | Star goals (2nd, 3rd) |
+The rival is the red fire ants' royal line: the young queen **Ashling**, then her mother **Queen Cinder**, then Cinder's mother, the **Ember Empress**. The rival queen kills are the climaxes. The **Hornet Mother** is a recurring menace: her daughter leads the Hollow Log raid before she comes herself. Burr becomes the colony's Warlord, and Vetch is found again on the Matron's Road. Story text lives in `Levels.Intro`/`Outro`; the story panels before each level are in `src/UI/Comic.cs` and `docs/story-art.md`.
+
+"Ep" marks a re-slotted PR #6 episode. The internal scenario ids stay 1-4 so their code does not move, and new levels use ids 5-12. The order on the map is the table below (`Levels.Order`).
+
+| # | Act | Level | Novelty | Rival | Win | Star goals (2nd, 3rd) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Spring | **The First Nest** (Ep 1) | the basics: select, move, found the nest, build, hatch | - | the founding is complete | under 9:00 · lose no more than 2 ants |
-| 2 | Spring | **The Foraging Season** (Ep 2) | the aphid herd, a lair raid, the first queen kill | young | kill the young red queen | under 18:00 · every step done before she falls |
-| 3 | Spring | **Sweet Rain** | food effects: honeydew, fruit, protein and seeds, with a storm deadline | - | store 1,000 food before the storm | under 9:00 · carry home all four kinds of food |
-| 4 | Summer | **The Hollow Log** | defence against waves of wasps and spiders, majors, a mini-boss (the Hornet Mother) | - | beat every wave | lose no more than 30 ants · the queen never drops below 70% |
-| 5 | Summer | **The Rival Colony** (Ep 3) | scouting, research, an outpost | grown | kill the red queen | under 22:00 · lose no more than 60 ants |
-| 6 | Summer | **The Matron's Road** | escort: bring a wounded Acid Matron home through bug country | young | kill the red queen | under 20:00 · the Matron lives to the end |
-| 7 | Autumn | **The Dry Spell** | economy puzzle: the yard is bare, lairs are the larder | grown | kill the red queen | under 26:00 · clear all three lairs first |
-| 8 | Autumn | **Wings and Acid** | flying ants and acid gunners, three watch posts shielding the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
-| 9 | Autumn | **The Nuptial Flight** (Ep 4) | heroes, the Old Stag, mound guardians, a deadline | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
-| 10 | Late summer | **The Hornet Mother** | a boss with her own nest who raids you, plus a rival | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
-| 11 | Late summer | **The Long March** | time pressure: a strike army, no time to build, 8:00 before the mound seals | awake | kill the red queen before the seal | under 4:00 · lose no more than 60 ants |
-| 12 | Late summer | **Empress of the Garden** | the finale: a fully awake rival that raids, guardians on both mounds, the Old Stag, every tool | awake, shielded | kill the red Empress | under 25:00 · your queen never drops below 50% |
+| 1 | I · The Broken Tube | **The First Nest** (Ep 1) | the basics, out of the broken tube | - | found the nest | under 9:00 · lose no more than 3 ants |
+| 2 | I | **Sweet Rain** | food effects, storm deadline | - | fill the galleries before the storm | under 9:00 · carry home all four kinds of food |
+| 3 | I | **The Foraging Season** (Ep 2) | aphid herd, lair raid, first queen kill | Ashling | kill Ashling | under 18:00 · every step before she falls |
+| 4 | II · Red Neighbours | **The Hollow Log** | defence: wasps, spiders, a hornet captain | - | break every raid | lose no more than 30 ants · queen never below 70% |
+| 5 | II | **Queen Cinder** (Ep 3) | scouting, research, outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
+| 6 | II | **The Matron's Road** | escort Vetch home | young | kill the red queen | under 20:00 · Vetch lives to the end |
+| 7 | III · Hard Times | **The Hornet Mother** | a boss with her own nest; Burr becomes a Warlord | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
+| 8 | III | **The Dry Spell** | economy puzzle: the lairs are the larder | grown | kill the red queen | under 26:00 · clear all three lairs first |
+| 9 | III | **Wings and Acid** | flyers, gunners, watch posts shield the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
+| 10 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | heroes, the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
+| 11 | IV | **The Long March** | time pressure: eight minutes, one army | awake | kill the mound's queen before the seal | under 4:00 · lose no more than 60 ants |
+| 12 | IV | **The Ember Empress** | the finale: every tool against an awake Empress | awake, shielded | kill the Ember Empress | under 25:00 · queen never below 50% |
 
-The curve: 1 (gentle) → 2 (first peak) → 3 (breather) → 4 (defence, medium) → 5 (peak) → 6 (escort, medium) → 7 (puzzle,
-medium) → 8 (new castes, medium-high) → 9 (peak) → 10 (boss, high) → 11 (blitz, high but short) → 12 (finale).
+The curve: 1 (gentle) → 2 (breather) → 3 (first peak) → 4 (defence) → 5 (peak) → 6 (escort) → 7 (boss) → 8 (puzzle) → 9 (new castes) → 10 (peak) → 11 (blitz) → 12 (finale).
+
+### The colony map
+
+The level map is a cut through the Glass Queen's nest. Level 1 is the first chamber below the entrance, and each act is a stratum of earth, darker and deeper than the last. The Ember Empress is the deepest, widest chamber. Ants walk the dug galleries. Locked chambers are still undug soil, and won chambers keep a keepsake of their level (a shard of the tube, a honeydew drop, a captured red banner) along with their stars. The palette is warm earth and amber throughout, with no grey.
 
 ### Unlocks (36 stars in all)
 
@@ -166,7 +171,9 @@ starts, so the sim stays deterministic (they enter `Expedition.Perks` before the
   setup on the yard. Episodes 1-4 keep their own code in `Expedition.cs` and `Campaign.cs`.
 - `src/Game/CampaignProgress.cs`: per level the win, the stars (kept one by one) and the best time; the chosen colour
   and emblem; old `episodeN` keys migrate.
-- `src/UI/LevelMap.cs`: the landscape level map and the side card with the selected level.
+- `src/UI/LevelMap.cs`: the colony map (nest cross-section) and the side card with the selected level.
+- `src/UI/Comic.cs`: the story panels and their viewer; art in `assets/ui/comic`, provenance in `docs/story-art.md`.
+- `src/World/ExpeditionWorld.cs`: level 1's grass alley, dressed naturally, with the broken tube and its spilled sand at the start.
 - `src/UI/Emblem.cs`: the procedural emblems.
 - The briefing lists the star goals, the objective card tracks them live, and the result card awards the stars and
   names the next unlock.

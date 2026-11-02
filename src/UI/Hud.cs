@@ -674,7 +674,7 @@ public partial class Hud : CanvasLayer
         foreach (var c in n.GetChildren()) Relabel(c);
     }
 
-    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || (_brief?.Visible ?? false) || _help.Visible;
+    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || (_brief?.Visible ?? false) || _help.Visible || StoryOpen;
 
     /// The episode's opening card: the story so far and what is at stake. The colony waits until Begin.
     public void ShowBriefing(int episode)
@@ -730,7 +730,8 @@ public partial class Hud : CanvasLayer
             int number = Levels.NumberOf(Game.Episode), next = Levels.IdAt(number + 1);
             _end = victory && next > 0
                 ? Overlay("LEVEL COMPLETE", lines, ($"Level {number + 1}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
-                : Overlay(victory ? "THE GARDEN IS YOURS" : "LEVEL FAILED", lines, (victory ? "Replay" : "Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
+                : victory ? Overlay("THE WOODS ARE YOURS", lines, ("Epilogue", () => ShowStory(Comic.Ending, "EPILOGUE", () => { })), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
+                : Overlay("LEVEL FAILED", lines, ("Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
             if (victory) AddResult(_end);
         }
         else _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
@@ -738,6 +739,17 @@ public partial class Hud : CanvasLayer
     }
 
     void QuitToMap() { Game.QuitToMenu(); Game.App.Menu.OpenCampaign(); }
+
+    /// The comic beat before a level (or the epilogue), over everything; the game stays paused until it closes.
+    public void ShowStory(Comic.Panel[] panels, string heading, System.Action done)
+    {
+        Game.SetPaused(true);
+        var strip = new ComicStrip { Panels = panels, Heading = heading, Done = done };
+        _root.AddChild(strip);
+        Story = strip;
+    }
+    public ComicStrip Story;
+    public bool StoryOpen => Story != null && IsInstanceValid(Story) && !Story.IsQueuedForDeletion();
 
     /// The result of a won level: three stars that land one after the other, each goal met or missed, and
     /// what the stars bought (or what the next unlock costs).
