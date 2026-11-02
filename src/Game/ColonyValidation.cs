@@ -35,7 +35,7 @@ public static class ColonyValidation
                 app.GetTree().Quit();
                 return;
             }
-            if (only != "")
+            if (only != "" && only != "chain")
             {
                 foreach (var part in only.Split(',')) LevelValidation.Play(app, int.Parse(part), out _);
                 GD.Print("[campaign-test] ALL PASS (selected levels)");
@@ -46,6 +46,7 @@ public static class ColonyValidation
             var root = new Node3D(); app.AddChild(root);
             var w = WorldBuilder.Build(root, 20261031, firstNest: true);
             var s = new Sim(w); var c = s.Col[0];
+            s.ApplyRoster(null, 1); // the broken tube's survivors, old Burr among them
             Check(s.Mission != null && c.Chambers.Count == 0 && !c.Founded, "Mission did not start on the trail");
             Check(!s.OrderEntrance(0, Units(s, AntType.Worker)), "Entrance allowed before reaching clearing");
             for (int i = 0; i < 900; i++) s.Tick(1f / 30);
@@ -107,6 +108,9 @@ public static class ColonyValidation
             Rate(s);
             GD.Print($"[campaign-test] PASS episode 1 in {s.Time:0}s, gathered {c.Gathered:0}, workers {s.Mission.WorkersHatched}, soldiers {s.Mission.SoldiersHatched}; full skirmish roster unlocked");
             root.QueueFree(); other.QueueFree();
+            var afterTube = s.HarvestRoster(1);
+            LevelValidation.Chain(app, afterTube);
+            if (only == "chain") { GD.Print("[campaign-test] ALL PASS (episode 1 and the persistent colony chain)"); app.GetTree().Quit(); return; }
             var times = new Dictionary<int, float> { [1] = s.Mission.EndTime, [2] = Episode2(app), [3] = Episode3(app), [4] = Episode4(app) };
             Defeat(app);
             for (int id = 5; id <= Levels.Count; id++) times[id] = LevelValidation.Play(app, id, out _);

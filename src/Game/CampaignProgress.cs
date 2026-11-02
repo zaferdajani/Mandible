@@ -13,6 +13,7 @@ public static class CampaignProgress
     static readonly int[] _stars = new int[Levels.Count + 1];
     static readonly float[] _best = new float[Levels.Count + 1];
     static readonly bool[] _story = new bool[Levels.Count + 1];
+    static readonly string[] _roster = new string[Levels.Count + 1];   // the colony as it enters each chapter
     static int _colour, _emblem;
     static bool _loaded;
 
@@ -66,6 +67,22 @@ public static class CampaignProgress
 
     public static void Complete(int id) => Record(id, 1, 0);
 
+    /// The colony that starts a chapter: whoever walked out of the chapter before it. Null until the chapter before
+    /// it has been won with this save (Chapter 1 always starts from the broken tube).
+    public static ColonyRoster RosterFor(int id) { Ensure(); return Valid(id) ? ColonyRoster.Load(_roster[id]) : null; }
+
+    /// A chapter was won: its survivors walk into the next chapter. Replaying an earlier chapter never rewrites the
+    /// colony of a chapter already won, so the save's frontier is the only place the colony moves forward.
+    /// A lost chapter records nothing: the retry starts from the same colony.
+    public static void CarryRoster(int id, ColonyRoster survivors)
+    {
+        Ensure();
+        int next = Levels.IdAt(Levels.NumberOf(id) + 1);
+        if (next <= 0 || survivors == null || Completed(next)) return;
+        _roster[next] = survivors.Save();
+        Save();
+    }
+
     /// The comic beat before a level plays once by itself; the map replays it on request.
     public static bool StorySeen(int id) { Ensure(); return Valid(id) && _story[id]; }
     public static void SeeStory(int id) { Ensure(); if (!Valid(id) || _story[id]) return; _story[id] = true; Save(); }
@@ -93,7 +110,7 @@ public static class CampaignProgress
 
     public static void Reset()
     {
-        System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story);
+        System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story); System.Array.Clear(_roster);
         _colour = _emblem = 0;
         _loaded = true;
         Save();
@@ -104,7 +121,7 @@ public static class CampaignProgress
     public static void Load()
     {
         _loaded = true;
-        System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story);
+        System.Array.Clear(_done); System.Array.Clear(_stars); System.Array.Clear(_best); System.Array.Clear(_story); System.Array.Clear(_roster);
         _colour = _emblem = 0;
         var cfg = new ConfigFile();
         if (cfg.Load(_path) != Error.Ok) return;
@@ -116,6 +133,7 @@ public static class CampaignProgress
             _stars[id] = (int)cfg.GetValue("levels", $"stars{id}", _done[id] ? 1 : 0);
             _best[id] = (float)cfg.GetValue("levels", $"best{id}", 0f);
             _story[id] = (bool)cfg.GetValue("story", $"seen{id}", false);
+            _roster[id] = (string)cfg.GetValue("colony", $"enter{id}", "");
         }
         _colour = (int)cfg.GetValue("colony", "colour", 0);
         _emblem = (int)cfg.GetValue("colony", "emblem", 0);
@@ -132,6 +150,7 @@ public static class CampaignProgress
             cfg.SetValue("levels", $"stars{id}", _stars[id]);
             cfg.SetValue("levels", $"best{id}", _best[id]);
             cfg.SetValue("story", $"seen{id}", _story[id]);
+            if (!string.IsNullOrEmpty(_roster[id])) cfg.SetValue("colony", $"enter{id}", _roster[id]);
         }
         cfg.SetValue("colony", "colour", _colour);
         cfg.SetValue("colony", "emblem", _emblem);

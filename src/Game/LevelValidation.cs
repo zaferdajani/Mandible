@@ -11,11 +11,17 @@ public static class LevelValidation
     static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     static readonly List<Node3D> _worlds = new();
 
+    /// The colony the next Play/Open carries in (null: the level's own muster). Cleared after use.
+    public static ColonyRoster Carry;
+    public static ColonyRoster LastHarvest;
+
     public static Sim Open(Main app, int id, out IColonyAI rival, Perk perks = Perk.None)
     {
         var root = new Node3D(); app.AddChild(root); _worlds.Add(root);
         var s = new Sim(WorldBuilder.Build(root, Levels.Info(id).Seed));
         s.BeginEpisode(id);
+        s.ApplyRoster(Carry, Levels.NumberOf(id));
+        Carry = null;
         s.ApplyPerks(perks);
         rival = AIController.ForLevel(s);
         Check(s.Mission?.Episode == id && s.Mission.Step == 0 && s.Winner < 0, $"Level {Levels.NumberOf(id)} did not start on its first objective");
@@ -173,6 +179,7 @@ public static class LevelValidation
         Check(m.Complete, $"Level {Levels.NumberOf(id)} won without completing");
         if (m.Info.Rival != RivalKind.None) Check(!s.Col[1].Alive, $"Level {Levels.NumberOf(id)} won without killing the red queen");
         stars = s.Stars();
+        LastHarvest = s.HarvestRoster(Levels.NumberOf(id));
         Check((stars & 1) == 1, "A won level earned no star");
         // the stars match what happened
         for (int k = 0; k < 2; k++)
@@ -215,6 +222,71 @@ public static class LevelValidation
         for (int i = 0; i < s.High && ids.Count < n; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].Type == AntType.Worker && s.Ants[i].Layer == 0) ids.Add(i);
         return ids;
     }
+
+    /// The persistent colony across chapters: Chapter 1's survivors (with old Burr) walk into Chapter 2 and win it,
+    /// Burr surviving both; Chapter 3 starts with the colony and nest they carried, a named veteran's death is
+    /// recorded, and a lost Chapter 3 retries from the same colony without wiping the save.
+    public static void Chain(Main app, ColonyRoster afterChapter1)
+    {
+        Check(afterChapter1 != null && afterChapter1.Veterans.Exists(v => v.Name == "Burr" && v.Joined == 1), "Burr did not walk out of the broken tube");
+        Check(afterChapter1.Chambers.Contains(ChamberKind.Brood) && afterChapter1.Chambers.Contains(ChamberKind.Storage), "Chapter 1's nest was not carried");
+        const string path = "user://campaign_chain.cfg";
+        CampaignProgress.UsePath(path); CampaignProgress.Reset();
+        CampaignProgress.Record(1, 1, 300);
+        CampaignProgress.CarryRoster(1, afterChapter1);
+        int ch2 = Levels.IdAt(2), ch3 = Levels.IdAt(3);
+        var entering2 = CampaignProgress.RosterFor(ch2);
+        Check(entering2 != null && entering2.Total == afterChapter1.Total, "Chapter 2 did not receive Chapter 1's survivors from the save");
+        // Chapter 2 with the carried colony
+        Carry = entering2;
+        var s = Open(app, ch2, out _);
+        Check(s.Mission.Tracked.Count > 0 && Exists(s, "Burr"), "Burr was not on the field in Chapter 2");
+        Check(s.ChamberCount(0, ChamberKind.Brood, true) >= afterChapter1.Chambers.FindAll(k => k == ChamberKind.Brood).Count, "Chapter 2's nest lost Chapter 1's brood chambers");
+        Close();
+        Carry = entering2;
+        Play(app, ch2, out _);
+        var after2 = LastHarvest;
+        var burr = after2.Veterans.Find(v => v.Name == "Burr");
+        Check(burr != null && burr.Joined == 1, "Burr did not survive two chapters");
+        CampaignProgress.Record(ch2, 1, 400);
+        CampaignProgress.CarryRoster(ch2, after2);
+        // Chapter 3: the carried nest and colony, a named death, a loss and a retry
+        var entering3 = CampaignProgress.RosterFor(ch3);
+        Check(entering3 != null && entering3.Total == after2.Total, "Chapter 3 did not receive Chapter 2's survivors");
+        Carry = entering3;
+        s = Open(app, ch3, out var rival);
+        Check(s.ChamberCount(0, ChamberKind.Storage, true) >= entering3.Chambers.FindAll(k => k == ChamberKind.Storage).Count, "Chapter 3's nest lost the carried stores");
+        int burrId = Find(s, "Burr");
+        Check(burrId >= 0, "Burr missing at the start of Chapter 3");
+        s.Slay(burrId);
+        Check(s.Mission.Fallen.Exists(v => v.Name == "Burr"), "A named veteran's death was not recorded");
+        s.Winner = 1; // the chapter is lost
+        Close();
+        CampaignProgress.Load();
+        var retry = CampaignProgress.RosterFor(ch3);
+        Check(retry != null && retry.Save() == entering3.Save() && CampaignProgress.Completed(ch2) && !CampaignProgress.Completed(ch3), "A lost chapter changed the saved colony or progress");
+        Carry = retry;
+        s = Open(app, ch3, out _);
+        Check(Find(s, "Burr") >= 0, "The retry did not bring Burr back with the chapter's starting colony");
+        Close();
+        // a careless colony still gets a fighting floor of fresh brood
+        var thin = new ColonyRoster { QueenTier = 1 };
+        thin.Plain[(int)AntType.Worker] = 2;
+        Carry = thin;
+        s = Open(app, ch3, out _);
+        Check(s.Mission.Reinforcements > 0 && s.Col[0].Count[(int)AntType.Soldier] >= 6, "A thin colony got no reinforcements: a dead-end save");
+        Close();
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
+        CampaignProgress.UsePath("user://campaign.cfg");
+        GD.Print($"[campaign-test] PASS persistent colony: chapter 1 -> 2 -> 3 with {afterChapter1.Total} -> {after2.Total} ants, Burr survived two chapters ({burr.Kills} kills), named death recorded, loss retried from the same colony, thin colony reinforced");
+    }
+
+    static int Find(Sim s, string name)
+    {
+        foreach (var (id, (serial, vet)) in s.Mission.Tracked) if (vet.Name == name && s.Valid(id, serial)) return id;
+        return -1;
+    }
+    static bool Exists(Sim s, string name) => Find(s, name) >= 0;
 
     /// Losses that are not the queen: the escort falling, the storm, the seal.
     public static void Losses(Main app)

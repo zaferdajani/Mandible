@@ -139,6 +139,20 @@ The rival is the red fire ants' royal line: the young queen **Ashling**, then he
 
 The curve: 1 (gentle) → 2 (breather) → 3 (first peak) → 4 (defence) → 5 (peak) → 6 (escort) → 7 (boss) → 8 (puzzle) → 9 (new castes) → 10 (peak) → 11 (blitz) → 12 (finale).
 
+### One persistent colony
+
+The campaign follows one colony from the broken tube to the Empress's chamber (`src/Sim/CampaignColony.cs`).
+
+- **Who survives walks on.** A chapter's survivors are its next chapter's colony. Losses are permanent. The colony is stored as the roster that enters each chapter (`[colony] enterN` in `user://campaign.cfg`). Rank-1 ants are kept as counts by caste. Every ant of rank 2 or higher, and every hero, is kept as a veteran with caste, rank, kills and the chapter it joined.
+- **Names you come to care about.** Old Burr is named among the tube's survivors and becomes the Warlord when a Warlord hatches. Vetch is the Acid Matron, and other heroes get names too. A veteran that reaches rank 3 earns a name from the colony's list (Sorrel, Flint, Bramble...). A named ant's death is recorded and shown under **Fallen** on the result card.
+- **The nest persists.** Chambers dug in one chapter exist at the start of the next, and the queen keeps her rank (Young Queen, Matriarch, Empress...). The colony map is that nest.
+- **Never a dead end.** The level's own muster sets a floor: a carried colony is never weaker than 60% of it, and fresh brood fills the gap. A strong colony carries at most one and a half times the muster plus six, so a careful player keeps a real veteran core while every chapter stays winnable. This avoids the They Are Billions trap of a run that cannot be won any more.
+- **Losing costs nothing saved.** Losing your queen loses the chapter, and the retry starts from the colony as it was when the chapter began. Replaying an already-won chapter never rewrites the colony of a later one. Only the save's frontier moves forward.
+- **Stars come second.** The result card leads with the colony: ants that walk on, veterans, chambers, the queen's title, named survivors and the fallen. The stars sit below it as bragging rights.
+- **Deterministic.** The roster is applied before the first tick, from the save, and the campaign is single-player, so no live lockstep match is ever touched.
+
+**Why it hooks.** Attachment and loss aversion: a named veteran with twelve kills is someone, and losing him hurts, so players play carefully and remember. The underdog-to-ruler arc runs from a dozen ants in a broken tube to an Empress's nest, and you can see it in the roster growing and the queen's title rising. The unfinished-story pull comes from every outro ending on a beat that points to the next chapter. Named characters are why players finish campaigns: they come back for Burr and Vetch, not for a level number.
+
 ### The colony map
 
 The level map is a cut through the Glass Queen's nest. Level 1 is the first chamber below the entrance, and each act is a stratum of earth, darker and deeper than the last. The Ember Empress is the deepest, widest chamber. Ants walk the dug galleries. Locked chambers are still undug soil, and won chambers keep a keepsake of their level (a shard of the tube, a honeydew drop, a captured red banner) along with their stars. The palette is warm earth and amber throughout, with no grey.

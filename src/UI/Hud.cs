@@ -731,7 +731,7 @@ public partial class Hud : CanvasLayer
             _end = victory && next > 0
                 ? Overlay("LEVEL COMPLETE", lines, ($"Level {number + 1}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
                 : victory ? Overlay("THE WOODS ARE YOURS", lines, ("Epilogue", () => ShowStory(Comic.Ending, "EPILOGUE", () => { })), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
-                : Overlay("LEVEL FAILED", lines, ("Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
+                : Overlay("LEVEL FAILED", Retry(lines), ("Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
             if (victory) AddResult(_end);
         }
         else _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
@@ -739,6 +739,13 @@ public partial class Hud : CanvasLayer
     }
 
     void QuitToMap() { Game.QuitToMenu(); Game.App.Menu.OpenCampaign(); }
+
+    /// A lost chapter costs nothing that was saved: the retry starts from the colony as it was when the chapter began.
+    static string[] Retry(string[] lines)
+    {
+        var l = new System.Collections.Generic.List<string>(lines) { "", "The colony that began this chapter is waiting. Try again: nothing you saved is lost." };
+        return l.ToArray();
+    }
 
     /// The comic beat before a level (or the epilogue), over everything; the game stays paused until it closes.
     public void ShowStory(Comic.Panel[] panels, string heading, System.Action done)
@@ -757,13 +764,30 @@ public partial class Hud : CanvasLayer
     {
         var body = (VBoxContainer)end.GetChild(0).GetChild(0);
         int id = Game.Episode;
-        var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars };
-        body.AddChild(big); body.MoveChild(big, 1);
+        // the colony first: who walks on into the next chapter, and who did not
+        if (Game.Survivors is { } r)
+        {
+            int vets = 0; foreach (var v in r.Veterans) if (v.Level >= 2 || v.Name != "") vets++;
+            var queen = Config.QueenTitles[Mathf.Clamp(r.QueenTier, 1, Config.QueenTitles.Length - 1)];
+            var colony = UiTheme.Text($"THE COLONY  ·  {r.Total} ants walk on  ·  {vets} veterans  ·  {r.Chambers.Count} chambers  ·  the {queen}", 17, UiTheme.Title, UiTheme.Gold);
+            colony.HorizontalAlignment = HorizontalAlignment.Center;
+            body.AddChild(colony); body.MoveChild(colony, 1);
+            var names = new System.Collections.Generic.List<string>();
+            foreach (var v in r.Veterans) if (v.Name != "") names.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
+            int at = 2;
+            if (names.Count > 0) { var l = UiTheme.Text("Still with the queen: " + string.Join(",  ", names), 14, UiTheme.Bold, UiTheme.Ink); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
+            var fallen = new System.Collections.Generic.List<string>();
+            foreach (var v in Game.Sim.Mission.Fallen) if (v.Name != "") fallen.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
+            if (fallen.Count > 0) { var l = UiTheme.Text("Fallen: " + string.Join(",  ", fallen), 14, UiTheme.Bold, new Color(1f, 0.6f, 0.45f)); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
+        }
+        // the stars come second: bragging rights, under the colony
+        var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars, CustomMinimumSize = new Vector2(0, 70) };
+        body.AddChild(big); body.MoveChild(big, body.GetChildCount() - 3);
         var list = new StarList { Size_ = 11, FontSize = 15, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
         var rows = new System.Collections.Generic.List<(bool, string)>();
         for (int s = 0; s < 3; s++) rows.Add(((Game.Stars & 1 << s) != 0, Levels.StarText(id, s) + ((Game.NewStars & 1 << s) != 0 ? "   NEW" : "")));
         list.Set(rows);
-        body.AddChild(list); body.MoveChild(list, 2);
+        body.AddChild(list); body.MoveChild(list, body.GetChildCount() - 3);
         int total = CampaignProgress.TotalStars;
         string unlock = "";
         foreach (var u in Levels.Unlocks) if (u.Stars > Game.StarsBefore && u.Stars <= total) unlock += (unlock == "" ? "" : "  ·  ") + $"{u.Kind}: {u.Name}";

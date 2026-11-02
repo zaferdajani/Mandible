@@ -27,6 +27,7 @@ public partial class GameSession : Node3D
     public GameMode Mode = GameMode.Colony;
     public int Episode;           // campaign level id 1-12 (Levels.Order places it on the map; 0: not a campaign game)
     public int Stars, NewStars, StarsBefore; // the result of a won level
+    public ColonyRoster Survivors;               // the colony that walks out of a won chapter
     public static bool ForceStory;               // tests: show the comic beat even in a test run
     public bool TutorialMode => Episode == 1; // Episode 1: the guided colony founding
     public bool Campaign => Episode > 0;
@@ -57,7 +58,7 @@ public partial class GameSession : Node3D
         Sim = new Sim(World, Mode, Heroes[0], Heroes[1], Fortified);
         if (Skirmish) Sim.BeginSkirmish();
         if (Episode > 1) Sim.BeginEpisode(Episode);
-        if (Campaign) Sim.ApplyPerks(CampaignProgress.Perks);
+        if (Campaign) { Sim.ApplyRoster(CampaignProgress.RosterFor(Episode), Levels.NumberOf(Episode)); Sim.ApplyPerks(CampaignProgress.Perks); }
         foreach (var f in World.Food) if (!f.Alive && f.Node != null) f.Node.Visible = false; // the Dry Spell's dried-up food
         CampaignProgress.ApplyLook(!Demo && Local.Me == Config.Player);
         Orders = Net != null ? Net : new DirectOrders(Sim);
@@ -1003,6 +1004,8 @@ public partial class GameSession : Node3D
             StarsBefore = CampaignProgress.TotalStars;
             Stars = Sim.Stars();
             NewStars = CampaignProgress.Record(Episode, Stars, Sim.Mission.EndTime >= 0 ? Sim.Mission.EndTime : Sim.Time);
+            Survivors = Sim.HarvestRoster(Levels.NumberOf(Episode));
+            CampaignProgress.CarryRoster(Episode, Survivors);
         }
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");

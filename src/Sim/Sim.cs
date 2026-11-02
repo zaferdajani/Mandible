@@ -1437,6 +1437,7 @@ public sealed partial class Sim
     void Kill(int id, int killer)
     {
         ref var t = ref Ants[id];
+        if (Mission != null) RosterKill(id, killer);
         if (t.Boss && t.Team == Config.Wild && killer >= 0 && Ants[killer].Team < 2) { Rouse(id, Ants[killer].Team, killer); return; }
         t.Alive = false;
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
