@@ -229,30 +229,6 @@ public static partial class WorldBuilder
         Seed = rng.I(1, 99999), Tint = rng.F(), Rust = rng.F() * 0.6f, Moss = rng.F() < 0.4f ? rng.R(0.4f, 1f) : 0f,
     };
 
-    static void BuildRock(World w, Rock r)
-    {
-        var n = new FastNoiseLite { Seed = r.Seed, Frequency = 1.6f, NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth };
-        var n2 = new FastNoiseLite { Seed = r.Seed + 1, Frequency = 5f };
-        var k = new MeshKit();
-        k.Ellipsoid(Vector3.Zero, Basis.FromScale(r.Radii), 28, 18, new Color(1, r.Tint, r.Rust, r.Moss), Vector2.Zero, u =>
-        {
-            float d = 1 + 0.2f * n.GetNoise3D(u.X, u.Y, u.Z) + 0.05f * n2.GetNoise3D(u.X, u.Y, u.Z);
-            if (u.Y < -0.2f) d *= Mathf.Lerp(1f, 0.7f, Mathf.Clamp((-u.Y - 0.2f) * 2, 0, 1));
-            return d;
-        });
-        for (int i = 0; i < k.V.Count; i++)
-        {
-            var v = k.V[i];
-            float ao = Mathf.Lerp(0.45f, 1.05f, Mathf.SmoothStep(-0.5f * r.Radii.Y, 0.5f * r.Radii.Y, v.Y));
-            k.C[i] = new Color(ao, r.Tint, r.Rust, r.Moss);
-        }
-        k.RecalcNormals();
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Rock) };
-        float baseY = w.HF.Sample(r.P.X, r.P.Y);
-        mi.Transform = new Transform3D(new Basis(Vector3.Up, r.Yaw), new Vector3(r.P.X, baseY - r.Radii.Y * 0.18f, r.P.Y));
-        w.Root.AddChild(mi);
-    }
-
     // ---------------------------------------------------------------- leaves
     sealed class LeafDef { public Vector2 P; public float Len, Wid, Yaw, Age, Seed; public int Species; public Vector3[] Verts; public Vector2[] Uvs; public int Rows, Cols; }
 
