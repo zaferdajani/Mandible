@@ -331,6 +331,37 @@ public static class Config
         ? new[] { "Stingless: warriors have no venom, only their bite", "Protein (corpses, seeds) gives no bonus" }
         : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
 
+    // ------------------------------------------------------------------ carrion
+    // A carcass holds CorpseFood loads: a worker is a crumb, a major a meal, a hero or a beetle a feast, the stag a banquet.
+    public const float CarcassFresh = 60f;     // seconds a carcass stays whole before it starts to dry out and crumble
+    public const float CarcassRot = 90f;       // ...and how long the rest takes to go
+    /// Workers it takes to drag a carcass whole (0: one worker can carry it, or it is too big to move and is cut up where it lies).
+    public static int HaulNeed(AntType t) => t switch
+    {
+        AntType.Major => 2, AntType.Warlord or AntType.Matron or AntType.Marshal => 3, AntType.Wasp => 3, AntType.Beetle or AntType.Spider => 4, _ => 0,
+    };
+    public const float HaulSpeed = 2.4f;       // a fully crewed carcass slides home at this pace (30% faster with extra hands)
+    public const float HaulArrive = 4.5f;      // a dragged carcass is home when its edge is this close to the nest mouth or the midden
+    public const float MiddenDist = 16f;       // the refuse pile lies this far out from the nest mouth
+    public const float NestCarryOut = 6f;      // nurses carry a nestmate who died inside out to the midden after this long
+    public const float NestEatRate = 0.6f;     // loads a second the nurses eat from a carcass inside the nest
+    public const float MournBite = 1.05f;      // Honour the dead: resolve while burials go on
+    public const float SickBrood = 0.85f;      // Recycle the fallen: carrion pathogens in the brood chambers slow the hatching
+    public const float MoraleTime = 20f;       // seconds each burial or eaten nestmate adds
+    public const float MoraleMax = 60f;
+    public const float FeastBite = 1.1f;       // seconds a hero takes over each mouthful
+    public const float FeastHeal = 0.06f;      // share of its health each mouthful restores
+    /// Mouthfuls a hero may take from one carcass, and the experience it learns from all of them together.
+    public static int FeastLoads(AntType t) => t switch
+    {
+        AntType.Worker => 1, AntType.Soldier or AntType.Gunner or AntType.Flyer => 2, AntType.Major => 3, AntType.Queen => 6, _ => IsHero(t) ? 6 : 5,
+    };
+    public static float FeastXp(AntType t) => Bounty(t, 1) * (IsHero(t) ? 0.5f : IsBug(t) ? 0.4f : 0.3f);
+    public static string FallenName(FallenOrder o) => o == FallenOrder.Honour ? "Honour the dead" : "Recycle the fallen";
+    public static string FallenDesc(FallenOrder o) => o == FallenOrder.Honour
+        ? $"Workers carry fallen nestmates to the midden outside the nest. Resolve: +{MournBite * 100 - 100:0}% bite for {MoraleTime:0}s after each burial."
+        : $"Fallen nestmates are eaten as protein. Carrion fever: brood hatches {100 - SickBrood * 100:0}% slower for {MoraleTime:0}s after each one eaten.";
+
     // ------------------------------------------------------------------ food
     public const float EffectPerDelivery = 1.2f; // seconds of colony effect added per load delivered
     public const float EffectMax = 30f;
@@ -355,7 +386,7 @@ public static class Config
     {
         FoodKind.Sugar => "Energy: while honeydew keeps arriving, workers run 15% faster.",
         FoodKind.Berry => "Water: while fruit keeps arriving, every ant regenerates 1.5% health per second.",
-        FoodKind.Corpse => "Protein feeds the larvae: while it keeps arriving, the queen lays 30% faster.",
+        FoodKind.Corpse => "Protein feeds the larvae: while it keeps arriving, the queen lays 30% faster. A big carcass is dragged home whole by a team of workers; it rots away within two and a half minutes.",
         FoodKind.Seed => "Dense: each load is worth 6 food, but carriers walk 20% slower.",
         _ => "No special effect.",
     };

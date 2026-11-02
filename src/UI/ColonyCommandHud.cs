@@ -33,6 +33,8 @@ public partial class ColonyCommandHud : Control
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
     readonly List<(Button button, Upgrade upgrade, Label status)> _research = new();
     readonly List<Button> _tabs = new();
+    readonly List<(Button button, FallenOrder order)> _orders = new();
+    Label _fallenStatus;
     readonly List<(Button button, TextureRect art)> _queueSlots = new();
     readonly Dictionary<int, PanelContainer> _labels = new();
     Texture2D _atlas;
@@ -271,12 +273,13 @@ public partial class ColonyCommandHud : Control
         _cardsBlock = Block(682, 689, _cardsSize.X, _cardsSize.Y);
         // on a computer the selection panel runs on under the cards; standing alone they need their own
         _cardsPanel = Panel(_cardsBlock, -8, cardsY - 6, _cardsSize.X + 16, _cardsSize.Y - cardsY + 6);
-        string[] names = { "Chambers", "Ants", "Research", "Heroes" };
+        string[] names = { "Chambers", "Ants", "Research", "Heroes", "The Dead" };
         for (int i = 0; i < names.Length; i++)
         {
             int page = i;
             var tabButton = Button(_cardsBlock, names[i], 4 + i * 115, 0, 115, tab, () => { _page = page; RebuildCards(); });
             _tabs.Add(tabButton);
+            if (i == 4 && Game.Sim.Mission != null) tabButton.Visible = false; // the campaign's colony eats its dead (Sim.CarrionRules)
         }
         _cards = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, 0, cardsY, 691, 125); _cardsBlock.AddChild(_cards);
         Text(_cardsBlock, _touch ? "COLONY QUEUE  ·  HOLD TO CANCEL" : "COLONY QUEUE", 0, queueY, 290, 17, _touch ? 12 : 11);
@@ -321,7 +324,7 @@ public partial class ColonyCommandHud : Control
     void RebuildCards()
     {
         foreach (var child in _cards.GetChildren()) { _cards.RemoveChild(child); child.QueueFree(); }
-        _units.Clear(); _research.Clear();
+        _units.Clear(); _research.Clear(); _orders.Clear(); _fallenStatus = null;
         for (int i = 0; i < _tabs.Count; i++)
         {
             _tabs[i].AddThemeStyleboxOverride("normal", UiTheme.Box(i == _page ? new Color("624619") : Background, i == _page ? Gold : Edge, 1, 3, 0));
@@ -343,6 +346,27 @@ public partial class ColonyCommandHud : Control
                 Art(b, Region(new Rect2(691, 820, 13, 22)), 8, 94, 13, 22);
                 _units.Add((b, kind));
             }
+        }
+        else if (_page == 4)
+        {
+            // the colony's standing order for its own dead; enemy and bug carcasses are always food
+            for (int i = 0; i < 2; i++)
+            {
+                var order = (FallenOrder)i;
+                var b = Button(_cards, "", i * 268, 0, 262, 125, () => Game.Issue(new Cmd { Kind = CmdKind.Fallen, Team = (byte)Local.Me, Arg = (byte)order }));
+                Text(b, Config.FallenName(order).ToUpperInvariant(), 10, 6, 242, 22, 13, true, Gold);
+                // wrap first, then the text: a label given its text unwrapped keeps the full line's width
+                var d = Text(b, "", 10, 30, 242, 90, _touch ? 13 : 12);
+                d.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+                d.CustomMinimumSize = new Vector2(242, 0);
+                d.Text = Config.FallenDesc(order);
+                d.Size = new Vector2(242, 90);
+                _orders.Add((b, order));
+            }
+            _fallenStatus = Text(_cards, "", 544, 4, 150, 118, _touch ? 13 : 12, false, UiTheme.Dim);
+            _fallenStatus.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            _fallenStatus.Size = new Vector2(150, 118);
+            RefreshFallen(Game.Sim.Col[Local.Me]);
         }
         else if (_page == 0)
         {
@@ -405,8 +429,24 @@ public partial class ColonyCommandHud : Control
             status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "Later episode" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
             b.TooltipText = active ? "Right-click to cancel research and refund food." : Sim.ChamberName(Sim.KindOf(u));
         }
+        RefreshFallen(c);
         RefreshSelection(c); RefreshQueue(c);
         if (Game.Net is { } net) _network.Text = $"vs {net.PeerName} · {net.PingMs:0} ms" + (net.Desyncs > 0 ? " · SYNC ERROR" : Game.NetStall > 0.4f ? " · Waiting for player…" : "");
+    }
+    /// Opens a tab of the cards (tests).
+    internal void ShowPage(int page) { _page = page; RebuildCards(); }
+    void RefreshFallen(Colony c)
+    {
+        foreach (var (b, order) in _orders)
+        {
+            bool on = c.Fallen == order;
+            b.AddThemeStyleboxOverride("normal", UiTheme.Box(on ? new Color("3c2a0e") : new Color(0.035f, 0.03f, 0.02f, 0.98f), on ? Gold : Edge, on ? 2 : 1, 3, 0));
+            b.Modulate = new Color(1, 1, 1, on ? 1f : 0.75f);
+        }
+        if (_fallenStatus == null) return;
+        string state = (c.MournT > 0 ? $"Resolve: {c.MournT:0}s\n" : "") + (c.SickT > 0 ? $"Carrion fever: {c.SickT:0}s\n" : "");
+        if (state.Length == 0) state = "No effect now\n";
+        _fallenStatus.Text = $"Buried on the midden: {c.Buried}\n{state}Enemy and bug carcasses are always food.";
     }
     void RefreshSelection(Colony c)
     {

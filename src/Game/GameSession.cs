@@ -14,6 +14,7 @@ public partial class GameSession : Node3D
     public Sim Sim;
     public AntRenderer Ants;
     public Effects Effects;
+    public Carnage Gore;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -60,6 +61,8 @@ public partial class GameSession : Node3D
         Ants = new AntRenderer(this);
         long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
+        Gore = new Carnage(this, World.HF, Effects);
+        Ants.Gore = Gore;
         Interior = new NestInterior(this);
         Ants.Brood = Interior;
         BuildLighting();
@@ -659,6 +662,7 @@ public partial class GameSession : Node3D
         {
             var wp = World.HF.Point(e.Pos, 0.3f);
             bool seen = Demo || e.Team == Local.Me || Fog == null || Fog.Visible(e.Pos);
+            Gore.Event(e, Sim, seen);
             switch (e.Kind)
             {
                 case EvKind.Bite:
@@ -677,7 +681,7 @@ public partial class GameSession : Node3D
                         bool bug = Config.IsBug(e.Type);
                         Audio.At("death", wp, bug ? 4 : e.Type == AntType.Worker ? -2 : 1, 0.05f, 0.08f, bug ? 0.55f : 1f);
                         Effects.Burst(wp, bug ? 22 : 8, 1, bug ? 5 : 3.5f, bug ? 0.3f : 0.16f, 0.7f);
-                        Effects.Burst(wp, bug ? 10 : 4, 0, 1.5f, bug ? 1.4f : 0.6f, 1.2f);
+                        Effects.Burst(wp, bug ? 10 : 2, 0, 1.5f, bug ? 1.4f : 0.3f, 1.2f); // a little dust; the hemolymph (Carnage) carries the moment
                         if (bug && !Demo && Audible(e.Pos)) Hud.Alert($"{Config.Of(e.Type).Name} slain! Its carcass is a feast.", new Color(0.85f, 0.7f, 1f));
                     }
                     break;

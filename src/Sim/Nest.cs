@@ -497,7 +497,7 @@ public sealed partial class Sim
         switch (a.State)
         {
             case AntState.Forage: case AntState.Gather: return 0;
-            case AntState.Return: return FoodDeliveryPoint(a.Team).layer;
+            case AntState.Return: return a.Burying ? 0 : FoodDeliveryPoint(a.Team).layer;
             case AntState.Move: case AntState.AttackMove: case AntState.Dig: return a.GoalLayer;
             case AntState.Engage: return Valid(a.Target, a.TargetSerial) ? Ants[a.Target].Layer : a.Layer;
             default: return a.Layer;

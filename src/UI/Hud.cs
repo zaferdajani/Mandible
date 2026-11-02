@@ -883,7 +883,7 @@ public partial class Hud : CanvasLayer
             _selTitle.AddThemeColorOverride("font_color", Config.TeamUi(a.Team));
             _selHp.Value = a.Hp / a.MaxHp;
             _selDetail.Text = wild
-                 ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood:0} food."
+                 ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood * Config.FoodValue(FoodKind.Corpse):0} food."
                 : $"{Local.ColonyName(a.Team)}.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}";
             AddIcon(a.Type, 1);
             return;

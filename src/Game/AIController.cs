@@ -77,11 +77,22 @@ public sealed class AIController : IColonyAI
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
+        Fallen(c);
         March();
         Reinforce(c);
         Defend(c);
         Raid(c);
         Creep(c);
+    }
+
+    /// The computer's policy on its dead: bury them while the stores are full, eat them whenever food is short (most of a war)
+    /// (with a margin either way so it does not flip back and forth).
+    void Fallen(Colony c)
+    {
+        var want = c.Fallen;
+        if (c.Food < 200 && c.Fallen == FallenOrder.Honour) want = FallenOrder.Recycle;
+        else if (c.Food > 380 && c.Fallen == FallenOrder.Recycle) want = FallenOrder.Honour;
+        if (want != c.Fallen) Orders.Issue(new Cmd { Kind = CmdKind.Fallen, Team = (byte)_team, Arg = (byte)want });
     }
 
     /// Battered squads that are not fighting go home to heal and refill.

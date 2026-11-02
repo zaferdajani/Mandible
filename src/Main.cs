@@ -41,6 +41,7 @@ public partial class Main : Node
             if (a == "--raidtest") { Capture.RaidTest(this); return; }
             if (a == "--campaign-test") { ColonyValidation.Campaign(this); return; }
             if (a == "--transport-test") { FoodTransportValidation.Run(this); return; }
+            if (a == "--carrion-test") { CarrionValidation.Run(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
@@ -80,6 +81,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--gore-capture=")) _ = GoreValidation.Capture(this, a["--gore-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
@@ -304,7 +306,7 @@ public partial class MainMenu : CanvasLayer
         _main.Visible = false;
         CloseOverlay();
         var panel = new PanelContainer();
-        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -400, -300, 400, 300);
+        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -400, -340, 400, 340);
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 10);
         var title = UiTheme.Text("GRAPHICS", 34, UiTheme.Title, UiTheme.Gold);
@@ -350,6 +352,31 @@ public partial class MainMenu : CanvasLayer
             row.AddChild(d);
             v.AddChild(row);
             buttons.Add((b, q));
+        }
+        // how much of a kill is shown: fluids, severed legs and bodies in pieces, or a lighter touch
+        {
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 16);
+            var b = new Button { CustomMinimumSize = new Vector2(170, 52) };
+            b.AddThemeFontSizeOverride("font_size", 17);
+            b.AddThemeFontOverride("font", UiTheme.Title);
+            void Label() => b.Text = $"Combat: {Settings.CombatDetail}";
+            Label();
+            b.Pressed += () =>
+            {
+                App.Audio.Ui("ui_click");
+                Settings.CombatDetail = Settings.CombatDetail == Settings.Detail.Full ? Settings.Detail.Reduced : Settings.Detail.Full;
+                Settings.Save();
+                Label();
+            };
+            b.MouseEntered += () => App.Audio.Ui("ui_hover");
+            row.AddChild(b);
+            var d = UiTheme.Text("Combat detail. Full: hemolymph sprays and soaks into the soil, legs and antennae are bitten off, the dead lie in pieces. Reduced: lighter fluids, bodies stay whole.", 15, null, UiTheme.Ink);
+            d.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            d.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            d.VerticalAlignment = VerticalAlignment.Center;
+            row.AddChild(d);
+            v.AddChild(row);
         }
         var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(170, 48) };
         back.AddThemeFontOverride("font", UiTheme.Title);

@@ -15,6 +15,14 @@ public static class Settings
 
     static Quality Default() => Mobile ? Quality.Low : Quality.High;
 
+    /// How much of a kill the player sees: Full sprays hemolymph, severs legs and leaves bodies in pieces; Reduced keeps
+    /// the fluids light and the bodies whole. Rendering only.
+    public enum Detail { Full, Reduced }
+    public static Detail CombatDetail = Detail.Full;
+    public static bool Severing => CombatDetail == Detail.Full;
+    /// Share of the droplets and stains drawn: fewer on Reduced, and fewer on the Low tier phones run.
+    public static float GoreBudget => (CombatDetail == Detail.Full ? 1f : 0.4f) * (Gfx == Quality.Low ? 0.45f : 1f);
+
     /// Computers start fullscreen: in a window the mouse slides off the edge instead of scrolling the map.
     public static bool Fullscreen = true;
 
@@ -34,6 +42,7 @@ public static class Settings
         if (cfg.Load(Path) != Error.Ok) return;
         Gfx = (Quality)Mathf.Clamp((int)cfg.GetValue("graphics", "quality", (int)Default()), 0, (int)Quality.Ultra);
         Fullscreen = (bool)cfg.GetValue("display", "fullscreen", true);
+        CombatDetail = (Detail)Mathf.Clamp((int)cfg.GetValue("graphics", "combat_detail", 0), 0, 1);
     }
 
     public static void Save()
@@ -41,6 +50,7 @@ public static class Settings
         var cfg = new ConfigFile();
         cfg.SetValue("graphics", "quality", (int)Gfx);
         cfg.SetValue("display", "fullscreen", Fullscreen);
+        cfg.SetValue("graphics", "combat_detail", (int)CombatDetail);
         cfg.Save(Path);
     }
 
