@@ -189,7 +189,7 @@ public partial class ComicStrip : Control
     {
         int fs = Settings.Mobile ? 22 : Mathf.Clamp((int)(r.Size.Y / 26), 15, 24);
         float maxW = r.Size.X * 0.62f;
-        var font = UiTheme.Bold;
+        var font = UiTheme.Title; // Cinzel, in the game's gold, like an engraved caption card
         var lines = Wrap(font, text, fs, maxW - 24);
         float lh = fs * 1.25f;
         float w = 0; foreach (var l in lines) w = Mathf.Max(w, font.GetStringSize(l, HorizontalAlignment.Left, -1, fs).X);
@@ -198,7 +198,11 @@ public partial class ComicStrip : Control
         DrawRect(box, new Color(0.08f, 0.045f, 0.02f, 0.82f * k));
         DrawRect(box, new Color(0.78f, 0.58f, 0.28f, 0.9f * k), false, 1.5f);
         for (int i = 0; i < lines.Count; i++)
-            DrawString(font, box.Position + new Vector2(14, 9 + fs + i * lh - fs * 0.2f), lines[i], HorizontalAlignment.Left, -1, fs, new Color(1f, 0.92f, 0.76f, k));
+        {
+            var at = box.Position + new Vector2(14, 9 + fs + i * lh - fs * 0.2f);
+            DrawString(font, at + new Vector2(1, 1), lines[i], HorizontalAlignment.Left, -1, fs, new Color(0.03f, 0.015f, 0.005f, 0.8f * k));
+            DrawString(font, at, lines[i], HorizontalAlignment.Left, -1, fs, new Color(1f, 0.8f, 0.42f, k));
+        }
     }
 
     static List<string> Wrap(Font font, string text, int fs, float width)

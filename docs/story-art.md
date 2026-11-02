@@ -19,10 +19,10 @@ Every prompt begins with "Cinematic photoreal (macro) still from a premium 3D st
 
 | File | Before | Prompt (abridged to its subject) |
 | --- | --- | --- |
-| `o1-tube` | Level 1 | A corked glass collector's tube half full of damp sand in a worn canvas backpack pocket; inside, a black garden ant queen, a grizzled soldier with big mandibles, workers. Golden evening light, amber rim light. |
-| `o2-fall` | Level 1 | Ant's-eye view: the tube tumbles from the open pocket of a huge backpack; a giant hiking boot steps past, out of focus. |
-| `o3-break` | Level 1 | The tube shattered on stones; corked half, shards, spilled sand and cotton; the queen climbs out, the soldier at her side, workers behind. |
-| `o4-woods` | Level 1 | The queen leads a column into tall grass, glass glinting behind; the old soldier at the head; the hiker walking away, blurred. |
+| `o1-tube` | Level 1 | Remade 2026-11-02 (art pipeline) from the approved tube target `docs/art-targets/a-opening-tube.jpg` and the label scan: the tube in a canvas backpack pocket, thick glass, cotton plug, water reservoir behind a second plug, handwritten 'Lasius niger' label, queen, soldiers and workers inside on sand. `gpt_image_2_5`, high, 2k, both as references. |
+| `o2-fall` | Level 1 | Remade 2026-11-02 with the same references: ground-level view on the stony path, the same labelled tube slipping from the backpack pocket in motion blur as a boot strides past. |
+| `o3-break` | Level 1 | Remade 2026-11-02 with the same references: the same tube burst on the stones, jagged fracture, curved shards, cotton plug half out, reservoir end intact, the colony climbing out into the leaf litter. |
+| `o4-woods` | Level 1 | Remade 2026-11-02 with the tube target as reference: the queen leads the column along the sandy path away from the broken tube, natural black Lasius ants (no glowing eyes), the hiker walking away, blurred. |
 | `b-rain` | Sweet Rain | After rain: a clover stem with aphids and a golden honeydew drop; two black workers tend them. |
 | `b-scout` | The Foraging Season | A red fire ant scout on a pebble watches black ants carry seeds along a trail. |
 | `b-log` | The Hollow Log | A hornet hovers over a rotting mossy log; a black worker and soldier look up. |
