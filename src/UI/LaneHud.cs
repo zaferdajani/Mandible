@@ -8,7 +8,7 @@ public partial class Hud
     Label _heroName, _heroStats, _ability, _respawn, _score;
     ProgressBar _heroHp, _heroXp;
     readonly Button[] _shop = new Button[4];
-    AntPortrait _heroPortrait;
+    Control _heroPortrait;
 
     void BuildLanePanel()
     {
@@ -20,7 +20,8 @@ public partial class Hud
 
         var top = new HBoxContainer();
         top.AddThemeConstantOverride("separation", 10);
-        _heroPortrait = new AntPortrait { Type = Game.Heroes[Local.Me], Team = Local.Me, CustomMinimumSize = new Vector2(110, 96) };
+        _heroPortrait = HeroArt.Frame(Game.Heroes[Local.Me], Local.Me, HeroArt.Framing.Bust, new Vector2(96, 110));
+        _heroPortrait.MouseFilter = Control.MouseFilterEnum.Pass; // keeps its hero-card tooltip
         top.AddChild(_heroPortrait);
         var info = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _heroName = UiTheme.Text("", 18, UiTheme.Title, UiTheme.Gold);

@@ -742,6 +742,33 @@ void fragment() {
 }
 ";
 
+    /// A hero's aura: a soft additive glow that slowly swirls. On the ground it is a disc with a faint rim; with
+    /// billboard = 1 it is a halo facing the camera. Per instance: rgb = colour, a = strength.
+    public const string Aura = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform float billboard = 0.0;
+varying vec4 v_c;
+void vertex() {
+    v_c = INSTANCE_CUSTOM;
+    if (billboard > 0.5) {
+        float s = length(MODEL_MATRIX[0].xyz);
+        MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+    }
+}
+void fragment() {
+    vec2 p = UV - 0.5;
+    float r = length(p) * 2.0;
+    float a = atan(p.y, p.x);
+    // two slow counter-turning lobes so the light seems to drift and blend rather than sit still
+    float swirl = 0.72 + 0.28 * sin(a * 3.0 + TIME * 1.1 - r * 5.0) * sin(a * 2.0 - TIME * 0.7 + r * 3.0);
+    float glow = pow(max(0.0, 1.0 - r), 2.4) * swirl;
+    float rim = (1.0 - billboard) * smoothstep(0.6, 0.82, r) * (1.0 - smoothstep(0.82, 1.0, r)) * 0.35 * swirl;
+    ALBEDO = v_c.rgb;
+    ALPHA = clamp((glow + rim) * v_c.a, 0.0, 1.0);
+}
+";
+
     public const string Bar = @"
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled;
