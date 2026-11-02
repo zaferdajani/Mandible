@@ -23,9 +23,9 @@ void fragment() {
     v.xyz /= v.w;
     vec3 wp = (INV_VIEW_MATRIX * vec4(v.xyz, 1.0)).xyz;
     // break the frontier: two octaves of the yard's cell noise push the lookup a couple of units either way
-    vec2 j = (texture(noise_b, wp.xz * 0.045).rg - 0.5) * 3.2 + (texture(noise_b, wp.xz * 0.17 + 0.37).rg - 0.5) * 1.1;
+    vec2 j = (texture(noise_b, wp.xz * 0.045).rg - 0.5) * 2.0 + (texture(noise_b, wp.xz * 0.17 + 0.37).rg - 0.5) * 0.5;
     vec2 f = texture(fow_tex, (wp.xz + j) / map_size).rg;
-    float known = smoothstep(0.08, 0.75, f.g);
+    float known = smoothstep(0.02, 0.95, f.g);
     float seen = smoothstep(0.05, 0.9, f.r);
     float lit = known * mix(remembered, 1.0, seen);
     ALBEDO = vec3(0.0);

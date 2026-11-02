@@ -614,5 +614,236 @@
 		],
 		"src": "hamburger_buns",
 		"tris": 936
+	},
+	{
+		"file": "grass_bermuda_01_0.res",
+		"kind": "grass",
+		"size": [
+			0.0677379965782166,
+			0.0247411299496889,
+			0.0843101441860199
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_1.res",
+		"kind": "grass",
+		"size": [
+			0.0701003074645996,
+			0.0433435663580894,
+			0.0550261437892914
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_2.res",
+		"kind": "grass",
+		"size": [
+			0.0439380407333374,
+			0.0436337552964687,
+			0.0692532658576965
+		],
+		"src": "grass_bermuda_01",
+		"tris": 19
+	},
+	{
+		"file": "grass_bermuda_01_3.res",
+		"kind": "grass",
+		"size": [
+			0.0385122299194336,
+			0.0977500230073929,
+			0.0285673327744007
+		],
+		"src": "grass_bermuda_01",
+		"tris": 17
+	},
+	{
+		"file": "grass_bermuda_01_4.res",
+		"kind": "grass",
+		"size": [
+			0.0511637330055237,
+			0.0745726078748703,
+			0.0218643508851528
+		],
+		"src": "grass_bermuda_01",
+		"tris": 8
+	},
+	{
+		"file": "grass_bermuda_01_5.res",
+		"kind": "grass",
+		"size": [
+			0.0569814220070839,
+			0.0666733533143997,
+			0.0916188955307007
+		],
+		"src": "grass_bermuda_01",
+		"tris": 20
+	},
+	{
+		"file": "grass_bermuda_01_6.res",
+		"kind": "grass",
+		"size": [
+			0.0549736022949219,
+			0.102065697312355,
+			0.0162992849946022
+		],
+		"src": "grass_bermuda_01",
+		"tris": 14
+	},
+	{
+		"file": "grass_bermuda_01_7.res",
+		"kind": "grass",
+		"size": [
+			0.0660364329814911,
+			0.0826614648103714,
+			0.0368752591311932
+		],
+		"src": "grass_bermuda_01",
+		"tris": 24
+	},
+	{
+		"file": "grass_bermuda_01_8.res",
+		"kind": "grass",
+		"size": [
+			0.0407008528709412,
+			0.113004244863987,
+			0.026102602481842
+		],
+		"src": "grass_bermuda_01",
+		"tris": 30
+	},
+	{
+		"file": "grass_bermuda_01_9.res",
+		"kind": "grass",
+		"size": [
+			0.0678350329399109,
+			0.150886446237564,
+			0.0455812066793442
+		],
+		"src": "grass_bermuda_01",
+		"tris": 147
+	},
+	{
+		"file": "grass_bermuda_01_10.res",
+		"kind": "grass",
+		"size": [
+			0.0765952467918396,
+			0.127205029129982,
+			0.0492665469646454
+		],
+		"src": "grass_bermuda_01",
+		"tris": 140
+	},
+	{
+		"file": "grass_bermuda_01_11.res",
+		"kind": "grass",
+		"size": [
+			0.0371622443199158,
+			0.0922582522034645,
+			0.0445119738578796
+		],
+		"src": "grass_bermuda_01",
+		"tris": 128
+	},
+	{
+		"file": "grass_bermuda_01_12.res",
+		"kind": "grass",
+		"size": [
+			0.0696470737457275,
+			0.152189016342163,
+			0.0831337794661522
+		],
+		"src": "grass_bermuda_01",
+		"tris": 268
+	},
+	{
+		"file": "grass_bermuda_01_13.res",
+		"kind": "grass",
+		"size": [
+			0.00357520580291748,
+			0.149414852261543,
+			0.0136966006830335
+		],
+		"src": "grass_bermuda_01",
+		"tris": 15
+	},
+	{
+		"file": "grass_bermuda_01_14.res",
+		"kind": "grass",
+		"size": [
+			0.00357520580291748,
+			0.149414837360382,
+			0.0136965969577432
+		],
+		"src": "grass_bermuda_01",
+		"tris": 15
+	},
+	{
+		"file": "grass_bermuda_01_15.res",
+		"kind": "grass",
+		"size": [
+			0.079865425825119,
+			0.032239593565464,
+			0.0277538746595383
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_16.res",
+		"kind": "grass",
+		"size": [
+			0.0826874673366547,
+			0.0458502620458603,
+			0.0360337197780609
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_17.res",
+		"kind": "grass",
+		"size": [
+			0.0539996176958084,
+			0.0551652126014233,
+			0.0414659194648266
+		],
+		"src": "grass_bermuda_01",
+		"tris": 18
+	},
+	{
+		"file": "grass_bermuda_01_18.res",
+		"kind": "grass",
+		"size": [
+			0.0582116991281509,
+			0.0546445623040199,
+			0.0334690883755684
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
+	},
+	{
+		"file": "grass_bermuda_01_19.res",
+		"kind": "grass",
+		"size": [
+			0.0287119150161743,
+			0.0907373130321503,
+			0.0176627151668072
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
+	},
+	{
+		"file": "grass_bermuda_01_20.res",
+		"kind": "grass",
+		"size": [
+			0.0355377197265625,
+			0.0690527185797691,
+			0.0246128626167774
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
 	}
 ]

@@ -13,7 +13,6 @@ public static class Shaders
     }
 
     const string Fow = @"
-uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
 uniform float map_size = 320.0;
 // the fog of war itself is FogOverlay's screen pass (true black over the unknown); materials no longer dim themselves
 float fow(vec3 wp) { return 1.0; }
@@ -436,7 +435,17 @@ uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
 uniform vec2 entrance_a = vec2(-1000.0);
 uniform vec2 entrance_b = vec2(-1000.0);
-uniform int detail = 1; // graphics tier: 0 plain soil (phones), 1 grain and clods, 2 a finer grain octave on top
+uniform int detail = 1; // graphics tier: 0 phones (base and hollow sets only), 1 and up every ground set
+uniform sampler2D g_base_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_base_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_base_a : filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_crest_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_crest_n : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_crest_a : filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_hollow_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_hollow_n : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_litter_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_litter_n : hint_normal, filter_linear_mipmap, repeat_enable;
 // Glass Earth: while xray_on, the soil directly over the colony's galleries and rooms is cut away
 varying vec3 wpos;
 varying vec4 vcol;   // r baked shade, g excavated sand, b pine thatch, a 0.5 level / <0.5 crest / >0.5 hollow
@@ -445,6 +454,8 @@ void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vcol = COLOR;
+    TANGENT = normalize(vec3(1.0, 0.0, 0.0) - NORMAL * NORMAL.x);
+    BINORMAL = normalize(cross(TANGENT, NORMAL));
 }
 " + NetworkFn + @"
 void fragment() {
@@ -464,44 +475,45 @@ void fragment() {
     float steep = smoothstep(0.08, 0.35, 1.0 - wnrm.y);
     float n1 = texture(noise_a, uv * 0.0035).r;
     float n2 = texture(noise_a, uv * 0.017 + 0.3).r;
-    float g = texture(noise_b, uv * 0.09).r;
     float g2 = texture(noise_b, uv * 0.41 + 0.7).r;
-    float grain = texture(noise_b, uv * 1.7).r;
-    float grain2 = detail > 0 ? texture(noise_b, uv * 4.3 + 0.23).r : 0.5;
-    float grain3 = detail > 0 ? texture(noise_b, uv * 9.1 + 0.61).r : 0.5;
-    float grit = texture(noise_b, uv * 0.83 + 0.37).r;
-    vec3 dry = vec3(0.42, 0.315, 0.22);
-    vec3 damp = vec3(0.19, 0.135, 0.09);
-    vec3 clay = vec3(0.38, 0.23, 0.13);
-    vec3 pale = vec3(0.58, 0.49, 0.37);   // sun-dried crests
-    vec3 col = mix(dry, damp, smoothstep(0.45, 0.85, n1) * 0.8);
-    col = mix(col, clay, smoothstep(0.5, 0.8, n2) * 0.5);
-    // hollows hold the damp and the fines; crests dry pale; steep sides show the lighter subsoil
-    col = mix(col, damp * 0.9, inHollow * 0.55);
-    col = mix(col, pale, onCrest * 0.45 + steep * 0.25);
-    col *= 0.72 + 0.45 * g;
-    col *= 0.8 + 0.3 * g2;
-    // individual sand grains: bright quartz flecks and dark pores (stronger in the pebble beds of the hollows)
-    float gc = 1.0 + 0.5 * inHollow;
-    col *= 1.0 - (0.26 - 0.32 * grain) * gc;
-    col *= 0.86 + 0.28 * grain2;
-    col *= 0.92 + 0.16 * grain3;
-    float quartz = smoothstep(0.80, 0.88, grit) * smoothstep(0.35, 0.7, g) * (1.0 + 0.7 * onCrest);
-    col = mix(col, vec3(0.64, 0.59, 0.52), clamp(quartz, 0.0, 1.0) * 0.6);
-    // a bed of small stones where the fines have washed in
-    float bed = step(0.74 - 0.08 * inHollow, g2) * inHollow * float(detail > 0);
-    col = mix(col, vec3(0.38, 0.35, 0.31) * (0.7 + 0.5 * grain3), bed * 0.65);
-    float pore = smoothstep(0.72, 0.8, texture(noise_b, uv * 0.6 + 0.11).r);
-    col = mix(col, vec3(0.06, 0.045, 0.035), pore * 0.35);
-    float dark = smoothstep(0.7, 0.8, texture(noise_b, uv * 0.23).r);
-    col = mix(col, vec3(0.1, 0.075, 0.05), dark * 0.35);
-    // excavated sand around the black colony's nest
-    vec3 sand = vec3(0.50, 0.40, 0.28) * (0.7 + 0.5 * g2) * (0.8 + 0.3 * grain) * (0.82 + 0.36 * grain2) * (0.9 + 0.2 * grain3);
-    sand = mix(sand, vec3(0.30, 0.22, 0.14), step(0.86, grain3) * 0.6);          // scattered dark grains
-    sand = mix(sand, vec3(0.72, 0.66, 0.58), step(0.9, grain2) * smoothstep(0.5, 0.8, grain3)); // bright quartz specks
+    // photographed soil (CC0 ground sets, assets/nature/ground), blended by the lie of the land. The base is read
+    // twice, at two scales and angles, and the two are mixed by slow noise so its tile never repeats visibly.
+    vec2 ua = uv / 34.0;
+    vec2 ub = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80)) * uv / 23.0 + 0.37;
+    float mixAB = smoothstep(0.35, 0.65, n2);
+    vec3 baseC = mix(texture(g_base_d, ua).rgb, texture(g_base_d, ub).rgb, mixAB);
+    vec3 baseN = mix(texture(g_base_n, ua).rgb, texture(g_base_n, ub).rgb, mixAB);
+    vec3 baseA = mix(texture(g_base_a, ua).rgb, texture(g_base_a, ub).rgb, mixAB);
+    // where each layer lies, sharpened against the base's own height so stones stand proud of the fines
+    float hBase = baseA.b;
+    float edgeD = min(min(wpos.x, map_size - wpos.x), min(wpos.z, map_size - wpos.z));
+    float wCrest = clamp(onCrest * 0.9 + steep * 0.6 + smoothstep(0.62, 0.8, n1) * 0.35, 0.0, 1.0);
+    float wHollow = clamp(inHollow * 1.1 + smoothstep(0.7, 0.9, n1) * 0.3, 0.0, 1.0);
+    float wLitter = clamp((1.0 - smoothstep(8.0, 30.0, edgeD)) * 0.9 + smoothstep(0.66, 0.82, n2) * 0.55 * (1.0 - inHollow), 0.0, 1.0);
+    vec3 col = baseC; vec3 nmT = baseN; float rough = baseA.g; float occ = baseA.r;
+    if (detail > 0) {
+        vec2 uc = uv / 30.0 + 0.19;
+        vec3 crestA = texture(g_crest_a, uc).rgb;
+        float tC = smoothstep(0.0, 0.25, wCrest + crestA.b - hBase - 0.35);
+        col = mix(col, texture(g_crest_d, uc).rgb, tC); nmT = mix(nmT, texture(g_crest_n, uc).rgb, tC);
+        rough = mix(rough, crestA.g, tC); occ = mix(occ, crestA.r, tC);
+    }
+    vec2 uh = uv / 26.0 + 0.53;
+    float tH = smoothstep(0.0, 0.3, wHollow - hBase * 0.5 - 0.15);
+    col = mix(col, texture(g_hollow_d, uh).rgb * vec3(1.02, 0.98, 0.92), tH);
+    nmT = mix(nmT, texture(g_hollow_n, uh).rgb, tH);
+    if (detail > 0) {
+        vec2 ul = uv / 40.0 + 0.71;
+        float tL = smoothstep(0.0, 0.25, wLitter - hBase * 0.4 - 0.2);
+        col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
+    }
+    col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
+    float quartz = 0.0;
+    // excavated sand around the black colony's nest: the same soil, sifted paler
+    vec3 sand = baseC * vec3(1.18, 1.12, 1.02) * (0.85 + 0.3 * g2);
     col = mix(col, sand, vcol.g);
     // pine thatch mound of the red colony
-    vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g) * (0.7 + 0.4 * g2);
+    vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g2) * (0.7 + 0.4 * n2);
     col = mix(col, thatch, vcol.b);
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
@@ -509,15 +521,13 @@ void fragment() {
     col *= 1.0 - 0.32 * band - 0.46 * glass;
     col = mix(col, col * vec3(1.0, 0.9, 0.8), 0.5 * max(band, glass));
     ALBEDO = col;
-    ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
+    ROUGHNESS = clamp(mix(rough, rough * 0.8, clamp(wet, 0.0, 1.0)), 0.4, 1.0);
     SPECULAR = 0.3;
-    // the surface: broad undulations, clods, then the grains (two octaves at Ultra); plain soil keeps only the first two
-    vec2 nm = (texture(normal_a, uv * 0.11).xy - 0.5) * 1.0 + (texture(normal_b, uv * 0.47).xy - 0.5) * 0.9;
-    if (detail > 0) nm += (texture(normal_c, uv * 0.26).xy - 0.5) * (1.0 + 0.4 * inHollow);
-    if (detail > 1) nm += (texture(normal_c, uv * 0.95 + 0.31).xy - 0.5) * 0.6;
+    // the photographed relief on top of the broad undulations of the land
+    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
-    NORMAL_MAP_DEPTH = detail > 0 ? 1.5 : 1.1;
+    NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;
     float ph = texture(pher_tex, uv / map_size).r;
     float f = fow(wpos);
     ALBEDO = mix(ALBEDO, vec3(1.0, 0.72, 0.32), clamp(ph, 0.0, 1.0) * pher_view * 0.35) * f;

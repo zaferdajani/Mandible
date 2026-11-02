@@ -48,13 +48,13 @@ public static partial class WorldBuilder
         BuildTerrainMesh(w, ao);
         BuildSkirt(w);
         foreach (var l in leaves) BuildLeaf(w, l);
-        foreach (var t in twigs) BuildTwig(w, t);
-        foreach (var r in rocks) BuildRock(w, r);
+        BuildTwigs(w, deco, twigs);
         BuildGrass(w, deco);
         BuildNestDressing(w, deco);
         if (firstNest) BuildExpedition(w, deco);
         else { PlaceFood(w, rng); PlaceCamps(w, rng); }
         w.IndexObstacles();
+        DressYard(w, deco, rocks, firstNest);
         BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);
         return w;
@@ -406,18 +406,46 @@ public static partial class WorldBuilder
         return list;
     }
 
-    static void BuildTwig(World w, TwigDef t)
+    /// The fallen sticks the ants climb over: each a scanned dead branch laid along the bump the sim already raised.
+    static void BuildTwigs(World w, Rng rng, List<TwigDef> twigs)
     {
-        var k = new MeshKit();
-        var white = new Color(1, 1, 1);
-        for (int s = 0; s < t.Pts.Length - 1; s++)
-            k.Tube(t.Pts[s], t.Pts[s + 1], t.R * (1 - s * 0.08f), t.R * (1 - (s + 1) * 0.08f), 10, white, white, Vector2.Zero, s == t.Pts.Length - 2);
-        // small side branch
-        var mid = (t.Pts[1] + t.Pts[2]) * 0.5f;
-        var dir = (t.Pts[2] - t.Pts[1]).Normalized().Cross(Vector3.Up);
-        k.Tube(mid, mid + dir * 7 + (t.Pts[2] - t.Pts[1]).Normalized() * 4 + Vector3.Up * 0.5f, t.R * 0.45f, t.R * 0.15f, 6, white, white, Vector2.Zero);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Twig) };
-        w.Root.AddChild(mi);
+        var d = new NatureScatter.Dresser(w, rng);
+        var branches = d.Twigs.FindAll(p => p.Src.StartsWith("dry_branches"));
+        if (branches.Count == 0) branches = d.Twigs;
+        foreach (var t in twigs)
+        {
+            var a = new Vector2(t.Pts[0].X, t.Pts[0].Z); var b = new Vector2(t.Pts[^1].X, t.Pts[^1].Z);
+            var dir = b - a;
+            var p = branches[rng.I(0, branches.Count)];
+            // the scan is laid lengthwise along z; thicken its cross-section to the stick's real girth
+            var laid = (p.Lie * p.Size).Abs();
+            float len = dir.Length();
+            float girth = Mathf.Clamp(t.R * 3.2f / (Mathf.Min(laid.X, laid.Y) * len / laid.Z), 0.7f, 3f);
+            d.Place(p, (a + b) * 0.5f, len * 1.05f, 0.18f, 0.02f, p.Lie, Mathf.Atan2(dir.X, dir.Y), rng.R(0.85f, 1f), girth, 0.3f);
+        }
+        d.Commit();
+    }
+
+    /// Stones, debris and roots over the whole yard (NatureScatter), kept off nests, food, rocks and level 1's corridor.
+    static void DressYard(World w, Rng rng, List<Rock> rocks, bool firstNest)
+    {
+        var sites = rocks.ConvertAll(r => new NatureScatter.Site { P = r.P, R = r.R, Yaw = r.Yaw, Seed = r.Seed });
+        var a = w.Nests[0].Pos; var b = w.Nests[1].Pos;
+        float Trail(Vector2 p)
+        {
+            if (firstNest) return Mathf.Abs(p.Y - 256) + Mathf.Max(0, Mathf.Max(36 - p.X, p.X - 132));
+            float t = Mathf.Clamp((p - a).Dot(b - a) / (b - a).LengthSquared(), 0, 1);
+            return p.DistanceTo(a + (b - a) * t); // the worn hollow between the nests
+        }
+        bool KeepOut(Vector2 p)
+        {
+            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < n.Radius + 4) return true;
+            foreach (var f in w.Food) if (p.DistanceTo(f.Pos) < f.Radius + 1.5f) return true;
+            if (firstNest && Expedition.Contains(p, 1.5f)) return true;
+            foreach (var r in rocks) if (p.DistanceTo(r.P) < r.R * 0.9f) return true;
+            return false;
+        }
+        NatureScatter.Build(w, rng, sites, Trail, KeepOut, new Rect2(4, 4, S - 8, S - 8), Settings.Density);
     }
 
     // ---------------------------------------------------------------- terrain mesh
@@ -507,7 +535,7 @@ public static partial class WorldBuilder
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
-        w.TerrainMaterial.SetShaderParameter("normal_c", w.NormalC);
+        Ground(w.TerrainMaterial);
         w.TerrainMaterial.SetShaderParameter("entrance_a", w.Nests[0].Pos);
         w.TerrainMaterial.SetShaderParameter("entrance_b", w.Nests[1].Pos);
         w.TerrainMaterials.Add(w.TerrainMaterial);
@@ -516,6 +544,17 @@ public static partial class WorldBuilder
     }
 
     // ---------------------------------------------------------------- grass
+    /// The photographed ground sets (assets/nature/ground, CC0): base, crest, hollow and litter layers.
+    static void Ground(ShaderMaterial m)
+    {
+        foreach (var (slot, set) in new[] { ("base", "gravelly_sand"), ("crest", "dry_ground_rocks"), ("hollow", "brown_mud_dry"), ("litter", "forest_leaves_04") })
+            foreach (var map in new[] { "d", "n", "a" })
+            {
+                if (map == "a" && slot is "hollow" or "litter") continue; // those two borrow the base's occlusion and roughness
+                m.SetShaderParameter($"g_{slot}_{map}", NatureAssets.Texture($"ground/{set}_{(map == "d" ? "diff" : map == "n" ? "nor" : "arm")}"));
+            }
+    }
+
     static ArrayMesh BladeMesh()
     {
         var k = new MeshKit();
@@ -569,29 +608,29 @@ public static partial class WorldBuilder
             }
         st.GenerateNormals();
         var skirt = Mat(w, Shaders.Terrain);
-        skirt.SetShaderParameter("normal_c", w.NormalC);
+        Ground(skirt);
         w.TerrainMaterials.Add(skirt);
         w.Root.AddChild(new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = skirt, Name = "Skirt" }); // fog of war carries on seamlessly past the edge
     }
 
+    /// Grass from the photographed Bermuda sprigs (CC0): clumps in the field, a lawn along the yard's rim and a tall
+    /// meadow beyond it. Each clump mixes sprig shapes and sizes, and some are dry.
     static void BuildGrass(World w, Rng rng)
     {
-        var xf = new List<Transform3D>();
-        var dry = new List<float>();
-        var hf = w.HF;
-        void Blade(Vector2 p, float h)
+        var d = new NatureScatter.Dresser(w, rng);
+        if (d.Grass.Count == 0) return;
+        void Blade(Vector2 p, float h, float dry)
         {
             if (w.Blocked(p, 0.5f)) return;
-            var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.3f, 0.3f)) * Basis.FromScale(new Vector3(rng.R(0.9f, 1.6f), h, 1));
-            xf.Add(new Transform3D(basis, new Vector3(p.X, SkirtY(hf, p.X, p.Y) - 0.2f, p.Y)));
-            dry.Add(rng.F());
+            d.Sprig(p, h, dry);
         }
-        bool FarFromNests(Vector2 p, float d)
+        bool FarFromNests(Vector2 p, float dist)
         {
-            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < d) return false;
+            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < dist) return false;
             return true;
         }
-        // in-field clumps (mirrored)
+        var hf = w.HF;
+        // in-field clumps (mirrored), each with its own height and dryness
         int clumps = 0, tries = 0;
         while (clumps < (int)(34 * Settings.Density) && tries++ < 2000)
         {
@@ -599,43 +638,35 @@ public static partial class WorldBuilder
             if (c.X + c.Y > S || !FarFromNests(c, 34) || !FarFromNests(Mirror(c), 34) || c.DistanceTo(Center) < 22) continue;
             if (hf.Bilinear(hf.Leaf, c.X, c.Y) > 0.1f) continue;
             float rad = rng.R(2.5f, 6.5f);
-            int count = (int)(rad * rad * 2.2f);
-            float hb = rng.R(10, 24);
+            int count = (int)(rad * rad * 0.8f);
+            float hb = rng.R(10, 22), dry = rng.R(0, 0.7f);
             for (int i = 0; i < count; i++)
             {
                 var o = rng.InDisk(rad);
-                float h = hb * rng.R(0.6f, 1.2f) * (1 - o.Length() / rad * 0.4f);
-                Blade(c + o, h);
-                Blade(Mirror(c + o), h);
+                float h = hb * rng.R(0.5f, 1.2f) * (1 - o.Length() / rad * 0.45f);
+                float dd = Mathf.Clamp(dry + o.Length() / rad * 0.3f, 0, 1); // the rim of a clump dries first
+                Blade(c + o, h, dd);
+                Blade(Mirror(c + o), h, dd);
             }
             clumps++;
         }
-        // dense border lawn
-        for (int i = 0; i < (int)(4200 * Settings.Density); i++)
+        // lawn along the rim
+        for (int i = 0; i < (int)(1500 * Settings.Density); i++)
         {
-            float t = rng.F() * S, d = Mathf.Pow(rng.F(), 1.6f) * 22f;
+            float t = rng.F() * S, dist = Mathf.Pow(rng.F(), 1.6f) * 22f;
             int side = rng.I(0, 4);
-            var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
-            Blade(p, rng.R(14, 34) * (1.2f - d / 22f * 0.5f));
+            var p = side switch { 0 => new Vector2(t, dist), 1 => new Vector2(t, S - dist), 2 => new Vector2(dist, t), _ => new Vector2(S - dist, t) };
+            Blade(p, rng.R(12, 28) * (1.2f - dist / 22f * 0.5f), rng.R(0.1f, 0.6f));
         }
         // and a tall wild meadow beyond the yard's edge, so the world never just stops
-        for (int i = 0; i < (int)(3600 * Settings.Density); i++)
+        for (int i = 0; i < (int)(1300 * Settings.Density); i++)
         {
-            float t = rng.R(-40, S + 40), d = -Mathf.Pow(rng.F(), 0.8f) * 34f;
+            float t = rng.R(-40, S + 40), dist = -Mathf.Pow(rng.F(), 0.8f) * 34f;
             int side = rng.I(0, 4);
-            var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
-            Blade(p, rng.R(22, 44));
+            var p = side switch { 0 => new Vector2(t, dist), 1 => new Vector2(t, S - dist), 2 => new Vector2(dist, t), _ => new Vector2(S - dist, t) };
+            Blade(p, rng.R(20, 40), rng.R(0.2f, 0.8f));
         }
-        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = BladeMesh() };
-        mm.InstanceCount = xf.Count;
-        for (int i = 0; i < xf.Count; i++)
-        {
-            mm.SetInstanceTransform(i, xf[i]);
-            mm.SetInstanceCustomData(i, new Color(dry[i], 0, 0, 0));
-        }
-        var mmi = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = Mat(w, Shaders.Grass), Name = "Grass" };
-        w.Root.AddChild(mmi);
-        w.Scatter.Add((mmi, Scatter.Grass));
+        d.Commit();
     }
 
     // ---------------------------------------------------------------- nests
@@ -910,21 +941,12 @@ public static partial class WorldBuilder
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < 2.2f) return false;
             return true;
         }
-        for (int variant = 0; variant < 3; variant++)
+        for (int variant = 0; variant < 1; variant++)
         {
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = PebbleMesh(17 + variant) };
             var xf = new List<Transform3D>();
             var cd = new List<Color>();
-            for (int i = 0; i < (int)(4200 * Settings.Density); i++)
-            {
-                var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
-                if (!Clear(p, 0.3f)) continue;
-                // mostly grit, some proper pebbles
-                float s = rng.F() < 0.85f ? rng.R(0.08f, 0.35f) : rng.R(0.4f, 1.1f);
-                var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.3f, 0.3f)) * Basis.FromScale(Vector3.One * s);
-                xf.Add(new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) + s * 0.12f, p.Y)));
-                cd.Add(new Color(rng.F(), rng.F() < 0.15f ? 1 : 0, rng.F() < 0.2f ? rng.R(0.3f, 0.8f) : 0, rng.F()));
-            }
+            // (the stones themselves are photoscans now, see NatureScatter; the ground sets carry the fine grit)
             // excavated grains around the crater
             if (variant == 0)
             {
@@ -951,7 +973,7 @@ public static partial class WorldBuilder
         var smm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = sk.Commit() };
         var sx = new List<Transform3D>();
         var sc = new List<float>();
-        for (int i = 0; i < (int)(2600 * Settings.Density); i++)
+        for (int i = 0; i < (int)(900 * Settings.Density); i++)
         {
             var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
             if (!Clear(p, 0.5f)) continue;
