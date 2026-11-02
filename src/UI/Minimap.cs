@@ -98,6 +98,10 @@ public partial class Minimap : Control
                 for (int i = 0; i < lane.Length; i++) line[i] = lane[i] * k;
                 DrawPolyline(line, new Color(0.95f, 0.85f, 0.55f, 0.28f), 3f, true);
             }
+        }
+        if (Game.Lanes || Game.Sim.Mission?.Episode > 1)
+        {
+            float k = Size.X / Config.MapSize;
             var sim = Game.Sim;
             // the aphid herd while it is in the pasture, and the Old Stag's log (brighter while it is awake)
             if (sim.HerdHere)
@@ -107,9 +111,14 @@ public partial class Minimap : Control
                 DrawCircle(p, 4.5f, c);
                 if (sim.HerdTeam >= 0) DrawArc(p, 7, -Mathf.Pi / 2, -Mathf.Pi / 2 + Mathf.Tau * sim.HerdBar, 24, c, 2, true);
             }
-            var stagAt = sim.StagAwake ? sim.Ants[sim.StagId].Pos * k : sim.StagLair * k;
-            var stagColor = !sim.StagAwake ? new Color(0.6f, 0.45f, 0.3f, 0.7f) : sim.StagTeam < 0 ? new Color(1f, 0.55f, 0.25f) : Config.TeamUi(sim.StagTeam);
-            DrawArc(stagAt, sim.StagAwake ? 6 : 4, 0, Mathf.Tau, 16, stagColor, sim.StagAwake ? 3 : 1.5f, true);
+            if (sim.StagLair != Vector2.Zero)
+            {
+                var stagAt = sim.StagAwake ? sim.Ants[sim.StagId].Pos * k : sim.StagLair * k;
+                var stagColor = !sim.StagAwake ? new Color(0.6f, 0.45f, 0.3f, 0.7f) : sim.StagTeam < 0 ? new Color(1f, 0.55f, 0.25f) : Config.TeamUi(sim.StagTeam);
+                DrawArc(stagAt, sim.StagAwake ? 6 : 4, 0, Mathf.Tau, 16, stagColor, sim.StagAwake ? 3 : 1.5f, true);
+            }
+            // the current campaign objective
+            if (sim.Mission is { Episode: > 1 } m && !m.Complete) DrawArc(m.Marker * k, 5, 0, Mathf.Tau, 20, UiTheme.Gold, 2, true);
         }
         // camera footprint
         var cam = Game.Camera;

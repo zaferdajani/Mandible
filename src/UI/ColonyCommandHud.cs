@@ -27,6 +27,7 @@ public partial class ColonyCommandHud : Control
     Vector2 _resourcesSize, _chambersSize, _selectionSize, _cardsSize, _commandsSize;
     Label _food, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
     TextureRect _selectedArt, _queueArt, _nextArt;
+    public Texture2D SelectedArt => _selectedArt.Texture;
     ProgressBar _health, _queueProgress;
     readonly List<(Button button, ProdKind kind)> _units = new();
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
@@ -54,7 +55,7 @@ public partial class ColonyCommandHud : Control
         _canvas = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(1672, 941) }; AddChild(_canvas);
         _title = Block(22, 3, 280, 55);
         Text(_title, "MANDIBLE", 0, 0, 280, 39, 27, true, Gold);
-        Text(_title, Game.TutorialMode ? "THE FIRST NEST" : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 1, 35, 260, 18, 12, false, UiTheme.Dim);
+        Text(_title, Game.Campaign ? CampaignEpisodes.Name(Game.Episode).ToUpperInvariant() : Game.Skirmish ? "SKIRMISH" : "COLONY WAR", 1, 35, 260, 18, 12, false, UiTheme.Dim);
         BuildResources(); BuildRoomList(); BuildBottom();
         _network = Text(_canvas, "", 320, 52, 650, 20, 12);
         _mapFrame = Panel(_canvas, 14, 651, 254, 267);
@@ -157,6 +158,7 @@ public partial class ColonyCommandHud : Control
     }
     Texture2D UnitArt(ProdKind kind)
     {
+        if (Config.IsHeroKind(kind) && HeroArt.Card(Config.UnitOf(kind), Local.Me) is { } hero) return hero;
         int i = Array.IndexOf(Units, kind);
         if (i < 0) i = kind == ProdKind.Warlord ? 2 : kind == ProdKind.Matron ? 4 : 3;
         return Region(new Rect2(685 + i * 133, 750, 125, 64));
@@ -378,7 +380,7 @@ public partial class ColonyCommandHud : Control
         _chambers.Visible = Game.NestView;
         foreach (var (button, kind, status) in _rooms)
         {
-            bool episodeLock = sim.Mission != null && (kind is not (ChamberKind.Brood or ChamberKind.Storage));
+            bool episodeLock = sim.Mission != null && (!sim.Mission.AllowsChamber(kind) || RoomUpgrade(kind) is { } lu && !sim.Mission.AllowsResearch(lu, c.T(lu) + 1));
             if (RoomUpgrade(kind) is { } u)
             {
                 bool complete = c.T(u) >= Config.MaxTier(u);
@@ -394,13 +396,13 @@ public partial class ColonyCommandHud : Control
             var availability = sim.CanEnqueue(Local.Me, k);
             b.Disabled = availability != QueueResult.Ok;
             b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : b.Disabled ? 0.65f : 1f);
-            b.TooltipText = sim.Mission != null && k is not (ProdKind.Worker or ProdKind.Soldier) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
+            b.TooltipText = sim.Mission != null && !sim.Mission.AllowsProd(k) ? "Introduced in later episodes; available in Skirmish." : $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
         }
         foreach (var (b, u, status) in _research)
         {
             b.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             bool active = c.Researching && c.ResearchKind == u;
-            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null ? "Later episode" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
+            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? "Later episode" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
             b.TooltipText = active ? "Right-click to cancel research and refund food." : Sim.ChamberName(Sim.KindOf(u));
         }
         RefreshSelection(c); RefreshQueue(c);
@@ -423,8 +425,10 @@ public partial class ColonyCommandHud : Control
         foreach (int id in input.Selection) if (Game.Sim.Ants[id].Alive) { var a = Game.Sim.Ants[id]; type = a.Type; hp += a.Hp; max += a.MaxHp; n++; }
         _selection.Text = n > 0 ? n == 1 ? Config.Of(type).Name : $"{n} ANTS SELECTED" : "THE COLONY";
         _health.Value = n > 0 ? hp / Mathf.Max(1, max) : 1;
-        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, _ => ProdKind.Worker };
-        _selectedArt.Texture = n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
+        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+            AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker };
+        // a selected hero shows its own upright bust; the wide card art serves the queue and the Heroes tab
+        _selectedArt.Texture = n > 0 && Config.IsHero(type) && HeroArt.Bust(type, Local.Me) is { } bust ? bust : n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
         _counts.Text = n > 0 ? $"{hp:0} / {max:0} health" : $"Workers {c.Count[0]}  ·  Soldiers {c.Count[1]}";
         _detail.Text = _touch
             ? n > 0 ? "Tap the ground to move or an enemy to attack. Hold for attack-move." : "Tap ants to command them. Tap the nest hole or Build to see the chambers."
@@ -434,6 +438,7 @@ public partial class ColonyCommandHud : Control
         {
             var enemy = Game.Sim.Ants[input.Inspect];
             _selection.Text = Config.Of(enemy.Type).Name;
+            if (Config.IsHero(enemy.Type) && HeroArt.Bust(enemy.Type, enemy.Team) is { } enemyBust) _selectedArt.Texture = enemyBust;
             _health.Value = enemy.Hp / enemy.MaxHp;
             _counts.Text = $"{enemy.Hp:0} / {enemy.MaxHp:0} health";
             _detail.Text = enemy.Team == Config.Wild ? "Wild insect. Defeat it for experience and protein." : "Enemy colony. Select your attackers and right-click to attack.";

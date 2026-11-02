@@ -76,12 +76,14 @@ public partial class Main : Node
         ShowMenu();
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
+        foreach (var a in args) if (a.StartsWith("--episode=") && int.TryParse(a["--episode=".Length..], out int ep)) StartEpisode(ep); // jump straight into a campaign episode
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
+        foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
     }
 
     string _layout, _gfx;
@@ -126,13 +128,16 @@ public partial class Main : Node
         Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified });
     }
 
-    /// The guided first battle: black garden ants against a peaceful red colony, one lesson at a time.
-    public void StartTutorial()
+    /// Episode 1, the guided colony founding.
+    public void StartTutorial() => StartEpisode(1);
+
+    /// A campaign episode (1-4). The black garden ants are always the player's colony.
+    public void StartEpisode(int episode)
     {
         Local.Me = Config.Player;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, TutorialMode = true });
+        Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, Episode = System.Math.Clamp(episode, 1, CampaignEpisodes.Count) });
     }
 
     public void StartSkirmish(int team = 0)
@@ -206,7 +211,7 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(sub);
 
         _main = Column(
-            ("Episode 1 · The First Nest", () => App.StartTutorial()),
+            ("Campaign", OpenCampaign),
             ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
             ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
@@ -355,6 +360,65 @@ public partial class MainMenu : CanvasLayer
         v.AddChild(foot);
         panel.AddChild(v);
         Refresh();
+        _overlay = panel;
+        _root.AddChild(panel);
+    }
+
+    /// The campaign: Continue starts the next unfinished episode; every unlocked episode can be replayed.
+    public void OpenCampaign()
+    {
+        _main.Visible = false;
+        CloseOverlay();
+        var panel = new PanelContainer();
+        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -470, -200, 470, 400); // below the title
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 10);
+        var title = UiTheme.Text("CAMPAIGN", 34, UiTheme.Title, UiTheme.Gold);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(title);
+        var note = UiTheme.Text($"War Beneath the Grass  ·  {CampaignProgress.CompletedCount} of {CampaignEpisodes.Count} episodes complete", 15, null, UiTheme.Dim);
+        note.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(note);
+        int next = CampaignProgress.Next;
+        var cont = new Button { Text = next > 0 ? $"Continue  ·  Episode {next}: {CampaignEpisodes.Name(next)}" : "Campaign complete  ·  replay any episode", CustomMinimumSize = new Vector2(0, 56), Disabled = next == 0 };
+        cont.AddThemeFontOverride("font", UiTheme.Title);
+        cont.AddThemeFontSizeOverride("font_size", 20);
+        cont.AddThemeColorOverride("font_color", UiTheme.Gold);
+        cont.Pressed += () => { App.Audio.Ui("ui_click"); App.StartEpisode(next); };
+        cont.MouseEntered += () => App.Audio.Ui("ui_hover");
+        v.AddChild(cont);
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
+        for (int ep = 1; ep <= CampaignEpisodes.Count; ep++)
+        {
+            int episode = ep;
+            bool open = CampaignProgress.Unlocked(ep), done = CampaignProgress.Completed(ep);
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 16);
+            var text = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            text.AddChild(UiTheme.Text($"EPISODE {ep}  ·  {CampaignEpisodes.Name(ep).ToUpperInvariant()}", 18, UiTheme.Title, open ? UiTheme.Ink : UiTheme.Dim));
+            var blurb = UiTheme.Text(open ? CampaignEpisodes.Blurb(ep) : $"Locked  ·  complete Episode {ep - 1} to open it.", 14, null, UiTheme.Dim);
+            blurb.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            text.AddChild(blurb);
+            row.AddChild(text);
+            var state = UiTheme.Text(done ? "✓ Completed" : open ? "Unlocked" : "Locked", 15, UiTheme.Bold, done ? new Color(0.6f, 1f, 0.55f) : open ? UiTheme.Gold : UiTheme.Dim);
+            state.CustomMinimumSize = new Vector2(120, 0);
+            state.VerticalAlignment = VerticalAlignment.Center;
+            row.AddChild(state);
+            var play = new Button { Text = done ? "Replay" : "Play", CustomMinimumSize = new Vector2(130, 50), Disabled = !open, TooltipText = open ? "" : $"Complete Episode {ep - 1} first." };
+            play.AddThemeFontOverride("font", UiTheme.Title);
+            play.Pressed += () => { App.Audio.Ui("ui_click"); App.StartEpisode(episode); };
+            play.MouseEntered += () => App.Audio.Ui("ui_hover");
+            row.AddChild(play);
+            v.AddChild(row);
+        }
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(170, 48) };
+        back.AddThemeFontOverride("font", UiTheme.Title);
+        back.Pressed += () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; };
+        var foot = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        foot.AddChild(back);
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
+        v.AddChild(foot);
+        panel.AddChild(v);
         _overlay = panel;
         _root.AddChild(panel);
     }

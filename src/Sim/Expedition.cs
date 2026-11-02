@@ -6,10 +6,12 @@ namespace Mandible;
 
 public enum ExpeditionStage { ClearTrail, EscortQueen, DigEntrance, RoyalChamber, Incubator, Store, RaiseWorkers, RaiseSoldiers, Complete }
 
-/// Episode one is an authored mission. Its gates live in the simulation, so hotkeys and
-/// UI buttons obey the same rules. No enemy colony is required for this building lesson.
-public sealed class Expedition
+/// An authored campaign episode. Its gates live in the simulation, so hotkeys and UI buttons
+/// obey the same rules. Episode one is the confined founding lesson (Stage); episodes two to
+/// four play on the open yard with an ordered list of objectives (Step, see Campaign.cs).
+public sealed partial class Expedition
 {
+    public int Episode = 1;
     public ExpeditionStage Stage;
     public bool EntranceOrdered;
     public int WorkersHatched, SoldiersHatched;
@@ -27,7 +29,7 @@ public sealed class Expedition
     public static bool Contains(Vector2 p, float margin = 0)
         => p.DistanceTo(Constrain(p)) <= margin + 0.01f;
 
-    public string Title => Stage switch
+    public string Title => Episode > 1 ? StepTitle(Step) : Stage switch
     {
         ExpeditionStage.ClearTrail => "Clear the grass alley",
         ExpeditionStage.EscortQueen => "Lead the queen to food",
@@ -39,7 +41,7 @@ public sealed class Expedition
         ExpeditionStage.RaiseSoldiers => "Raise a fighting squad",
         _ => "The first nest is thriving",
     };
-    public string Instruction => Stage switch
+    public string Instruction => Episode > 1 ? StepInstruction : Stage switch
     {
         ExpeditionStage.ClearTrail => "Press F2 to select your attackers. Right-click the red ants ahead, or press A and click beyond them.",
         ExpeditionStage.EscortQueen => "With your attackers selected, right-click the food clearing. The queen and workers follow them along the protected trail.",
@@ -49,9 +51,9 @@ public sealed class Expedition
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
         ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food.",
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
-        _ => "Episode complete. More chambers and castes become available in later episodes. Skirmish lets you try the complete roster now.",
+        _ => "Episode complete. The Foraging Season is now open in the campaign list; Skirmish lets you try the complete roster now.",
     };
-    public Vector2 Marker => Stage == ExpeditionStage.ClearTrail ? Ambush : Clearing;
+    public Vector2 Marker => Episode > 1 ? MarkerPos : Stage == ExpeditionStage.ClearTrail ? Ambush : Clearing;
 }
 
 public sealed partial class Sim
@@ -121,9 +123,11 @@ public sealed partial class Sim
         return true;
     }
 
-    void TickExpedition()
+    void TickExpedition(float dt)
     {
+        if (Mission != null && Mission.Episode > 1 && Winner == Config.Player && !Mission.Complete) { Mission.StepsDone = Mission.Step; Mission.Step = Mission.Steps; }
         if (Mission == null || !Col[0].Alive || Winner >= 0) return;
+        if (Mission.Episode > 1) { TickCampaign(dt); return; }
         var c = Col[0];
         ref var queen = ref Ants[c.QueenId];
         if (Mission.Stage == ExpeditionStage.ClearTrail && Mission.Guards.TrueForAll(id => !Ants[id].Alive)) Mission.Stage = ExpeditionStage.EscortQueen;

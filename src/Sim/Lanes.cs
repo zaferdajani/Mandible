@@ -187,17 +187,18 @@ public sealed partial class Sim
         SpawnGuardian(team, nest + toCenter * 6 - side * 3, AntType.Gunner);
     }
 
-    void SpawnGuardian(int team, Vector2 p, AntType type)
+    int SpawnGuardian(int team, Vector2 p, AntType type)
     {
         var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - p).Normalized();
         int id = Spawn(team, type, p, toCenter.AngleD());
-        if (id < 0) return;
+        if (id < 0) return id;
         ref var a = ref Ants[id];
         a.Guardian = true;
         Col[team].Count[(int)type]--; // guardians are the mound's, not the brood's: they take no population
         ApplyLevel(ref a);
         a.Hp = a.MaxHp;
         a.State = AntState.Hold;
+        return id;
     }
 
     /// Guardians are part of the mound: far tougher than the ant they grew from, rooted, and repaired by the
@@ -205,8 +206,9 @@ public sealed partial class Sim
     void ApplyGuardianStats(ref Ant a)
     {
         bool ranged = Config.Ranged(a.Type);
-        a.MaxHp *= ranged ? 14f : 9f;
-        a.DmgMul *= 3.2f;
+        // campaign posts guard against a young colony's army, not a pushed lane: they are grown thinner
+        a.MaxHp *= (ranged ? 14f : 9f) * (Mission != null ? Expedition.PostHp : 1f);
+        a.DmgMul *= Mission != null ? Expedition.PostDmg : 3.2f;
         a.Size *= ranged ? 1.5f : 1.6f;
         a.SpeedMul = 0;
     }
@@ -352,14 +354,21 @@ public sealed partial class Sim
         a.DmgMul *= Lane.RousedDmg;
         if (W.Blocked(a.Pos, a.Size * 0.3f)) a.Pos = OpenGround(StagLair); // wedged among rocks while it prowled: it heaves itself free first
         a.PoisonT = 0; a.Root = 0; a.Target = -1; a.Forced = false; a.Stuck = 0;
+        StagTeam = team;
+        Events.Add(new SimEvent { Kind = EvKind.StagRoused, Pos = a.Pos, Team = team });
+        if (Mode != GameMode.Lanes)
+        {
+            // the campaign's Old Stag has no lanes to follow: it joins the colony that felled it and waits for orders
+            a.Goal = a.Anchor = a.Pos;
+            a.State = AntState.Idle;
+            return;
+        }
         int lane = WeakestLane(1 - team);
         a.Lane = (byte)(lane + 1);
         a.LaneStep = 3;
         a.Goal = Waypoint(team, lane, 3);
         a.Anchor = a.Goal;
         a.State = AntState.AttackMove;
-        StagTeam = team;
-        Events.Add(new SimEvent { Kind = EvKind.StagRoused, Pos = a.Pos, Team = team });
     }
 
     /// The lane where `team` has the fewest guardians left standing (the middle lane on a tie).
@@ -458,10 +467,12 @@ public sealed partial class Sim
         return true;
     }
 
-    /// Lane War: a queen cannot be harmed while either guardian of her mound still stands.
+    /// Lane War (and the campaign finale): a queen cannot be harmed while either guardian of her mound still stands.
     public bool QueenShielded(int team)
     {
-        if (Mode != GameMode.Lanes || team > 1) return false;
+        if (team > 1) return false;
+        // the campaign finale borrows the siege rule: the red queen is safe while her mound guardians stand
+        if (Mode != GameMode.Lanes && !(Mission?.ShieldsRival == true && team == Config.Enemy)) return false;
         var nest = W.Nests[team].Pos;
         for (int i = 0; i < High; i++)
         {

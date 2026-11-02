@@ -211,8 +211,8 @@ public sealed partial class Sim
     /// May a room of this kind be dug at all (food, counts, founding)? Position rules are in PlaceCheck.
     public DigResult CanDig(int team, ChamberKind k)
     {
-        if (Mission != null && (team != 0 || k is not (ChamberKind.Brood or ChamberKind.Storage))) return DigResult.Busy;
-        if (Mission != null && k == ChamberKind.Storage && ChamberCount(team, ChamberKind.Brood, true) == 0) return DigResult.Busy;
+        if (Mission != null && (team == 0 ? !Mission.AllowsChamber(k) : Mission.Episode < 3)) return DigResult.Busy;
+        if (Mission?.Confined == true && k == ChamberKind.Storage && ChamberCount(team, ChamberKind.Brood, true) == 0) return DigResult.Busy;
         var c = Col[team];
         if (!c.Alive) return DigResult.Dead;
         if (Mode == GameMode.Lanes) return DigResult.Busy;
@@ -536,10 +536,10 @@ public sealed partial class Sim
     /// Attackers with nothing left to fight at an enemy mound break in: down the shaft toward the queen.
     bool RaidNest(ref Ant a)
     {
-        int foe = 1 - a.Team;
-        if (!Col[foe].Alive || !Col[foe].Founded || Config.Flies(a.Type) && a.Alt > 1f) return false;
+        int foe = a.Raider ? Config.Player : 1 - a.Team;
+        if (foe < 0 || foe > 1 || !Col[foe].Alive || !Col[foe].Founded || Config.Flies(a.Type) && a.Alt > 1f) return false;
         if (a.Goal.DistanceTo(W.Nests[foe].Pos) > 8 || a.Pos.DistanceTo(W.Nests[foe].Pos) > 10) return false;
-        if (Mode == GameMode.Lanes && QueenShielded(foe)) return false;
+        if (QueenShielded(foe)) return false;
         a.Goal = ChamberPos(foe, Royal(foe));
         a.GoalLayer = (byte)NestLayer(foe);
         return true;
@@ -549,7 +549,7 @@ public sealed partial class Sim
     Vector2 QueenWalk(ref Ant a)
     {
         var c = Col[a.Team];
-        if (Mission != null && a.Team == 0 && !c.Founded) return ExpeditionQueenWalk(ref a);
+        if (Mission?.Confined == true && a.Team == 0 && !c.Founded) return ExpeditionQueenWalk(ref a);
         if (!c.Founded) return Vector2.Zero;
         var royal = ChamberPos(a.Team, Royal(a.Team));
         if (a.Layer == 0)
