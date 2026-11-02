@@ -251,10 +251,10 @@ public static class LevelValidation
         Check(s.CanEnqueue(0, ProdKind.Matron) == QueueResult.Locked, "The Acid Matron was open without her stars");
         Close();
         s = Open(app, 4, out _, Perk.Matron | Perk.Veteran);
-        Check(s.CanEnqueue(0, ProdKind.Matron) != QueueResult.Locked, "The Acid Matron perk did not open her");
+        Check(s.Mission.AllowsProd(ProdKind.Matron) && !s.Mission.AllowsProd(ProdKind.Marshal), "The Acid Matron perk did not open her (alone)");
         Close();
         s = Open(app, 3, out _, Perk.Gunner | Perk.Flyer);
-        Check(s.CanResearch(0, Upgrade.Wings) != ResearchResult.Locked && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Level 5");
+        Check(s.Mission.AllowsResearch(Upgrade.Wings, 1) && s.Mission.AllowsProd(ProdKind.Flyer) && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Level 5");
         int soldiers = s.Col[0].Count[(int)AntType.Soldier];
         Close();
         s = Open(app, 3, out _);
@@ -290,7 +290,7 @@ public static class LevelValidation
             {
                 app.StartEpisode(id); var g = app.Session;
                 Check(g.Sim.Mission?.Episode == id && g.Hud.BriefingOpen, $"Level {Levels.NumberOf(id)} did not open with its briefing");
-                await Shot($"L{4 + Levels.NumberOf(id):00}-briefing-{name}");
+                await Shot($"L05-briefing-level{Levels.NumberOf(id):00}-{name}");
             }
             // objective cards in play, the camera on each level's own feature
             foreach (var (id, seconds, name) in new[] { (6, 100, "hollow-log-raid"), (7, 20, "matron"), (9, 30, "watch-post"), (10, 20, "paper-nest"), (8, 20, "dry-lair") })
@@ -303,7 +303,7 @@ public static class LevelValidation
                 var m = g.Sim.Mission;
                 var at = id switch { 6 => m.WaveBugs.Count > 0 ? m.MarkerPos : m.WaveFrom, 7 => g.Sim.Ants[m.EscortId].Pos, 10 => m.WaveFrom, _ => m.GroupPos[0] };
                 g.Camera.JumpTo(at, id == 6 ? 46 : 40);
-                await Shot($"L{10 + Levels.NumberOf(id):00}-play-{name}", 3);
+                await Shot($"L10-play-level{Levels.NumberOf(id):00}-{name}", 3);
             }
             // a won level's result card and a lost one's
             {

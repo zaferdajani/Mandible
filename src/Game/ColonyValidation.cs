@@ -28,6 +28,13 @@ public static class ColonyValidation
         {
             // MANDIBLE_LEVELS=5,6 plays only those level ids (tuning); the full run plays every level
             var only = OS.GetEnvironment("MANDIBLE_LEVELS");
+            if (only == "checks")
+            {
+                LevelValidation.Losses(app); LevelValidation.Gates(app); LevelValidation.Progress();
+                GD.Print("[campaign-test] ALL PASS (loss paths, gates, perks and saved progress only)");
+                app.GetTree().Quit();
+                return;
+            }
             if (only != "")
             {
                 foreach (var part in only.Split(',')) LevelValidation.Play(app, int.Parse(part), out _);
