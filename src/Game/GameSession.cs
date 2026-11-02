@@ -58,6 +58,7 @@ public partial class GameSession : Node3D
         long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
         Interior = new NestInterior(this);
+        Ants.Brood = Interior;
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildObjectiveDressing(); }
         GD.Print($"[startup] session: world {tWorld} ms, sim {tSim - tWorld} ms, ant meshes {tAnts - tSim} ms, rest {sw.ElapsedMilliseconds - tAnts} ms");
@@ -793,6 +794,7 @@ public partial class GameSession : Node3D
                     if (Audible(e.Pos)) Audio.At("deliver", wp, -14, 0.25f);
                     break;
                 case EvKind.Spawn:
+                    if (e.HatchP1 > 0) Interior.Hatched(e); // the cocoon splits in the nursery it hatched in
                     if (seen) { Effects.Burst(wp, 8, 0, 2f, 0.8f, 1f); if (Audible(e.Pos)) Audio.At("spawn", wp, -8, 0.2f); }
                     break;
                 case EvKind.HerdArrives:

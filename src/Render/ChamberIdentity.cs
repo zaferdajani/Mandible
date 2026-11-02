@@ -30,17 +30,30 @@ public sealed partial class NestInterior
         switch (ch.Kind)
         {
             case ChamberKind.Brood:
-                OrganicScatter(node, Surface.Egg, N(64), _ => new Transform3D(Pose(rng.R(1.25f, 1.65f)), Bed(1.0f, -1.25f, 1.65f, 0.95f, 0.32f, 0.23f)));
-                placed.Clear();
-                OrganicScatter(node, Surface.Larva, N(25), _ => new Transform3D(Pose(rng.R(1.45f, 1.8f)), Bed(-1.7f, 0, 0.85f, 1.65f, 0.45f, 0.24f)));
-                placed.Clear();
-                OrganicScatter(node, Surface.Cocoon, N(18), _ => new Transform3D(Pose(rng.R(1.45f, 1.8f)), Bed(1.2f, 1.3f, 1.35f, 0.85f, 0.53f, 0.28f)));
+                // three beds whose slots are laid out here; how many hold brood follows the queue (BroodLife)
+                Transform3D[] Slots(int n, float scale0, float scale1, float x, float z, float rx, float rz, float gap, float h)
+                {
+                    placed.Clear();
+                    var slots = new Transform3D[n];
+                    for (int i = 0; i < n; i++) slots[i] = new Transform3D(Pose(rng.R(scale0, scale1)), Bed(x, z, rx, rz, gap, h));
+                    return slots;
+                }
+                room.Beds = new[]
+                {
+                    MakeBed(node, Surface.Egg, new Vector2(1.0f, -1.25f), new Vector2(1.65f, 0.95f), Slots(N(64), 1.25f, 1.65f, 1.0f, -1.25f, 1.65f, 0.95f, 0.32f, 0.23f)),
+                    MakeBed(node, Surface.Larva, new Vector2(-1.7f, 0), new Vector2(0.85f, 1.65f), Slots(N(25), 1.45f, 1.8f, -1.7f, 0, 0.85f, 1.65f, 0.45f, 0.24f)),
+                    MakeBed(node, Surface.Cocoon, new Vector2(1.2f, 1.3f), new Vector2(1.35f, 0.85f), Slots(N(18), 1.45f, 1.8f, 1.2f, 1.3f, 1.35f, 0.85f, 0.53f, 0.28f)),
+                };
                 break;
             case ChamberKind.Royal:
+                // the apron behind her gaster stays bare: that is where each new egg is laid (BroodLife)
+                var (tip, fwd) = GasterTip(room.Team);
+                var apron = tip - fwd * 0.6f - _g.Sim.ChamberPos(room.Team, ch);
                 OrganicScatter(node, Surface.Egg, N(135), _ =>
                 {
                     Vector3 p;
-                    do { p = Bed(0, 0, 3.55f, 2.55f, 0.28f, 0.23f); } while (new Vector2(p.X / 1.15f, p.Z / 1.3f).LengthSquared() < 1);
+                    do { p = Bed(0, 0, 3.55f, 2.55f, 0.28f, 0.23f); }
+                    while (new Vector2(p.X / 1.15f, p.Z / 1.3f).LengthSquared() < 1 || new Vector2(p.X, p.Z).DistanceSquaredTo(apron) < 0.95f * 0.95f);
                     return new Transform3D(Pose(rng.R(1.2f, 1.6f)), p);
                 });
                 OrganicScatter(node, Surface.Resin, N(21), _ =>
