@@ -337,7 +337,10 @@ public static class Config
     public const float GalleryPace = 1.4f;       // workers hurry through their own nest's galleries: short, smooth and scent-marked
 
     // Loads are carried all the way down to a store (0.10), so each is a full jawful: a fifth more than at 0.9.
-    public static float FoodValue(FoodKind k) => k switch { FoodKind.Seed => 7f, FoodKind.Berry or FoodKind.Sugar => 6f, _ => 5f };
+    // The campaign episodes were balanced, scripted raids and all, on the old loads and keep them.
+    public static float FoodValue(FoodKind k, bool campaign = false) => campaign
+        ? k switch { FoodKind.Seed => 6f, FoodKind.Berry or FoodKind.Sugar => 5f, _ => 4f }
+        : k switch { FoodKind.Seed => 7f, FoodKind.Berry or FoodKind.Sugar => 6f, _ => 5f };
     public static string FoodName(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",

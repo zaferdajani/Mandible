@@ -108,5 +108,12 @@ public partial class ExpeditionGuide : PanelContainer
         ("Choose Storage and click beside a connected room.", "Choose Storage and tap beside a connected room."),
         (" with Z or the Worker portrait", " with the Worker portrait"),
         (" with X or the Soldier portrait", " with the Soldier portrait"),
+        ("Open the Chambers tab (N), choose Storage and click beside a connected room.", "Open the Chambers tab, choose Storage and tap beside a connected room."),
+        ("Press F2 for your squads and attack it together", "Tap Army for your squads and tap it to attack together"),
+        ("Hatch more workers (Z)", "Hatch more workers"),
+        ("Hatch soldiers (X)", "Hatch soldiers"),
+        ("Attack-move your army onto them.", "Tap Army, then Attack and the ground beyond them."),
+        ("attack-move onto the red mound", "tap Attack and then the red mound"),
+        ("raise the Warlord (Y)", "raise the Warlord"),
     };
 }

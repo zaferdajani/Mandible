@@ -584,7 +584,7 @@ public static class Capture
     }
 
     /// Quick layout check at whatever window size the game was launched with: menu, colony battle (surface,
-    /// build mode with a room selected, the pause menu), Episode 1 and lane battle. Add --mobile to lay out as a phone.
+    /// build mode with a room selected, the pause menu), Episodes 1 and 3 (briefing and objective panel) and lane battle. Add --mobile to lay out as a phone.
     /// Each colony frame is audited: buttons narrower or shorter than a finger, and text or panels off screen.
     public static async Task Layout(Main app, string dir)
     {
@@ -617,6 +617,14 @@ public static class Capture
         await Wait(4);
         await Shot("layout_episode");
         AuditLayout(app, "episode");
+        app.StartEpisode(3);
+        await Wait(3);
+        await Shot("layout_briefing");
+        AuditLayout(app, "briefing");
+        app.Session.Hud.CloseBriefing();
+        await Wait(2);
+        await Shot("layout_episode3");
+        AuditLayout(app, "episode3");
         app.StartLanes(Difficulty.Normal, 1, AntType.Matron);
         await Wait(4);
         await Shot("layout_lanes");

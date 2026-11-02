@@ -1513,7 +1513,7 @@ public sealed partial class Sim
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
-                float gain = Config.FoodValue(a.CarryKind) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
+                float gain = Config.FoodValue(a.CarryKind, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
                 if (c.Food + gain > c.FoodCap)
                 {
                     // the stores are full: the surplus is eaten on the spot
