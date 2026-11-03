@@ -43,9 +43,9 @@ sealed class NestLights
     }
 
     /// Lamps lit at once, and how many of those cast shadows, by graphics tier.
-    static int Budget => Settings.Gfx switch { Settings.Quality.Low => 6, Settings.Quality.Medium => 8, Settings.Quality.High => 12, _ => 16 };
+    static int Budget => Settings.Gfx switch { Settings.Quality.Low => 6, Settings.Quality.Medium => 3, Settings.Quality.High => 4, _ => 8 };
     // cube shadow maps are dear: on High five of them halved the chamber frame rate (42 -> 21 fps on a GTX 1650)
-    static int ShadowBudget => Settings.Mobile ? 0 : Settings.Gfx switch { Settings.Quality.Low => 0, Settings.Quality.Medium => 1, Settings.Quality.High => 2, _ => 4 };
+    static int ShadowBudget => Settings.Mobile ? 0 : Settings.Gfx switch { Settings.Quality.Low => 0, Settings.Quality.Medium => 0, Settings.Quality.High => 0, _ => 2 };
 
     /// `open` is the Glass Earth fade (0 = ground closed, 1 = fully open).
     public void Update(float dt, float open)
@@ -60,7 +60,7 @@ sealed class NestLights
             float target = l.On ? l.Energy * open : 0f;
             l.Cur = Mathf.MoveToward(l.Cur, target, dt * l.Energy * 3f);
             l.Light.LightEnergy = l.Cur;
-            l.Light.Visible = l.Cur > 0.01f;
+            l.Light.Visible = !low && l.Cur > 0.01f; // Low: the walls paint the pools themselves, no real lights at all
             if (low && l.On && p < _poolData.Length && l.Cur > 0.01f) _poolData[p++] = new Vector4(l.Pos.X, l.Pos.Y, l.Pos.Z, l.Range * l.Cur / l.Energy);
         }
         if (low) _pools(_poolData);

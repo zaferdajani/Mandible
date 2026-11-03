@@ -228,7 +228,7 @@ public partial class GameSession : Node3D
         {
             case Settings.Quality.Low:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 110;
-                _sun.LightAngularDistance = 0.5f; _sun.ShadowBlur = 0.7f;
+                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f; // phones: hard sun shadows (soft ones cost a fifth of the frame)
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
                 break;
