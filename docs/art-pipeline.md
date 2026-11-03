@@ -176,3 +176,23 @@ Audit, 2026-11-03, Forward+, mean luminance with clipped and crushed share:
 Open lighting follow-ups:
 1. Ants in the nest are still lit by the sun. They are batched with the surface ants in one MultiMesh, so moving them to the underground layer needs a separate batch, or a light function in the Ant shader.
 2. The Low-tier lamp pools are faint: the walls read evenly warm brown, without distinct pools.
+
+**2026-11-03, round 5, after the #11 merge and the macro soil layer (commit eb5af21).** Art scores, out of 5: repetition, primitives, scale, material, light, palette. Readability is out of 5.
+
+| View | Art | Readability |
+|---|---|---|
+| a-opening | 3 2 2 3 3 3 fail | 3 fail: the queen does not read; no trail line |
+| b-yard | 3 1 2 2 3 4 fail (a dark stick slab in the close frame) | 2 fail: no ants and no trail in the frame |
+| c-level-map | 3 3 3 3 3 4 fail | **4 pass** |
+| d-chamber | 2 2 3 2 2 3 fail | 3 fail: brood stages and workers too alike |
+| e-food-crumb | 2 2 2 2 3 3 fail | 2 fail: the crumbs blend into the sand |
+| e-food-seed | 2 2 3 2 3 4 fail | **4 pass** |
+| e-food-sugar | 3 1 2 2 3 3 fail | **5 pass** |
+| e-food-berry | 2 2 3 2 3 2 fail | **4 pass** |
+| f-fog-of-war | 3 3 2 3 2 4 fail | **4 pass** |
+
+Readability now passes for five of nine views. Every art check still fails. The next fixes, in the order the reviewers weight them:
+1. The twig "bridges" are 40-unit sticks with a 512 px scan stretched over them; at close framing they read as dark flat cards. They need a bark texture tiled along the stick.
+2. The sugar cubes and the seeds are code primitives. They need scanned or Blender-made meshes, which need Blender to be allowed in this session.
+3. The berries are one lychee scan repeated. They need several fruit scans or modelled variants.
+4. Brood and ants belong to the ant session.
