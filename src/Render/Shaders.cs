@@ -507,6 +507,8 @@ uniform float pher_view = 0.25;
 uniform vec2 entrance_a = vec2(-1000.0);
 uniform vec2 entrance_b = vec2(-1000.0);
 uniform int detail = 1; // graphics tier: 0 phones (base and hollow sets only), 1 and up every ground set
+uniform vec4 trail_seg = vec4(-1000.0); // a worn path from (x, y) to (z, w), world xz; packed, darker, finer soil
+uniform float trail_w = 0.0;
 uniform sampler2D g_base_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D g_base_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D g_base_a : filter_linear_mipmap, repeat_enable;
@@ -582,6 +584,15 @@ void fragment() {
         col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
     }
     col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
+    // the worn trail: trodden flat, darker and finer than the loose soil either side, with a ragged edge
+    float worn = 0.0;
+    if (trail_w > 0.0) {
+        vec2 ab = trail_seg.zw - trail_seg.xy;
+        float tt = clamp(dot(uv - trail_seg.xy, ab) / dot(ab, ab), 0.0, 1.0);
+        float dd = length(uv - trail_seg.xy - ab * tt) + (n2 - 0.5) * 2.5;
+        worn = 1.0 - smoothstep(trail_w * 0.55, trail_w, dd);
+        col = mix(col, col * vec3(0.74, 0.68, 0.62), worn * 0.85);
+    }
     // close to the camera, a macro layer: the pebbly ground set at a tenth of the base tile, so at ant framing the
     // soil shows individual grains, grit and pebbles; it fades out by ~30 units, where the base sets carry the look
     float camD = length(CAMERA_POSITION_WORLD - wpos);
@@ -622,6 +633,7 @@ void fragment() {
     SPECULAR = 0.3;
     // the photographed relief on top of the broad undulations of the land
     vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (macroN.xy - 0.5) * 1.3 * macro + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
+    nm *= 1.0 - worn * 0.6; // trodden smooth
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;
@@ -750,10 +762,12 @@ void fragment() {
         vec3 n = d0 >= d1 && d0 >= d2 ? cut0.xyz : d1 >= d2 ? cut1.xyz : cut2.xyz;
         NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(n, 0.0))).xyz);
         if (inside == 0) {
-            // bread: soft cream crumb full of gas pockets
-            float pore = smoothstep(0.55, 0.7, n2) + smoothstep(0.62, 0.75, n1) * 0.6;
-            ALBEDO = vec3(0.86, 0.74, 0.52) * (1.0 - 0.45 * clamp(pore, 0.0, 1.0)) * (0.9 + 0.15 * n1);
+            // bread: soft cream crumb full of gas pockets of every size, in relief, darker and warmer toward the crust
+            float big = smoothstep(0.58, 0.7, texture(noise_b, lp.xz * 4.0 + lp.y * 2.0).g);
+            float pore = clamp(smoothstep(0.55, 0.7, n2) + smoothstep(0.62, 0.75, n1) * 0.6 + big, 0.0, 1.0);
+            ALBEDO = vec3(0.9, 0.78, 0.55) * (1.0 - 0.5 * pore) * (0.9 + 0.15 * n1);
             ROUGHNESS = 0.95;
+            NORMAL = normalize(NORMAL + (VIEW_MATRIX * vec4((n2 - 0.5) * 0.8, 0.0, (n1 - 0.5) * 0.8, 0.0)).xyz);
         } else if (inside == 1) {
             // apple flesh, browning where it has been open longest
             ALBEDO = mix(vec3(0.95, 0.88, 0.64), vec3(0.72, 0.5, 0.24), clamp(0.25 + bite * 0.6 + (n1 - 0.5) * 0.4, 0.0, 1.0));
@@ -816,9 +830,9 @@ void fragment() {
     vec3 an = abs(ln); an /= an.x + an.y + an.z;
     float n = tri(lp, an, 9.0, seed);
     float pore = tri(lp, an, 41.0, seed + 0.37);
-    float crust = smoothstep(0.05, 0.55, ln.y + (n - 0.5) * 0.8);
-    vec3 crumbC = vec3(0.78, 0.62, 0.38) * (1.0 - 0.6 * smoothstep(0.5, 0.68, pore)) * (0.85 + 0.15 * n);
-    vec3 crustC = mix(vec3(0.33, 0.14, 0.04), vec3(0.62, 0.33, 0.1), n) * (0.85 + 0.25 * pore);
+    float crust = smoothstep(0.35, 0.75, ln.y + (n - 0.5) * 0.6); // only the top was the loaf's outside
+    vec3 crumbC = vec3(0.84, 0.66, 0.42) * (1.0 - 0.55 * smoothstep(0.5, 0.66, pore)) * (0.88 + 0.15 * n);
+    vec3 crustC = mix(vec3(0.42, 0.2, 0.06), vec3(0.72, 0.42, 0.14), n) * (0.85 + 0.25 * pore);
     ALBEDO = mix(crumbC, crustC, crust);
     ROUGHNESS = mix(0.95, 0.5, crust);
     SPECULAR = mix(0.2, 0.45, crust);

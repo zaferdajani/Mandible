@@ -70,23 +70,26 @@ public static class FoodArt
 
     static void Crumbs(World w, Rng rng, Pile pile, float size)
     {
-        // pieces torn off the scanned bun and croissant: each keeps its golden photographed crust on one side and shows
-        // the soft crumb where one plane broke it (FoodCut draws the break). One big chunk, smaller pieces around it.
-        var bread = NatureAssets.Kind("food_bread");
-        int n = rng.I(6, 10);
+        // torn bread crumbs modelled in Blender (lumpy, pitted chunks) in the Crumb shader: golden crust on the side
+        // that was the loaf's outside, soft porous crumb on the torn faces. One big chunk, a scatter around it.
+        var shapes = NatureAssets.Kind("food_crumb");
+        if (shapes.Count == 0) shapes = NatureAssets.Kind("stone");
+        var mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Crumb) };
+        mat.SetShaderParameter("noise_b", w.NoiseB);
+        int n = rng.I(10, 16);
         for (int i = 0; i < n; i++)
         {
-            var p = bread[rng.I(0, bread.Count)];
+            var p = shapes[rng.I(0, shapes.Count)];
             bool chunk = i == 0;
-            float across = chunk ? size * 1.5f : size * Mathf.Lerp(0.4f, 0.8f, rng.F());
+            float across = chunk ? size * 1.25f : size * Mathf.Lerp(0.3f, 0.75f, Mathf.Pow(rng.F(), 1.4f));
             float s = across / p.Footprint;
-            var m = Cut(p, rng, 1, 0.05f, 0.3f, 0);
-            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.7f + Mathf.Pow(rng.F(), 1.4f) * 1.1f);
+            var m = (ShaderMaterial)mat.Duplicate();
+            m.SetShaderParameter("seed", rng.F());
+            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.5f + Mathf.Pow(rng.F(), 1.4f) * 1.1f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
-            // most lie crust up, a few on their broken face
-            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.F() < 0.75f ? rng.R(-0.35f, 0.35f) : rng.R(1.2f, 1.9f)) * Basis.FromScale(Vector3.One * s);
-            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.15f, at.Y);
-            Add(pile, mi, chunk ? 0 : (float)i / n, m);
+            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.4f, 0.4f)) * Basis.FromScale(Vector3.One * s);
+            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.08f, at.Y);
+            Add(pile, mi, chunk ? 0 : (float)i / n, null);
         }
     }
 
@@ -130,17 +133,18 @@ public static class FoodArt
         {
             // amber, dark where it pools deep, the soil showing through at the thin edge; a wet mirror on top
             AlbedoColor = new Color(0.36f, 0.17f, 0.02f, 0.8f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            Roughness = 0.03f, MetallicSpecular = 0.6f,
+            Roughness = 0.12f, MetallicSpecular = 0.35f, // glossy, but no sun disc blooming off it
             ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.0f,
             BacklightEnabled = true, Backlight = new Color(0.32f, 0.15f, 0.01f),
         };
         Add(pile, new MeshInstance3D { Mesh = SyrupMesh(rng, size * 0.8f), MaterialOverride = syrup, Position = new Vector3(size * 0.35f, 0.06f, size * 0.2f) }, 0.6f, null);
         var crystal = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.9f, 0.89f, 0.86f, 0.62f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            // opaque enough to keep crisp facets at play zoom (a thin alpha read as a soft white smudge from afar)
+            AlbedoColor = new Color(0.93f, 0.92f, 0.89f, 0.86f), Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass,
             Roughness = 0.04f, MetallicSpecular = 1f, // no refraction: with it the screen copy ignores alpha and the crystal turns solid
             RimEnabled = true, Rim = 1f, RimTint = 0.05f, ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0f,
-            EmissionEnabled = true, Emission = new Color(1f, 0.96f, 0.86f), EmissionEnergyMultiplier = 0.08f, // reads white at play zoom
+            EmissionEnabled = true, Emission = new Color(1f, 0.96f, 0.86f), EmissionEnergyMultiplier = 0.03f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
         var crystals = NatureAssets.Kind("food_sugar");

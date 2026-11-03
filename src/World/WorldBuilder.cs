@@ -570,6 +570,10 @@ public static partial class WorldBuilder
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
         Ground(w.TerrainMaterial);
+        // the worn trail: level 1's alley, or the hollow between the two nests elsewhere
+        var (ta, tb, tw) = w.FirstNest ? (Expedition.Start + new Vector2(-10, 0), Expedition.Clearing, 5.5f) : (w.Nests[0].Pos, w.Nests[1].Pos, 4f);
+        w.TerrainMaterial.SetShaderParameter("trail_seg", new Vector4(ta.X, ta.Y, tb.X, tb.Y));
+        w.TerrainMaterial.SetShaderParameter("trail_w", tw);
         w.TerrainMaterial.SetShaderParameter("entrance_a", w.Nests[0].Pos);
         w.TerrainMaterial.SetShaderParameter("entrance_b", w.Nests[1].Pos);
         w.TerrainMaterials.Add(w.TerrainMaterial);

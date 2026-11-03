@@ -82,6 +82,39 @@ def sugar(seed):
     return ob
 
 
+# ------------------------------------------------------------------ crumbs: torn bread, soft lumpy chunks with a crust side
+def crumb(seed):
+    rng = random.Random(seed)
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=6, use_grid_fill=True)
+    # torn: cut by a few planes, then the surface pulled and pitted so no face stays flat
+    for _ in range(rng.randint(2, 4)):
+        nrm = Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1))).normalized()
+        geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+        res = bmesh.ops.bisect_plane(bm, geom=geom, plane_co=nrm * rng.uniform(0.2, 0.42), plane_no=nrm, clear_outer=True)
+        edges = [e for e in res["geom_cut"] if isinstance(e, bmesh.types.BMEdge)]
+        if edges:
+            bmesh.ops.edgeloop_fill(bm, edges=edges)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=2)
+    off = Vector((seed * 1.7, seed * 0.3, 0))
+    for v in bm.verts:
+        p = v.co
+        # soft rounding toward a blob, big lumps, and fine pits like torn crumb
+        r = p.length
+        p = p.lerp(p.normalized() * 0.45, 0.6)
+        p += p.normalized() * (0.13 * noise.noise(p * 3 + off) + 0.05 * noise.noise(p * 9 + off) + 0.02 * noise.noise(p * 23 + off))
+        v.co = p
+    s = rng.uniform(0.006, 0.012)
+    bmesh.ops.scale(bm, vec=Vector((rng.uniform(0.8, 1.25), rng.uniform(0.6, 0.95), rng.uniform(0.85, 1.3))) * s, verts=bm.verts)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    ob = mesh_object(f"crumb_{seed}", bm)
+    shade(ob, True, 60)
+    smart_uv(ob)
+    return ob
+
+
 # ------------------------------------------------------------------ seeds: sunflower seed shells, whole and split
 def seed_shell(seed, half=False):
     rng = random.Random(seed)
@@ -299,6 +332,9 @@ def shard(seed):
 reset()
 for s in range(6):
     export(f"sugar_{s}", [sugar(100 + s)])
+reset()
+for s in range(8):
+    export(f"crumb_{s}", [crumb(700 + s)])
 reset()
 for s in range(4):
     export(f"seed_{s}", [seed_shell(200 + s)])
