@@ -285,3 +285,24 @@ mandibles hang from the scan's hips and sockets. Every view fails again, with sc
 Open after round 2: the eye framings and the Marshal capture; a warmer, less glossy Lasius cuticle so the baked
 detail shows; the black queen (her Lasius scans did not part at the waist) and a real replete for the Matron; the
 readability spec at play zoom, where an ant is a few pixels whatever its mesh.
+
+**2026-11-04, ant round 3: the capture faults fixed (the Marshals framed at flight height, the eye views lit by the
+sun), the Warlord's spines back on the scanned thorax, a warmer satin Lasius cuticle, ants drawn double-sided over
+the scans' open seams.** Every view still fails; the scores have plateaued.
+
+| View | Art (anatomy, primitives, eyes, material, light, palette) |
+|---|---|
+| g-castes-black | 2 2 1 1 3 2 |
+| g-castes-red | 2 2 1 2 3 3 |
+| g-warlord | 2 2 1 2 3 3 |
+| g-matron | 2 2 1 2 3 3 |
+| g-marshal | 2 1 1 2 2 3 |
+| g-eyes | 2 2 1 2 3 3 |
+| g-eyes-queen | 1 1 1 1 2 2 |
+| g-play (read) | 3 |
+
+What the reviewers repeat in every round: the ants are small in the close frames (an ant fills a tenth of the frame,
+where the target's fills a quarter to a half), so the eyes, the scanned sculpture and the setae fall below a few
+pixels; and at play zoom a worker is a speck. Both point at framing and on-screen size rather than at the meshes:
+the capture's close framings, and (an owner decision) whether ants are drawn larger than life at play zoom, as the
+food piles already are (1.4x), or given a light rim.

@@ -286,9 +286,11 @@ def build(species, caste, lod):
             base = Vector((s * 0.03 * T, BODY_Y + 0.035 * T, -0.06 * T))
             v, f = cone(base, base + Vector((s * 0.05, 0.12, -0.09)) * T, 0.016 * T, lsides)
             parts.append(make(v, f, llv, BODY, THORAX_R))
+            parts[-1].spine = ("propodeal", base)
             base = Vector((s * 0.045 * T, BODY_Y + 0.03 * T, 0.09 * T))
             v, f = cone(base, base + Vector((s * 0.08, 0.06, 0.035)) * T, 0.015 * T, lsides)
             parts.append(make(v, f, llv, BODY, THORAX_R))
+            parts[-1].spine = ("pronotal", base)
 
     # ---- waist: Lasius a single upright scale; Solenopsis a petiole and a postpetiole node
     gz_front = -0.115 - (G - 1) * 0.02
@@ -648,7 +650,20 @@ def build_scanned(species, caste, lod):
     targets[7], targets[8] = [moved(Vector(x), 0) for x in meta["sockets"]]
     targets[9], targets[10] = [moved(Vector(x), 0) for x in meta["hinges"]]
     hang = waist - Vector((0, BODY_Y - 0.01, -0.105))
+    meso = [p for p in parts if p.part == BODY]
+    meso_bvh = BVHTree.FromPolygons([v for p in meso for v in p.v],
+                                    [tuple(i + sum(len(q.v) for q in meso[:k]) for i in t) for k, p in enumerate(meso) for t in p.t]) if meso else None
     for p in proc:
+        if getattr(p, "spine", None) and meso_bvh:
+            kind, base = p.spine
+            # the pronotal pair sits behind the neck, the propodeal pair in front of the waist
+            z = neck.z - 0.25 * (neck.z - waist.z) if kind == "pronotal" else waist.z + 0.2 * (neck.z - waist.z)
+            hit = meso_bvh.ray_cast(Vector((base.x * 0.8, 1.0, z)), Vector((0, -1, 0)), 2.0)[0]
+            if hit is not None:
+                d = hit - base - Vector((0, 0.004, 0))
+                p.v = [v + d for v in p.v]
+                parts.append(p)
+            continue
         if p.part in targets and p.part in roots:
             d = targets[p.part] - roots[p.part]
             p.v = [v + d for v in p.v]

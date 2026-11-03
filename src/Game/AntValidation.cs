@@ -88,15 +88,22 @@ public static class AntValidation
                 Clear();
                 float sz = Config.Of(hero).Size;
                 var side = new Vector2(-across.Y, across.X);
-                g.Sim.Spawn(0, hero, stage + side * (0.75f * sz), heading);
+                int a0 = g.Sim.Spawn(0, hero, stage + side * (0.75f * sz), heading);
                 g.Sim.Spawn(1, hero, stage - side * (0.75f * sz), heading);
-                Frame(3.0f * sz, 50, -0.6f, 0.3f * sz); await Shot($"g-{hero.ToString().ToLowerInvariant()}-close");
+                // a Sky Marshal hovers: aim at the height it is drawn at, not at the ground under it
+                await app.ToSignal(app.GetTree().CreateTimer(0.3f), SceneTreeTimer.SignalName.Timeout);
+                float alt = g.Sim.Ants[a0].Alt + (Config.Flies(hero) ? 0.6f : 0f);
+                Frame(3.0f * sz, 50, -0.6f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-close");
             }
-            // the compound eyes: a worker's head filling the frame, then a queen's (larger eyes, three ocelli)
-            var headAt = stage + across * 0.23f;
-            Clear(); g.Sim.Spawn(0, AntType.Worker, stage, heading); Frame(0.75f, 30, -1.0f, 0.16f, headAt); await Shot("g-eyes-close");
+            // the compound eyes: a worker's head filling the frame, then a queen's (larger eyes, three ocelli). The ant faces
+            // the sun and the lens looks at its face from just off the sun's side, so the head is lit, not a silhouette
+            var toSun = -(Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward);
+            float sunH = Mathf.Atan2(toSun.Z, toSun.X);
+            var face = new Vector2(Mathf.Cos(sunH), Mathf.Sin(sunH));
+            float faceYaw = sunH - heading - Mathf.Pi * 0.5f + 0.45f;
+            Clear(); g.Sim.Spawn(0, AntType.Worker, stage, sunH); Frame(0.95f, 28, faceYaw, 0.15f, stage + face * 0.27f); await Shot("g-eyes-close");
             float qs = Config.Of(AntType.Queen).Size;
-            Clear(); g.Sim.Spawn(0, AntType.Queen, stage, heading); Frame(0.75f * qs, 32, -1.0f, 0.18f * qs, stage + across * (0.27f * qs)); await Shot("g-eyes-queen-close");
+            Clear(); g.Sim.Spawn(0, AntType.Queen, stage, sunH); Frame(1.0f * qs, 30, faceYaw, 0.17f * qs, stage + face * (0.3f * qs)); await Shot("g-eyes-queen-close");
             Clear();
             g.Camera.Cam.MakeCurrent();
 

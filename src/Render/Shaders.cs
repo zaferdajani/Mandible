@@ -61,7 +61,7 @@ float fow(vec3 wp) { return 1.0; }
 
     public const string Ant = @"
 shader_type spatial;
-render_mode depth_draw_opaque;
+render_mode depth_draw_opaque, cull_disabled; // a scanned shell can stay open where a limb was cut: show its inside, not the soil
 " + Under + @"
 uniform vec3 body_color : source_color = vec3(0.03, 0.026, 0.024);
 uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
@@ -370,14 +370,14 @@ void fragment() {
         vec3 tilt = (VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, dd.y, dd.x, 0.0)).xyz;
         NORMAL = normalize(NORMAL + tilt * 0.35);
         // dark warm lenses: a metal-like reflection tinted brown, so the sky does not turn the eye blue
-        c = mix(vec3(0.06, 0.04, 0.025), vec3(0.012, 0.008, 0.006), edge);
+        c = mix(vec3(0.035, 0.028, 0.022), vec3(0.006, 0.005, 0.004), edge); // darker than the head around it
         rough = 0.2; cc = 0.0; metal = 0.55;
         // the spark of life: the sky caught in the eye, a small bright window that slides over the dome as the head
         // turns (the head group's rotation already moved NORMAL); dimmed underground, where only the lamps are
         vec3 r = reflect(-VIEW, NORMAL);
         vec3 sky = normalize((VIEW_MATRIX * vec4(0.35, 1.0, 0.25, 0.0)).xyz);
-        float spark = smoothstep(0.986, 0.996, dot(r, sky));
-        eyeEm += vec3(1.0, 0.93, 0.8) * spark * 1.6 * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+        float spark = smoothstep(0.975, 0.992, dot(r, sky));
+        eyeEm += vec3(1.0, 0.93, 0.8) * spark * 2.4 * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
     }
     if (pattern == 0 && !eye && part != 14.0 && part != 15.0) {
         // cuticle micro-relief: two octaves of smooth noise tilt the normal, finest on the legs, coarse on a rugose hero
@@ -394,7 +394,7 @@ void fragment() {
             c *= 1.0 - 0.45 * pit * (1.0 - smoothstep(10.0, 18.0, -VERTEX.z));
             rough += 0.12 * pit;
         }
-        cc = 0.05; rough = max(rough, 0.66); // satin, not lacquer: the sheen comes from the setae and the sculpture
+        cc = 0.0; rough = max(rough, 0.72); // satin, not lacquer: the sheen comes from the setae and the sculpture
         // the pale seams between tergites and the stretched membrane of a replete
         float mem = clamp(v_cus.x, 0.0, 1.0);
         c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
