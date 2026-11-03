@@ -60,7 +60,9 @@ public static class NatureAssets
                 Size = new Vector3((float)size[0], (float)size[1], (float)size[2]),
             };
             p.Mesh = GD.Load<Mesh>("res://assets/nature/meshes/" + p.File);
-            p.Material = MaterialFor(p.Src);
+            // Blender-made pieces (sugar, seeds, berries, crumbs, the tube) carry no photo textures: their users
+            // give them their own shaders, so they get no scan material (loading one logged missing-file errors)
+            p.Material = ResourceLoader.Exists($"res://assets/nature/tex/{p.Src}_diff.jpg") || ResourceLoader.Exists($"res://assets/nature/tex/{p.Src}_diff.png") ? MaterialFor(p.Src) : null;
             if (p.Kind is "twig" or "leaf" or "root" or "bark")
             {
                 // the longest side goes along z, the shortest up
