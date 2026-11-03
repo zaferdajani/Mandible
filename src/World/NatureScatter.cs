@@ -178,7 +178,7 @@ public static class NatureScatter
         // 3. grit: thousands of small scanned stones (cut to ~50 triangles) that give the soil real grain at play zoom,
         //    thick in the hollows and along trail edges, thin on crests, never a uniform carpet
         var grit = NatureAssets.Kind("grit");
-        if (grit.Count > 0)
+        if (grit.Count > 0 && Settings.Gfx > Settings.Quality.Low) // phones: the ground set alone carries the grain
         {
             int grains = (int)(areaSize / 11f * density);
             for (int i = 0; i < grains; i++)
