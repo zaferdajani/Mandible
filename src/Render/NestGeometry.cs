@@ -110,6 +110,10 @@ public sealed class NestGeometry
                 distances[z * (nx + 1) + x] = d;
                 float y = Height(d);
                 float bank = Mathf.SmoothStep(-0.5f, -0.3f, d) * (1 - Mathf.SmoothStep(0.05f, 0.2f, d)); // 0 on the floor and above the lip
+                // the floor is trodden, not flat: low lumps and shallow scrapes, gone near the walking strip's middle
+                float floor = 1 - Mathf.SmoothStep(-0.6f, -0.45f, d);
+                y += floor * (0.05f * Mathf.Sin(p.X * 2.7f + Mathf.Sin(p.Y * 1.9f) * 1.5f) * Mathf.Sin(p.Y * 2.3f + p.X * 0.7f)
+                              + 0.025f * Mathf.Sin(p.X * 7.9f - p.Y * 6.1f));
                 y += bank * (0.16f * Mathf.Sin(p.X * 4.3f + Mathf.Sin(p.Y * 3.1f) * 2) * Mathf.Sin(p.Y * 3.7f + p.X * 0.9f)
                              + 0.07f * Mathf.Sin(p.X * 11.3f + p.Y * 9.7f));
                 mesh.Add(new Vector3(p.X, y, p.Y), Vector3.Up, Colors.White, new Vector2(d, 0), Vector2.Zero);

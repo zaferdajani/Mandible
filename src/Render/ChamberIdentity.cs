@@ -51,6 +51,7 @@ public sealed partial class NestInterior
                 var apron = tip - fwd * 0.6f - _g.Sim.ChamberPos(room.Team, ch);
                 // the nurses keep the eggs in a few heaps beside her, not a ring: piled high in the middle of each,
                 // spilling at the edges, with bare floor between the heaps
+                placed.Clear();
                 var heaps = new (Vector2 c, float r)[3];
                 float a0 = rng.R(0, Mathf.Tau);
                 for (int h = 0; h < heaps.Length; h++)
@@ -63,10 +64,17 @@ public sealed partial class NestInterior
                     var (c, r) = heaps[i % heaps.Length];
                     Vector2 q;
                     int guard = 0;
-                    do { q = c + new Vector2(rng.R(-1, 1) + rng.R(-1, 1), rng.R(-1, 1) + rng.R(-1, 1)) * 0.5f * r; }
-                    while (guard++ < 40 && (new Vector2(q.X / 1.15f, q.Y / 1.3f).LengthSquared() < 1 || q.DistanceSquaredTo(apron) < 0.95f * 0.95f || new Vector2(q.X / 3.6f, q.Y / 2.6f).LengthSquared() > 1));
-                    float heap = Mathf.Max(0, 1 - q.DistanceTo(c) / (r * 1.1f)) * 0.32f; // eggs stack in the middle of a heap
-                    return new Transform3D(Pose(rng.R(1.1f, 1.65f)), new Vector3(q.X, 0.23f + heap + rng.R(0, 0.06f), q.Y));
+                    bool clear;
+                    do
+                    {
+                        q = c + new Vector2(rng.R(-1, 1) + rng.R(-1, 1), rng.R(-1, 1) + rng.R(-1, 1)) * 0.6f * r;
+                        // each egg keeps a little space: a heap of separate eggs, not one lump
+                        clear = true; foreach (var o in placed) if (o.DistanceSquaredTo(q) < 0.15f * 0.15f) { clear = false; break; }
+                    }
+                    while (guard++ < 40 && (!clear || new Vector2(q.X / 1.15f, q.Y / 1.3f).LengthSquared() < 1 || q.DistanceSquaredTo(apron) < 0.95f * 0.95f || new Vector2(q.X / 3.6f, q.Y / 2.6f).LengthSquared() > 1));
+                    placed.Add(q);
+                    float heap = Mathf.Max(0, 1 - q.DistanceTo(c) / (r * 1.3f)) * 0.18f; // a low heap, higher in the middle
+                    return new Transform3D(Pose(rng.R(0.85f, 1.35f)), new Vector3(q.X, 0.2f + heap + rng.R(0, 0.04f), q.Y));
                 });
                 OrganicScatter(node, Surface.Resin, N(21), _ =>
                 {

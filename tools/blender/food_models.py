@@ -153,14 +153,14 @@ def berry(seed):
     ring = []
     for k in range(10):
         a = k / 10 * math.tau
-        rr = r * (0.42 if k % 2 == 0 else 0.16)
-        ring.append(cb.verts.new((math.cos(a) * rr, math.sin(a) * rr, r * (0.93 if k % 2 == 0 else 0.88))))
+        rr = r * (0.24 if k % 2 == 0 else 0.09)
+        ring.append(cb.verts.new((math.cos(a) * rr, math.sin(a) * rr, r * (0.96 if k % 2 == 0 else 0.9))))
     for k in range(10):
         cb.faces.new((centre, ring[k], ring[(k + 1) % 10]))
     calyx = mesh_object(f"calyx_{seed}", cb)
     # a short broken stalk
     sb = bmesh.new()
-    bmesh.ops.create_cone(sb, cap_ends=True, segments=6, radius1=r * 0.09, radius2=r * 0.06, depth=r * 0.9)
+    bmesh.ops.create_cone(sb, cap_ends=True, segments=8, radius1=r * 0.05, radius2=r * 0.035, depth=r * rng.uniform(0.4, 0.9))
     bmesh.ops.translate(sb, vec=Vector((0, 0, r * 1.25)), verts=sb.verts)
     bmesh.ops.rotate(sb, cent=Vector((0, 0, r)), matrix=Matrix.Rotation(rng.uniform(0.3, 0.8), 3, "X"), verts=sb.verts)
     stalk = mesh_object(f"stalk_{seed}", sb)
@@ -177,6 +177,40 @@ def berry(seed):
     bpy.ops.object.join()
     smart_uv(ob)
     return ob
+
+
+# ------------------------------------------------------------------ blackberry: a cluster of glossy drupelets
+def blackberry(seed):
+    rng = random.Random(seed)
+    r = rng.uniform(0.006, 0.0075)
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=12, radius=r * 0.8)
+    core = mesh_object(f"core_{seed}", bm)
+    parts = [core]
+    n = 46
+    for i in range(n):
+        y = 1 - 2 * (i + 0.5) / n
+        if y < -0.7:
+            continue
+        rr = math.sqrt(max(0, 1 - y * y)); th = i * 2.39996 + rng.uniform(-0.2, 0.2)
+        d = Vector((math.cos(th) * rr, math.sin(th) * rr, y * 1.12))
+        db = bmesh.new()
+        dr = r * rng.uniform(0.24, 0.3)
+        bmesh.ops.create_uvsphere(db, u_segments=10, v_segments=7, radius=dr)
+        bmesh.ops.translate(db, vec=d * r * 0.88, verts=db.verts)
+        parts.append(mesh_object(f"drupe_{seed}_{i}", db))
+    for o in parts:
+        o.select_set(True)
+        for p in o.data.polygons:
+            p.use_smooth = True
+    bpy.context.view_layer.objects.active = core
+    bpy.ops.object.join()
+    col = core.data.color_attributes.new("Col", "BYTE_COLOR", "CORNER")
+    core.data.color_attributes.active_color = col
+    for li in range(len(core.data.loops)):
+        col.data[li].color = (1, 1, 1, 1)
+    smart_uv(core)
+    return core
 
 
 # ------------------------------------------------------------------ the formicarium tube: thick glass, broken
@@ -273,6 +307,9 @@ for s in range(2):
 reset()
 for s in range(5):
     export(f"berry_{s}", [berry(400 + s)])
+reset()
+for s in range(3):
+    export(f"blackberry_{s}", [blackberry(600 + s)])
 reset()
 export("tube_closed", tube())
 reset()

@@ -801,16 +801,26 @@ shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform float seed = 0.0;
+uniform float stripes = 5.0;   // 0: a husked grass grain, no stripes
+uniform float contrast = 0.6;  // how pale the stripes are against the dark shell
+uniform float wear = 0.5;      // dust and scuffing
 void fragment() {
     float n = texture(noise_b, UV * vec2(3.0, 9.0) + seed).r;
+    float n2 = texture(noise_b, UV * vec2(11.0, 2.5) + seed * 3.0).r;
     if (FRONT_FACING) {
-        float stripes = smoothstep(0.82, 0.94, abs(sin((UV.x * 5.0 + n * 0.25) * 3.14159)));
-        float tip = smoothstep(0.85, 1.0, UV.y);
-        vec3 shell = mix(vec3(0.05, 0.048, 0.045), vec3(0.6, 0.57, 0.5), stripes * (1.0 - tip * 0.6));
-        ALBEDO = shell * (0.85 + 0.3 * n);
-        ROUGHNESS = 0.5 + 0.2 * n;
-        SPECULAR = 0.35;
-        CLEARCOAT = 0.25; CLEARCOAT_ROUGHNESS = 0.4;
+        vec3 dark = mix(vec3(0.07, 0.065, 0.06), vec3(0.16, 0.13, 0.1), n2 * 0.6);
+        vec3 pale = mix(vec3(0.5, 0.47, 0.41), vec3(0.66, 0.6, 0.5), n);
+        // soft-edged stripes that wander and break, each seed its own count and contrast
+        float st = stripes > 0.0 ? smoothstep(0.55, 0.95, abs(sin((UV.x * stripes + n * 0.35 + seed) * 3.14159))) * smoothstep(0.2, 0.6, n2 + 0.3) : 0.0;
+        vec3 shell = mix(dark, pale, st * contrast);
+        // grass grain: a pale straw husk
+        if (stripes <= 0.0) shell = mix(vec3(0.5, 0.38, 0.2), vec3(0.72, 0.6, 0.38), n);
+        // wear: dust in the grooves, scuffs on the ridges
+        shell = mix(shell, vec3(0.42, 0.32, 0.22), smoothstep(0.6, 0.9, n) * wear * 0.45);
+        ALBEDO = shell * (0.9 + 0.2 * n);
+        ROUGHNESS = 0.55 + 0.25 * n + wear * 0.15;
+        SPECULAR = 0.3;
+        CLEARCOAT = 0.15 * (1.0 - wear); CLEARCOAT_ROUGHNESS = 0.5;
     } else {
         ALBEDO = vec3(0.86, 0.8, 0.66) * (0.85 + 0.2 * n);
         ROUGHNESS = 0.7;
@@ -823,21 +833,32 @@ void fragment() {
     public const string BerrySkin = @"
 shader_type spatial;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
-uniform float tone = 1.0;
+uniform float tone = 1.0;   // below ~0.6 a bruised, darkened berry
+uniform float black = 0.0;  // 1: a blackberry
+uniform float split = 0.0;  // 1: burst open down one side
 varying float skin;
 varying vec3 lp;
 void vertex() { skin = COLOR.r; lp = VERTEX; }
 void fragment() {
     float n = texture(noise_b, UV * 4.0 + tone).r;
-    vec3 red = mix(vec3(0.08, 0.005, 0.015), vec3(0.24, 0.018, 0.03), clamp(tone * (0.65 + 0.45 * n), 0.0, 1.0));
-    float vein = smoothstep(0.93, 1.0, abs(sin(atan(lp.x, lp.z) * 5.0))) * 0.25;
-    vec3 col = mix(red, red * 1.7 + vec3(0.05, 0.0, 0.0), vein);
-    vec3 dry = vec3(0.16, 0.1, 0.05) * (0.8 + 0.4 * n);
+    float m = texture(noise_b, UV * 13.0 + tone * 2.0).r;
+    vec3 red = mix(vec3(0.07, 0.004, 0.012), vec3(0.3, 0.02, 0.035), clamp(tone * (0.6 + 0.5 * n), 0.0, 1.0));
+    // pale lines under the skin, and the bloom of a thin waxy coat that dulls the colour a little
+    float vein = smoothstep(0.93, 1.0, abs(sin(atan(lp.x, lp.z) * 5.0))) * 0.2;
+    vec3 col = mix(red, red * 1.6 + vec3(0.04, 0.0, 0.0), vein);
+    col = mix(col, col + vec3(0.03, 0.02, 0.03), smoothstep(0.55, 0.8, m) * 0.6);
+    if (black > 0.5) col = mix(vec3(0.015, 0.008, 0.014), vec3(0.06, 0.018, 0.04), n); // near-black, a hint of wine
+    // bruises: dark soft patches
+    col *= 1.0 - 0.45 * smoothstep(0.62, 0.8, n) * (1.0 - clamp(tone, 0.0, 1.0));
+    // a split: wet dark pulp down one side
+    float crack = split * smoothstep(0.12, 0.0, abs(lp.x / max(length(lp.xz), 1e-5) - 0.2 * sin(lp.y * 900.0))) * step(0.0, lp.z);
+    col = mix(col, vec3(0.16, 0.0, 0.02), crack);
+    vec3 dry = vec3(0.13, 0.085, 0.045) * (0.8 + 0.4 * n);
     ALBEDO = mix(dry, col, skin);
-    ROUGHNESS = mix(0.85, 0.16 + 0.1 * n, skin);
-    SPECULAR = mix(0.2, 0.55, skin);
-    CLEARCOAT = 0.4 * skin; CLEARCOAT_ROUGHNESS = 0.12;
-    BACKLIGHT = vec3(0.22, 0.02, 0.02) * skin;
+    ROUGHNESS = mix(0.85, 0.22 + 0.12 * m, skin);
+    SPECULAR = mix(0.2, 0.45, skin);
+    CLEARCOAT = 0.25 * skin; CLEARCOAT_ROUGHNESS = 0.25;
+    BACKLIGHT = mix(vec3(0.3, 0.03, 0.03), vec3(0.06, 0.01, 0.03), black) * skin; // light through the skin
 }
 ";
 

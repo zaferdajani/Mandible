@@ -15,7 +15,7 @@ uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform float map_size = 320.0;
-uniform float remembered = 0.36; // how bright ground seen before (but not now) stays
+uniform float remembered = 0.4; // how bright ground seen before (but not now) stays
 void vertex() { POSITION = vec4(VERTEX.xy * 2.0, 1.0, 1.0); }
 void fragment() {
     float d = texture(depth_tex, SCREEN_UV).r;
@@ -23,15 +23,17 @@ void fragment() {
     v.xyz /= v.w;
     vec3 wp = (INV_VIEW_MATRIX * vec4(v.xyz, 1.0)).xyz;
     // break the frontier: two octaves of the yard's cell noise push the lookup a couple of units either way
-    vec2 j = (texture(noise_b, wp.xz * 0.045).rg - 0.5) * 2.0 + (texture(noise_b, wp.xz * 0.17 + 0.37).rg - 0.5) * 0.5;
+    // a single low-frequency wobble: the edge wanders like a lit pool's, without the mottling of fine noise
+    vec2 j = (texture(noise_b, wp.xz * 0.03).rg - 0.5) * 2.2;
     vec2 f = texture(fow_tex, (wp.xz + j) / map_size).rg;
-    float known = smoothstep(0.02, 0.95, f.g);
-    float seen = smoothstep(0.05, 0.9, f.r);
+    float known = smoothstep(0.1, 0.9, f.g);
+    float seen = smoothstep(0.15, 0.85, f.r);
     float lit = known * mix(remembered, 1.0, seen);
     // ground seen before but out of sight now is a clearly separate tier: dimmed and drained of colour (a cool grey-brown
     // veil), so black (never seen), remembered and in sight read as three different things at a glance
     float remember = known * (1.0 - seen);
-    ALBEDO = mix(vec3(0.0), vec3(0.09, 0.08, 0.075), remember / max(1.0 - lit, 0.001));
+    // remembered ground is the same ground at a firm lower value (a deep warm brown veil), not a pale haze
+    ALBEDO = mix(vec3(0.0), vec3(0.03, 0.018, 0.01), remember / max(1.0 - lit, 0.001));
     ALPHA = 1.0 - lit;
 }
 ";
