@@ -74,6 +74,10 @@ uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
 uniform float sculpture = 0.08; // the cuticle's micro-relief: fine imbricate on a worker, coarse rugose on the Warlord
+uniform vec3 waist = vec3(0.0, 0.14, -0.105); // the gaster nods (and curls to spray) about this model-space point
+// a body made from a real specimen scan (Antscan micro-CT): its sutures, punctures and setae sockets, baked
+uniform sampler2D detail_normal : hint_normal, filter_linear_mipmap, repeat_disable;
+uniform float has_detail = 0.0;
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
 varying float v_part;
 varying float v_flash;
@@ -89,14 +93,15 @@ varying float v_ao;
 varying float v_pale;
 varying float v_etch;
 varying float v_stage;
+varying vec4 v_cus; // CUSTOM0: membrane, seta, textured
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
 float vnoise(vec3 p) {
     vec3 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y),
-               mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+    return mix(mix(mix(hash3(i), hash3(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 0.0)), hash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+               mix(mix(hash3(i + vec3(0.0, 0.0, 1.0)), hash3(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 1.0)), hash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
 
 // distance to the nearest of a jittered lattice of points: the punctures that pit an ant's cuticle
@@ -236,12 +241,12 @@ void vertex() {
         if (part == 13.0) {
             p.y += sin(TIME * 2.0 + id) * 0.004;
             if (pattern == 0) {
-                vec3 q = p - vec3(0.0, 0.14, -0.105);
+                vec3 q = p - waist;
                 float g = sin(2.0 * phase - 0.6) * 0.05 * amp;
                 // a formicine sprays from the acidopore: the gaster swings down and forward under the body on the shot
                 if (length(acid) > 0.0) g -= bite * 1.25 * alive;
                 q = rot_x(q, g); n = rot_x(n, g);
-                p = q + vec3(0.0, 0.14, -0.105);
+                p = q + waist;
             }
         }
         // a beetle hunkers behind its shell wall; an ant dips to acknowledge, crouches on a flinch, rises to listen
@@ -279,6 +284,7 @@ void vertex() {
     v_sel = sel;
     v_hov = hov;
     v_ao = COLOR.a; // occlusion baked by MeshKit.BakeAO: legs under the body, the neck, the waist
+    v_cus = CUSTOM0;
     VERTEX = p;
     NORMAL = n;
 }
@@ -378,21 +384,24 @@ void fragment() {
         vec3 sp = v_local * (part >= 1.0 && part <= 8.0 ? 300.0 : 180.0);
         vec3 jit = vec3(vnoise(sp), vnoise(sp + 17.3), vnoise(sp + 41.9)) - 0.5
                  + 0.5 * (vec3(vnoise(sp * 2.7 + 5.1), vnoise(sp * 2.7 + 23.4), vnoise(sp * 2.7 + 61.2)) - 0.5);
-        NORMAL = normalize(NORMAL + (VIEW_MATRIX * MODEL_MATRIX * vec4(jit, 0.0)).xyz * sculpture * 1.6);
+        // (a scanned body carries the real relief in its normal map instead)
+        bool scanned = has_detail > 0.5 && v_cus.z > 0.5;
+        if (scanned) { NORMAL_MAP = texture(detail_normal, v_uv).rgb; NORMAL_MAP_DEPTH = 1.0; }
+        else NORMAL = normalize(NORMAL + (VIEW_MATRIX * MODEL_MATRIX * vec4(jit, 0.0)).xyz * sculpture * 1.6);
         // punctures, each with a hair socket: only near the camera, where they are more than a pixel (and phones skip them)
-        if (-VERTEX.z < 18.0 && part != 13.0 || -VERTEX.z < 18.0 && v_uv.x < 0.5) {
+        if (!scanned && -VERTEX.z < 18.0 && v_cus.x < 0.5) {
             float pit = 1.0 - smoothstep(0.1, 0.24, worley(v_local * (part >= 1.0 && part <= 8.0 ? 260.0 : 150.0)));
             c *= 1.0 - 0.45 * pit * (1.0 - smoothstep(10.0, 18.0, -VERTEX.z));
             rough += 0.12 * pit;
         }
         cc = 0.05; rough = max(rough, 0.66); // satin, not lacquer: the sheen comes from the setae and the sculpture
         // the pale seams between tergites and the stretched membrane of a replete
-        float mem = clamp(v_uv.x, 0.0, 1.0);
+        float mem = clamp(v_cus.x, 0.0, 1.0);
         c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
         rough = mix(rough, 0.18, mem); cc = mix(cc, 0.8, mem);
         BACKLIGHT = mix(BACKLIGHT, vec3(0.9, 0.5, 0.12), mem);
         // setae: fine golden hairs that catch the sun
-        if (v_uv.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
+        if (v_cus.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
@@ -467,7 +476,7 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
-    SPECULAR = pattern == 0 ? 0.2 : 0.32;
+    SPECULAR = pattern == 0 ? 0.14 : 0.32;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.42;
     RIM = pattern == 2 ? 0.6 : 0.35;
@@ -476,12 +485,14 @@ void fragment() {
     EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08) + eyeEm;
     // a beetle behind its shell wall: the wing cases gleam hard along their edges
     if (v_block > 0.5 && part != 11.0) { EMISSION += accent * (0.08 + 0.35 * fres) * (0.7 + 0.3 * sin(TIME * 6.0)); ROUGHNESS = 0.25; }
-    if (part == 13.0 && length(acid) > 0.0 && v_uv.x > 0.5) {
+    if (part == 13.0 && length(acid) > 0.0 && v_cus.x > 0.5) {
         // a replete's membrane: amber formic acid seen through taut cuticle, glowing where the sun comes through
         float pulse = 0.85 + 0.15 * sin(TIME * 2.2);
-        ALBEDO = vec3(0.17, 0.075, 0.014) * (1.0 - dead * 0.35);
-        EMISSION += vec3(0.22, 0.09, 0.012) * 0.08 * pulse * (1.0 - dead);
-        BACKLIGHT = vec3(0.55, 0.28, 0.06) * (1.0 - dead);
+        // the acid inside is not even: darker where it is deep, paler veins where the membrane is stretched thinnest
+        float mottle = vnoise(v_local * 38.0) * 0.6 + vnoise(v_local * 110.0) * 0.4;
+        ALBEDO = mix(vec3(0.075, 0.03, 0.006), vec3(0.2, 0.09, 0.016), mottle) * (1.0 - dead * 0.35);
+        EMISSION += vec3(0.16, 0.065, 0.01) * 0.05 * pulse * (1.0 - dead);
+        BACKLIGHT = vec3(0.32, 0.15, 0.03) * (0.6 + 0.6 * mottle) * (1.0 - dead);
         CLEARCOAT = 1.0; CLEARCOAT_ROUGHNESS = 0.08; ROUGHNESS = 0.12; METALLIC = 0.0;
     }
 }
@@ -1169,17 +1180,6 @@ uniform vec3 tint : source_color = vec3(0.85, 0.88, 0.9);
 uniform vec3 vein : source_color = vec3(0.12, 0.08, 0.04);
 varying vec2 v_uv;
 varying float v_fly;
-// distance to the nearest of a jittered lattice of points: the punctures that pit an ant's cuticle
-float worley(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    float d = 9.0;
-    for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-        vec3 o = vec3(float(x), float(y), float(z));
-        vec3 r = o + vec3(hash3(i + o), hash3(i + o + 1.7), hash3(i + o + 3.3)) - f;
-        d = min(d, dot(r, r));
-    }
-    return sqrt(d);
-}
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
 void vertex() {

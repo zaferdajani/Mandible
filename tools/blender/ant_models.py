@@ -24,6 +24,7 @@ import json
 import math
 import os
 import random
+import shutil
 import struct
 import sys
 
@@ -41,12 +42,13 @@ HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
 class Part:
     """A finished piece of the ant: vertices, normals, triangles and the shader contract."""
 
-    def __init__(self, verts, normals, tris, part, region, pivot=(0.0, 0.0), weights=None, membrane=None, seta=0.0):
+    def __init__(self, verts, normals, tris, part, region, pivot=(0.0, 0.0), weights=None, membrane=None, seta=0.0, uv=None):
         self.v, self.n, self.t = verts, normals, tris
         self.part, self.region, self.pivot = part, region, pivot
         self.w = weights or [0.0] * len(verts)
         self.m = membrane or [0.0] * len(verts)
         self.seta = seta
+        self.uv = uv  # texture coordinates into the scanned body's normal map, or None
 
 
 # ---------------------------------------------------------------------------------------------------------- lofting
@@ -248,6 +250,7 @@ def build(species, caste, lod):
     H, M, G, T, L = cs["H"], cs["M"], cs["G"], cs["T"], cs["L"]
     rnd = random.Random(hash((species, caste)) & 0xffff)
     parts = []
+    roots = {}  # limb part id -> the point it hangs from (hip, antennal socket, mandible hinge)
 
     # ---- mesosoma: pronotum dome, mesonotum, the metanotal groove, then the propodeum's rounded declivity
     flight = cs.get("flight", False)
@@ -422,6 +425,7 @@ def build(species, caste, lod):
         pid = 9 if s > 0 else 10
         M = cs["M"] * (0.75 + 0.25 * H)
         hinge = Vector((s * 0.046 * H, hc.y - 0.024 * H, hc.z + hl * 0.84))
+        roots[pid] = hinge.copy()
         mid = hinge + Vector((s * 0.016 * M, -0.008, 0.075 * M))
         tip = mid + Vector((-s * 0.058 * M, -0.004, 0.032 * M))
         pts, rs = resample([hinge, mid, tip], [(0.024 * M, 0.0095 * M), (0.019 * M, 0.0065 * M), (0.004, 0.0025)], 3 if fine else 1)
@@ -440,6 +444,7 @@ def build(species, caste, lod):
     for s in (-1, 1):
         pid = 7 if s > 0 else 8
         root = Vector((s * 0.028 * H, hc.y + 0.018 * H, hc.z + hl * 0.62))
+        roots[pid] = root.copy()
         sl = 0.13 * (0.85 + 0.15 * H)
         elbow = root + Vector((s * 0.75, 0.55, -0.38)).normalized() * sl
         tip = elbow + Vector((s * 0.55, -0.12, 1.0)).normalized() * 0.21
@@ -478,6 +483,7 @@ def build(species, caste, lod):
             def sx(p):
                 return Vector((p.x * s, p.y, p.z))
             hip = Vector((s * 0.034 * T, BODY_Y - 0.012, hips[i] * T))
+            roots[pid] = hip.copy()
             tro_off, knee, ankle, foot = targets[i]
             troch = hip + sx(tro_off)
             L2 = L * 1.25
@@ -541,7 +547,146 @@ def build(species, caste, lod):
                 v, f = cone(p0 - n0 * 0.001, p0 + d * ln, 0.0008, 3)
                 parts.append(make(v, f, 0, pid, reg, seta=1.0))
 
+    build.roots = roots
     return parts, neck, gaster_tip, gaster_c
+
+
+
+# ------------------------------------------------------------------------------------------- real specimens (Antscan)
+
+# Which Antscan specimen (micro-CT, CC-BY 4.0; see docs/asset-credits.md) gives each caste its body, made by
+# tools/blender/antscan_body.py. The head, mesosoma, waist and gaster come from the scan; the legs, antennae and
+# mandibles are the animated ones above, hung from the scan's own hips, sockets and hinges. `head` and `gaster` scale
+# those masses about the neck and the waist where a caste departs from its specimen (Lasius has no majors).
+SCANS = {
+    ("lasius", "Worker"): dict(body="lasius_worker"),
+    ("lasius", "Gunner"): dict(body="lasius_worker", gaster=1.25),
+    ("lasius", "Soldier"): dict(body="camponotus_minor"),
+    ("lasius", "Major"): dict(body="camponotus_major"),
+    ("lasius", "Warlord"): dict(body="camponotus_major", head=1.08),
+    ("lasius", "Matron"): dict(body="lasius_worker", replete=True),
+    # (the black queen keeps her modelled body: the Lasius queen scans tried so far did not part cleanly at her
+    # broad waist; see docs/art-pipeline.md)
+    ("lasius", "Flyer"): dict(body="lasius_male"),
+    ("lasius", "Marshal"): dict(body="lasius_male", head=1.1),
+    ("solenopsis", "Worker"): dict(body="solenopsis_minor"),
+    ("solenopsis", "Gunner"): dict(body="solenopsis_minor", gaster=1.25),
+    ("solenopsis", "Soldier"): dict(body="solenopsis_major", head=0.85),
+    ("solenopsis", "Major"): dict(body="solenopsis_major"),
+    ("solenopsis", "Warlord"): dict(body="solenopsis_major", head=1.1),
+    ("solenopsis", "Matron"): dict(body="solenopsis_minor", replete=True),
+    ("solenopsis", "Queen"): dict(body="solenopsis_queen"),
+    ("solenopsis", "Flyer"): dict(body="solenopsis_queen"),
+    ("solenopsis", "Marshal"): dict(body="solenopsis_queen"),
+}
+BODIES = os.environ.get("ANT_BODIES", "D:/Temp/ant-rebuild/bodies")
+LABEL_PART = {0: (HEAD, HEAD_R), 1: (BODY, THORAX_R), 2: (GASTER, GASTER_R), 3: (EYE, HEAD_R)}
+
+
+def read_body(path):
+    with open(path, "rb") as fh:
+        assert fh.read(4) == b"BDY1"
+        nv, nt = struct.unpack("<II", fh.read(8))
+        rows = [struct.unpack("<8fi", fh.read(36)) for _ in range(nv)]
+        tris = [struct.unpack("<3I", fh.read(12)) for _ in range(nt)]
+    return rows, tris
+
+
+def build_scanned(species, caste, lod):
+    """The caste's body from its specimen scan, with the modelled limbs moved onto it; None when no scan is baked."""
+    cfg = SCANS.get((species, caste))
+    if not cfg:
+        return None
+    path = os.path.join(BODIES, f"{cfg['body']}_{lod}.body")
+    meta_path = os.path.join(BODIES, cfg["body"] + ".json")
+    if not (os.path.exists(path) and os.path.exists(meta_path)):
+        return None
+    meta = json.load(open(meta_path))
+    neck, waist = Vector(meta["neck"]), Vector(meta["waist"])
+    hs, gs = cfg.get("head", 1.0), cfg.get("gaster", 1.0)
+
+    def moved(p, label):
+        if label in (0, 3):
+            return neck + (p - neck) * hs
+        if label == 2:
+            return waist + (p - waist) * gs
+        return p
+
+    rows, tris = read_body(path)
+    groups = {}
+    for t in tris:
+        labs = [rows[i][8] for i in t]
+        lab = 3 if labs.count(3) >= 2 else max(set(labs), key=labs.count)
+        if cfg.get("replete") and lab == 2:
+            continue  # a replete's gaster is the modelled, swollen one
+        groups.setdefault(lab, []).append(t)
+    parts = []
+    for lab, ts in groups.items():
+        index, vs, ns, uvs, out = {}, [], [], [], []
+        for t in ts:
+            tri = []
+            for i in t:
+                if i not in index:
+                    index[i] = len(vs)
+                    r = rows[i]
+                    vs.append(moved(Vector(r[0:3]), r[8]))
+                    ns.append(Vector(r[3:6]).normalized())
+                    uvs.append((r[6], r[7]))
+                tri.append(index[i])
+            out.append(tuple(tri))
+        part, region = LABEL_PART[lab]
+        parts.append(Part(vs, ns, out, part, region, uv=uvs))
+
+    # the modelled ant of the same caste supplies the limbs (and a replete's gaster); move each onto the scan
+    proc, _, proc_tip, _ = build(species, caste, lod)
+    roots = build.roots
+    hips = [Vector(h) for h in meta["hips"]]  # front left, front right, middle left, middle right, hind left, hind right
+    targets = {}
+    for i in range(3):
+        targets[1 + i] = hips[2 * i]
+        targets[4 + i] = hips[2 * i + 1]
+    targets[7], targets[8] = [moved(Vector(x), 0) for x in meta["sockets"]]
+    targets[9], targets[10] = [moved(Vector(x), 0) for x in meta["hinges"]]
+    hang = waist - Vector((0, BODY_Y - 0.01, -0.105))
+    for p in proc:
+        if p.part in targets and p.part in roots:
+            d = targets[p.part] - roots[p.part]
+            p.v = [v + d for v in p.v]
+            p.pivot = (p.pivot[0] + d.x, p.pivot[1] + d.z)
+            parts.append(p)
+        elif cfg.get("replete") and p.part == GASTER:
+            # the swollen gaster (and its setae) hangs from the scan's waist instead of the modelled one
+            p.v = [v + hang for v in p.v]
+            parts.append(p)
+    tip = proc_tip + hang if cfg.get("replete") else waist + (Vector(meta["gaster_tip"]) - waist) * gs
+    return parts, neck, tip, Vector(meta["gaster"]), waist
+
+
+def tangents(part):
+    """Per-vertex tangent (xyz, handedness) from the UV derivatives, for the baked normal map."""
+    acc = [Vector() for _ in part.v]
+    bit = [Vector() for _ in part.v]
+    for a, b, c in part.t:
+        p0, p1, p2 = part.v[a], part.v[b], part.v[c]
+        u0, u1, u2 = part.uv[a], part.uv[b], part.uv[c]
+        e1, e2 = p1 - p0, p2 - p0
+        du1, dv1, du2, dv2 = u1[0] - u0[0], u1[1] - u0[1], u2[0] - u0[0], u2[1] - u0[1]
+        r = du1 * dv2 - du2 * dv1
+        if abs(r) < 1e-12:
+            continue
+        r = 1.0 / r
+        t = (e1 * dv2 - e2 * dv1) * r
+        bt = (e2 * du1 - e1 * du2) * r
+        for i in (a, b, c):
+            acc[i] += t
+            bit[i] += bt
+    out = []
+    for n, t, bt in zip(part.n, acc, bit):
+        t = t - n * n.dot(t)
+        t = t.normalized() if t.length > 1e-9 else n.orthogonal().normalized()
+        w = -1.0 if n.cross(t).dot(bt) < 0 else 1.0
+        out.append((t.x, t.y, t.z, w))
+    return out
 
 
 def plate(c, R, lat, lon, ext, thick, sides, lv):
@@ -614,21 +759,25 @@ def bake_ao(parts, rays=20, reach=0.12):
 
 
 def write_bin(path, parts, ao):
-    """Little-endian: 'ANT1', vertex count, index count; then per vertex position(3) normal(3) color(4) uv(2) uv2(2)
-    as float32; then the triangle indices as uint32."""
+    """Little-endian: 'ANT2', vertex count, index count; then per vertex position(3) normal(3) color(4) uv(2) uv2(2)
+    custom0(4: membrane, seta, textured, 0) tangent(4) as float32; then the triangle indices as uint32."""
     vbuf, ibuf = [], []
     nv = 0
     for p, a in zip(parts, ao):
+        tan = tangents(p) if p.uv else None
         for k, (v, n) in enumerate(zip(p.v, p.n)):
-            vbuf.append((v.x, v.y, v.z, n.x, n.y, n.z, p.part / 255.0, p.w[k], p.region, a[k], p.m[k], p.seta, p.pivot[0], p.pivot[1]))
+            uv = p.uv[k] if p.uv else (0.0, 0.0)
+            tg = tan[k] if tan else (1.0, 0.0, 0.0, 1.0)
+            vbuf.append((v.x, v.y, v.z, n.x, n.y, n.z, p.part / 255.0, p.w[k], p.region, a[k], uv[0], uv[1],
+                         p.pivot[0], p.pivot[1], p.m[k], p.seta, 1.0 if p.uv else 0.0, 0.0) + tuple(tg))
         for t in p.t:
             ibuf.append((t[0] + nv, t[1] + nv, t[2] + nv))
         nv += len(p.v)
     with open(path, "wb") as fh:
-        fh.write(b"ANT1")
+        fh.write(b"ANT2")
         fh.write(struct.pack("<II", len(vbuf), len(ibuf) * 3))
         for row in vbuf:
-            fh.write(struct.pack("<14f", *row))
+            fh.write(struct.pack("<22f", *row))
         for t in ibuf:
             # Godot's front faces wind clockwise
             fh.write(struct.pack("<3I", t[0], t[2], t[1]))
@@ -645,12 +794,22 @@ def main():
             if only and caste not in only:
                 continue
             for lod in ("near", "mid", "far"):
-                parts, neck, tip, gc = build(species, caste, lod)
+                scanned = build_scanned(species, caste, lod)
+                if scanned:
+                    parts, neck, tip, gc, waist = scanned
+                    body = SCANS[(species, caste)]["body"]
+                    png = os.path.join(BODIES, body + "_normal.png")
+                    if os.path.exists(png):
+                        shutil.copyfile(png, os.path.join(OUT, body + "_normal.png"))
+                else:
+                    parts, neck, tip, gc = build(species, caste, lod)
+                    waist, body = Vector((0, 0.14, -0.105)), None
                 ao = bake_ao(parts, 20 if lod != "far" else 10)
                 name = f"{species}_{caste}_{lod}"
                 tris = write_bin(os.path.join(OUT, name + ".bin"), parts, ao)
-                manifest[name] = dict(neck=list(neck), gaster_tip=list(tip), gaster_centre=list(gc), tris=tris)
-                print(f"[ants] {name}: {tris} triangles")
+                manifest[name] = dict(neck=list(neck), gaster_tip=list(tip), gaster_centre=list(gc), waist=list(waist),
+                                      detail=(body + "_normal") if body else "", tris=tris)
+                print(f"[ants] {name}: {tris} triangles" + (f" (scan {body})" if body else ""))
     with open(os.path.join(OUT, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=1)
 

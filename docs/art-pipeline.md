@@ -264,3 +264,24 @@ primitives, eyes, material, light, palette) and `g-play` for readability.
 What this round shows: lofted and subdivided shapes, however well proportioned, still read as primitives next to a
 macro photograph. The remaining gap is surface detail (sculpture, setae, segment edges) that a real specimen scan
 carries and a procedural loft does not.
+
+**2026-11-04, ant round 2, after the switch to real specimens (Antscan micro-CT, CC BY 4.0).** The head, mesosoma,
+waist and gaster of seven specimens (Lasius niger worker and male, Camponotus japonicus minor and major, Solenopsis
+invicta minor, major and queen) are cut from their scans by `tools/blender/antscan_body.py`, straightened, reduced
+to 7000 / 2400 / 700 triangles and given a normal map baked from the full scan; the animated legs, antennae and
+mandibles hang from the scan's hips and sockets. Every view fails again, with scores close to round 1.
+
+| View | Art (anatomy, primitives, eyes, material, light, palette) | Note |
+|---|---|---|
+| g-castes-black | 2 1 1 1 3 2 | near-black glossy bodies hide the scanned sculpture |
+| g-castes-red | 2 2 1 2 3 3 | gasters read as glossy dark ellipsoids at this framing |
+| g-warlord | 2 2 1 2 3 3 | no spines; jaws read as pincers |
+| g-matron | 2 2 1 2 3 3 | the modelled replete gaster still reads as a striped ball |
+| g-marshal | 1 1 1 1 2 2 | capture fault: the flying Marshals are still out of frame |
+| g-eyes | 2 2 1 2 3 2 | capture fault: the lens is too close and misses the face |
+| g-eyes-queen | 1 1 1 2 2 2 | capture fault: the frame shows the thorax, not the head |
+| g-play (read) | 3 | workers are specks at play zoom; red on red soil is low contrast |
+
+Open after round 2: the eye framings and the Marshal capture; a warmer, less glossy Lasius cuticle so the baked
+detail shows; the black queen (her Lasius scans did not part at the waist) and a real replete for the Matron; the
+readability spec at play zoom, where an ant is a few pixels whatever its mesh.

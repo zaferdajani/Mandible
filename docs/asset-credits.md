@@ -49,6 +49,27 @@ are resized to 512-2048 px (`assets/nature/tex`, `assets/nature/ground`) and imp
 The approved target images in `docs/art-targets/` were generated with Higgsfield `gpt_image_2_5`. The prompts are
 listed in `docs/art-targets/README.md`. They are references for review, not shipped in the game.
 
+## Antscan (CC BY 4.0)
+
+The ants' bodies are real specimens from [Antscan](https://www.antscan.info), synchrotron micro-CT of ethanol-preserved
+ants scanned at the KIT Light Source (Katzke, van de Kamp, Economo et al., "High-throughput phenomics of global ant
+biodiversity", bioRxiv 2025, doi:10.1101/2025.11.29.689474). The surface meshes come from
+[Biomedisa](https://biomedisa.info/antscan) and are licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+`tools/blender/antscan_body.py` keeps the head, mesosoma, waist and gaster, straightens the curled specimen, reduces it
+to the game's levels of detail and bakes a normal map from the full scan; `tools/blender/ant_models.py` hangs the
+game's animated legs, antennae and mandibles on it (`assets/ants`). Changes were made: the specimens are re-posed,
+decimated and recoloured, and their limbs replaced.
+
+| Specimen | Antscan dataset | Use |
+|---|---|---|
+| Lasius niger worker, CASENT0745065 | [10.35097/eb1pckwn5jtjg5f8](https://dx.doi.org/10.35097/eb1pckwn5jtjg5f8) | black worker, acid gunner, Acid Matron (head and thorax) |
+| Lasius niger male, CASENT0745068 | [10.35097/zsnrhpxf87n1c3ya](https://dx.doi.org/10.35097/zsnrhpxf87n1c3ya) | black flying ant |
+| Lasius flavus alate queen, CASENT0745013 | [10.35097/vt63mr7fzxgkr7ma](https://dx.doi.org/10.35097/vt63mr7fzxgkr7ma) | black queen, Sky Marshal |
+| Camponotus japonicus workers, OKENT0105312, OKENT0105313 | [10.35097/vcdzdwuqzcnb77y9](https://dx.doi.org/10.35097/vcdzdwuqzcnb77y9), [10.35097/8xdv23v8yww929b8](https://dx.doi.org/10.35097/8xdv23v8yww929b8) | black soldier, major, Warlord |
+| Solenopsis invicta minor worker, CASENT0744526 | [10.35097/ne8ttte36gsk2puk](https://dx.doi.org/10.35097/ne8ttte36gsk2puk) | red worker, acid gunner, Acid Matron (head and thorax) |
+| Solenopsis invicta major worker, CASENT0744090 | [10.35097/5z5r1fvxvkqhmhz4](https://dx.doi.org/10.35097/5z5r1fvxvkqhmhz4) | red soldier, major, Warlord |
+| Solenopsis invicta alate queen, OKENT0105174 | [10.35097/knfknksdr12pcnsf](https://dx.doi.org/10.35097/knfknksdr12pcnsf) | red queen, flying ant, Sky Marshal |
+
 ## Fonts
 
 Cinzel: SIL Open Font License, see `assets/fonts/Cinzel-OFL.txt`.

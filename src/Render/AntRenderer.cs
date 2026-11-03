@@ -131,10 +131,10 @@ public sealed class AntRenderer
     public bool ShowAllBars;
 
     // Lasius niger: a warm brown-black with browner legs; Solenopsis: reddish amber over a dark brown gaster (target G)
-    static readonly Color[] Body = { new(0.04f, 0.031f, 0.025f), new(0.24f, 0.085f, 0.03f) };
-    static readonly Color[] HeadC = { new(0.042f, 0.032f, 0.026f), new(0.27f, 0.095f, 0.035f) };
-    static readonly Color[] GasterC = { new(0.032f, 0.025f, 0.02f), new(0.085f, 0.035f, 0.022f) };
-    static readonly Color[] LegC = { new(0.085f, 0.06f, 0.042f), new(0.32f, 0.12f, 0.055f) };
+    static readonly Color[] Body = { new(0.075f, 0.052f, 0.036f), new(0.24f, 0.085f, 0.03f) };
+    static readonly Color[] HeadC = { new(0.07f, 0.049f, 0.034f), new(0.27f, 0.095f, 0.035f) };
+    static readonly Color[] GasterC = { new(0.062f, 0.045f, 0.032f), new(0.085f, 0.035f, 0.022f) };
+    static readonly Color[] LegC = { new(0.12f, 0.085f, 0.056f), new(0.32f, 0.12f, 0.055f) };
 
     // wild bugs: body, head, shell/abdomen, legs per species
     static readonly Dictionary<AntType, Color[]> BugColors = new()
@@ -275,7 +275,13 @@ public sealed class AntRenderer
             m.SetShaderParameter("sculpture", type switch { AntType.Warlord => 0.3f, AntType.Major => 0.15f, AntType.Soldier => 0.11f, _ => 0.08f });
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
-        if (team != Config.Wild) m.SetShaderParameter("neck", AntMesh.NeckOf(type, team));
+        if (team != Config.Wild)
+        {
+            m.SetShaderParameter("neck", AntMesh.NeckOf(type, team));
+            m.SetShaderParameter("waist", AntMesh.WaistOf(type, team));
+            var detail = AntMesh.DetailOf(type, team);
+            if (detail != null) { m.SetShaderParameter("detail_normal", detail); m.SetShaderParameter("has_detail", 1f); }
+        }
         else if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;

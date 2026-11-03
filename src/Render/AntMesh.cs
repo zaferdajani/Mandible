@@ -28,6 +28,22 @@ public static class AntMesh
     static readonly Dictionary<(AntType, int, Detail), ArrayMesh> Modelled = new();
     static readonly Dictionary<(AntType, int), Vector3> NeckOfTeam = new();
     static readonly Dictionary<(AntType, int), Vector3> TipOfTeam = new();
+    static readonly Dictionary<(AntType, int), Vector3> WaistOfTeam = new();
+    static readonly Dictionary<(AntType, int), Texture2D> DetailOfTeam = new();
+
+    /// Where the gaster hangs from the body: it nods about this point as the ant walks, and swings from it to spray.
+    public static Vector3 WaistOf(AntType type, int team)
+    {
+        Build(type, false, team);
+        return WaistOfTeam.TryGetValue((type, team), out var w) ? w : new Vector3(0, 0.14f, -0.105f);
+    }
+
+    /// The normal map baked from the real specimen the caste's body was scanned from, or null.
+    public static Texture2D DetailOf(AntType type, int team)
+    {
+        Build(type, false, team);
+        return DetailOfTeam.TryGetValue((type, team), out var t) ? t : null;
+    }
 
     /// The head's turning point of a colony's caste (each species' head sits a little differently).
     public static Vector3 NeckOf(AntType type, int team)
@@ -57,6 +73,9 @@ public static class AntMesh
             var neck = (Vector3)mesh.GetMeta("neck");
             NeckOfTeam[(type, team)] = neck;
             TipOfTeam[(type, team)] = (Vector3)mesh.GetMeta("gaster_tip");
+            if (mesh.HasMeta("waist")) WaistOfTeam[(type, team)] = (Vector3)mesh.GetMeta("waist");
+            if (mesh.HasMeta("detail") && ResourceLoader.Exists((string)mesh.GetMeta("detail")))
+                DetailOfTeam[(type, team)] = ResourceLoader.Load<Texture2D>((string)mesh.GetMeta("detail"));
             if (team == 0 || !Neck.ContainsKey(type)) Neck[type] = neck;
         }
         return mesh;
