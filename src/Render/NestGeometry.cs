@@ -7,7 +7,8 @@ namespace Mandible;
 /// the soil roof and hit testing. It never changes the simulation's graph, paths or random stream.
 public sealed class NestGeometry
 {
-    public const float Depth = 2.4f;
+    public const float Depth = 6.0f;      // floor below the surface: deep enough that the walls read as walls
+    public const float Lip = 1.7f;        // the bank climbs from the floor's edge to the surface over this distance
     public const int MaxSegments = 32, Stride = 7;
     public readonly float[] Network = new float[MaxSegments * Stride];
     public int Count { get; private set; }
@@ -56,9 +57,9 @@ public sealed class NestGeometry
             int k = i * Stride;
             var a = new Vector2(Network[k], Network[k + 1]);
             var b = new Vector2(Network[k + 2], Network[k + 3]);
-            var r = new Vector2(Network[k + 4] + 5f, Network[k + 5] + 5f);
-            _min = _min.Min(a - Vector2.One * 5).Min(b - r);
-            _max = _max.Max(a + Vector2.One * 5).Max(b + r);
+            var r = new Vector2(Network[k + 4] + 6f, Network[k + 5] + 6f);
+            _min = _min.Min(a - Vector2.One * 6).Min(b - r);
+            _max = _max.Max(a + Vector2.One * 6).Max(b + r);
         }
         Revision++;
         return true;
@@ -91,7 +92,13 @@ public sealed class NestGeometry
                     + 0.045f * Mathf.Sin(p.X * 5.7f + p.Y * 4.3f);
     }
 
-    public static float Height(float distance) => Mathf.Lerp(-Depth, -0.18f, Mathf.SmoothStep(-0.72f, 0.22f, distance));
+    /// The bank's profile: flat floor to the cavity's edge, then a wall that rises steeply from the foot and eases
+    /// into a sloped lip at the surface, like a pit dug in sand.
+    public static float Height(float distance)
+    {
+        float t = Mathf.Clamp((distance + 0.45f) / Lip, 0f, 1f);
+        return Mathf.Lerp(-Depth, -0.03f, Mathf.Pow(t, 1.7f));
+    }
 
     /// A single welded heightfield: overlapping room/tunnel fields are unioned BEFORE triangulation,
     /// so there are no bowl walls blocking doorways, stacked floors or transform-scaled tube stubs.
@@ -112,7 +119,7 @@ public sealed class NestGeometry
             for (int x = 0; x < nx; x++)
             {
                 int a = z * (nx + 1) + x, b = a + 1, c = a + nx + 2, d = a + nx + 1;
-                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > 4f) continue;
+                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > Lip + 0.6f) continue;
                 mesh.Quad(a, b, c, d);
             }
         mesh.RecalcNormals();

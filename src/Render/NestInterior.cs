@@ -80,11 +80,12 @@ public sealed partial class NestInterior
         };
         n.AddChild(_excavation[team]);
         // The entrance is the only genuinely open hole in the surface.
-        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false) });
+        // the shaft: the ragged funnel runs from the lip all the way down to the pit floor
+        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false), Scale = new Vector3(1, (NestGeometry.Depth - 0.2f) / 1.9f, 1) });
         n.AddChild(new MeshInstance3D
         {
             Name = "EntranceShadow", Mesh = new CylinderMesh { TopRadius = 0.8f, BottomRadius = 0.8f, Height = 0.03f, RadialSegments = 24 },
-            Position = new Vector3(0, -1.7f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Position = new Vector3(0, -NestGeometry.Depth + 0.08f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(0.035f, 0.018f, 0.007f) },
         });
         // the plug of soil the founders dig away (sinks and shrinks with progress)

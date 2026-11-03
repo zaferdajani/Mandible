@@ -441,7 +441,7 @@ float net_dist(vec3 p, vec3 cam) {
     vec2 shift = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
     float sl = length(shift);
     if (sl > 6.0) shift *= 6.0 / sl;
-    vec2 q = p.xz + shift * (p.y - net_ground_y + 2.4) - xray_center;
+    vec2 q = p.xz + shift * (p.y - net_ground_y) - xray_center; // the cut is at the surface: the pit's walls below are real geometry
     return nest_field(q);
 }
 float glass_at(vec3 p, vec3 cam) {
@@ -486,8 +486,11 @@ void fragment() {
     // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
-    float glass = xray_on * (1.0 - smoothstep(-0.15, 0.85, nd));
-    float band = exp(-pow((nd - 0.1) / 0.9, 2.0)) * xray_on;
+    // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
+    float lip = 1.25;
+    if (xray_on > 0.5 && nd < lip) discard;
+    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.55, nd));
+    float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
     float inHollow = smoothstep(0.05, 0.7, hollow);
@@ -1120,6 +1123,10 @@ void fragment() {
         col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.58) * vec3(0.55,0.53,0.50);
         col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
         col *= 0.87 + 0.20 * g;
+        // the walls show the soil in its layers (dark topsoil, ochre loam, pale sand), the floor stays trodden sand
+        vec3 layer = mix(mix(vec3(0.46, 0.30, 0.17), vec3(1.0, 0.70, 0.40), t1), vec3(1.05, 0.90, 0.66), t2);
+        float wall = 1.0 - an.y;
+        col *= mix(vec3(1.0), layer, 0.8 * wall);
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
         col *= 1.0 - 0.32 * crevice;
         if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
