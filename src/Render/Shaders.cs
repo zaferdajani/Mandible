@@ -6,11 +6,52 @@ public static class Shaders
 
     /// One shared Shader per source: the renderer compiles every Shader object separately, so
     /// creating one per rock, leaf or crumb stalled the first frame for many seconds.
+    static bool _globals;
+
+    /// Runtime global: (nest x, nest z, nest ground height, 0) of the local colony. Shaders read it to know when
+    /// a fragment is underground, where the sky must not light it. Must exist before any shader using it compiles.
+    public static void EnsureGlobals()
+    {
+        if (_globals) return;
+        _globals = true;
+        Godot.RenderingServer.GlobalShaderParameterAdd("nest_info", Godot.RenderingServer.GlobalShaderParameterType.Vec4, new Godot.Vector4(-1000f, -1000f, 0f, 0f));
+    }
+
+    static Godot.Vector4 _nest = new(-1000f, -1000f, 0f, 0f);
+
+    public static void SetNest(Godot.Vector2 pos, float groundY)
+    {
+        _nest = new Godot.Vector4(pos.X, pos.Y, groundY, _nest.W);
+        Godot.RenderingServer.GlobalShaderParameterSet("nest_info", _nest);
+    }
+
+    /// How far the earth is opened for building (0..1): the nest's contents take more fill so they read through the roof.
+    public static void SetNestOpen(float open)
+    {
+        if (Godot.Mathf.IsEqualApprox(open, _nest.W)) return;
+        _nest.W = open;
+        Godot.RenderingServer.GlobalShaderParameterSet("nest_info", _nest);
+    }
+
     public static Godot.Shader Get(string code)
     {
+        EnsureGlobals();
         if (!_cache.TryGetValue(code, out var s)) _cache[code] = s = new Godot.Shader { Code = code };
         return s;
     }
+
+    /// How much sky ambient reaches a point: 1 on the surface, `UNDER_AMBIENT` in the dug nest (below the entrance
+    /// and within its footprint), blended over a short distance so nothing pops at the hole.
+    public const string Under = @"
+global uniform vec4 nest_info;
+float under_ambient(vec3 p) {
+    float depth = nest_info.z - p.y;
+    float near = 1.0 - smoothstep(26.0, 32.0, length(p.xz - nest_info.xy));
+    // underground it is dark (0.09 of the sky's fill); with the earth opened for building, enough fill returns (0.6)
+    // for the brood and the ants to read in the lamp light (nest_info.w = how open)
+    return mix(1.0, mix(0.09, 0.6, nest_info.w), smoothstep(0.9, 1.6, depth) * near);
+}
+";
 
     const string Fow = @"
 uniform float map_size = 320.0;
@@ -21,6 +62,7 @@ float fow(vec3 wp) { return 1.0; }
     public const string Ant = @"
 shader_type spatial;
 render_mode depth_draw_opaque;
+" + Under + @"
 uniform vec3 body_color : source_color = vec3(0.03, 0.026, 0.024);
 uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
@@ -347,7 +389,7 @@ void fragment() {
         BACKLIGHT = mix(BACKLIGHT, vec3(0.5, 0.34, 0.16), v_pale);
     }
     ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
-    AO = v_ao;
+    AO = v_ao * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
     AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
@@ -526,7 +568,7 @@ void fragment() {
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
     // the freshly cut soil at the opening's edge: darker and damper than the surface
-    col *= 1.0 - 0.32 * band - 0.46 * glass;
+    col *= 1.0 - 0.32 * band - 0.18 * glass; // the roof stays readable over the opened galleries
     col = mix(col, col * vec3(1.0, 0.9, 0.8), 0.5 * max(band, glass));
     ALBEDO = col;
     ROUGHNESS = clamp(mix(rough, rough * 0.8, clamp(wet, 0.0, 1.0)), 0.4, 1.0);
@@ -571,7 +613,8 @@ void fragment() {
     // dust settles on top
     col = mix(col, vec3(0.36, 0.28, 0.20), smoothstep(0.8, 1.0, wnrm.y) * 0.3);
     ALBEDO = col * vcol.r * fow(wpos);
-    ROUGHNESS = 0.82 - b * 0.2;
+    ROUGHNESS = 0.9 - b * 0.12;
+    SPECULAR = 0.25;
     NORMAL_MAP = texture(normal_b, UV * 3.0).rgb;
     NORMAL_MAP_DEPTH = 0.8;
 }
@@ -746,25 +789,35 @@ uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec4 vcol;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; vcol = COLOR; }
+float h11(float x) { return fract(sin(x * 91.3458 + 17.17) * 47453.5453); }
 void fragment() {
-    float age = vcol.r;
+    // the photographed leaf (atlas), dried by age, with PR #11's per-leaf variation and matte rules: the seed in the
+    // vertex colour shifts each leaf's age and drying colours, so no two neighbours match
+    float h1 = h11(vcol.g * 313.0), h2 = h11(vcol.g * 571.0 + 3.0), h3 = h11(vcol.g * 977.0 + 7.0);
+    float age = clamp(vcol.r + (h1 - 0.5) * 0.3, 0.0, 1.0);
     // where each species sits in the atlas (x, y, w, h); the stem end of the mesh (v = 0) is the photo's bottom
     vec4 r = vcol.b < 0.25 ? vec4(0.0, 0.1943, 0.3333, 0.6104) : vcol.b < 0.75 ? vec4(0.3684, 0.0, 0.2622, 0.999) : vec4(0.6667, 0.1807, 0.3333, 0.6387);
     vec2 t = r.xy + vec2(UV.x, 1.0 - UV.y) * r.zw;
     vec4 photo = texture(leaf_tex, t);
     if (photo.a < 0.5) discard;
     float lum = dot(photo.rgb, vec3(0.3, 0.59, 0.11));
-    vec3 yellow = vec3(1.75, 1.18, 0.34) * lum * 0.6;
-    vec3 brown = vec3(1.15, 0.58, 0.22) * lum * 0.55;
-    vec3 col = age < 0.45 ? mix(photo.rgb, yellow, age / 0.45) : mix(yellow, brown, (age - 0.45) / 0.55);
-    // decay works in from the edges and in blotches
-    float n = texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r;
-    float rim = smoothstep(0.32, 0.5, abs(UV.x - 0.5));
-    col = mix(col, brown * 0.62, clamp(smoothstep(0.6, 0.72, n) * (0.25 + age * 0.6) + rim * age * 0.5, 0.0, 1.0));
-    ALBEDO = col;
+    vec3 yellow = mix(vec3(1.6, 1.1, 0.3), vec3(1.85, 1.3, 0.42), h3) * lum * 0.6;
+    vec3 ochre = mix(vec3(1.35, 0.8, 0.22), vec3(1.5, 0.92, 0.3), h2) * lum * 0.55;
+    vec3 brown = mix(vec3(0.95, 0.5, 0.2), vec3(1.2, 0.68, 0.28), h1) * lum * 0.5;
+    vec3 col = age < 0.35 ? mix(photo.rgb, yellow, age / 0.35) : age < 0.7 ? mix(yellow, ochre, (age - 0.35) / 0.35) : mix(ochre, brown, (age - 0.7) / 0.3);
+    // decay: dark blotches that spread with age, and dry edges
+    float n = texture(noise_b, UV * vec2(3.0, 8.0) + vcol.g * 3.0).r;
+    float blotch = smoothstep(0.58, 0.72, texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r);
+    float fine = smoothstep(0.66, 0.78, texture(noise_b, UV * vec2(9.0, 22.0) + vcol.g * 11.0).r);
+    float decay = clamp(blotch * (0.3 + age * 0.7) * (0.6 + 0.8 * h3) + fine * age * 0.5, 0.0, 1.0);
+    col = mix(col, vec3(0.13, 0.07, 0.03), decay * 0.7);
+    col = mix(col, brown * 0.62, smoothstep(0.32, 0.5, abs(UV.x - 0.5)) * age * 0.5);
+    ALBEDO = clamp(col, 0.03, 0.72);
     NORMAL_MAP = texture(leaf_nor, t).rgb;
-    ROUGHNESS = mix(0.5, 0.88, age);
-    SPECULAR = 0.35;
+    // matte (the lighting audit: a dry leaf never below 0.8; a fresh one may be a little smoother), grain breaks the highlight
+    ROUGHNESS = clamp(mix(0.7, 0.9, age) + (n - 0.5) * 0.16 + decay * 0.05, 0.6, 1.0);
+    SPECULAR = 0.2;
+    METALLIC = 0.0;
     BACKLIGHT = col * (0.55 - 0.35 * age);
 }
 ";
@@ -814,14 +867,15 @@ void fragment() {
 
     public static readonly string Food = @"
 shader_type spatial;
-" + Fow + @"
+" + Under + Fow + @"
 uniform int kind = 0; // 0 crumb, 1 berry, 2 sugar, 3 seed
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec3 lpos;
 varying vec3 lnrm;
 varying float vcol_r;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; lpos = VERTEX; lnrm = NORMAL; vcol_r = COLOR.r; }
+varying float v_h;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; lpos = VERTEX; lnrm = NORMAL; vcol_r = COLOR.r; v_h = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453); }
 void fragment() {
     float n = texture(noise_b, lpos.xz * 0.9 + lpos.y * 0.3).r;
     float m = texture(noise_b, lpos.xy * 2.3).r;
@@ -831,6 +885,9 @@ void fragment() {
         vec3 crumb = mix(vec3(0.70, 0.58, 0.38), vec3(0.80, 0.68, 0.48), m);
         float pores = smoothstep(0.6, 0.7, m);
         col = mix(crumb * (1.0 - pores * 0.45), crust, smoothstep(0.1, 0.6, lnrm.y + n * 0.4));
+        col *= 0.84 + 0.32 * v_h;                           // each scrap its own tone
+        col = mix(col, col * vec3(1.1, 0.95, 0.8), fract(v_h * 7.0) * 0.5);
+        rough = clamp(0.88 + (n - 0.5) * 0.16 + (v_h - 0.5) * 0.1, 0.78, 0.97); spec = 0.22;
     } else if (kind == 1) {
         // raspberry drupelets: vertex red channel carries the per-drupelet tone, core is darker
         float tone = vcol_r;
@@ -849,13 +906,15 @@ void fragment() {
     } else {
         float stripe = smoothstep(0.35, 0.5, abs(sin(atan(lpos.x, lpos.y) * 6.0 + n * 2.0)));
         col = mix(vec3(0.05, 0.045, 0.04), vec3(0.78, 0.74, 0.66), stripe * 0.85);
-        rough = 0.4; spec = 0.5; cc = 0.4;
+        rough = clamp(0.8 + (n - 0.5) * 0.12 + (v_h - 0.5) * 0.08, 0.75, 0.9); spec = 0.28; // dry seed husk: matte, no varnish
+        col *= 0.88 + 0.24 * v_h;
     }
     ALBEDO = col * fow(wpos);
     ROUGHNESS = rough;
     SPECULAR = spec;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.2;
+    AO = under_ambient(wpos);
 }
 ";
 
@@ -879,8 +938,9 @@ void fragment() {
     float n = texture(noise_b, wpos.xz * 2.5 + v_c.w * 9.0).r;
     a *= 0.72 + 0.42 * n;
     a *= mix(0.6, 1.0, smoothstep(-0.6, 0.6, v_n.y));
+    a *= 0.88 + 0.24 * v_h;                                               // no two stones alike
     ALBEDO = a * fow(wpos);
-    ROUGHNESS = mix(0.9, 0.6, v_c.y);
+    ROUGHNESS = clamp(mix(0.92, 0.8, v_c.y) + (n - 0.5) * 0.16 + (v_h - 0.5) * 0.08, 0.75, 0.97);
     SPECULAR = 0.25;
 }
 ";
@@ -1150,9 +1210,9 @@ void fragment() {
     /// Every dug surface of a nest: the pit walls, the shaft, the galleries, the room walls and floors. The soil
     /// is read by world height below the entrance (`ground_y`): a dark organic topsoil with roots and leaf
     /// litter, an ochre loam set with pebbles, and a pale loose sandy subsoil underneath, the boundaries wavy.
-    /// The walls carry the scallops of the diggers' jaws (`grooves`), the floors are trodden smooth. There is no
-    /// lamp below ground: the one sun comes in through the opened earth, and the sand around the mouth throws a
-    /// little warm light into the hole (`bounce`). CULL is replaced per use (back faces for the cavities, which
+    /// The walls carry the scallops of the diggers' jaws (`grooves`), the floors are trodden smooth. Cavity
+    /// surfaces take no sun and no sky ambient (see NestLights): they are lit by the warm lamps and a faint fill
+    /// (`ambient_scale`); the sand around the mouth throws a little warm light into the hole (`bounce`). CULL is replaced per use (back faces for the cavities, which
     /// are seen from inside, both for the bowl and the mouth).
     public static readonly string Earth = @"
 shader_type spatial;
@@ -1165,6 +1225,9 @@ uniform float shade = 1.0;      // how much of the sun this surface can see
 uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
 uniform bool cavity_surface = false;
 uniform bool flat_lighting = false; // Low tier: stable directional light without screen-space buffers
+uniform float ambient_scale = 0.1;  // cavity walls: share of the sky's fill that reaches underground (the sky ambient is switched off there)
+uniform vec4 lamps[8];              // Low tier: nearest lamps (xyz world, w range) painted as pools, as there are no real shaded lights
+
 uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
 uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roots and grooves, 2 finer grain
 varying vec3 wpos;
@@ -1247,6 +1310,19 @@ void fragment() {
         NORMAL_MAP_DEPTH = 0.8;
     }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
+    if (cavity_surface) {
+        // the sky ambient is off down here: a faint warm fill keeps the blacks readable
+        EMISSION += col * vec3(1.0, 0.78, 0.55) * ambient_scale * 0.6;
+        if (flat_lighting) {
+            float pool = 0.0;
+            for (int i = 0; i < 8; i++) {
+                float r = max(lamps[i].w, 0.001);
+                float f = clamp(1.0 - length(wpos - lamps[i].xyz) / r, 0.0, 1.0);
+                pool += f * f * step(0.01, lamps[i].w);
+            }
+            EMISSION += col * vec3(1.0, 0.72, 0.45) * pool * 1.5;
+        }
+    }
 }
 ";
 

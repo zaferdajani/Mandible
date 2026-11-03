@@ -19,6 +19,12 @@ public sealed partial class NestInterior
     readonly List<ShaderMaterial> _soils = new(), _shafts = new();
     float _refresh;
     int _tierStamp = -1;
+    readonly NestLights _lights;
+
+    /// Render layer of everything dug (the excavation and the rooms' contents). The sun's cull mask leaves it
+    /// out, so the nest is lit by its lamps alone, never by daylight.
+    public const uint UndergroundLayer = 2;
+    public const uint SunMask = 0xFFFFFu & ~UndergroundLayer;
 
     /// The way the sun falls (world space): the shafts of light below ground follow it.
     static readonly Vector3 LightDir = (Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward).Normalized();
@@ -32,7 +38,6 @@ public sealed partial class NestInterior
         public int ContentCount = -1, Tier, TierStamp = -1;
         public float ShownProgress = -1;
         public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
-        public OmniLight3D Glow;      // the warm light low in the room that models its walls (High and Ultra only)
     }
 
     public NestInterior(GameSession g)
@@ -41,8 +46,22 @@ public sealed partial class NestInterior
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
         for (int team = 0; team < 2; team++) BuildNest(team);
+        _lights = new NestLights(g, _root, SetPools);
         InitBrood();
         ApplyQuality();
+    }
+
+    /// Low tier: the cavity walls are unshaded, so the nearest lamps are handed to their shader as pools of light.
+    void SetPools(Vector4[] pools)
+    {
+        foreach (var m in _soils)
+            if (m.GetShaderParameter("cavity_surface").AsBool()) m.SetShaderParameter("lamps", pools);
+    }
+
+    static void MoveToUnderground(Node n)
+    {
+        if (n is VisualInstance3D v && v.Layers != UndergroundLayer) v.Layers = UndergroundLayer;
+        foreach (var c in n.GetChildren()) MoveToUnderground(c);
     }
 
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
@@ -50,7 +69,7 @@ public sealed partial class NestInterior
     /// One shared Earth shader per culling mode; a material per surface role, tuned by how much sun it sees.
     ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back, bool cavity = false)
     {
-        var mode = cavity ? "cull_disabled, shadows_disabled" : back ? "cull_back" : "cull_disabled";
+        var mode = cavity ? "cull_disabled, shadows_disabled, ambient_light_disabled" : back ? "cull_back" : "cull_disabled";
         var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", mode)) };
         m.SetShaderParameter("cavity_surface", cavity);
         m.SetShaderParameter("noise_b", _g.World.NoiseB);
@@ -76,7 +95,7 @@ public sealed partial class NestInterior
         // light the exposed underground floor: the bank shader supplies that shading.
         _excavation[team] = new MeshInstance3D
         {
-            Name = "ConnectedExcavation", MaterialOverride = earth,
+            Name = "ConnectedExcavation", MaterialOverride = earth, Layers = UndergroundLayer,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
         };
         n.AddChild(_excavation[team]);
@@ -130,6 +149,11 @@ public sealed partial class NestInterior
     {
         if (OS.GetEnvironment("MANDIBLE_NOPANE") != "") strength = 0; // perf A/B: no shafts
         _open = strength;
+        Shaders.SetNestOpen(strength);
+        // with the earth opened for building, the chambers must read through the roof: a warm fill rises in the cavities
+        // (the lamps still pool on top of it), so the cut never shows as dark blotches under the soil
+        foreach (var m in _soils)
+            if (m.GetShaderParameter("cavity_surface").AsBool()) m.SetShaderParameter("ambient_scale", 0.1f + 0.5f * strength);
         float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength * 0.15f : 0f;
         foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
     }
@@ -145,12 +169,11 @@ public sealed partial class NestInterior
             bool low = Settings.Gfx == Settings.Quality.Low;
             // The Low cutaway supplies its own inexpensive directional shading;
             // it does not depend on lighting buffers rebuilt when MSAA/SSAO change.
-            m.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", low ? "cull_disabled, unshaded" : "cull_disabled, shadows_disabled"));
+            m.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", low ? "cull_disabled, unshaded" : "cull_disabled, shadows_disabled, ambient_light_disabled"));
             m.SetShaderParameter("flat_lighting", low);
-            m.SetShaderParameter("shade", low ? 1.55f : 0.94f);
+            m.SetShaderParameter("shade", low ? 0.7f : 0.94f); // Low is unshaded: a flat base dim enough for the lamp pools to show, bright enough to read
         }
         for (int team = 0; team < 2; team++) _meshRevision[team] = -1;
-        foreach (var r in _rooms.Values) if (r.Glow != null) r.Glow.Visible = Settings.Gfx >= Settings.Quality.High;
         _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
     }
 
@@ -300,16 +323,6 @@ public sealed partial class NestInterior
         };
         room.Node.AddChild(room.Contents);
         room.Node.AddChild(room.Label);
-        // light held low against one wall, as if from the sunlit opening above: the far banks catch it, the near ones
-        // fall into shade, and the brood throws short shadows across the floor
-        var (rw, _, rd) = NestGeometry.RoomSize(ch);
-        room.Glow = new OmniLight3D
-        {
-            LightColor = new Color(1f, 0.74f, 0.45f), LightEnergy = 1.6f, OmniRange = Mathf.Max(rw, rd) * 1.35f, OmniAttenuation = 1.4f,
-            Position = new Vector3(-rw * 0.38f, 1.5f, -rd * 0.32f), ShadowEnabled = false, LightSpecular = 0.4f, // shadowed omni lights per room cost 2.5x the frame time
-            Visible = Settings.Gfx >= Settings.Quality.High,
-        };
-        room.Node.AddChild(room.Glow);
         return room;
     }
 
@@ -404,6 +417,7 @@ public sealed partial class NestInterior
                 if (full)
                 {
                     FillRoom(team, room);
+                    MoveToUnderground(room.Contents);
                     string name = Sim.ChamberName(ch.Kind);
                     room.Label.Text = ch.Digging ? $"{name}  {ch.Progress * 100:0}%  ({ch.Diggers} digging)" : name;
                     room.Label.Modulate = ch.Digging ? new Color(1f, 0.75f, 0.35f) : new Color(1f, 0.88f, 0.6f, 0.95f);
@@ -421,5 +435,6 @@ public sealed partial class NestInterior
             }
         }
         UpdateBrood(alpha);
+        _lights.Update(1f / 60f, _open);
     }
 }

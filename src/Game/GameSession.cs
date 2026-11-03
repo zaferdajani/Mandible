@@ -69,6 +69,8 @@ public partial class GameSession : Node3D
         Effects = new Effects(this, World.HF);
         Interior = new NestInterior(this);
         Ants.Brood = Interior;
+        var nestPos = World.Nests[Local.Me].Pos;
+        Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
         if (Episode == 2) BuildHerdDressing();
@@ -150,6 +152,16 @@ public partial class GameSession : Node3D
     }
 
     Environment _env;
+    const float SurfaceExposure = 1.05f, NestExposure = 1.6f;
+    float _underT; // 0 = looking at the yard, 1 = looking into the nest; eased over ~0.6 s
+
+    /// Eye adaptation going underground: the exposure rises and falls smoothly as the camera drops into the nest
+    /// (and back), so the dark tunnels stay readable and nothing pops at the entrance.
+    void UpdateExposure(float dt)
+    {
+        _underT = Mathf.MoveToward(_underT, Camera.NestView ? 1f : 0f, dt / 0.6f);
+        _env.TonemapExposure = Mathf.Lerp(SurfaceExposure, NestExposure, Mathf.SmoothStep(0f, 1f, _underT));
+    }
 
     /// One sun, one sky. The ProceduralSkyMaterial draws its sun disc where the DirectionalLight3D points, the
     /// ambient and reflections come from that sky, and the sun is the only light in the scene: every shadow in
@@ -190,7 +202,8 @@ public partial class GameSession : Node3D
         {
             LightColor = new Color(1f, 0.94f, 0.84f), LightEnergy = 1.85f, ShadowEnabled = true,
             DirectionalShadowBlendSplits = true, DirectionalShadowFadeStart = 0.85f, DirectionalShadowPancakeSize = 10f,
-            ShadowBias = 0.03f, ShadowNormalBias = 1.6f, ShadowOpacity = 1f,
+            ShadowBias = 0.03f, ShadowNormalBias = 0.9f, ShadowOpacity = 1f, // low normal bias: ant legs meet their shadows
+            LightCullMask = NestInterior.SunMask, // the dug nest is lit by its lamps, never by the sun
         };
         _sun.RotationDegrees = SunAngles;
         AddChild(_sun);
@@ -215,7 +228,7 @@ public partial class GameSession : Node3D
         {
             case Settings.Quality.Low:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 110;
-                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f;
+                _sun.LightAngularDistance = 0.5f; _sun.ShadowBlur = 0.7f;
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
                 break;
@@ -233,7 +246,7 @@ public partial class GameSession : Node3D
                 break;
             default:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits; _sun.DirectionalShadowMaxDistance = 260;
-                _sun.LightAngularDistance = 1.2f; _sun.ShadowBlur = 1.6f;
+                _sun.LightAngularDistance = 1.0f; _sun.ShadowBlur = 1.5f;
                 RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftHigh);
                 break;
@@ -659,7 +672,7 @@ public partial class GameSession : Node3D
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
-        if (!Demo) UpdateGlass(dt);
+        if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);
         Effects.Update(_paused ? 0 : dt);
