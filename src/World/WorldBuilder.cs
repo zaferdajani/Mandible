@@ -403,8 +403,11 @@ public static partial class WorldBuilder
             // the scan is laid lengthwise along z; thicken its cross-section to the stick's real girth
             var laid = (p.Lie * p.Size).Abs();
             float len = dir.Length();
-            float girth = Mathf.Clamp(t.R * 3.2f / (Mathf.Min(laid.X, laid.Y) * len / laid.Z), 0.7f, 3f);
-            d.Place(p, (a + b) * 0.5f, len * 1.05f, 0.18f, 0.02f, p.Lie, Mathf.Atan2(dir.X, dir.Y), rng.R(0.85f, 1f), girth, 0.3f);
+            // the scan is a forked branch whose forks spread up as far as sideways: press it down to the stick's own
+            // thickness (the bump the sim raised), or a 40-unit branch stands ten units tall
+            float scale = len * 1.05f / Mathf.Max(laid.X, laid.Z);
+            float flatten = Mathf.Clamp(t.R * 2.4f / (laid.Y * scale), 0.08f, 1f);
+            d.Place(p, (a + b) * 0.5f, len * 1.05f, 0.18f, 0.02f, p.Lie, Mathf.Atan2(dir.X, dir.Y), rng.R(0.85f, 1f), flatten, 0.3f);
         }
         d.Commit();
     }

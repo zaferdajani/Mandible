@@ -61,6 +61,14 @@ Food piles are drawn 1.4x the sim's radius, so they read at play zoom; ants and 
 
 Do not soften the prompts or the specs to make a frame pass.
 
+**Ants are judged by the ant session's work.** The ants are code-built (`src/Render/AntMesh.cs`), and a separate
+ant session rebuilds them against its own approved target, with the same two-part gate. Until that lands, an art
+review's remarks about the ants themselves (body shape, legs, chitin) are recorded but do not block the terrain,
+food, tube, map or chamber views; every other criterion still does. That session can use these as they are:
+- `--art-capture` (its close framings use `RtsCamera.PitchOverride` and a pushed-in near plane);
+- `tools/art-gate.py` (add the ant views to `VIEWS` with a target and a readability spec);
+- `tools/asset-process.gd` (cut real or Blender-made meshes to phone budgets with LODs).
+
 ## 5. Budgets
 
 - The Low tier must stay fast on phones. `--art-capture` prints fps per view and `a-opening-low` is the Low tier.

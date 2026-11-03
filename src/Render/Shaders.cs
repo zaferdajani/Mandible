@@ -550,6 +550,21 @@ void fragment() {
         col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
     }
     col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
+    // close to the camera, a macro layer: the pebbly ground set at a tenth of the base tile, so at ant framing the
+    // soil shows individual grains, grit and pebbles; it fades out by ~30 units, where the base sets carry the look
+    float camD = length(CAMERA_POSITION_WORLD - wpos);
+    float macro = detail > 0 ? 1.0 - smoothstep(10.0, 30.0, camD) : 0.0;
+    vec3 macroN = vec3(0.5, 0.5, 1.0);
+    if (macro > 0.001) {
+        vec2 um = mat2(vec2(0.6, 0.8), vec2(-0.8, 0.6)) * uv / 2.6 + 0.13;
+        vec3 mc = texture(g_crest_d, um).rgb;
+        float ml = dot(mc, vec3(0.3, 0.59, 0.11));
+        // its own stones show through where they stand proud; elsewhere it only adds grain to the base colour
+        float stones = smoothstep(0.42, 0.62, texture(g_crest_a, um).b) * (0.35 + 0.65 * wHollow);
+        col = mix(col, col * clamp(0.5 + ml * 1.4, 0.65, 1.3), macro * 0.8);
+        col = mix(col, mc * vec3(1.05, 0.96, 0.86), stones * macro * 0.7);
+        macroN = texture(g_crest_n, um).rgb;
+    }
     // the grains themselves: a fine octave of the photographed sand, in luminance only so the layer colours stay
     vec3 fineN = vec3(0.5, 0.5, 1.0);
     if (detail > 0) {
@@ -574,7 +589,7 @@ void fragment() {
     ROUGHNESS = clamp(mix(rough, rough * 0.8, clamp(wet, 0.0, 1.0)), 0.4, 1.0);
     SPECULAR = 0.3;
     // the photographed relief on top of the broad undulations of the land
-    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
+    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (macroN.xy - 0.5) * 1.3 * macro + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;

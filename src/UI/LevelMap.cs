@@ -308,7 +308,14 @@ public partial class LevelMap : Control
             var ps = UiTheme.Title.GetStringSize(numeral, HorizontalAlignment.Left, -1, (int)pf);
             var plate = new Rect2(c + new Vector2(-ps.X / 2 - 10, -rr - pf - 14), new Vector2(ps.X + 20, pf + 8));
             ci.DrawStyleBox(UiTheme.Box(open ? new Color(0.2f, 0.12f, 0.06f, 0.9f) : new Color(0.1f, 0.07f, 0.05f, 0.85f), open ? Emblem.Gold : new Color(0.45f, 0.32f, 0.2f), 1, 4, 0), plate);
-            ci.DrawString(UiTheme.Title, plate.Position + new Vector2(10, pf + 1), numeral, HorizontalAlignment.Left, -1, (int)pf, open ? new Color(1f, 0.8f, 0.42f) : new Color(0.55f, 0.4f, 0.26f));
+            ci.DrawString(UiTheme.Title, plate.Position + new Vector2(10, pf + 1), numeral, HorizontalAlignment.Left, -1, (int)pf, open ? new Color(1f, 0.8f, 0.42f) : new Color(0.8f, 0.62f, 0.42f));
+            if (!open)
+            {
+                // a small padlock beside the plate: the chamber is still to be dug
+                var lk = plate.Position + new Vector2(plate.Size.X + 6, 4);
+                ci.DrawArc(lk + new Vector2(6, 6), 4.5f, Mathf.Pi, Mathf.Tau, 12, new Color(0.85f, 0.66f, 0.42f), 2);
+                ci.DrawRect(new Rect2(lk + new Vector2(0, 6), new Vector2(12, 10)), new Color(0.85f, 0.66f, 0.42f));
+            }
             int bits = CampaignProgress.StarBits(id);
             for (int st = 0; st < 3; st++)
             {
@@ -319,8 +326,20 @@ public partial class LevelMap : Control
             }
             var np = c + new Vector2(-ns.X / 2, rr + nf + 20);
             var col = n == _selected ? new Color(1f, 0.8f, 0.42f) : open ? new Color(0.98f, 0.9f, 0.74f) : new Color(0.72f, 0.52f, 0.33f, 0.9f);
+            // the name on a dark plate so it reads over the busy soil; the selected chamber gets a gold ring
+            var nameBox = new Rect2(np + new Vector2(-8, -nf - 2), new Vector2(ns.X + 16, nf + 10));
+            ci.DrawStyleBox(UiTheme.Box(new Color(0.06f, 0.035f, 0.02f, open ? 0.72f : 0.82f), new Color(0, 0, 0, 0), 0, 6, 0), nameBox);
             ci.DrawString(UiTheme.Title, np + new Vector2(1, 1), name, HorizontalAlignment.Left, -1, nf, new Color(0.04f, 0.02f, 0.01f, 0.85f));
-            ci.DrawString(UiTheme.Title, np, name, HorizontalAlignment.Left, -1, nf, col);
+            ci.DrawString(UiTheme.Title, np, name, HorizontalAlignment.Left, -1, nf, open ? col : new Color(0.86f, 0.68f, 0.46f));
+            if (n == _selected)
+            {
+                var a = ColonyMapArt.Anchors[n - 1];
+                var half = new Vector2(a.Z, a.W) * ArtRect.Size * 1.12f;
+                var pts = new Vector2[49];
+                for (int k = 0; k <= 48; k++) { float t = k / 48f * Mathf.Tau; pts[k] = c + new Vector2(Mathf.Cos(t) * half.X, Mathf.Sin(t) * half.Y); }
+                ci.DrawPolyline(pts, new Color(0.05f, 0.03f, 0.01f, 0.8f), 6, true);
+                ci.DrawPolyline(pts, new Color(1f, 0.78f, 0.35f), 3, true);
+            }
         }
     }
 

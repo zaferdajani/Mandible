@@ -42,7 +42,8 @@ public static class NatureScatter
         {
             _w = w; _rng = rng;
             Stones = NatureAssets.Kind("stone"); Rocks = NatureAssets.Kind("rock");
-            Bark = NatureAssets.Kind("bark"); Twigs = NatureAssets.Kind("twig"); Leaves = NatureAssets.Kind("leaf"); Roots = NatureAssets.Kind("root");
+            Bark = NatureAssets.Kind("bark"); Leaves = NatureAssets.Kind("leaf").FindAll(p => !p.Src.StartsWith("dry_quiver")); /* the quiver-tree leaf is a dark succulent spike, wrong on a woodland floor */ Roots = NatureAssets.Kind("root").FindAll(p => p.Src == "single_root"); // the root cluster scan stands up off the soil in a tangle a stone high
+            Twigs = NatureAssets.Kind("twig").FindAll(p => p.Src.StartsWith("dry_branches")); // the quiver-tree branches are bushy 3D forks that stand up off the soil
             Grass = NatureAssets.Kind("grass").FindAll(p => !p.Dead && p.Size.Y > 0.05f); DryGrass = NatureAssets.Kind("grass").FindAll(p => p.Dead);
             SmallStones = new List<NatureAssets.Piece>(Stones);
             foreach (var b in Rocks) if (b.Src.StartsWith("namaqualand_rocks")) SmallStones.Add(b); // the hand-sized ones

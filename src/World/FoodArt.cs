@@ -70,26 +70,23 @@ public static class FoodArt
 
     static void Crumbs(World w, Rng rng, Pile pile, float size)
     {
-        // one broken chunk of bread, and the scatter of smaller crumbs that came off it as it fell. The chunk shapes are
-        // the scanned stones' broken forms; the Crumb shader makes them bread (crust up, porous crumb on the breaks).
-        var shapes = NatureAssets.Kind("stone");
-        var mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Crumb) };
-        mat.SetShaderParameter("noise_b", w.NoiseB);
-        int n = rng.I(8, 14);
+        // pieces torn off the scanned bun and croissant: each keeps its golden photographed crust on one side and shows
+        // the soft crumb where one plane broke it (FoodCut draws the break). One big chunk, smaller pieces around it.
+        var bread = NatureAssets.Kind("food_bread");
+        int n = rng.I(6, 10);
         for (int i = 0; i < n; i++)
         {
-            var p = shapes[rng.I(0, shapes.Count)];
+            var p = bread[rng.I(0, bread.Count)];
             bool chunk = i == 0;
-            float across = chunk ? size * 1.3f : size * Mathf.Lerp(0.25f, 0.7f, Mathf.Pow(rng.F(), 1.5f));
+            float across = chunk ? size * 1.5f : size * Mathf.Lerp(0.4f, 0.8f, rng.F());
             float s = across / p.Footprint;
-            var m = (ShaderMaterial)mat.Duplicate();
-            m.SetShaderParameter("seed", rng.F());
-            // crumbs fan out from the chunk, most close by, a few further
-            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.55f + Mathf.Pow(rng.F(), 1.5f) * 1.3f);
+            var m = Cut(p, rng, 1, 0.05f, 0.3f, 0);
+            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.7f + Mathf.Pow(rng.F(), 1.4f) * 1.1f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
-            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * Basis.FromScale(new Vector3(1, rng.R(0.8f, 1.2f), 1) * s);
-            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.1f, at.Y);
-            Add(pile, mi, chunk ? 0 : (float)i / n, null);
+            // most lie crust up, a few on their broken face
+            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.F() < 0.75f ? rng.R(-0.35f, 0.35f) : rng.R(1.2f, 1.9f)) * Basis.FromScale(Vector3.One * s);
+            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.15f, at.Y);
+            Add(pile, mi, chunk ? 0 : (float)i / n, m);
         }
     }
 
