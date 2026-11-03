@@ -239,3 +239,28 @@ The ground cover moved the yard's material to 3 and light and palette to 4, and 
 - The sugar crystals are opaque white.
 - The berries and seeds are high-contrast copies.
 - The bread crumbs need a porous texture.
+
+## Ants (target G, branch claude/ant-rebuild-d05706)
+
+The ants are modelled in Blender by `tools/blender/ant_models.py` (both species, every caste and hero, three levels of
+detail), baked to `assets/ants/*.res` by `tools/ant-bake.gd`, and loaded by `AntMesh.Build`, which falls back to the
+code-built ant when a model is missing. `tools/blender/ant_preview.py` renders a top, side and front sheet of the meshes.
+`--ant-capture=<dir>` shoots the ant views; `tools/art-gate.py` checks them with an ant-specific art prompt (anatomy,
+primitives, eyes, material, light, palette) and `g-play` for readability.
+
+**2026-11-03, ant round 1. Every view fails.** Art scores out of 5: anatomy, primitives, eyes, material, light, palette.
+
+| View | Art | Note |
+|---|---|---|
+| g-castes-black | 2 1 1 1 3 2 | smooth ellipsoids, stick legs, glossy near-black, no readable eyes |
+| g-castes-red | 2 2 1 2 3 3 | gasters unsegmented, eyes not visible, maroon not amber |
+| g-warlord | 2 2 1 2 3 3 | head and jaws small; no armour-like sculpture |
+| g-matron | 2 2 1 2 3 3 | replete reads as a striped plastic ball |
+| g-marshal | 1 1 1 1 2 2 | capture fault: the flying Marshals hover out of frame |
+| g-eyes | 1 1 1 1 2 2 | eyes too small to read at this framing |
+| g-eyes-queen | 1 1 1 2 2 2 | capture fault: the frame misses her head |
+| g-play (read) | 3 | individual workers are specks; red raiders merge with red soil |
+
+What this round shows: lofted and subdivided shapes, however well proportioned, still read as primitives next to a
+macro photograph. The remaining gap is surface detail (sculpture, setae, segment edges) that a real specimen scan
+carries and a procedural loft does not.

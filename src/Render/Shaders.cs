@@ -73,6 +73,7 @@ uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
+uniform float sculpture = 0.08; // the cuticle's micro-relief: fine imbricate on a worker, coarse rugose on the Warlord
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
 varying float v_part;
 varying float v_flash;
@@ -91,7 +92,24 @@ varying float v_stage;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
+float vnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
 
+// distance to the nearest of a jittered lattice of points: the punctures that pit an ant's cuticle
+float worley(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    float d = 9.0;
+    for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec3 o = vec3(float(x), float(y), float(z));
+        vec3 r = o + vec3(hash3(i + o), hash3(i + o + 1.7), hash3(i + o + 3.3)) - f;
+        d = min(d, dot(r, r));
+    }
+    return sqrt(d);
+}
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_x(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
 vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
@@ -220,6 +238,8 @@ void vertex() {
             if (pattern == 0) {
                 vec3 q = p - vec3(0.0, 0.14, -0.105);
                 float g = sin(2.0 * phase - 0.6) * 0.05 * amp;
+                // a formicine sprays from the acidopore: the gaster swings down and forward under the body on the shot
+                if (length(acid) > 0.0) g -= bite * 1.25 * alive;
                 q = rot_x(q, g); n = rot_x(n, g);
                 p = q + vec3(0.0, 0.14, -0.105);
             }
@@ -287,16 +307,13 @@ void fragment() {
             float chev = smoothstep(0.4, 0.5, fract((v_local.z + abs(v_local.x) * 1.4) * 14.0)) * step(v_local.z, -0.25);
             c = mix(c, c * 0.35, max(heart * step(-0.3, v_local.z), chev * 0.7));
         } else {
-            // tergite bands: darker toward each seam, and the seam itself tilts the normal so it catches the sun
-            float f = fract(v_local.z * 18.0 + 0.3);
-            float band = smoothstep(0.42, 0.5, f);
-            c *= 1.0 - band * 0.35;
             if (pattern == 0) {
-                float seam = smoothstep(0.36, 0.46, f) - smoothstep(0.46, 0.56, f);
-                vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
-                NORMAL = normalize(NORMAL - fwd * seam * 0.35);
-                // honey through the abdomen when the sun is behind it
+                // the tergites are modelled; honey glows through the abdomen when the sun is behind it
                 BACKLIGHT = gaster_color * 1.5 + vec3(0.26, 0.13, 0.03);
+            } else {
+                // tergite bands: darker toward each seam
+                float band = smoothstep(0.42, 0.5, fract(v_local.z * 18.0 + 0.3));
+                c *= 1.0 - band * 0.35;
             }
         }
     }
@@ -324,30 +341,58 @@ void fragment() {
         c *= 1.0 - (1.0 - smoothstep(0.006, 0.014, abs(v_local.x))) * 0.6;
     }
     if (pattern == 4 && part == 12.0) c = head_color * (0.85 + 0.3 * smoothstep(0.0, 0.05, v_local.y - 0.16)); // polished crown
-    if (pattern == 0 && part == 0.0) {
-        // the thorax is three plates: seams across the back where pronotum, mesonotum and propodeum meet
-        float seam = exp(-pow((v_local.z + 0.03) * 70.0, 2.0)) + exp(-pow((v_local.z - 0.05) * 70.0, 2.0));
-        seam *= smoothstep(0.12, 0.17, v_local.y);
-        c *= 1.0 - 0.4 * seam;
-        vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
-        NORMAL = normalize(NORMAL - fwd * seam * 0.3);
-    }
     if (part >= 1.0 && part <= 8.0) {
         c = leg_color; rough = 0.62; BACKLIGHT = leg_color * 0.6;
-        if (hero > 0.0 && part <= 6.0) {
-            // a hero's legs are ringed in its metal at the knee and the ankle
-            float ring = step(0.42, v_w) * step(v_w, 0.48) + step(0.87, v_w) * step(v_w, 0.92);
-            c = mix(c, accent, ring);
-            metal = ring * 0.9; rough = mix(rough, 0.35, ring);
-        }
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
         if (pattern == 1 || pattern == 4) c *= 0.8 + 0.2 * step(0.85, v_w);
         if (part >= 7.0) BACKLIGHT += vec3(0.2, 0.1, 0.02) * v_w; // light through the antenna tips
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
-    if (part == 11.0) {
-        // part 11 is now only the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture
+    bool eye = part == 11.0 && pattern == 0 && v_region < 0.25;
+    if (part == 11.0 && !eye) {
+        // the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture, a fire ant's sting
         c = vec3(0.012); rough = 0.3; cc = 0.0;
+    }
+    if (eye) {
+        // a compound eye: hundreds of ommatidia, each a tiny lens. A hexagonal lattice over the eye's surface tilts
+        // each facet's normal a little, so the eye breaks the light into a fine glitter instead of one smooth dome
+        vec2 q = vec2(v_local.z * 1.1547, v_local.y + v_local.z * 0.57735) * 520.0;
+        vec2 cell = floor(q), f = fract(q);
+        vec2 ctr = (f.x + f.y < 1.0) ? vec2(0.33) : vec2(0.67);
+        vec2 dd = f - ctr;
+        float edge = smoothstep(0.18, 0.3, length(dd));
+        vec3 tilt = (VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, dd.y, dd.x, 0.0)).xyz;
+        NORMAL = normalize(NORMAL + tilt * 0.35);
+        // dark warm lenses: a metal-like reflection tinted brown, so the sky does not turn the eye blue
+        c = mix(vec3(0.06, 0.04, 0.025), vec3(0.012, 0.008, 0.006), edge);
+        rough = 0.2; cc = 0.0; metal = 0.55;
+        // the spark of life: the sky caught in the eye, a small bright window that slides over the dome as the head
+        // turns (the head group's rotation already moved NORMAL); dimmed underground, where only the lamps are
+        vec3 r = reflect(-VIEW, NORMAL);
+        vec3 sky = normalize((VIEW_MATRIX * vec4(0.35, 1.0, 0.25, 0.0)).xyz);
+        float spark = smoothstep(0.986, 0.996, dot(r, sky));
+        eyeEm += vec3(1.0, 0.93, 0.8) * spark * 1.6 * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+    }
+    if (pattern == 0 && !eye && part != 14.0 && part != 15.0) {
+        // cuticle micro-relief: two octaves of smooth noise tilt the normal, finest on the legs, coarse on a rugose hero
+        vec3 sp = v_local * (part >= 1.0 && part <= 8.0 ? 300.0 : 180.0);
+        vec3 jit = vec3(vnoise(sp), vnoise(sp + 17.3), vnoise(sp + 41.9)) - 0.5
+                 + 0.5 * (vec3(vnoise(sp * 2.7 + 5.1), vnoise(sp * 2.7 + 23.4), vnoise(sp * 2.7 + 61.2)) - 0.5);
+        NORMAL = normalize(NORMAL + (VIEW_MATRIX * MODEL_MATRIX * vec4(jit, 0.0)).xyz * sculpture * 1.6);
+        // punctures, each with a hair socket: only near the camera, where they are more than a pixel (and phones skip them)
+        if (-VERTEX.z < 18.0 && part != 13.0 || -VERTEX.z < 18.0 && v_uv.x < 0.5) {
+            float pit = 1.0 - smoothstep(0.1, 0.24, worley(v_local * (part >= 1.0 && part <= 8.0 ? 260.0 : 150.0)));
+            c *= 1.0 - 0.45 * pit * (1.0 - smoothstep(10.0, 18.0, -VERTEX.z));
+            rough += 0.12 * pit;
+        }
+        cc = 0.05; rough = max(rough, 0.66); // satin, not lacquer: the sheen comes from the setae and the sculpture
+        // the pale seams between tergites and the stretched membrane of a replete
+        float mem = clamp(v_uv.x, 0.0, 1.0);
+        c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
+        rough = mix(rough, 0.18, mem); cc = mix(cc, 0.8, mem);
+        BACKLIGHT = mix(BACKLIGHT, vec3(0.9, 0.5, 0.12), mem);
+        // setae: fine golden hairs that catch the sun
+        if (v_uv.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
@@ -380,7 +425,7 @@ void fragment() {
     }
     if ((pattern == 1 || pattern == 4) && part != 11.0 && part != 14.0 && part != 15.0) { rough = pattern == 4 ? 0.36 : 0.42; cc = 0.4; metal = 0.15; }
     if (pattern == 3 && part != 11.0 && part != 14.0) { rough = 0.48; cc = 0.25; }
-    if (hero > 0.0 && part != 11.0 && part != 14.0 && part != 15.0) {
+    if (hero > 0.0 && pattern != 0 && part != 11.0 && part != 14.0 && part != 15.0) {
         // metal filigree in the colony's colour: bands on the abdomen, a crest line on the head, edged mandibles
         float gband = part == 13.0 ? step(0.74, fract(v_local.z * 11.0 + 0.1)) : 0.0;
         float crest = part == 12.0 ? smoothstep(0.02, 0.0, abs(v_local.x)) * step(0.17, v_local.y) : 0.0;
@@ -422,7 +467,7 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
-    SPECULAR = 0.32;
+    SPECULAR = pattern == 0 ? 0.2 : 0.32;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.42;
     RIM = pattern == 2 ? 0.6 : 0.35;
@@ -431,17 +476,13 @@ void fragment() {
     EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08) + eyeEm;
     // a beetle behind its shell wall: the wing cases gleam hard along their edges
     if (v_block > 0.5 && part != 11.0) { EMISSION += accent * (0.08 + 0.35 * fres) * (0.7 + 0.3 * sin(TIME * 6.0)); ROUGHNESS = 0.25; }
-    if (part == 13.0 && length(acid) > 0.0) {
-        // translucent acid sac: smooth glossy green with a slow inner glow, gold bands still on top
-        float pulse = 0.75 + 0.25 * sin(TIME * 2.2);
-        float bands = hero * step(0.74, fract(v_local.z * 11.0 + 0.1));
-        ALBEDO = mix(acid * 0.6, accent, bands);
-        EMISSION += acid * 0.22 * pulse * (1.0 - bands);
-        CLEARCOAT = 0.5;
-        CLEARCOAT_ROUGHNESS = 0.35;
-        ROUGHNESS = 0.42;
-        METALLIC = bands * 0.8;
-        BACKLIGHT = vec3(0.0);
+    if (part == 13.0 && length(acid) > 0.0 && v_uv.x > 0.5) {
+        // a replete's membrane: amber formic acid seen through taut cuticle, glowing where the sun comes through
+        float pulse = 0.85 + 0.15 * sin(TIME * 2.2);
+        ALBEDO = vec3(0.17, 0.075, 0.014) * (1.0 - dead * 0.35);
+        EMISSION += vec3(0.22, 0.09, 0.012) * 0.08 * pulse * (1.0 - dead);
+        BACKLIGHT = vec3(0.55, 0.28, 0.06) * (1.0 - dead);
+        CLEARCOAT = 1.0; CLEARCOAT_ROUGHNESS = 0.08; ROUGHNESS = 0.12; METALLIC = 0.0;
     }
 }
 ";
@@ -1128,6 +1169,17 @@ uniform vec3 tint : source_color = vec3(0.85, 0.88, 0.9);
 uniform vec3 vein : source_color = vec3(0.12, 0.08, 0.04);
 varying vec2 v_uv;
 varying float v_fly;
+// distance to the nearest of a jittered lattice of points: the punctures that pit an ant's cuticle
+float worley(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    float d = 9.0;
+    for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec3 o = vec3(float(x), float(y), float(z));
+        vec3 r = o + vec3(hash3(i + o), hash3(i + o + 1.7), hash3(i + o + 3.3)) - f;
+        d = min(d, dot(r, r));
+    }
+    return sqrt(d);
+}
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
 void vertex() {

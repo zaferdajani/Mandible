@@ -34,6 +34,18 @@ VIEWS = {
     "e-food-seed": ("e-food-small.jpg", "a seed food pile", "The pile is recognisably seeds, stands out from the soil, and is not mistaken for stones or crumbs."),
     "e-food-sugar": ("e-food-small.jpg", "a sugar food source", "The source is recognisably sugar, stands out from the soil, and is not mistaken for stones."),
     "e-food-berry": ("e-food-fruit-protein.jpg", "a berry food source", "The source is recognisably fruit or berries, stands out from the soil, and is not mistaken for stones."),
+    # the ants (target G): close views are art-checked with ANT_ART; g-play is the readability check at play zoom
+    "g-castes-black": ("g-ant-lasius-castes.jpg", "black garden ant castes: worker, soldier, major, acid gunner, winged ant, queen", ""),
+    "g-castes-red": ("g-ant-solenopsis-castes.jpg", "red fire ant castes: worker, soldier, major, acid gunner, winged ant, queen", ""),
+    "g-warlord": ("g-ant-warlord.jpg", "the Warlord hero of each colony, black left and red right", ""),
+    "g-matron": ("g-ant-matron-black.jpg", "the Acid Matron hero of each colony, black left and red right", ""),
+    "g-marshal": ("g-ant-marshal.jpg", "the Sky Marshal hero of each colony, black left and red right", ""),
+    "g-eyes": ("g-ant-eyes-worker.jpg", "a black garden ant worker's head, close", ""),
+    "g-eyes-queen": ("g-ant-eyes-alate.jpg", "a black garden ant queen's head, close", ""),
+    "g-play": ("", "a black foraging column meeting a red raiding party",
+               "Each ant reads as an ant (head, body, legs) and not as a dot or a blob; the black and the red colonies "
+               "are told apart at a glance; soldiers and majors read larger than workers; the ants stand out from the "
+               "soil and the litter."),
     "f-fog-of-war": ("f-fog-of-war.jpg", "level start under fog of war",
                      "Ground never seen is black, ground seen before is dimmed, ground in sight is clear: the three "
                      "are told apart; the ants and the trail inside the visible area read; the edge is soft, not a hard cut."),
@@ -58,6 +70,27 @@ Score the FRAME 1-5 on each (5 = matches the target's standard):
 
 Reply with JSON only:
 {{"view": "{view}", "check": "art", "scores": {{"repetition": n, "primitives": n, "scale": n, "material": n,
+"light": n, "palette": n}}, "blockers": ["..."], "pass": true|false, "fix_first": "one sentence"}}
+pass is true only when every score is 4 or 5 and blockers is empty.
+"""
+
+ANT_ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
+Open ONLY this image: {img}
+Its left half is the approved TARGET (a macro photograph of real ants); its right half is a close FRAME from the
+game ({what}) at about the target's framing. Judge whether the ants in the frame reach the standard of the ants in
+the target. It need not match the composition or the pose. Judge the ants only, not the ground. Ignore any UI.
+
+Score the FRAME's ants 1-5 on each (5 = matches the target's standard):
+- anatomy: correct real ant anatomy and proportions (head with eyes, mandibles and elbowed antennae; a three-part
+  thorax; the waist node(s); a segmented gaster; six jointed legs with femur, tibia and tarsus)
+- primitives: no part reads as a code primitive (blob, ellipsoid, sausage, stick, cone)
+- eyes: compound eyes read as real eyes (dark, oval, set on the sides, a small live catchlight), not cartoon beads
+- material: chitin reads as real cuticle (matte to satin, fine sculpture, setae catching the light), not plastic
+- light: warm directional sun, grounded contact shadows, no flat or plastic shading
+- palette: warm natural colour, no grey cast, no cartoon saturation
+
+Reply with JSON only:
+{{"view": "{view}", "check": "art", "scores": {{"anatomy": n, "primitives": n, "eyes": n, "material": n,
 "light": n, "palette": n}}, "blockers": ["..."], "pass": true|false, "fix_first": "one sentence"}}
 pass is true only when every score is 4 or 5 and blockers is empty.
 """
@@ -97,7 +130,8 @@ def main():
         if os.path.exists(close):
             img = os.path.abspath(os.path.join(out, view + "-art.jpg"))
             side_by_side(os.path.join(TARGETS, target), close, img)
-            lines += [f"## {view} art", "", "```", ART.format(img=img, what=what, view=view).strip(), "```", ""]
+            prompt = ANT_ART if view.startswith("g-") else ART
+            lines += [f"## {view} art", "", "```", prompt.format(img=img, what=what, view=view).strip(), "```", ""]
             print(img)
         if os.path.exists(play):
             img = os.path.abspath(os.path.join(out, view + "-read.jpg"))

@@ -883,7 +883,10 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.Spit:
                 {
-                    var from = World.HF.Point(e.Pos, 0.8f);
+                    // formicine acid leaves the acidopore: the gaster tip, curled forward under the body (target G7)
+                    float size = Config.Of(e.Type).Size;
+                    var aim = (e.To - e.Pos).LengthSquared() > 1e-6f ? (e.To - e.Pos).Normalized() : Vector2.Right;
+                    var from = World.HF.Point(e.Pos + aim * (0.12f * size), 0.12f * size);
                     var to = World.HF.Point(e.To, 0.5f);
                     if (seen)
                     {

@@ -21,14 +21,58 @@ public static class AntMesh
         public float Head, Mandible, Gaster, Thorax, Leg, Seg;
     }
 
-    /// `far`: the distant-crowd build of a colony caste, with half the rings, four-sided limbs and no setae,
-    /// drawn by the renderer once an ant is far enough from the camera that the detail would be sub-pixel.
-    public static ArrayMesh Build(AntType type, bool far = false)
+    /// How much of the modelled anatomy a mesh carries: Near for close-ups and the cards (setae, claws, tarsal
+    /// segments, mandible teeth), Mid at play zoom, Far for the crowd past AntRenderer.FarDist.
+    public enum Detail { Near, Mid, Far }
+
+    static readonly Dictionary<(AntType, int, Detail), ArrayMesh> Modelled = new();
+    static readonly Dictionary<(AntType, int), Vector3> NeckOfTeam = new();
+    static readonly Dictionary<(AntType, int), Vector3> TipOfTeam = new();
+
+    /// The head's turning point of a colony's caste (each species' head sits a little differently).
+    public static Vector3 NeckOf(AntType type, int team)
+    {
+        if (NeckOfTeam.TryGetValue((type, team), out var n)) return n;
+        Build(type, false, team);
+        return NeckOfTeam.TryGetValue((type, team), out n) ? n : Neck.GetValueOrDefault(type, new Vector3(0, 0.14f, 0.13f));
+    }
+
+    /// Where the acidopore sits: the tip of the gaster, which a Matron or a gunner curls forward to spray from.
+    public static Vector3 GasterTip(AntType type, int team)
+    {
+        Build(type, false, team);
+        return TipOfTeam.TryGetValue((type, team), out var t) ? t : new Vector3(0, 0.12f, -0.48f);
+    }
+
+    /// The Blender-modelled ant (tools/blender/ant_models.py, baked by tools/ant-bake.gd), Lasius for the black
+    /// colony and Solenopsis for the red; null when the model is missing, and the code-built ant stands in.
+    static ArrayMesh Model(AntType type, int team, Detail d)
+    {
+        if (Modelled.TryGetValue((type, team, d), out var cached)) return cached;
+        string path = $"res://assets/ants/{(team == 1 ? "solenopsis" : "lasius")}_{type}_{d.ToString().ToLowerInvariant()}.res";
+        var mesh = ResourceLoader.Exists(path) ? ResourceLoader.Load<ArrayMesh>(path) : null;
+        Modelled[(type, team, d)] = mesh;
+        if (mesh != null)
+        {
+            var neck = (Vector3)mesh.GetMeta("neck");
+            NeckOfTeam[(type, team)] = neck;
+            TipOfTeam[(type, team)] = (Vector3)mesh.GetMeta("gaster_tip");
+            if (team == 0 || !Neck.ContainsKey(type)) Neck[type] = neck;
+        }
+        return mesh;
+    }
+
+    /// `far`: the distant-crowd build of a colony caste, drawn once an ant is far enough from the camera that the
+    /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
+    public static ArrayMesh Build(AntType type, bool far = false, int team = 0, Detail? detail = null)
     {
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
         if (type == AntType.Spider) return Spider();
         if (type == AntType.Wasp) return Wasp();
+        var model = Model(type, team == 1 ? 1 : 0, detail ?? (far ? Detail.Far : Detail.Mid));
+        if (model != null) return model;
+        far = far || detail == Detail.Far;
         Shape s = type switch
         {
             AntType.Soldier => new Shape { Head = 1.35f, Mandible = 1.45f, Gaster = 1.0f, Thorax = 1.05f, Leg = 1.0f, Seg = 14 },
