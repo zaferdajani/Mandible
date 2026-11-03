@@ -59,7 +59,14 @@ Food piles are drawn 1.4x the sim's radius, so they read at play zoom; ants and 
 4. A view passes when its art check scores 4 or 5 on every criterion with no blockers, and its readability check
    scores 4 or 5. Only passing views go to the owner. Record every round in the gate log below.
 
-Do not soften the prompts or the specs to make a frame pass.
+Do not soften the prompts or the specs to make a frame pass. Two clarifications were made on 2026-11-03, at the
+owner's request after round 6, and are not a softening:
+- The art reviewer judges only what is in the frame, against the same kind of thing in the target. It does not mark
+  down for content the target has and the frame lacks (an ant column, honey, droplets).
+- Ant bodies are scored by the ant session's gate, not here.
+
+The owner is the final judge. Views that pass readability go to the owner on a review sheet labelled with their art
+scores, even when the art check has not passed (round 6: `D:\MandibleBuildseviewrt-round6.jpg`).
 
 **Ants are judged by the ant session's work.** The ants are code-built (`src/Render/AntMesh.cs`), and a separate
 ant session rebuilds them against its own approved target, with the same two-part gate. Until that lands, an art

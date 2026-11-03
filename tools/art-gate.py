@@ -42,8 +42,11 @@ VIEWS = {
 ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
 Open ONLY this image: {img}
 Its left half is the approved TARGET; its right half is a close FRAME from the game ({what}) at about the
-target's framing. Judge whether the frame reaches the target's quality; it need not match the composition.
-Ignore any UI.
+target's framing. Judge whether what the frame shows reaches the quality of the same kind of thing in the target.
+It need not match the composition, and it need not contain everything the target contains: do NOT mark down for
+content that is absent (an ant column, honey, droplets, extra food types) and do NOT ask for it. Judge only the
+things that are in the frame. Ants are rebuilt by a separate session: do not score the ants' own bodies (shape,
+legs, chitin); judge everything else. Ignore any UI.
 
 Score the FRAME 1-5 on each (5 = matches the target's standard):
 - repetition: no visible copies of one mesh or texture, no rhythm or grid in placement
