@@ -129,3 +129,42 @@ Readability now passes for four views. Every art check fails. Two findings recur
 - **Soil material at close range:** one tiled 1-2k photo set cannot match a macro photograph at ant framing. It needs a macro soil layer (photoscanned pebbles and crumb as a decal or displacement) close to the camera.
 
 After round 3: the chamber cavities are rebuilt (a deeper excavation at 3.0, steep scalloped banks on a finer mesh, a soft shade over the lip instead of the outline band, and a warm unshadowed light low in each room on High and Ultra; 42 fps). The berry cut that showed an empty shell is removed.
+
+## Lighting (merged from PR #11, 2026-11-03)
+
+PR #11 (`claude/lighting-tunnels-leaves`) is merged into this branch. The lighting-audit checklist is in `.claude/skills/lighting-audit/SKILL.md`. The underground has its own light:
+- The dug nest is on render layer 2 (`NestInterior.UndergroundLayer`), so the sun never reaches it.
+- The sky's fill is cut to a tenth there (`Shaders.Under`, `under_ambient`).
+- It is lit by a pool of warm lamps (`NestLights`): one per chamber, plus one about every 10 units of gallery.
+- Exposure rises from 1.05 to 1.6 over 0.6 s as the camera drops into the nest.
+
+Changes made on merge:
+- **Build mode no longer goes dark.** #11's own frames showed the opened nest blotching the roof dark. Now, as the earth opens, the cavities and their contents take more fill: `nest_info.w` lifts `under_ambient` from 0.09 to 0.6, and the walls' `ambient_scale` from 0.1 to 0.6. The roof over the galleries darkens by 0.18 instead of 0.46. The roof stays readable and the chambers keep the warm lamp pools.
+- **Budgets, measured on Forward+ (GTX 1650):**
+
+  | Setting | Low | Medium | High | Ultra |
+  |---|---|---|---|---|
+  | Lamps lit | 6 | 3 | 4 | 8 |
+  | Lamps casting shadows | 0 | 0 | 0 | 2 |
+  | Sun shadow angle | 0 (hard) | 0.5 | 0.8 | 1.0 |
+
+  On Low the lamps are not real lights: the walls paint the pools in the shader. #11's original budget (12 lamps, 5 cube shadow maps on High) cut the glass-earth view from 44 to 27 fps. It is now 39 fps (PASS, threshold 30).
+- **Leaves:** the photographed leaf atlas, with #11's per-leaf variation and matte roughness rules.
+
+Audit, 2026-11-03, Forward+, mean luminance with clipped and crushed share:
+
+| Frame | Mean | Clipped white | Crushed black |
+|---|---|---|---|
+| Surface, yard | 0.43 (target ~0.45) | 0% | 0.6% |
+| Surface, close | 0.41 | 0% | 1.2% |
+| Nest, build view | 0.48 (chamber floors 0.30) | 0% | 0% |
+| Interior, Low | 0.44 | 0% | 0.1% |
+| Opening, Low | 0.35 | 0% | 26% (the fog of war, intended) |
+
+- One sun, all shadows parallel.
+- Leaves, soil, stones and crumbs are matte (roughness at least 0.75).
+- Underground with the earth closed is not visible in play, so the tunnel target of 0.12-0.18 applies only to galleries seen through the entrance shaft.
+
+Open lighting follow-ups:
+1. Ants in the nest are still lit by the sun. They are batched with the surface ants in one MultiMesh, so moving them to the underground layer needs a separate batch, or a light function in the Ant shader.
+2. The Low-tier lamp pools are faint: the walls read evenly warm brown, without distinct pools.
