@@ -1,0 +1,1234 @@
+[
+	{
+		"file": "namaqualand_stones_01_0.res",
+		"kind": "stone",
+		"size": [
+			0.0759056806564331,
+			0.0363118834793568,
+			0.0623823776841164
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 756
+	},
+	{
+		"file": "namaqualand_stones_01_1.res",
+		"kind": "stone",
+		"size": [
+			0.146745085716248,
+			0.0821733847260475,
+			0.0795421823859215
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 566
+	},
+	{
+		"file": "namaqualand_stones_01_2.res",
+		"kind": "stone",
+		"size": [
+			0.102607518434525,
+			0.0553407445549965,
+			0.0966571569442749
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 618
+	},
+	{
+		"file": "namaqualand_stones_01_3.res",
+		"kind": "stone",
+		"size": [
+			0.114572167396545,
+			0.0362554267048836,
+			0.0818182229995728
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 732
+	},
+	{
+		"file": "namaqualand_stones_01_4.res",
+		"kind": "stone",
+		"size": [
+			0.110362768173218,
+			0.075141429901123,
+			0.111944817006588
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 696
+	},
+	{
+		"file": "namaqualand_rocks_01_0.res",
+		"kind": "rock",
+		"size": [
+			0.224973917007446,
+			0.14668932557106,
+			0.212500393390656
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 848
+	},
+	{
+		"file": "namaqualand_rocks_01_1.res",
+		"kind": "rock",
+		"size": [
+			0.21715122461319,
+			0.0808680281043053,
+			0.1620202511549
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 774
+	},
+	{
+		"file": "namaqualand_rocks_01_2.res",
+		"kind": "rock",
+		"size": [
+			0.211365312337875,
+			0.0835845395922661,
+			0.164323210716248
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 700
+	},
+	{
+		"file": "namaqualand_rocks_01_3.res",
+		"kind": "rock",
+		"size": [
+			0.197361081838608,
+			0.120726384222507,
+			0.154116407036781
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 778
+	},
+	{
+		"file": "namaqualand_boulder_02_0.res",
+		"kind": "rock",
+		"size": [
+			2.51062083244324,
+			0.86542546749115,
+			1.2136777639389
+		],
+		"src": "namaqualand_boulder_02",
+		"tris": 1526
+	},
+	{
+		"file": "namaqualand_boulder_03_0.res",
+		"kind": "rock",
+		"size": [
+			2.3810920715332,
+			1.45673811435699,
+			3.0594654083252
+		],
+		"src": "namaqualand_boulder_03",
+		"tris": 1012
+	},
+	{
+		"file": "namaqualand_boulder_04_0.res",
+		"kind": "rock",
+		"size": [
+			2.49656009674072,
+			1.86722898483276,
+			2.46747159957886
+		],
+		"src": "namaqualand_boulder_04",
+		"tris": 922
+	},
+	{
+		"file": "namaqualand_boulder_05_0.res",
+		"kind": "rock",
+		"size": [
+			1.35555946826935,
+			0.523396372795105,
+			0.737421870231628
+		],
+		"src": "namaqualand_boulder_05",
+		"tris": 1400
+	},
+	{
+		"file": "namaqualand_boulder_06_0.res",
+		"kind": "rock",
+		"size": [
+			0.669936180114746,
+			0.649404168128967,
+			1.1983950138092
+		],
+		"src": "namaqualand_boulder_06",
+		"tris": 1704
+	},
+	{
+		"file": "rock_moss_set_01_0.res",
+		"kind": "rock",
+		"size": [
+			2.17268991470337,
+			1.40925979614258,
+			3.32557320594788
+		],
+		"src": "rock_moss_set_01",
+		"tris": 686
+	},
+	{
+		"file": "rock_moss_set_01_1.res",
+		"kind": "rock",
+		"size": [
+			2.62231755256653,
+			1.24702870845795,
+			3.23583197593689
+		],
+		"src": "rock_moss_set_01",
+		"tris": 686
+	},
+	{
+		"file": "rock_moss_set_01_2.res",
+		"kind": "rock",
+		"size": [
+			2.10800337791443,
+			1.08843493461609,
+			2.05362844467163
+		],
+		"src": "rock_moss_set_01",
+		"tris": 624
+	},
+	{
+		"file": "rock_moss_set_01_3.res",
+		"kind": "rock",
+		"size": [
+			2.11451315879822,
+			1.74406218528748,
+			1.94708299636841
+		],
+		"src": "rock_moss_set_01",
+		"tris": 659
+	},
+	{
+		"file": "rock_moss_set_01_4.res",
+		"kind": "rock",
+		"size": [
+			1.79480564594269,
+			1.15249443054199,
+			2.98223733901978
+		],
+		"src": "rock_moss_set_01",
+		"tris": 516
+	},
+	{
+		"file": "rock_moss_set_01_5.res",
+		"kind": "rock",
+		"size": [
+			2.11826181411743,
+			1.22617387771606,
+			2.74459719657898
+		],
+		"src": "rock_moss_set_01",
+		"tris": 562
+	},
+	{
+		"file": "rock_moss_set_02_0.res",
+		"kind": "rock",
+		"size": [
+			1.20136141777039,
+			0.513586580753326,
+			0.970437526702881
+		],
+		"src": "rock_moss_set_02",
+		"tris": 500
+	},
+	{
+		"file": "rock_moss_set_02_1.res",
+		"kind": "rock",
+		"size": [
+			1.62492644786835,
+			0.602223992347717,
+			1.00203943252563
+		],
+		"src": "rock_moss_set_02",
+		"tris": 492
+	},
+	{
+		"file": "rock_moss_set_02_2.res",
+		"kind": "rock",
+		"size": [
+			1.54448366165161,
+			0.710819721221924,
+			1.41907393932343
+		],
+		"src": "rock_moss_set_02",
+		"tris": 499
+	},
+	{
+		"file": "rock_moss_set_02_3.res",
+		"kind": "rock",
+		"size": [
+			2.07122802734375,
+			1.22725319862366,
+			1.11486840248108
+		],
+		"src": "rock_moss_set_02",
+		"tris": 494
+	},
+	{
+		"file": "rock_moss_set_02_4.res",
+		"kind": "rock",
+		"size": [
+			2.17374610900879,
+			0.750806450843811,
+			1.53174781799316
+		],
+		"src": "rock_moss_set_02",
+		"tris": 500
+	},
+	{
+		"file": "rock_moss_set_02_5.res",
+		"kind": "rock",
+		"size": [
+			1.92779207229614,
+			1.26173043251038,
+			1.49857783317566
+		],
+		"src": "rock_moss_set_02",
+		"tris": 500
+	},
+	{
+		"file": "rock_moss_set_02_6.res",
+		"kind": "rock",
+		"size": [
+			1.68890070915222,
+			0.74039626121521,
+			1.19130110740662
+		],
+		"src": "rock_moss_set_02",
+		"tris": 614
+	},
+	{
+		"file": "stone_01_0.res",
+		"kind": "stone",
+		"size": [
+			0.146499454975128,
+			0.0706547275185585,
+			0.08751530200243
+		],
+		"src": "stone_01",
+		"tris": 836
+	},
+	{
+		"file": "rock_07_0.res",
+		"kind": "stone",
+		"size": [
+			0.166049808263779,
+			0.140590712428093,
+			0.317545056343079
+		],
+		"src": "rock_07",
+		"tris": 462
+	},
+	{
+		"file": "rock_09_0.res",
+		"kind": "stone",
+		"size": [
+			0.0732125714421272,
+			0.0315964668989182,
+			0.143234208226204
+		],
+		"src": "rock_09",
+		"tris": 388
+	},
+	{
+		"file": "boulder_01_0.res",
+		"kind": "rock",
+		"size": [
+			1.26380813121796,
+			0.988405525684357,
+			1.80614757537842
+		],
+		"src": "boulder_01",
+		"tris": 1032
+	},
+	{
+		"file": "bark_debris_01_0.res",
+		"kind": "bark",
+		"size": [
+			0.185586541891098,
+			0.0611784532666206,
+			0.390072166919708
+		],
+		"src": "bark_debris_01",
+		"tris": 600
+	},
+	{
+		"file": "bark_debris_01_1.res",
+		"kind": "bark",
+		"size": [
+			0.194145396351814,
+			0.0705815106630325,
+			0.459247767925262
+		],
+		"src": "bark_debris_01",
+		"tris": 528
+	},
+	{
+		"file": "bark_debris_01_2.res",
+		"kind": "bark",
+		"size": [
+			0.141207098960876,
+			0.0898422449827194,
+			0.570521771907806
+		],
+		"src": "bark_debris_01",
+		"tris": 1140
+	},
+	{
+		"file": "bark_debris_01_3.res",
+		"kind": "bark",
+		"size": [
+			0.135076433420181,
+			0.0976574420928955,
+			0.600049436092377
+		],
+		"src": "bark_debris_01",
+		"tris": 644
+	},
+	{
+		"file": "dead_quiver_branch_01_0.res",
+		"kind": "twig",
+		"size": [
+			0.253788709640503,
+			0.438253194093704,
+			0.225797593593597
+		],
+		"src": "dead_quiver_branch_01",
+		"tris": 926
+	},
+	{
+		"file": "dead_quiver_branch_02_0.res",
+		"kind": "twig",
+		"size": [
+			0.28344389796257,
+			0.523805797100067,
+			0.197964012622833
+		],
+		"src": "dead_quiver_branch_02",
+		"tris": 898
+	},
+	{
+		"file": "dry_branches_medium_01_0.res",
+		"kind": "twig",
+		"size": [
+			0.12710028886795,
+			0.141727447509766,
+			0.774777948856354
+		],
+		"src": "dry_branches_medium_01",
+		"tris": 702
+	},
+	{
+		"file": "dry_branches_medium_01_1.res",
+		"kind": "twig",
+		"size": [
+			0.147948384284973,
+			0.13943438231945,
+			1.03850376605988
+		],
+		"src": "dry_branches_medium_01",
+		"tris": 656
+	},
+	{
+		"file": "dry_branches_medium_01_2.res",
+		"kind": "twig",
+		"size": [
+			0.316881954669952,
+			0.337343156337738,
+			1.29572331905365
+		],
+		"src": "dry_branches_medium_01",
+		"tris": 739
+	},
+	{
+		"file": "dry_quiver_leaf_0.res",
+		"kind": "leaf",
+		"size": [
+			0.12990614771843,
+			0.394272357225418,
+			0.142639070749283
+		],
+		"src": "dry_quiver_leaf",
+		"tris": 414
+	},
+	{
+		"file": "dry_quiver_leaf_1.res",
+		"kind": "leaf",
+		"size": [
+			0.135605782270432,
+			0.419706165790558,
+			0.184961199760437
+		],
+		"src": "dry_quiver_leaf",
+		"tris": 400
+	},
+	{
+		"file": "single_root_0.res",
+		"kind": "root",
+		"size": [
+			0.55516242980957,
+			0.170558422803879,
+			1.8359534740448
+		],
+		"src": "single_root",
+		"tris": 951
+	},
+	{
+		"file": "root_cluster_01_0.res",
+		"kind": "root",
+		"size": [
+			4.12270832061768,
+			1.5076220035553,
+			2.68277668952942
+		],
+		"src": "root_cluster_01",
+		"tris": 1753
+	},
+	{
+		"file": "food_apple_01_0.res",
+		"kind": "food_apple",
+		"size": [
+			0.0963776707649231,
+			0.0848583355545998,
+			0.0950280874967575
+		],
+		"src": "food_apple_01",
+		"tris": 876
+	},
+	{
+		"file": "food_pears_asian_01_0.res",
+		"kind": "food_pear",
+		"size": [
+			0.0438050590455532,
+			0.0437505431473255,
+			0.0796650052070618
+		],
+		"src": "food_pears_asian_01",
+		"tris": 666
+	},
+	{
+		"file": "food_pears_asian_01_1.res",
+		"kind": "food_pear",
+		"size": [
+			0.0439804494380951,
+			0.0710197985172272,
+			0.0444710329174995
+		],
+		"src": "food_pears_asian_01",
+		"tris": 634
+	},
+	{
+		"file": "food_pears_asian_01_2.res",
+		"kind": "food_pear",
+		"size": [
+			0.0433413907885551,
+			0.0668273419141769,
+			0.0429648198187351
+		],
+		"src": "food_pears_asian_01",
+		"tris": 586
+	},
+	{
+		"file": "food_pears_asian_01_3.res",
+		"kind": "food_pear",
+		"size": [
+			0.0508537776768208,
+			0.0441571995615959,
+			0.0469893701374531
+		],
+		"src": "food_pears_asian_01",
+		"tris": 602
+	},
+	{
+		"file": "food_pears_asian_01_4.res",
+		"kind": "food_pear",
+		"size": [
+			0.0620721429586411,
+			0.0422781966626644,
+			0.0544531159102917
+		],
+		"src": "food_pears_asian_01",
+		"tris": 650
+	},
+	{
+		"file": "food_lychee_01_0.res",
+		"kind": "food_lychee",
+		"size": [
+			0.0388365462422371,
+			0.0499219037592411,
+			0.0412036962807179
+		],
+		"src": "food_lychee_01",
+		"tris": 847
+	},
+	{
+		"file": "food_pomegranate_01_0.res",
+		"kind": "food_pomegranate",
+		"size": [
+			0.113496944308281,
+			0.114700466394424,
+			0.114912435412407
+		],
+		"src": "food_pomegranate_01",
+		"tris": 1016
+	},
+	{
+		"file": "croissant_0.res",
+		"kind": "food_bread",
+		"size": [
+			0.200000002980232,
+			0.0619956701993942,
+			0.0755115151405334
+		],
+		"src": "croissant",
+		"tris": 1990
+	},
+	{
+		"file": "hamburger_buns_0.res",
+		"kind": "food_bread",
+		"size": [
+			0.104164034128189,
+			0.0631366595625877,
+			0.113617636263371
+		],
+		"src": "hamburger_buns",
+		"tris": 972
+	},
+	{
+		"file": "hamburger_buns_1.res",
+		"kind": "food_bread",
+		"size": [
+			0.11067895591259,
+			0.0575039722025394,
+			0.105815961956978
+		],
+		"src": "hamburger_buns",
+		"tris": 986
+	},
+	{
+		"file": "hamburger_buns_2.res",
+		"kind": "food_bread",
+		"size": [
+			0.106897220015526,
+			0.056738656014204,
+			0.0978755801916122
+		],
+		"src": "hamburger_buns",
+		"tris": 936
+	},
+	{
+		"file": "grass_bermuda_01_0.res",
+		"kind": "grass",
+		"size": [
+			0.0677379965782166,
+			0.0247411299496889,
+			0.0843101441860199
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_1.res",
+		"kind": "grass",
+		"size": [
+			0.0701003074645996,
+			0.0433435663580894,
+			0.0550261437892914
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_2.res",
+		"kind": "grass",
+		"size": [
+			0.0439380407333374,
+			0.0436337552964687,
+			0.0692532658576965
+		],
+		"src": "grass_bermuda_01",
+		"tris": 19
+	},
+	{
+		"file": "grass_bermuda_01_3.res",
+		"kind": "grass",
+		"size": [
+			0.0385122299194336,
+			0.0977500230073929,
+			0.0285673327744007
+		],
+		"src": "grass_bermuda_01",
+		"tris": 17
+	},
+	{
+		"file": "grass_bermuda_01_4.res",
+		"kind": "grass",
+		"size": [
+			0.0511637330055237,
+			0.0745726078748703,
+			0.0218643508851528
+		],
+		"src": "grass_bermuda_01",
+		"tris": 8
+	},
+	{
+		"file": "grass_bermuda_01_5.res",
+		"kind": "grass",
+		"size": [
+			0.0569814220070839,
+			0.0666733533143997,
+			0.0916188955307007
+		],
+		"src": "grass_bermuda_01",
+		"tris": 20
+	},
+	{
+		"file": "grass_bermuda_01_6.res",
+		"kind": "grass",
+		"size": [
+			0.0549736022949219,
+			0.102065697312355,
+			0.0162992849946022
+		],
+		"src": "grass_bermuda_01",
+		"tris": 14
+	},
+	{
+		"file": "grass_bermuda_01_7.res",
+		"kind": "grass",
+		"size": [
+			0.0660364329814911,
+			0.0826614648103714,
+			0.0368752591311932
+		],
+		"src": "grass_bermuda_01",
+		"tris": 24
+	},
+	{
+		"file": "grass_bermuda_01_8.res",
+		"kind": "grass",
+		"size": [
+			0.0407008528709412,
+			0.113004244863987,
+			0.026102602481842
+		],
+		"src": "grass_bermuda_01",
+		"tris": 30
+	},
+	{
+		"file": "grass_bermuda_01_9.res",
+		"kind": "grass",
+		"size": [
+			0.0678350329399109,
+			0.150886446237564,
+			0.0455812066793442
+		],
+		"src": "grass_bermuda_01",
+		"tris": 147
+	},
+	{
+		"file": "grass_bermuda_01_10.res",
+		"kind": "grass",
+		"size": [
+			0.0765952467918396,
+			0.127205029129982,
+			0.0492665469646454
+		],
+		"src": "grass_bermuda_01",
+		"tris": 140
+	},
+	{
+		"file": "grass_bermuda_01_11.res",
+		"kind": "grass",
+		"size": [
+			0.0371622443199158,
+			0.0922582522034645,
+			0.0445119738578796
+		],
+		"src": "grass_bermuda_01",
+		"tris": 128
+	},
+	{
+		"file": "grass_bermuda_01_12.res",
+		"kind": "grass",
+		"size": [
+			0.0696470737457275,
+			0.152189016342163,
+			0.0831337794661522
+		],
+		"src": "grass_bermuda_01",
+		"tris": 268
+	},
+	{
+		"file": "grass_bermuda_01_13.res",
+		"kind": "grass",
+		"size": [
+			0.00357520580291748,
+			0.149414852261543,
+			0.0136966006830335
+		],
+		"src": "grass_bermuda_01",
+		"tris": 15
+	},
+	{
+		"file": "grass_bermuda_01_14.res",
+		"kind": "grass",
+		"size": [
+			0.00357520580291748,
+			0.149414837360382,
+			0.0136965969577432
+		],
+		"src": "grass_bermuda_01",
+		"tris": 15
+	},
+	{
+		"file": "grass_bermuda_01_15.res",
+		"kind": "grass",
+		"size": [
+			0.079865425825119,
+			0.032239593565464,
+			0.0277538746595383
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_16.res",
+		"kind": "grass",
+		"size": [
+			0.0826874673366547,
+			0.0458502620458603,
+			0.0360337197780609
+		],
+		"src": "grass_bermuda_01",
+		"tris": 12
+	},
+	{
+		"file": "grass_bermuda_01_17.res",
+		"kind": "grass",
+		"size": [
+			0.0539996176958084,
+			0.0551652126014233,
+			0.0414659194648266
+		],
+		"src": "grass_bermuda_01",
+		"tris": 18
+	},
+	{
+		"file": "grass_bermuda_01_18.res",
+		"kind": "grass",
+		"size": [
+			0.0582116991281509,
+			0.0546445623040199,
+			0.0334690883755684
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
+	},
+	{
+		"file": "grass_bermuda_01_19.res",
+		"kind": "grass",
+		"size": [
+			0.0287119150161743,
+			0.0907373130321503,
+			0.0176627151668072
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
+	},
+	{
+		"file": "grass_bermuda_01_20.res",
+		"kind": "grass",
+		"size": [
+			0.0355377197265625,
+			0.0690527185797691,
+			0.0246128626167774
+		],
+		"src": "grass_bermuda_01",
+		"tris": 10
+	},
+	{
+		"file": "grit_namaqualand_stones_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.0732966661453247,
+			0.0354829058051109,
+			0.0608057342469692
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 46
+	},
+	{
+		"file": "grit_namaqualand_stones_01_1.res",
+		"kind": "grit",
+		"size": [
+			0.142875194549561,
+			0.0709535926580429,
+			0.0674606710672379
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 34
+	},
+	{
+		"file": "grit_namaqualand_stones_01_2.res",
+		"kind": "grit",
+		"size": [
+			0.0965082347393036,
+			0.0514905527234077,
+			0.0936841890215874
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 38
+	},
+	{
+		"file": "grit_namaqualand_stones_01_3.res",
+		"kind": "grit",
+		"size": [
+			0.110551163554192,
+			0.0284955222159624,
+			0.0817994028329849
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 44
+	},
+	{
+		"file": "grit_namaqualand_stones_01_4.res",
+		"kind": "grit",
+		"size": [
+			0.110362768173218,
+			0.0708069577813149,
+			0.111394211649895
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 42
+	},
+	{
+		"file": "grit_stone_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.143548056483269,
+			0.0643697008490562,
+			0.08751530200243
+		],
+		"src": "stone_01",
+		"tris": 52
+	},
+	{
+		"file": "grit_rock_09_0.res",
+		"kind": "grit",
+		"size": [
+			0.0723825171589851,
+			0.0295641664415598,
+			0.14168943464756
+		],
+		"src": "rock_09",
+		"tris": 48
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.211639404296875,
+			0.142629116773605,
+			0.195159494876862
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 52
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_1.res",
+		"kind": "grit",
+		"size": [
+			0.21169638633728,
+			0.0705338716506958,
+			0.14831006526947
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 48
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_2.res",
+		"kind": "grit",
+		"size": [
+			0.194687128067017,
+			0.079845018684864,
+			0.144775390625
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 42
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_3.res",
+		"kind": "grit",
+		"size": [
+			0.183980822563171,
+			0.116854272782803,
+			0.152003765106201
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 48
+	},
+	{
+		"file": "sugar_0_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.00118434417527169,
+			0.00119998771697283,
+			0.000756332534365356
+		],
+		"src": "sugar_0",
+		"tris": 24
+	},
+	{
+		"file": "sugar_1_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.000933098199311644,
+			0.00114415923599154,
+			0.000795528176240623
+		],
+		"src": "sugar_1",
+		"tris": 16
+	},
+	{
+		"file": "sugar_2_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.000833976024296135,
+			0.000923504820093513,
+			0.000721145770512521
+		],
+		"src": "sugar_2",
+		"tris": 28
+	},
+	{
+		"file": "sugar_3_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.00106290064286441,
+			0.00109702767804265,
+			0.00100854435004294
+		],
+		"src": "sugar_3",
+		"tris": 36
+	},
+	{
+		"file": "sugar_4_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.00105820083990693,
+			0.0010826081270352,
+			0.00104490981902927
+		],
+		"src": "sugar_4",
+		"tris": 24
+	},
+	{
+		"file": "sugar_5_0.res",
+		"kind": "food_sugar",
+		"size": [
+			0.000924332765862346,
+			0.00124591786880046,
+			0.00106591288931668
+		],
+		"src": "sugar_5",
+		"tris": 32
+	},
+	{
+		"file": "seed_0_0.res",
+		"kind": "food_seed",
+		"size": [
+			0.00501708965748549,
+			0.00909560639411211,
+			0.00331160821951926
+		],
+		"src": "seed_0",
+		"tris": 272
+	},
+	{
+		"file": "seed_1_0.res",
+		"kind": "food_seed",
+		"size": [
+			0.00491601368412375,
+			0.00923236086964607,
+			0.00273119425401092
+		],
+		"src": "seed_1",
+		"tris": 272
+	},
+	{
+		"file": "seed_2_0.res",
+		"kind": "food_seed",
+		"size": [
+			0.0048880479298532,
+			0.0112989880144596,
+			0.00273826159536839
+		],
+		"src": "seed_2",
+		"tris": 272
+	},
+	{
+		"file": "seed_3_0.res",
+		"kind": "food_seed",
+		"size": [
+			0.00550321768969297,
+			0.00926518626511097,
+			0.00305275409482419
+		],
+		"src": "seed_3",
+		"tris": 272
+	},
+	{
+		"file": "seedhalf_0_0.res",
+		"kind": "food_seedhalf",
+		"size": [
+			0.00540127232670784,
+			0.010783962905407,
+			0.00283639598637819
+		],
+		"src": "seedhalf_0",
+		"tris": 272
+	},
+	{
+		"file": "seedhalf_1_0.res",
+		"kind": "food_seedhalf",
+		"size": [
+			0.00560957565903664,
+			0.0101936496794224,
+			0.00313434237614274
+		],
+		"src": "seedhalf_1",
+		"tris": 272
+	},
+	{
+		"file": "tube_closed_0.res",
+		"kind": "tube",
+		"size": [
+			0.0160000007599592,
+			0.108800008893013,
+			0.0160000007599592
+		],
+		"src": "tube_closed",
+		"tris": 2664
+	},
+	{
+		"file": "shard_0_0.res",
+		"kind": "shard",
+		"size": [
+			0.00598082924261689,
+			0.016708068549633,
+			0.0082972701638937
+		],
+		"src": "shard_0",
+		"tris": 52
+	},
+	{
+		"file": "shard_1_0.res",
+		"kind": "shard",
+		"size": [
+			0.00802265759557486,
+			0.00970050785690546,
+			0.00277532637119293
+		],
+		"src": "shard_1",
+		"tris": 52
+	},
+	{
+		"file": "shard_2_0.res",
+		"kind": "shard",
+		"size": [
+			0.00273439893499017,
+			0.012881220318377,
+			0.0048337709158659
+		],
+		"src": "shard_2",
+		"tris": 52
+	},
+	{
+		"file": "shard_3_0.res",
+		"kind": "shard",
+		"size": [
+			0.00634291768074036,
+			0.0109954671934247,
+			0.00201171031221747
+		],
+		"src": "shard_3",
+		"tris": 52
+	},
+	{
+		"file": "shard_4_0.res",
+		"kind": "shard",
+		"size": [
+			0.00315316719934344,
+			0.0201253537088633,
+			0.0074778264388442
+		],
+		"src": "shard_4",
+		"tris": 52
+	},
+	{
+		"file": "shard_5_0.res",
+		"kind": "shard",
+		"size": [
+			0.00942553021013737,
+			0.0119171617552638,
+			0.00250857137143612
+		],
+		"src": "shard_5",
+		"tris": 52
+	},
+	{
+		"file": "berry_0_0.res",
+		"kind": "food_berry",
+		"size": [
+			0.00779998488724232,
+			0.00966374948620796,
+			0.00797706190496683
+		],
+		"src": "berry_0",
+		"tris": 2814
+	},
+	{
+		"file": "berry_1_0.res",
+		"kind": "food_berry",
+		"size": [
+			0.00831945147365332,
+			0.0103856865316629,
+			0.00843031518161297
+		],
+		"src": "berry_1",
+		"tris": 5628
+	},
+	{
+		"file": "berry_2_0.res",
+		"kind": "food_berry",
+		"size": [
+			0.00914901867508888,
+			0.0114621426910162,
+			0.00947558507323265
+		],
+		"src": "berry_2",
+		"tris": 4220
+	},
+	{
+		"file": "berry_3_0.res",
+		"kind": "food_berry",
+		"size": [
+			0.00913697853684425,
+			0.0114621426910162,
+			0.00947558507323265
+		],
+		"src": "berry_3",
+		"tris": 5628
+	},
+	{
+		"file": "berry_4_0.res",
+		"kind": "food_berry",
+		"size": [
+			0.00848021730780602,
+			0.00825568102300167,
+			0.00947558507323265
+		],
+		"src": "berry_4",
+		"tris": 3490
+	}
+]

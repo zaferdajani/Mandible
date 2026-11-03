@@ -21,9 +21,9 @@ public static partial class WorldBuilder
             Roughness = 0.01f, Metallic = 0f, MetallicSpecular = 1f, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             RefractionEnabled = true, RefractionScale = 0.03f, RimEnabled = true, Rim = 0.3f, RimTint = 0.2f,
         };
-        var edgeGlass = (StandardMaterial3D)glass.Duplicate(); // the broken edges read pale green, as thick glass does
-        edgeGlass.AlbedoColor = new Color(0.55f, 0.85f, 0.72f, 0.5f);
-        edgeGlass.Rim = 0.6f;
+        var edgeGlass = (StandardMaterial3D)glass.Duplicate(); // the broken edges read faintly green, as thick glass does
+        edgeGlass.AlbedoColor = new Color(0.78f, 0.9f, 0.84f, 0.2f);
+        edgeGlass.Rim = 0.45f;
 
         // the closed half: lying on its side in the grass beside the alley, its broken mouth toward the path
         var tubeAt = new Vector2(33f, 253.6f);
@@ -34,31 +34,38 @@ public static partial class WorldBuilder
         var root = new Node3D { Position = new Vector3(a0.X, hf.Sample(a0.X, a0.Y) + TubeR * 0.92f, a0.Y), Rotation = new Vector3(0.03f, -yaw, 0.05f) };
         w.Root.AddChild(root);
         var jag = Jagged(rng, 9, 0.2f, 1.6f);
-        root.AddChild(new MeshInstance3D { Mesh = Shell(a => 0, a => lenA - jag(a), closedStart: true, rimAtEnd: true), MaterialOverride = glass });
-        root.AddChild(new MeshInstance3D { Mesh = Rim(a => lenA - jag(a)), MaterialOverride = edgeGlass });
+        // the glass itself is modelled in Blender (tools/blender/food_models.py): a 1.2 mm wall, the rounded closed
+        // end, and a conchoidal break with big teeth and fine chips, scaled from the real 16 mm tube to the game's
+        var tubeScan = NatureAssets.Kind("tube");
+        if (tubeScan.Count > 0)
+        {
+            var t = tubeScan[0];
+            float sr = TubeR * 2f / Mathf.Max(t.Size.X, t.Size.Z), sl = (lenA + 0.6f) / t.Size.Y;
+            // the scan's length runs up its y from the closed end; lay it along the tube's x
+            var lay = new Basis(new Vector3(0, -sr, 0), new Vector3(sl, 0, 0), new Vector3(0, 0, sr));
+            root.AddChild(new MeshInstance3D { Mesh = t.Mesh, MaterialOverride = glass, Basis = lay, Position = new Vector3(-0.6f, 0, 0) });
+        }
+        else
+        {
+            root.AddChild(new MeshInstance3D { Mesh = Shell(a => 0, a => lenA - jag(a), closedStart: true, rimAtEnd: true), MaterialOverride = glass });
+            root.AddChild(new MeshInstance3D { Mesh = Rim(a => lenA - jag(a)), MaterialOverride = edgeGlass });
+        }
 
         // inside: the water reservoir behind its cotton plug, then the colony's sand bed
         var water = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.75f, 0.72f, 0.38f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.0f, MetallicSpecular = 1, RefractionEnabled = true, RefractionScale = 0.06f };
         float inner = TubeR - TubeWall;
         root.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = inner * 0.97f, BottomRadius = inner * 0.97f, Height = 3.2f, RadialSegments = 32 }, MaterialOverride = water, Position = new Vector3(1.3f, 0, 0), Rotation = new Vector3(0, 0, Mathf.Pi / 2) });
-        var cotton = new StandardMaterial3D { AlbedoColor = new Color(0.97f, 0.95f, 0.9f), Roughness = 1, BacklightEnabled = true, Backlight = new Color(0.5f, 0.45f, 0.35f) };
+        var cotton = new ShaderMaterial { Shader = Shaders.Get(Shaders.Cotton) };
+        cotton.SetShaderParameter("noise_b", w.NoiseB);
         root.AddChild(new MeshInstance3D { Mesh = Fluff(rng, inner * 0.98f, 1.5f), MaterialOverride = cotton, Position = new Vector3(3.6f, 0, 0) });
-        var soilTex = GD.Load<Texture2D>("res://assets/materials/nest-soil-albedo.png");
-        var substrate = new StandardMaterial3D { AlbedoTexture = soilTex, AlbedoColor = new Color(0.62f, 0.5f, 0.38f), Uv1Triplanar = true, Uv1Scale = new Vector3(0.9f, 0.9f, 0.9f), Roughness = 1 };
-        var damp = new StandardMaterial3D { AlbedoTexture = soilTex, AlbedoColor = new Color(0.3f, 0.24f, 0.19f), Uv1Triplanar = true, Uv1Scale = new Vector3(1.6f, 1.6f, 1.6f), Roughness = 0.7f };
+        // the colony's bed and the damp clumps it spilled: the same photographed soils as the yard
+        var substrate = new StandardMaterial3D { AlbedoTexture = NatureAssets.Texture("ground/gravelly_sand_diff"), NormalEnabled = true, NormalTexture = NatureAssets.Texture("ground/gravelly_sand_nor"), Uv1Triplanar = true, Uv1Scale = new Vector3(0.12f, 0.12f, 0.12f), Roughness = 1 };
+        var damp = new StandardMaterial3D { AlbedoTexture = NatureAssets.Texture("ground/brown_mud_dry_diff"), NormalEnabled = true, NormalTexture = NatureAssets.Texture("ground/brown_mud_dry_nor"), AlbedoColor = new Color(0.8f, 0.72f, 0.64f), Uv1Triplanar = true, Uv1Scale = new Vector3(0.2f, 0.2f, 0.2f), Roughness = 0.75f };
         root.AddChild(new MeshInstance3D { Mesh = SandBed(inner * 0.96f, lenA - 4.6f - 1.2f), MaterialOverride = substrate, Position = new Vector3(4.4f, 0, 0) });
-        // the handwritten label wrapped round the glass
-        var paper = new StandardMaterial3D { AlbedoColor = new Color(0.93f, 0.89f, 0.78f), Roughness = 0.9f };
+        // the collector's handwritten label wrapped round the glass, its lines running along the tube
+        var paper = new ShaderMaterial { Shader = Shaders.Get(Shaders.TubeLabel) };
+        paper.SetShaderParameter("label", NatureAssets.Texture("tex/tube_label"));
         root.AddChild(new MeshInstance3D { Mesh = Band(TubeR + 0.012f, 2.0f, 0.1f, 2.0f), MaterialOverride = paper, Position = new Vector3(6.7f, 0, 0) });
-        var label = new Label3D
-        {
-            Text = "Lasius niger\nQ + 3 soldiers, 9 workers", Font = UiTheme.Body, FontSize = 64, PixelSize = 0.0042f, Modulate = new Color(0.12f, 0.1f, 0.18f),
-            OutlineSize = 0, Shaded = true, DoubleSided = false, Position = new Vector3(7.7f, TubeR * 0.5f + 0.02f, TubeR * 0.866f), LineSpacing = -6,
-        };
-        // facing out from the glass, its lines running along the tube
-        var outward = new Vector3(0, 0.5f, 0.866f);
-        label.Basis = new Basis(Vector3.Right, outward.Cross(Vector3.Right), outward);
-        root.AddChild(label);
 
         // the open half, rolled away down the bank, its own cotton stopper still in the mouth
         float lenB = 6.2f;
@@ -76,7 +83,11 @@ public static partial class WorldBuilder
         {
             float big = i < 6 ? rng.R(1.2f, 2.6f) : rng.R(0.25f, 1.0f);
             var p = mouth + dir * rng.R(-1.5f, 7f) + new Vector2(-dir.Y, dir.X) * rng.R(-4.5f, 4.5f);
-            var shard = new MeshInstance3D { Mesh = Shard(rng, big), MaterialOverride = i % 3 == 0 ? edgeGlass : glass };
+            var shards = NatureAssets.Kind("shard");
+            var piece = shards.Count > 0 ? shards[i % shards.Count] : null;
+            var shard = piece != null
+                ? new MeshInstance3D { Mesh = piece.Mesh, MaterialOverride = i % 3 == 0 ? edgeGlass : glass, Scale = Vector3.One * (big * 2f / piece.Longest) }
+                : new MeshInstance3D { Mesh = Shard(rng, big), MaterialOverride = i % 3 == 0 ? edgeGlass : glass };
             shard.Position = new Vector3(p.X, hf.Sample(p.X, p.Y) + 0.03f, p.Y);
             // most lie flat on their curve, a few stand on edge in the grit
             shard.Rotation = rng.F() < 0.8f ? new Vector3(rng.R(-0.15f, 0.15f), rng.R(0, Mathf.Tau), rng.F() < 0.5f ? 0 : Mathf.Pi) : new Vector3(rng.R(0.9f, 1.3f), rng.R(0, Mathf.Tau), 0);
@@ -89,16 +100,14 @@ public static partial class WorldBuilder
             float r = rng.R(0.2f, 0.55f);
             w.Root.AddChild(new MeshInstance3D { Mesh = PebbleMesh(70 + i), MaterialOverride = damp, Position = new Vector3(p.X, hf.Sample(p.X, p.Y) + r * 0.15f, p.Y), Rotation = new Vector3(0, rng.R(0, 3), 0), Scale = new Vector3(r, r * 0.6f, r * rng.R(0.8f, 1.3f)) });
         }
-        var grit = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = PebbleMesh(57), InstanceCount = 1100 };
-        for (int i = 0; i < 1100; i++)
+        var spill = new NatureScatter.Dresser(w, rng);
+        for (int i = 0; i < 260; i++)
         {
             float along = Mathf.Pow(rng.F(), 1.6f) * 7f - 0.4f, spread = 0.5f + along * 0.55f;
             var p = mouth + dir * along + new Vector2(-dir.Y, dir.X) * rng.R(-spread, spread) * Mathf.Sqrt(rng.F());
-            float s = rng.R(0.04f, 0.13f) * (along < 1.5f ? 1.2f : 1);
-            grit.SetInstanceTransform(i, new Transform3D(new Basis(Vector3.Up, rng.R(0, 6)) * Basis.FromScale(Vector3.One * s), new Vector3(p.X, hf.Sample(p.X, p.Y) + s * 0.2f, p.Y)));
-            grit.SetInstanceCustomData(i, new Color(rng.R(0.85f, 1f), 0, 0, rng.F()));
+            spill.Place(spill.Pick(spill.Stones), p, rng.R(0.08f, 0.26f) * (along < 1.5f ? 1.2f : 1), 0.3f, 0.5f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.9f, 1.05f));
         }
-        w.Root.AddChild(new MultiMeshInstance3D { Multimesh = grit, MaterialOverride = Mat(w, Shaders.Pebble), Name = "SpilledSand" });
+        spill.Commit();
 
         // the fall cost the colony: a few workers lie on their backs among the glass
         var antMesh = AntMesh.Build(AntType.Worker);
@@ -219,7 +228,8 @@ public static partial class WorldBuilder
         var k = new MeshKit();
         var white = new Color(1, 1, 1);
         var noise = new FastNoiseLite { Seed = rng.I(0, 9999), Frequency = 3.2f };
-        k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(len * 0.5f, r, r)), 24, 14, white, Vector2.Zero, u => 1 + 0.08f * noise.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3));
+        var fine = new FastNoiseLite { Seed = rng.I(0, 9999), Frequency = 9f };
+        k.Ellipsoid(Vector3.Zero, Basis.FromScale(new Vector3(len * 0.5f, r, r)), 40, 24, white, Vector2.Zero, u => 1 + 0.12f * noise.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3) + 0.05f * fine.GetNoise3D(u.X * 3, u.Y * 3, u.Z * 3));
         k.RecalcNormals();
         for (int i = 0; i < k.Nrm.Count; i++) if (k.Nrm[i].Dot(k.V[i]) < 0) k.Nrm[i] = -k.Nrm[i];
         return k.Commit();
