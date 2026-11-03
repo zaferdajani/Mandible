@@ -62,6 +62,22 @@ public sealed class AIController : IColonyAI
 
     /// The campaign's red colony (Episodes 3 and 4): it hatches, researches and defends its mound, but the
     /// episode script, not this AI, decides when it raids.
+    /// The red colony a campaign level runs: none, the passive rival the level script raids with, or an awake AI.
+    public static AIController ForLevel(Sim sim)
+    {
+        var m = sim.Mission;
+        if (m == null || !sim.Col[Config.Enemy].Alive || m.Episode == 2) return null; // Episode 2's young queen has no AI
+        var kind = m.Info.Rival;
+        if (kind == RivalKind.None) return null;
+        if (kind is RivalKind.Awake or RivalKind.Empress)
+        {
+            var ai = new AIController(sim, Config.Enemy, kind == RivalKind.Empress ? Difficulty.Normal : Difficulty.Easy);
+            sim.Col[Config.Enemy].FoodMult = kind == RivalKind.Empress ? 0.85f : 1f;
+            return ai;
+        }
+        return CampaignRival(sim);
+    }
+
     public static AIController CampaignRival(Sim sim)
     {
         var ai = new AIController(sim, Config.Enemy, Difficulty.Easy) { Passive = true };
@@ -77,11 +93,45 @@ public sealed class AIController : IColonyAI
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
+        Remains(c);
         March();
         Reinforce(c);
         Defend(c);
         Raid(c);
         Creep(c);
+    }
+
+    float _nextFeast;
+
+    /// The computer plays by the same rule as the player: only eating makes its army stronger. Workers haul remains home
+    /// (the standing order stays at Haul); idle fighters and heroes near uneaten remains are sent to eat them, and once
+    /// the queen's next ascension is paid for, heroes at home are fed from the reserve.
+    void Remains(Colony c)
+    {
+        if (!_sim.EatRules || _sim.Time < _nextFeast) return;
+        _nextFeast = _sim.Time + 3f;
+        var nest = _sim.W.Nests[_team].Pos;
+        var claimed = new Dictionary<int, float>(); // food id -> organic already promised to an eater
+        var heroesHome = new List<int>();
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team != _team || !_sim.Eats(a) || _marching.Contains(i) || a.FeastOrder) continue;
+            if (a.State != AntState.Idle && a.State != AntState.Hold) continue;
+            if (_sim.EvolutionNeed(a) <= 0) continue;
+            if (Config.IsHero(a.Type) && a.Pos.DistanceTo(nest) < Config.ReinforceRadius) heroesHome.Add(i);
+            var f = _sim.BestRemains(_team, a.Pos, 22f, _sim.Cannibal(a), a.Layer);
+            if (f == null) continue;
+            claimed.TryGetValue(f.Id, out float taken);
+            if (taken >= Sim.RemainsValue(f)) continue; // enough mouths on it already
+            claimed[f.Id] = taken + Mathf.Max(2f, _sim.EvolutionNeed(a));
+            var cmd = Cmd.Units(CmdKind.Feast, _team, new List<int> { i }, _sim);
+            cmd.FoodId = f.Id;
+            Orders.Issue(cmd);
+        }
+        // the campaign's rival does not feed its heroes the reserve: its levels set its strength (Sim.GrantXp caps its heroes too)
+        if (heroesHome.Count > 0 && _sim.Mission == null && c.Organic > _sim.QueenOrganic(_team) + 25f)
+            Orders.Issue(Cmd.Units(CmdKind.FeedReserve, _team, heroesHome, _sim));
     }
 
     /// Battered squads that are not fighting go home to heal and refill.
@@ -214,7 +264,7 @@ public sealed class AIController : IColonyAI
             if (_sim.Time < after * pace) return false;
             var r = R(u);
             if (r == ResearchResult.Ok) return false;
-            return r == ResearchResult.NoFood;
+            return r == ResearchResult.NoFood; // saving food for it (an ascension waiting on organic matter does not hold the food back)
         }
         return false;
     }

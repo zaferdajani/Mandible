@@ -117,10 +117,13 @@ public sealed class AntRenderer
     readonly Batch[] _broodCargo = new Batch[2];
     /// The nest's brood life: nurses drawn with the workers, and the callow pose of ants that just hatched.
     public NestInterior Brood;
-    readonly Batch _rings, _bars;
+    /// Hemolymph, severed parts and the carcasses in pieces; when null the dead are drawn whole as before.
+    public Carnage Gore;
+    readonly Batch[,] _pieceCargo = new Batch[3, 3]; // carcass pieces in a worker's jaws: head, gaster, legs × black, red, bug chitin
+    readonly Batch _rings, _bars, _evoBars;
     readonly Batch _auraGround, _auraHalo;
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
-    internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; return n; } }
+    internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; foreach (var b in _pieceCargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
     public bool ShowAllBars;
 
@@ -201,6 +204,9 @@ public sealed class AntRenderer
             _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind), WorkerCargo.Material((FoodKind)kind), false, $"Carried{(FoodKind)kind}");
         for (int k = 0; k < 2; k++)
             _broodCargo[k] = new Batch(root, WorkerCargo.BroodMesh(k == 1), WorkerCargo.BroodMaterial(k == 1), false, k == 1 ? "CarriedLarva" : "CarriedEgg");
+        for (int shape = 0; shape < 3; shape++)
+            for (int tint = 0; tint < 3; tint++)
+                _pieceCargo[shape, tint] = new Batch(root, WorkerCargo.PieceMesh(shape), WorkerCargo.PieceMaterial(tint), false, $"CarriedPiece{shape}_{tint}");
 
         var ringMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Ring) };
         ringMat.SetShaderParameter("color", new Color(0.55f, 1.0f, 0.45f, 0.95f));
@@ -213,6 +219,11 @@ public sealed class AntRenderer
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
+        // the second line of life: how far a fighter has eaten toward its next stage (a hero: its next level)
+        var evoMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
+        evoMat.SetShaderParameter("evo", 1f);
+        _evoBars = new Batch(root, new QuadMesh { Size = Vector2.One }, evoMat, false, "EvolutionBars");
+        _evoBars.Node.SortingOffset = 100;
     }
 
     /// Low tier: the rank and file cast no shadows (hundreds of them, each a few pixels); heroes, the queens and
@@ -276,11 +287,13 @@ public sealed class AntRenderer
         foreach (var b in _dead) b?.Begin();
         foreach (var cargo in _cargo) cargo.Begin();
         foreach (var cargo in _broodCargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
+        foreach (var cargo in _pieceCargo) cargo.Begin();
+        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
+        var camUp = cam.GlobalTransform.Basis.Y.Normalized();
         var camPos = cam.GlobalPosition;
         var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
@@ -304,6 +317,8 @@ public sealed class AntRenderer
             // blend between the last two simulation ticks so motion is smooth at any frame rate
             var ip = a.PrevPos.DistanceSquaredTo(a.Pos) > 36 ? a.Pos : a.PrevPos.Lerp(a.Pos, alpha);
             float ih = Mathf.LerpAngle(a.PrevHeading, a.Heading, alpha);
+            // workers dragging a carcass face it and walk backwards, the way real ants haul prey
+            if (a.Hauling && a.FoodTarget != null) ih = (a.FoodTarget.Pos - ip).Angle();
             float ialt = Mathf.Lerp(a.PrevAlt, a.Alt, alpha);
             // a fresh callow: first out of its cocoon, then retracing its real path a moment behind until it catches up
             var callow = Brood != null && a.Team == Local.Me ? Brood.Callow(i, a, ref ip, ref ih) : default;
@@ -342,9 +357,22 @@ public sealed class AntRenderer
                 _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (a.Carrying && a.Type == AntType.Worker)
             {
-                // The same transform and head animation as this worker keep the
-                // load clamped in its jaws on slopes, in tunnels and while turning.
-                _cargo[(int)a.CarryKind].Add(b, o, data);
+                if (a.Burying)
+                {
+                    // a dead nestmate held crosswise in the jaws, legs curled, carried out to the midden
+                    var body = Orient(up, ih + Mathf.Pi * 0.5f, st.Size * 0.8f);
+                    body = new Basis(-body.X, -body.Y, body.Z);
+                    var fwd = new Vector3(Mathf.Cos(ih), 0, Mathf.Sin(ih));
+                    var dead = Config.HaulNeed(a.CarryType) == 0 && !Config.IsBug(a.CarryType) ? a.CarryType : AntType.Worker;
+                    AddDead(a.CarryTeam, dead, body, o + fwd * (st.Size * 0.5f) + up * (st.Size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
+                }
+                else if (a.CarryKind == FoodKind.Corpse)
+                    // a piece of the carcass: a head, a gaster or a bundle of legs, in the chitin it came from
+                    _pieceCargo[a.Serial % 3, a.CarryTeam > 1 ? 2 : a.CarryTeam].Add(b, o, data);
+                else
+                    // The same transform and head animation as this worker keep the
+                    // load clamped in its jaws on slopes, in tunnels and while turning.
+                    _cargo[(int)a.CarryKind].Add(b, o, data);
             }
             if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, st.Size, camPos, rdt);
             if (a.Selected)
@@ -357,15 +385,18 @@ public sealed class AntRenderer
                 float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, st.Size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
+                if (sim.EatRules && sim.Eats(a))
+                    _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
-            // veteran chevrons: one gold pip per level above the first
-            if (Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && a.SquadP1 == 0 && a.Level > 1)
+            // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
+            int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
+            if (ranks > 0)
             {
                 float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);
                 var top = o + Vector3.Up * (barY + 0.45f);
-                for (int p = 0; p < a.Level - 1; p++)
+                for (int p = 0; p < ranks; p++)
                 {
-                    var at = top + camRight * (p - (a.Level - 2) * 0.5f) * pip * 1.1f;
+                    var at = top + camRight * (p - (ranks - 1) * 0.5f) * pip * 1.1f;
                     _pips.Add(Basis.FromScale(Vector3.One * pip), at, new Color(a.Team == Local.Me ? 1 : 0, 0, 0, 1));
                 }
             }
@@ -425,7 +456,8 @@ public sealed class AntRenderer
             }
         }
         for (int l = labelsUsed; l < _labels.Count; l++) _labels[l].Visible = false;
-        foreach (var f in sim.W.Food)
+        Gore?.Draw(sim, this, VisibleToPlayer);
+        if (Gore == null) foreach (var f in sim.W.Food)
         {
             if (f.Kind != FoodKind.Corpse || !f.Alive) continue;
             if (!VisibleToPlayer(f.Pos) && f.Team != Local.Me) continue;
@@ -463,7 +495,8 @@ public sealed class AntRenderer
         foreach (var b in _dead) b?.End();
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
-        _rings.End(); _bars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
+        foreach (var cargo in _pieceCargo) cargo.End();
+        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
@@ -500,6 +533,13 @@ public sealed class AntRenderer
         var away = (o - camPos).Normalized();
         _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.7f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
             new Color(col.R, col.G, col.B, strength * 0.75f));
+    }
+
+    /// A dead body or a piece of one (Carnage): the colony's or the bug's own dead material.
+    internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data)
+    {
+        var batch = _dead[Math.Clamp(team, 0, 2), (int)type];
+        batch?.Add(b, o, data);
     }
 
     /// A render-only worker (a nurse in the nest) drawn with the colony's own, and the brood in its jaws (1 egg, 2 larva).
@@ -581,7 +621,9 @@ public sealed class AntRenderer
             at = t.Pos;
             wantPitch = Mathf.Clamp((t.Alt - a.Alt) * 0.3f, -0.3f, 0.5f) - 0.1f;
         }
-        else if (a.Carrying && a.Team < 2) at = a.Layer > 0 ? sim.FoodDeliveryPoint(a.Team).pos : sim.W.Nests[a.Team].Pos;
+        else if (a.Feasting && a.FoodTarget != null) { at = a.FoodTarget.Pos; wantPitch = -0.4f; } // head down in the carcass
+        else if (a.Hauling && a.FoodTarget != null) { at = a.FoodTarget.Pos; wantPitch = -0.3f; }
+        else if (a.Carrying && a.Team < 2) at = a.Burying ? sim.Midden(a.Team) : a.Layer > 0 ? sim.FoodDeliveryPoint(a.Team).pos : sim.W.Nests[a.Team].Pos;
         else if ((a.State == AntState.Forage || a.State == AntState.Gather) && a.FoodTarget != null) { at = a.FoodTarget.Pos; wantPitch = -0.15f; }
         else if (a.State == AntState.Move || a.State == AntState.AttackMove) at = a.Goal;
         else if (a.State == AntState.Hold) { direct = true; wantYaw = Mathf.Sin(_now * 0.8f + r.Serial) * 0.7f; wantPitch = 0.25f; }
@@ -614,9 +656,10 @@ public sealed class AntRenderer
         float y = yaw8 * 256 + pitch8 + Mathf.Min(amp, 0.996f);
         int flags = (a.BlockT > 0 ? 2 : 0) | (a.ChargeT > 0 ? 4 : 0) | (a.Carrying ? 8 : 0) | (a.Selected ? 16 : 0) | (hovered ? 32 : 0);
         flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
-        float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying ? 0.15f : 0f), 0.996f);
-        float w = 0;
-        if (r.Kind != 0 && _now >= r.KindStart) w = r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
+        if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
+        float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
+        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(a.Stage, 0, 3);
+        if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }
 }

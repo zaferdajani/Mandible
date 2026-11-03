@@ -295,7 +295,8 @@ public static class Config
         _ => true,
     };
 
-    public static readonly Color PlayerUi = new(1.0f, 0.78f, 0.29f);
+    public static readonly Color DefaultPlayerUi = new(1.0f, 0.78f, 0.29f);
+    public static Color PlayerUi = DefaultPlayerUi; // the colony colour chosen on the level map tints it (CampaignProgress.ApplyLook)
     public static readonly Color EnemyUi = new(1.0f, 0.27f, 0.18f);
     public static readonly Color WildUi = new(0.78f, 0.55f, 1.0f);
     public static Color TeamUi(int team) => team == Local.Me ? PlayerUi : team < 2 ? EnemyUi : WildUi;
@@ -331,6 +332,72 @@ public static class Config
         ? new[] { "Stingless: warriors have no venom, only their bite", "Protein (corpses, seeds) gives no bonus" }
         : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
 
+    // ------------------------------------------------------------------ carrion
+    // A carcass holds CorpseFood loads: a worker is a crumb, a major a meal, a hero or a beetle a feast, the stag a banquet.
+    public const float CarcassFresh = 60f;     // seconds a carcass stays whole before it starts to dry out and crumble
+    public const float CarcassRot = 90f;       // ...and how long the rest takes to go
+    /// Workers it takes to drag a carcass whole (0: one worker can carry it, or it is too big to move and is cut up where it lies).
+    public static int HaulNeed(AntType t) => t switch
+    {
+        AntType.Major => 2, AntType.Warlord or AntType.Matron or AntType.Marshal => 3, AntType.Wasp => 3, AntType.Beetle or AntType.Spider => 4, _ => 0,
+    };
+    public const float HaulSpeed = 2.4f;       // a fully crewed carcass slides home at this pace (30% faster with extra hands)
+    public const float HaulArrive = 4.5f;      // a dragged carcass is home when its edge is this close to the nest mouth or the midden
+    public const float MiddenDist = 16f;       // the refuse pile lies this far out from the nest mouth
+    public const float NestCarryOut = 6f;      // nurses carry a nestmate who died inside out to the midden after this long
+    public const float NestEatRate = 0.6f;     // loads a second the nurses eat from a carcass inside the nest
+    public const float MournBite = 1.05f;      // the dead carried to the midden: resolve while burials go on
+    public const float MoraleTime = 20f;       // seconds each burial adds
+    public const float MoraleMax = 60f;
+
+    // ------------------------------------------------------------------ organic matter and evolution
+    // Organic matter is the evolving material: it comes only from the remains of other creatures (wild bugs, the other
+    // colony). Workers haul it home into the reserve; fighters and heroes evolve only by eating it. Killing teaches nothing.
+    /// Organic matter in one load of these remains: a worker is a crumb, a major a meal, a beetle or a hero a feast.
+    public static float OrganicPerLoad(AntType t) => t switch
+    {
+        AntType.Worker => 0.5f, AntType.Soldier or AntType.Gunner or AntType.Flyer => 0.8f, AntType.Major => 1f,
+        AntType.Beetle or AntType.Spider => 0.8f, AntType.Wasp => 0.9f, AntType.StagBeetle => 1f, _ => 2f, // queen, heroes
+    };
+    public const int MaxStage = 3;
+    /// Organic matter a fighter must eat for each stage: about one beetle, then a whole lair, then the stag or a rival hero.
+    public static float StageCost(int stage) => stage switch { 1 => 24f, 2 => 60f, _ => 120f };
+    public const float StageHp = 0.15f, StageBite = 0.12f, StageSize = 0.06f; // per stage
+    public static readonly string[] StageNames = { "Hatched", "Blooded", "Scarred", "Grizzled" };
+    public static string StageGain(int stage) => $"+{StageHp * 100:0}% health, +{StageBite * 100:0}% bite, heavier mandibles";
+    public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
+    public const float HeroXpPerOrganic = 12.5f; // a hero turns what it eats into experience: about 290 organic from level 1 to 10
+    public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
+    public const float FeastHeal = 0.06f;      // share of its health each mouthful restores
+    // Devour the Fallen: the fire-ant Warlord alone eats its own colony's dead, faster and healing more
+    public const float DevourPace = 1.6f, DevourHeal = 1.5f;
+    /// The queen ascends on organic matter alone.
+    public static float QueenOrganic(int nextTier) => nextTier switch { 2 => 10f, 3 => 25f, 4 => 50f, _ => 80f };
+    /// Larvae need protein, not just sugar: organic matter for each brood on top of its food.
+    public static float BroodOrganic(ProdKind k) => k switch
+    {
+        ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major => 1.5f,
+        ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal => 8f, _ => 0f,
+    };
+    public const float RecruitRange = 110f, RecruitSight = 12f; // how far out the colony sends carriers, and how close an ant must be to have found the prey
+    public const float StartOrganic = 40f;     // carried by the founding queen and her workers
+    public const float FoundFood = 30f, FoundOrganic = 10f; // what founding the nest consumes
+    public const float OrganicFloor = 15f, OrganicTrickle = 0.15f; // the queen's own body keeps a colony that never hunts from stalling outright
+    public static ProdKind KindOf(AntType t) => t switch
+    {
+        AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+        AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
+    };
+    public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";
+    public static string RemainsDesc(RemainsOrder o) => o == RemainsOrder.Haul
+        ? "Workers drag and carry the remains of bugs and enemy ants home: organic matter for the queen and the brood."
+        : "Workers leave the remains where they fall, for your fighters and heroes to eat and evolve on.";
+    /// The fire-ant Warlord's signature, for its hero card, the picker and the Field Guide.
+    public const string DevourName = "Devour the Fallen";
+    /// The race-bound line for a hero card: empty unless this hero has a signature for this race.
+    public static string Signature(AntType t, Race r) => t == AntType.Warlord && r == Race.RedFire ? $"SIGNATURE  {DevourName}: {DevourDesc}" : "";
+    public static string DevourDesc => $"Signature of the fire-ant Warlord: it feeds on its own colony's dead as no other ant will, {DevourPace:0.#}x as fast and healing {DevourHeal * 100 - 100:0}% more. It never starves for evolution.";
+
     // ------------------------------------------------------------------ food
     public const float EffectPerDelivery = 1.2f; // seconds of colony effect added per load delivered
     public const float EffectMax = 30f;
@@ -355,7 +422,7 @@ public static class Config
     {
         FoodKind.Sugar => "Energy: while honeydew keeps arriving, workers run 15% faster.",
         FoodKind.Berry => "Water: while fruit keeps arriving, every ant regenerates 1.5% health per second.",
-        FoodKind.Corpse => "Protein feeds the larvae: while it keeps arriving, the queen lays 30% faster.",
+        FoodKind.Corpse => "Protein feeds the larvae: while it keeps arriving, the queen lays 30% faster. A big carcass is dragged home whole by a team of workers; it rots away within two and a half minutes.",
         FoodKind.Seed => "Dense: each load is worth 6 food, but carriers walk 20% slower.",
         _ => "No special effect.",
     };

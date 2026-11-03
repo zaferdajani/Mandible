@@ -26,31 +26,68 @@ public static class ColonyValidation
     {
         try
         {
+            // MANDIBLE_LEVELS=5,6 plays only those level ids (tuning); the full run plays every level
+            var only = OS.GetEnvironment("MANDIBLE_LEVELS");
+            if (only == "checks")
+            {
+                LevelValidation.Losses(app); LevelValidation.Gates(app); LevelValidation.Progress();
+                GD.Print("[campaign-test] ALL PASS (loss paths, gates, perks and saved progress only)");
+                app.GetTree().Quit();
+                return;
+            }
+            if (only != "" && only != "chain")
+            {
+                // "ep2".."ep4": the scripted episode runs; numbers: the level bot
+                foreach (var part in only.Split(','))
+                    if (part == "ep2") Episode2(app); else if (part == "ep3") Episode3(app); else if (part == "ep4") Episode4(app);
+                    else LevelValidation.Play(app, int.Parse(part), out _);
+                GD.Print("[campaign-test] ALL PASS (selected levels)");
+                app.GetTree().Quit();
+                return;
+            }
             Settings.Gfx = Settings.Quality.Low;
             var root = new Node3D(); app.AddChild(root);
             var w = WorldBuilder.Build(root, 20261031, firstNest: true);
             var s = new Sim(w); var c = s.Col[0];
+            s.ApplyRoster(null, 1); // the broken tube's survivors, old Burr among them
             Check(s.Mission != null && c.Chambers.Count == 0 && !c.Founded, "Mission did not start on the trail");
             Check(!s.OrderEntrance(0, Units(s, AntType.Worker)), "Entrance allowed before reaching clearing");
             for (int i = 0; i < 900; i++) s.Tick(1f / 30);
             Check(!c.Founded && s.Winner < 0, "Mission auto-founded or won without the player's orders");
-            Check(s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked && s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked, "Episode technology gate failed");
+            Check(s.CanResearch(0, Upgrade.Queen) == ResearchResult.Locked && s.CanEnqueue(0, ProdKind.Major) == QueueResult.Locked && s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Locked, "Episode technology gate failed");
+            Check(!s.Col[1].Alive && s.Mission.Chapter == 1 && !s.Mission.ShowsHeroes, "Chapter 1 has a red colony or heroes");
+            for (int i = 0; i < s.High; i++)
+                if (s.Ants[i].Alive) Check(s.Ants[i].Team != 1 && Reveal.Creature(s.Ants[i].Type) <= 1, $"Chapter 1 has a {s.Ants[i].Type} on the field before its reveal");
             var army = Units(s, AntType.Soldier);
             s.CmdMove(army, Expedition.Ambush, true);
-            Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "attackers clear the enemy patrol");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "Burr's soldiers clear the beetle from the alley");
             s.CmdMove(Units(s, AntType.Soldier), Expedition.Clearing + new Vector2(8, 0), false);
-            Until(s, () => s.Mission.Stage == ExpeditionStage.DigEntrance, 150, "queen and workers reach the food clearing");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.Provision, 150, "queen and workers reach the food clearing");
+            // the opening: the site needs both food and the hunt's remains before the queen can found her nest
+            Check(!s.CanFound(0) && c.Organic < Config.FoundOrganic && !s.OrderEntrance(0, Units(s, AntType.Worker)), "The nest could be founded before the site was stocked");
+            var remains = s.BestRemains(0, Expedition.Ambush, 40f);
+            Check(remains != null && Sim.RemainsValue(remains) >= Config.FoundOrganic, "The beetle left no remains worth hauling");
+            var haulers = Units(s, AntType.Worker); haulers.RemoveRange(Math.Min(4, haulers.Count), Math.Max(0, haulers.Count - 4));
+            s.CmdGather(haulers, remains);
+            for (int i = 0; i < 300 && s.Mission.Stage == ExpeditionStage.Provision; i++) s.Tick(1f / 30);
+            Check(s.Mission.Stage == ExpeditionStage.Provision || c.Organic >= Config.FoundOrganic, "The site was stocked without the remains");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.DigEntrance, 240, "the founders stock the site with seeds and the beetle's remains");
+            Check(c.Food >= Config.FoundFood && c.Organic >= Config.FoundOrganic && c.OrganicGathered >= Config.FoundOrganic, "The site was stocked without food and hauled remains");
+            float stockedFood = c.Food, stockedOrganic = c.Organic;
             Check(!s.OrderEntrance(0, Units(s, AntType.Soldier)), "Soldiers could order the founding dig");
             Check(s.OrderEntrance(0, Units(s, AntType.Worker)), "Selected workers could not start the entrance");
             Check(!s.OrderEntrance(0, Units(s, AntType.Worker)), "Duplicate entrance order accepted");
             Until(s, () => s.Mission.Stage == ExpeditionStage.Incubator, 180, "workers dig and queen enters the royal chamber");
+            Check(c.Organic < stockedOrganic, "Founding did not consume the remains");
             Check(s.ChamberCount(0, ChamberKind.Brood, false) == 0 && s.ChamberCount(0, ChamberKind.Storage, false) == 0, "Founding gifted rooms instead of teaching construction");
             Check(s.CanEnqueue(0, ProdKind.Worker) == QueueResult.Locked, "Production allowed without an incubator");
             Check(s.CanDig(0, ChamberKind.Storage) != Sim.DigResult.Ok, "Storage allowed before incubator");
             int capacity = c.PopCap;
+            Until(s, () => s.CanDig(0, ChamberKind.Brood) == Sim.DigResult.Ok, 180, "foragers gather the incubator's food after the founding");
             Check(s.Dig(0, ChamberKind.Brood, s.DefaultSpot(0, ChamberKind.Brood)) == Sim.DigResult.Ok, "Cannot place incubator");
             Until(s, () => s.Mission.Stage == ExpeditionStage.Store, 180, "incubator completes");
             Check(c.PopCap == capacity + Config.ChamberPop, "Incubator did not increase population capacity");
+            Until(s, () => s.CanDig(0, ChamberKind.Storage) == Sim.DigResult.Ok, 180, "foragers gather the store's food");
             Check(s.Dig(0, ChamberKind.Storage, s.DefaultSpot(0, ChamberKind.Storage)) == Sim.DigResult.Ok, "Cannot place storage");
             Until(s, () => s.Mission.Stage == ExpeditionStage.RaiseWorkers, 180, "storage completes");
             for (int i = 0; i < Expedition.WorkerGoal; i++)
@@ -58,11 +95,8 @@ public static class ColonyValidation
                 Until(s, () => s.CanEnqueue(0, ProdKind.Worker) == QueueResult.Ok, 120, "economy can pay for a worker");
                 Check(s.Enqueue(0, ProdKind.Worker) == QueueResult.Ok, "Worker queue rejected");
             }
-            Until(s, () => s.Mission.Stage == ExpeditionStage.RaiseSoldiers, 180, "four workers hatch inside the incubator");
-            Until(s, () => s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Ok, 240, "foragers fund a fighting squad");
+            Until(s, () => s.Winner == 0, 180, "four workers hatch and complete episode one");
             Check(c.Gathered > 0, "No actual food was gathered");
-            Check(s.Enqueue(0, ProdKind.Soldier) == QueueResult.Ok, "Soldier queue rejected");
-            Until(s, () => s.Winner == 0, 180, "six soldiers hatch and complete episode one");
             Check(s.Mission.Stage == ExpeditionStage.Complete, "Wrong victory condition");
             capacity = c.PopCap;
             var expansionSpot = s.DefaultSpot(0, ChamberKind.Brood);
@@ -87,12 +121,22 @@ public static class ColonyValidation
             Check(sk.Col[0].Queue[0].Progress == 0, "Eggs progressed while the queen was outside");
             sk.Ants[queen].Layer = (byte)Sim.NestLayer(0); sk.Ants[queen].Pos = queenPosition;
             sk.Tick(1f / 30); Check(sk.Col[0].Queue[0].Progress > 0, "Brood did not resume when queen returned");
+            for (int i = 0; i < 2; i++) s.Tick(1f / 30);
+            Rate(s);
             GD.Print($"[campaign-test] PASS episode 1 in {s.Time:0}s, gathered {c.Gathered:0}, workers {s.Mission.WorkersHatched}, soldiers {s.Mission.SoldiersHatched}; full skirmish roster unlocked");
             root.QueueFree(); other.QueueFree();
-            var times = new[] { s.Time, Episode2(app), Episode3(app), Episode4(app) };
+            var afterTube = s.HarvestRoster(1);
+            LevelValidation.Chain(app, afterTube);
+            if (only == "chain") { GD.Print("[campaign-test] ALL PASS (episode 1 and the persistent colony chain)"); app.GetTree().Quit(); return; }
+            var times = new Dictionary<int, float> { [1] = s.Mission.EndTime, [2] = Episode2(app), [3] = Episode3(app), [4] = Episode4(app) };
             Defeat(app);
-            SaveLoad();
-            GD.Print($"[campaign-test] ALL PASS; episodes won in {times[0]:0}s / {times[1]:0}s / {times[2]:0}s / {times[3]:0}s, finale loss path and saved progress checked");
+            for (int id = 5; id <= Levels.Count; id++) times[id] = LevelValidation.Play(app, id, out _);
+            LevelValidation.Losses(app);
+            LevelValidation.Gates(app);
+            LevelValidation.Progress();
+            var sb = new System.Text.StringBuilder();
+            for (int n = 1; n <= Levels.Count; n++) sb.Append($"L{n} {times[Levels.IdAt(n)]:0}s  ");
+            GD.Print($"[campaign-test] ALL PASS; 12 levels won ({sb.ToString().TrimEnd()}); loss paths, gates, perks, stars and saved progress checked");
             app.GetTree().Quit();
         }
         catch (Exception e) { GD.PushError("[campaign-test] FAIL " + e); app.GetTree().Quit(1); }
@@ -125,7 +169,7 @@ public static class ColonyValidation
         {
             if (t % 30 == 0) think();
             if (t % 600 == 0 && OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") != "")
-                GD.Print($"[campaign-trace] ep {s.Mission.Episode} t {s.Time:0} front {Front(s)} step {s.Mission.Step} {s.Mission.Have}/{s.Mission.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} guards {s.Mission.GuardsLeft} raiders {s.Mission.RaidersLeft}/{s.Mission.Raiders.Count} post {s.Mission.PostLeft} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} g{s.GuardiansLeft(1)} {GuardHp(s)} queen {s.Ants[s.Col[0].QueenId].Hp:0} rq {s.Ants[s.Col[1].QueenId].Hp:0} below {Below(s)}");
+                GD.Print($"[campaign-trace] ep {s.Mission.Episode} t {s.Time:0} front {Front(s)} step {s.Mission.Step} {s.Mission.Have}/{s.Mission.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} org {s.Col[0].Organic:0} stag {s.StagTeam}:{(s.Valid(s.StagId, s.StagSerial) ? s.Ants[s.StagId].Hp : -1):0}@{(s.Valid(s.StagId, s.StagSerial) ? s.Ants[s.StagId].Pos : default)} guards {s.Mission.GuardsLeft} raiders {s.Mission.RaidersLeft}/{s.Mission.Raiders.Count} post {s.Mission.PostLeft} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} g{s.GuardiansLeft(1)} {GuardHp(s)} queen {s.Ants[s.Col[0].QueenId].Hp:0} rq {s.Ants[s.Col[1].QueenId].Hp:0} below {Below(s)}");
             rival?.Tick(1f / 30);
             s.Tick(1f / 30);
             if (!allowLoss) Check(s.Winner != 1, $"Episode {s.Mission.Episode} lost during {reason}: {s.Mission.LossReason}; step {s.Mission.Step}; t {s.Time:0}s");
@@ -147,7 +191,7 @@ public static class ColonyValidation
     static string GuardHp(Sim s)
     {
         var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Guardian) sb.Append($"{s.Ants[i].Type}:{s.Ants[i].Hp:0}/{s.Ants[i].MaxHp:0} ");
+        for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Guardian) sb.Append($"{s.Ants[i].Type}:{s.Ants[i].Hp:0}/{s.Ants[i].MaxHp:0}@{s.Ants[i].Pos.X:0},{s.Ants[i].Pos.Y:0}L{s.Ants[i].Layer} ");
         return sb.ToString();
     }
 
@@ -213,7 +257,8 @@ public static class ColonyValidation
             else if (phase == 2 && m.Step == 3 && m.RaidsSent == 0 && m.Have < 15) { s.CmdMove(army, home.Lerp(m.Lair, 0.12f), false); phase = 3; }
         });
         Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && s.HerdTeam == 0 && c.Gathered - m.GatherBase >= Expedition.GatherGoal && m.RaidsSent == 1 && m.RaidersLeft == 0, "Episode 2 won without killing the queen or its steps");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
     }
 
     static float Episode3(Main app)
@@ -244,7 +289,8 @@ public static class ColonyValidation
             else s.CmdMove(army, home + (foe - home).Normalized() * 10, false);
         });
         Check(!s.Col[1].Alive && m.Complete && m.StepsDone == 4 && m.PostLeft == 0 && m.RaidsSent == 2 && c.T(Upgrade.Queen) >= 2, "Episode 3 won without killing the queen or its steps");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
     }
 
     static float Episode4(Main app)
@@ -273,7 +319,28 @@ public static class ColonyValidation
             else s.CmdMove(army, foe, true);
         });
         Check(m.Complete && !s.Col[1].Alive && s.StagTeam == 0 && s.GuardiansLeft(1) == 0 && s.Time < m.FlightAt, "Episode 4 won without its objectives");
-        float t = s.Time; Close(); return t;
+        s.Tick(1f / 30); s.Tick(1f / 30);
+        float t = Rate(s); Close(); return t;
+    }
+
+    /// Prints the stars an episode earned and checks the time and loss stars against what happened.
+    static float Rate(Sim s)
+    {
+        var m = s.Mission;
+        int stars = s.Stars();
+        Check((stars & 1) == 1 && m.EndTime > 0, $"Episode {m.Episode} won without its first star");
+        var parts = new List<string>();
+        for (int k = 0; k < 2; k++)
+        {
+            var (goal, value, text) = m.Info.Stars[k];
+            bool earned = (stars & 2 << k) != 0;
+            if (goal == StarGoal.Time) Check(earned == m.EndTime <= value, $"Time star wrong in episode {m.Episode}");
+            if (goal == StarGoal.Lost) Check(earned == m.EndLost <= value, $"Loss star wrong in episode {m.Episode}");
+            if (goal == StarGoal.AllSteps) Check(earned == m.StepsDone >= m.Steps - 1, $"Steps star wrong in episode {m.Episode}");
+            parts.Add((earned ? "+" : "-") + text);
+        }
+        GD.Print($"[campaign-test] stars for level {Levels.NumberOf(m.Episode)} ({m.Info.Name}): {1 + ((stars >> 1) & 1) + ((stars >> 2) & 1)} · won {m.EndTime:0}s, lost {m.EndLost} · {string.Join("; ", parts)}");
+        return m.EndTime;
     }
 
     /// The finale's loss path: a colony that never attacks loses to the red raids or the nuptial flight.

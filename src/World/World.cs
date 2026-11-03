@@ -22,10 +22,17 @@ public sealed class FoodSource
     public Obstacle Block;
     public Vector3 BaseScale = Vector3.One;
     // corpse data
-    public int Team;
+    public int Team = Config.Wild; // whose body it was (a carcass with no owner counts as a wild bug)
     public AntType AntType;
     public float Heading;
     public float Age;
+    // carcasses (Carrion.cs): where it lies, who drags it, what a feasting hero has taken from it
+    public byte Layer;                 // 0 the surface, 1 + team: inside that colony's nest
+    public bool Natural;               // left by a death, so it rots; the campaign's scripted carcass does not
+    public int Haulers, HaulCount;     // workers gripping it this tick, and last tick's count
+    public int HaulTeam;               // the colony whose workers have it in their jaws
+    public bool Hauled;                // dragged all the way to its destination
+    public int Feasted;                // loads a hero has eaten here
     public bool Alive => Amount > 0.01f;
 }
 

@@ -8,6 +8,7 @@ public partial class ExpeditionGuide : PanelContainer
 {
     public GameSession Game;
     Label _goal, _heading, _body, _list, _stake;
+    StarList _stars;
     Button _dig;
     int _shown = -1;
     public override void _Ready()
@@ -15,10 +16,10 @@ public partial class ExpeditionGuide : PanelContainer
         Game.Hud.EpisodeCard = this;
         var m = Game.Sim.Mission;
         bool steps = m != null && m.Episode > 1;
-        _desktopBottom = steps ? 448 : 318;
+        _desktopBottom = steps ? 520 : 384;
         UiTheme.Place(this, 1, 0, 1, 0, -445, 70, -16, _desktopBottom);
         var column = new VBoxContainer(); AddChild(column);
-        column.AddChild(UiTheme.Text($"EPISODE {Game.Episode} · {CampaignEpisodes.Name(Game.Episode).ToUpperInvariant()}", 12, UiTheme.Bold, UiTheme.Dim));
+        column.AddChild(UiTheme.Text($"LEVEL {Levels.NumberOf(Game.Episode)} · {CampaignEpisodes.Name(Game.Episode).ToUpperInvariant()}", 12, UiTheme.Bold, UiTheme.Dim));
         // the main victory, always on top: every step below leads to it
         _goal = UiTheme.Text((steps ? "MAIN GOAL  ·  " : "") + m.Goal, 17, UiTheme.Title, steps ? new Color(1f, 0.55f, 0.4f) : UiTheme.Dim);
         _goal.AutowrapMode = TextServer.AutowrapMode.WordSmart; _goal.CustomMinimumSize = new Vector2(380, 0);
@@ -33,6 +34,9 @@ public partial class ExpeditionGuide : PanelContainer
             _list = UiTheme.Text("", 14, UiTheme.Bold, UiTheme.Ink); column.AddChild(_list);
             _stake = UiTheme.Text("", 13, null, UiTheme.Dim); _stake.AutowrapMode = TextServer.AutowrapMode.WordSmart; column.AddChild(_stake);
         }
+        // the optional goals, live: lit while they still hold
+        _stars = new StarList { Size_ = 8, FontSize = 13 };
+        column.AddChild(_stars);
         var row = new HBoxContainer(); column.AddChild(row);
         var finger = new Vector2(0, Settings.Mobile ? 46 : 0);
         var show = new Button { Text = "Show objective", CustomMinimumSize = finger }; row.AddChild(show);
@@ -52,20 +56,19 @@ public partial class ExpeditionGuide : PanelContainer
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
         _dig.Visible = m.Episode == 1 && m.Stage == ExpeditionStage.DigEntrance;
+        bool stocking = m.Episode == 1 && m.Stage == ExpeditionStage.Provision && m.RemainsLeft;
+        if (stocking) Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
+        else if (_guiding) Game.Guide.Clear();
+        _guiding = stocking;
         if (_list != null)
         {
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < m.Steps; i++)
                 sb.Append(i < m.Step ? "✓  " : i == m.Step ? "▶  " : "○  ").Append(m.StepTitle(i)).Append(i < m.Steps - 1 ? "\n" : "");
             _list.Text = sb.ToString();
-            string stake = m.Step < m.Steps - 1 ? "The steps lead to the red queen; kill her any time to win. Lose if your queen dies" : "Lose if your queen dies";
-            if (m.FlightAt > 0)
-            {
-                int left = Mathf.Max(0, (int)(m.FlightAt - Game.Sim.Time));
-                stake += $" or the princesses fly: {left / 60}:{left % 60:00} left";
-            }
-            _stake.Text = stake + ".";
+            _stake.Text = m.Stake(Game.Sim.Time);
         }
+        if (Engine.GetProcessFrames() % 15 == 0) RefreshStars(m);
         int shown = m.Episode == 1 ? (int)m.Stage : m.Step;
         if (_shown != shown)
         {
@@ -74,6 +77,29 @@ public partial class ExpeditionGuide : PanelContainer
             Game.Audio.Ui("research", -5);
             if (m.Episode == 1 && m.Stage == ExpeditionStage.Incubator) Game.SetNestView(true);
         }
+    }
+
+    /// The two optional goals with their live numbers: lit while still within reach.
+    void RefreshStars(Expedition m)
+    {
+        var sim = Game.Sim;
+        var rows = new System.Collections.Generic.List<(bool, string)>();
+        foreach (var (goal, value, text) in m.Info.Stars)
+        {
+            float t = sim.Time;
+            (bool on, string live) = goal switch
+            {
+                StarGoal.Time => (t <= value, $"{(int)t / 60}:{(int)t % 60:00} of {(int)value / 60}:{(int)value % 60:00}"),
+                StarGoal.Lost => (sim.Col[0].Lost <= value, $"{sim.Col[0].Lost} lost of {value:0}"),
+                StarGoal.QueenHp => (m.QueenLow >= value, $"lowest {m.QueenLow * 100:0}%"),
+                StarGoal.Escort => (m.EscortId >= 0 && sim.Valid(m.EscortId, m.EscortSerial), ""),
+                StarGoal.Stag => (sim.StagTeam == 0 && sim.Valid(sim.StagId, sim.StagSerial), sim.StagTeam == 0 ? "with you" : "not yet roused"),
+                StarGoal.AllSteps => (true, $"{Mathf.Min(m.Step, m.Steps - 1)} of {m.Steps - 1}"),
+                _ => (true, ""),
+            };
+            rows.Add((on, live == "" ? text : $"{text}  ·  {live}"));
+        }
+        _stars.Set(rows);
     }
 
     /// On phones and tablets the card sits under the top bar, opposite the minimap, as large as fits.
@@ -90,18 +116,18 @@ public partial class ExpeditionGuide : PanelContainer
         var viewport = GetViewportRect().Size;
         Position = new Vector2(viewport.X - 12 - Size.X * hud.GuideScale, hud.TopEdge + 10);
     }
-    bool _flexible;
+    bool _flexible, _guiding;
     float _desktopBottom;
 
     /// The objectives are written for mouse and keyboard; on a touch screen the same steps are taps.
-    static string ForTouch(string text)
+    public static string ForTouch(string text)
     {
         foreach (var (mouse, touch) in TouchWords) text = text.Replace(mouse, touch);
         return text;
     }
     static readonly (string, string)[] TouchWords =
     {
-        ("Press F2 to select your attackers. Right-click the red ants ahead, or press A and click beyond them.", "Tap Army to select your attackers, then tap the red ants ahead, or tap Attack and then the ground beyond them."),
+        ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
         ("right-click the food clearing", "tap the food clearing"),
         ("Press F3 to select workers, then click Dig entrance below.", "Tap Workers to select them, then tap Dig entrance below."),
         ("Press N, choose Brood Chamber, then click beside the royal chamber.", "Tap Build, choose Brood Chamber, then tap beside the royal chamber."),
@@ -115,5 +141,23 @@ public partial class ExpeditionGuide : PanelContainer
         ("Attack-move your army onto them.", "Tap Army, then Attack and the ground beyond them."),
         ("attack-move onto the red mound", "tap Attack and then the red mound"),
         ("raise the Warlord (Y)", "raise the Warlord"),
+        // the level system's levels (Levels.cs)
+        ("Open the Research tab and research Wings (W).", "Open the Research tab and research Wings."),
+        ("Hatch flying ants (F) and acid gunners (D).", "Hatch flying ants and acid gunners."),
+        ("(right-click it with workers selected)", "(tap Workers, then tap it)"),
+        ("(F2, then right-click them)", "(tap Army, then tap them)"),
+        ("(F2, right-click near her)", "(tap Army, then tap near her)"),
+        ("Select the whole army (F2, F4 for flyers) and attack-move to the gold ring past the middle.", "Tap Army, then Attack and the gold ring past the middle."),
+        ("Majors can hatch now (C)", "Majors can hatch now"),
+        ("press X (or the Soldier card)", "tap the Soldier card"),
+        // the briefing's lessons (Reveal.Systems)
+        ("Hatch workers (Z)", "Hatch workers"),
+        ("giant workers (C)", "giant workers"),
+        ("the Warlord (Y)", "the Warlord"),
+        ("flying ants (F) and acid gunners (D)", "flying ants and acid gunners"),
+        ("attack-move onto them", "tap Attack and then the ground beyond them"),
+        ("Hatch more (Z)", "Hatch more"),
+        ("(Y for the Warlord)", "(the Warlord first)"),
+        ("Open the Chambers tab (N), choose Storage and click beside a connected room. Every store", "Open the Chambers tab, choose Storage and tap beside a connected room. Every store"),
     };
 }

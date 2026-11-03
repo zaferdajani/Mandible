@@ -405,7 +405,9 @@ public partial class HeroPicker : ColorRect
             blurb.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             blurb.CustomMinimumSize = new Vector2(240, 0);
             col.AddChild(blurb);
-            foreach (var (head, body) in new[] { ("ATTACK", Config.AttackDesc(type)), ("DEFENCE", Config.DefenceDesc(type)), ("SPECIAL  Q", Config.SpecialDesc(type)) })
+            var lines = new System.Collections.Generic.List<(string, string)> { ("ATTACK", Config.AttackDesc(type)), ("DEFENCE", Config.DefenceDesc(type)), ("SPECIAL  Q", Config.SpecialDesc(type)) };
+            if (type == AntType.Warlord && Config.RaceOf(Team) == Race.RedFire) lines.Add(("SIGNATURE", $"{Config.DevourName}: {Config.DevourDesc}"));
+            foreach (var (head, body) in lines)
             {
                 var line = FieldGuide.Rich($"[color=#e8c27a][b]{head}[/b][/color]  {body}");
                 line.AddThemeFontSizeOverride("normal_font_size", 13);
@@ -458,8 +460,9 @@ public partial class FieldGuide : ColorRect
 
         var tabs = new HBoxContainer();
         tabs.AddThemeConstantOverride("separation", 6);
-        foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Colony Needs" })
+        foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Feeding", "Colony Needs" })
         {
+            if (name == "Feeding" && !CampaignProgress.MetEvolution) continue; // eating to evolve is a later chapter's lesson
             var b = new Button { Text = name, ToggleMode = true, CustomMinimumSize = new Vector2(130, 38) };
             b.Pressed += () => Show(name);
             tabs.AddChild(b);
@@ -486,6 +489,7 @@ public partial class FieldGuide : ColorRect
             "Wildlife" => Wildlife(),
             "Foraging" => Foraging(),
             "Food" => Food(),
+            "Feeding" => Feeding(),
             _ => Needs(),
         });
     }
@@ -495,7 +499,7 @@ public partial class FieldGuide : ColorRect
         var h = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         h.AddThemeConstantOverride("separation", 20);
         h.AddChild(new RaceCard { Team = 0 });
-        h.AddChild(new RaceCard { Team = 1 });
+        if (CampaignProgress.MetRedColony) h.AddChild(new RaceCard { Team = 1 }); // the red colony arrives in Act II
         return h;
     }
 
@@ -518,7 +522,8 @@ public partial class FieldGuide : ColorRect
         v.AddThemeConstantOverride("separation", 10);
         var toggle = new HBoxContainer();
         toggle.AddChild(UiTheme.Text("Show colours of:", 14, UiTheme.Bold, UiTheme.Dim));
-        for (int team = 0; team < 2; team++)
+        if (!CampaignProgress.MetRedColony) _casteTeam = 0;
+        for (int team = 0; team < (CampaignProgress.MetRedColony ? 2 : 1); team++)
         {
             int tm = team;
             var b = new Button { Text = Config.RaceName(Config.RaceOf(team)), ToggleMode = true, ButtonPressed = _casteTeam == team };
@@ -529,7 +534,8 @@ public partial class FieldGuide : ColorRect
         var grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 12);
-        foreach (var (t, real) in CasteList) grid.AddChild(Card(t, _casteTeam, CasteText(t, _casteTeam), real));
+        // only what the player has met: the campaign reveals castes and bugs a chapter at a time
+        foreach (var (t, real) in CasteList) if (CampaignProgress.Met(t)) grid.AddChild(Card(t, _casteTeam, CasteText(t, _casteTeam), real));
         v.AddChild(grid);
         return v;
     }
@@ -549,7 +555,10 @@ public partial class FieldGuide : ColorRect
         if (t == AntType.Gunner) race = r == Race.BlackGarden ? "  Black garden ants: +30% (formic acid)." : "  Red fire ants: −25% (no acid gland).";
         if (t is AntType.Soldier or AntType.Major or AntType.Warlord && r == Race.RedFire) race = "  Red fire ants: venomous sting.";
         if (Config.IsHero(t))
-            return $"{Config.StatLine(t)}  ·  Cost {Config.ProdCost(k):0}.  {Config.Role(k).Replace("\n", " ")}{race}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}";
+        {
+            string sig = Config.Signature(t, r);
+            return $"{Config.StatLine(t)}  ·  Cost {Config.ProdCost(k):0}.  {Config.Role(k).Replace("\n", " ")}{race}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}{(sig.Length > 0 ? "\n" + sig : "")}";
+        }
         return $"HP {st.Hp}  ·  Bite {st.Damage}  ·  Speed {st.Speed}  ·  Cost {Config.ProdCost(k):0}.  {squad}{Config.Role(k).Replace("\n", " ")}{race}";
     }
 
@@ -587,7 +596,7 @@ public partial class FieldGuide : ColorRect
             (AntType.StagBeetle, "The lord of the yard. Spread out when it lowers its head: the toss hits everything in front of its jaws. Kill it for a feast.", "Male stag beetles wrestle rivals with antler-like mandibles."),
             (AntType.Wasp, "Flies. It stings, climbs away and comes back. Only flyers and spitters can reach it in the air.", "Hunting wasps snatch ants and other insects to feed their own larvae."),
         })
-            grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
+            if (CampaignProgress.Met(t)) grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
         return grid;
     }
 
@@ -632,6 +641,52 @@ public partial class FieldGuide : ColorRect
             p.AddChild(h);
             v.AddChild(p);
         }
+        return v;
+    }
+
+    /// Feeding and Evolution: what to eat, what each meal gives, where to find it.
+    static Control Feeding()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 12);
+        v.AddChild(Rich(
+            "[b]Victory alone makes no one stronger.[/b]  In the wild an ant grows on what it eats, and so it is here: [b]killing teaches nothing; eating the remains does.[/b] " +
+            "Every creature that dies leaves remains on the ground. They are [color=#dc8a2a][b]organic matter[/b][/color], the evolving material, and there are only two things to do with them.\n\n" +
+            "[color=#e8c27a]Eat them.[/color]  Select the ant you want to grow and [b]right-click the remains[/b] (on a phone: tap them). It stands over them and eats, a mouthful a second, healing as it goes. " +
+            "A soldier, major, flyer or gunner fills its [color=#dc8a2a]evolution bar[/color], the second line under its health, and moults into the next stage; a hero turns what it eats into experience and levels up. " +
+            "An ant that is eating is not fighting: guard it, or eat after the battle.\n\n" +
+            "[color=#e8c27a]Haul them home.[/color]  Workers drag big carcasses home in teams and cut small ones up, filling the colony's [color=#dc8a2a]organic reserve[/color] (the amber figure beside food). " +
+            "The queen ascends only on organic matter, larvae need a little of it besides food, and fighters brought home can be [b]fed from the reserve[/b] (the button under the evolution bar). " +
+            "In Colony Command, [b]Remains[/b] tells the workers whether to haul remains home or leave them on the ground for the army.\n\n" +
+            "[color=#e8c27a]Only other kinds feed you.[/color]  A colony gets nothing from its own race: its dead are carried to the midden. Wild bugs and the other colony's ants are the only prey, so protect your fallen from the enemy, who will happily eat them. " +
+            $"The one exception is the fire ants' Warlord: [b]{Config.DevourName}[/b]. {Config.DevourDesc}\n\n" +
+            "[color=#e8c27a]In the campaign[/color]  the colony's squads still rank up in battle, as they always have; from The Dry Spell on, eating evolves them on top of that."));
+        // the stages, and what each costs
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 24);
+        grid.AddThemeConstantOverride("v_separation", 6);
+        void Row(string a, string b)
+        {
+            var l = UiTheme.Text(a, 15, UiTheme.Title, UiTheme.Gold); grid.AddChild(l);
+            var r = UiTheme.Text(b, 15, null, UiTheme.Ink); r.AutowrapMode = TextServer.AutowrapMode.WordSmart; r.CustomMinimumSize = new Vector2(520, 0); grid.AddChild(r);
+        }
+        for (int s = 1; s <= Config.MaxStage; s++)
+            Row($"STAGE {new string('I', s)}  {Config.StageNames[s].ToUpper()}", $"{Config.StageCost(s):0} organic matter eaten.  {Config.StageGain(s)} (each stage adds to the last); darker, scarred chitin.");
+        Row("QUEEN", $"Ascends on organic matter alone: {Config.QueenOrganic(2):0}, {Config.QueenOrganic(3):0}, {Config.QueenOrganic(4):0}, {Config.QueenOrganic(5):0} for each title in turn.");
+        Row("HEROES", $"{Config.HeroXpPerOrganic:0.#} experience for each unit of organic matter eaten; kills give none.");
+        v.AddChild(grid);
+        // what each prey is worth
+        var prey = new GridContainer { Columns = 3 };
+        prey.AddThemeConstantOverride("h_separation", 24);
+        prey.AddChild(UiTheme.Text("REMAINS", 14, UiTheme.Title, UiTheme.Dim)); prey.AddChild(UiTheme.Text("ORGANIC MATTER", 14, UiTheme.Title, UiTheme.Dim)); prey.AddChild(UiTheme.Text("WHERE", 14, UiTheme.Title, UiTheme.Dim));
+        foreach (var (t, where) in new[] { (AntType.StagBeetle, "the Old Stag's log"), (AntType.Warlord, "a fallen rival hero"), (AntType.Wasp, "wasp lairs"), (AntType.Beetle, "beetle lairs"), (AntType.Spider, "spider lairs"), (AntType.Major, "the enemy's majors"), (AntType.Soldier, "the enemy's soldiers"), (AntType.Worker, "the enemy's foragers (a crumb)") })
+        {
+            prey.AddChild(UiTheme.Text(Config.Of(t).Name, 15, UiTheme.Bold, UiTheme.Ink));
+            prey.AddChild(UiTheme.Text($"{Config.Of(t).CorpseFood * Config.OrganicPerLoad(t):0}", 15, UiTheme.Bold, ColonyCommandHud.OrganicColor));
+            prey.AddChild(UiTheme.Text(where, 15, null, UiTheme.Dim));
+        }
+        v.AddChild(prey);
+        v.AddChild(Rich("[i]In nature[/i]  Ants are opportunist predators and scavengers: workers dismember prey too big to carry and recruit nestmates to drag the rest home, the protein goes to the queen and the larvae, and dead nestmates are carried out to a refuse pile (necrophoresis). Fire ants (Solenopsis) are known to eat their own dead and brood when food is short."));
         return v;
     }
 

@@ -317,7 +317,7 @@ public static class AntMesh
         for (int side = -1; side <= 1; side += 2)
             k.Ellipsoid(new Vector3(side * 0.08f, y + 0.03f, -0.15f), Scaled(0.115f, 0.13f, 0.3f, -0.05f), 22, 16, Tag(Gaster, 0, 1), Vector2.Zero,
                 u => 1f - 0.08f * Mathf.Max(0, -side * u.X)); // flatten the inner edge so the halves meet cleanly
-        k.Ellipsoid(new Vector3(0, y + 0.145f, -0.15f), Scaled(0.012f, 0.025f, 0.28f, -0.05f), 6, 6, Tag(Eye), Vector2.Zero);
+        k.Ellipsoid(new Vector3(0, y + 0.145f, -0.15f), Scaled(0.012f, 0.025f, 0.28f, -0.05f), 6, 6, Tag(Eye, 0, 1), Vector2.Zero); // the suture rides the wing cases
         // pronotum, a narrow waist, then the head
         k.Ellipsoid(new Vector3(0, y + 0.03f, 0.19f), Scaled(0.165f, 0.085f, 0.1f, 0.12f), 20, 12, Tag(Body, 0, 0.5f), Vector2.Zero,
             u => 1f + 0.08f * Mathf.Abs(u.X) * Mathf.Max(0, u.Y)); // squared-off shoulders

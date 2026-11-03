@@ -15,6 +15,7 @@ public partial class Hud : CanvasLayer
     readonly Control[] _prodLock = new Control[9];
     readonly Label[] _heroStatus = new Label[9];
     readonly Button[] _res = new Button[5];
+    PanelContainer _heroPanel;
     readonly Label[] _resTier = new Label[5], _resCost = new Label[5];
     ProgressBar _resBar;
     Label _netLabel, _waiting;
@@ -391,6 +392,7 @@ public partial class Hud : CanvasLayer
 
         // royal chamber: one of each hero
         var hp = new PanelContainer();
+        _heroPanel = hp;
         UiTheme.Place(hp, 1, 1, 1, 1, -452, -566, -12, -450);
         var hv = new VBoxContainer();
         hv.AddThemeConstantOverride("separation", 5);
@@ -455,7 +457,10 @@ public partial class Hud : CanvasLayer
         string squad = n > 1 ? "\nHatches as a squad that ranks up together and refills at the nest (B)." : "";
         var t = Config.UnitOf(k);
         if (Config.IsHero(t))
-            return $"{what}  [{key}]\n{role}\n{Config.StatLine(t)}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
+        {
+            string sig = Config.Signature(t, Config.RaceOf(Local.Me));
+            return $"{what}  [{key}]\n{role}\n{Config.StatLine(t)}\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}{(sig.Length > 0 ? "\n" + sig : "")}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
+        }
         return $"{what}  [{key}]\n{role}{squad}\nEach: HP {s.Hp} · Bite {s.Damage}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
     }
 
@@ -589,21 +594,45 @@ public partial class Hud : CanvasLayer
         _root.AddChild(p);
     }
 
+    // The field manual names only what the campaign has introduced so far (Reveal); other modes list everything.
+    string ManualLine(string head, string tail, params (ProdKind kind, string text)[] items)
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (kind, text) in items) if (Game.Sim.Mission is not { } m || m.AllowsProd(kind)) shown.Add(text);
+        return shown.Count == 0 ? "" : head + string.Join("  ·  ", shown) + tail;
+    }
+
+    string ResearchLine()
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (u, text) in new[] { (Upgrade.Queen, "Q royal jelly (queen level)"), (Upgrade.Wings, "W wings"), (Upgrade.Mandibles, "E mandible forge"), (Upgrade.Chitin, "R chitin"), (Upgrade.SilkCutters, "T silk cutters") })
+            if (Game.Sim.Mission is not { } m || m.ShowsResearch(u)) shown.Add(text);
+        return shown.Count == 0 ? "" : "Chambers:  " + string.Join("  ·  ", shown);
+    }
+
+    string BugLine()
+    {
+        var shown = new System.Collections.Generic.List<string>();
+        foreach (var (t, text) in new[] { (AntType.Beetle, "beetles sweep"), (AntType.Spider, "spiders shoot webs"), (AntType.Wasp, "wasps dive and sting") })
+            if (Game.Sim.Mission is not { } m || Reveal.Creature(t) <= m.Chapter) shown.Add(text);
+        return $"Wild bugs guard rich food: {string.Join(", ", shown)}. Their carcasses are feasts.";
+    }
+
     void BuildHelp()
     {
         _help = Overlay("FIELD MANUAL", new[]
         {
-            Game.TutorialMode ? "Episode 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers and 6 soldiers." : Game.Campaign ? $"Episode {Game.Episode}: follow the steps on the objective card; the win is killing the red queen in her royal chamber. Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
+            Game.TutorialMode ? "Level 1: follow the objective card. Build a royal chamber, incubator and store, then hatch 4 workers." : Game.Campaign ? $"Level {Levels.NumberOf(Game.Episode)}: follow the steps on the objective card. {Game.Sim.Mission.Goal} Keep your own queen alive." : "Keep your queen alive and destroy the enemy queen to win.",
             "Workers forage on their own: they find food, lay pheromone trails home, and the colony follows the trails.",
             "Fallen ants become food. Win a fight and your workers will haul the dead home.",
             "",
             "Left-click / drag  select ants   ·   Shift adds   ·   Double-click selects all of that kind on screen",
             "Right-click  move / attack / gather (workers on food)   ·   A + click  attack-move",
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
-            "Brood:  Z worker  ·  X soldier  ·  C major  ·  V chamber  ·  F flying ant  ·  D acid gunner",
-            "Chambers:  Q royal jelly (queen level)  ·  W wings  ·  E mandible forge  ·  R chitin  ·  T silk cutters",
-            "Heroes:  Y Warlord  ·  U Acid Matron  ·  I Sky Marshal. They level to 10 and cast specials on their own.",
-            "Wild bugs guard rich food. Beetles sweep, spiders shoot webs, wasps dive and sting. Their carcasses are feasts.",
+            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F flying ant"), (ProdKind.Gunner, "D acid gunner")),
+            ResearchLine(),
+            ManualLine("Heroes:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
+            BugLine(),
             "Click the nest, then right-click the ground to set a rally point.",
             "Arrows / screen edge pan   ·   Mouse wheel zoom   ·   Middle-drag rotate   ·   Space jump to last alert",
             "Warriors hatch in squads that rank up together. B sends squads home to heal and refill their fallen.",
@@ -674,18 +703,51 @@ public partial class Hud : CanvasLayer
         foreach (var c in n.GetChildren()) Relabel(c);
     }
 
-    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || (_brief?.Visible ?? false) || _help.Visible;
+    public bool Blocking => (_pause?.Visible ?? false) || (_end?.Visible ?? false) || (_brief?.Visible ?? false) || _help.Visible || StoryOpen;
 
     /// The episode's opening card: the story so far and what is at stake. The colony waits until Begin.
     public void ShowBriefing(int episode)
     {
+        var m = Game.Sim.Mission;
+        var info = Levels.Info(episode);
         var lines = new System.Collections.Generic.List<string>(CampaignEpisodes.Intro(episode));
         lines.Add("");
-        if (episode > 1) lines.Add($"Victory: {Game.Sim.Mission.Goal.TrimEnd('.').ToLowerInvariant()}.");
-        lines.Add(episode == 4 ? "You lose if your queen dies or the princesses fly (30 minutes)." : "You lose if your queen dies.");
-        _brief = Overlay($"EPISODE {episode}  ·  {CampaignEpisodes.Name(episode).ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
+        if (episode > 1) lines.Add($"Victory: {m.Goal.TrimEnd('.').ToLowerInvariant()}.");
+        string lose = "You lose if your queen dies";
+        if (m.EscortId >= 0) lose += $" or the {m.EscortName} falls";
+        if (episode == 4) lose += " or the princesses fly (30 minutes)";
+        else if (m.Deadline > 0) lose += $" or {m.DeadlineName} ({m.Deadline / 60:0} minutes)";
+        lines.Add(lose + ".");
+        _brief = Overlay($"LEVEL {info.Number}  ·  {info.Name.ToUpperInvariant()}", lines.ToArray(), ("Begin", CloseBriefing));
+        // the novelty and the three stars on offer, the ones already earned lit
+        var body = (VBoxContainer)_brief.GetChild(0).GetChild(0);
+        var tag = UiTheme.Text($"NEW  ·  {info.Novelty.ToUpperInvariant()}", 14, UiTheme.Bold, new Color(1f, 0.85f, 0.5f));
+        tag.HorizontalAlignment = HorizontalAlignment.Center;
+        body.AddChild(tag); body.MoveChild(tag, 1);
+        // what this chapter introduces, one lesson at a time (Reveal)
+        var lessons = new List<string>();
+        foreach (var (name, text) in Reveal.NewIn(info.Number)) lessons.Add($"{name}: {(Settings.Mobile ? ExpeditionGuide.ForTouch(text) : text)}");
+        if (lessons.Count > 0)
+        {
+            var news = UiTheme.Text(string.Join("\n", lessons), 14, UiTheme.Bold, UiTheme.Ink);
+            news.HorizontalAlignment = HorizontalAlignment.Center; news.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            news.CustomMinimumSize = new Vector2(760, 0);
+            body.AddChild(news); body.MoveChild(news, 2);
+        }
+        int bits = CampaignProgress.StarBits(episode);
+        var stars = new StarList { Size_ = 13, FontSize = 16, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
+        stars.Set(new[] { ((bits & 1) != 0, Levels.StarText(episode, 0)), ((bits & 2) != 0, Levels.StarText(episode, 1)), ((bits & 4) != 0, Levels.StarText(episode, 2)) });
+        body.AddChild(stars); body.MoveChild(stars, body.GetChildCount() - 3);
+        Grow(_brief, 300);
         _brief.Visible = true;
         Game.SetPaused(true);
+    }
+
+    /// Makes an overlay's panel taller (it is centred, so it grows both ways).
+    static void Grow(Control overlay, float half)
+    {
+        var p = (Control)overlay.GetChild(0);
+        p.OffsetTop = -half; p.OffsetBottom = half;
     }
 
     public bool BriefingOpen => _brief?.Visible ?? false;
@@ -697,20 +759,117 @@ public partial class Hud : CanvasLayer
         var lines = new[]
         {
             mission != null ? victory ? CampaignEpisodes.Outro(Game.Episode) : mission.LossReason : victory ? "The enemy queen has fallen. The backyard is yours." : "Your queen is dead. The colony scatters into the grass.",
-            mission is { Episode: > 1 } && victory ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
+            mission is { Episode: > 1 } && victory && mission.Info.Rival != RivalKind.None ? $"Steps completed before the queen fell: {mission.StepsDone} of {mission.Steps - 1}" : "",
             $"Time  {(int)time / 60}:{(int)time % 60:00}",
             $"Food gathered  {(int)me.Gathered}   ·   Brood raised  {me.Produced}",
             $"Enemies slain  {me.Killed}   ·   Ants lost  {me.Lost}",
         };
         if (mission != null)
         {
-            int next = Game.Episode + 1;
-            _end = victory && next <= CampaignEpisodes.Count
-                ? Overlay("EPISODE COMPLETE", lines, ($"Episode {next}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()))
-                : Overlay(victory ? "CAMPAIGN COMPLETE" : "EPISODE FAILED", lines, (victory ? "Replay" : "Try Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
+            int number = Levels.NumberOf(Game.Episode), next = Levels.IdAt(number + 1);
+            _end = victory && next > 0
+                ? Overlay("LEVEL COMPLETE", lines, ($"Level {number + 1}: {CampaignEpisodes.Name(next)}", () => Game.App.StartEpisode(next)), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
+                : victory ? Overlay("THE WOODS ARE YOURS", lines, ("Epilogue", () => ShowStory(Comic.Ending, "EPILOGUE", () => { })), ("Replay", () => Game.Restart()), ("Level Map", QuitToMap))
+                : Overlay("LEVEL FAILED", Retry(lines), ("Try Again", () => Game.Restart()), ("Level Map", QuitToMap));
+            if (victory) AddResult(_end);
         }
         else _end = Overlay(victory ? "VICTORY" : "DEFEAT", lines, ("Play Again", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()));
         _end.Visible = true;
+    }
+
+    PanelContainer _banner;
+    Label _bannerTitle, _bannerLine;
+    float _bannerT;
+
+    /// A large line across the upper middle of the screen for the moments that matter (an ant evolving, a first lesson):
+    /// gold Cinzel over a dark band, readable on a landscape phone.
+    public void Banner(string title, string line, float seconds = 4f)
+    {
+        if (_banner == null)
+        {
+            _banner = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            _banner.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.03f, 0.025f, 0.015f, 0.82f), new Color(UiTheme.Gold, 0.55f), 1, 4, 18));
+            var v = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            v.AddThemeConstantOverride("separation", 4);
+            _bannerTitle = UiTheme.Text("", Settings.Mobile ? 40 : 34, UiTheme.Title, UiTheme.Gold);
+            _bannerLine = UiTheme.Text("", Settings.Mobile ? 22 : 18, null, UiTheme.Ink);
+            foreach (var l in new[] { _bannerTitle, _bannerLine })
+            {
+                l.HorizontalAlignment = HorizontalAlignment.Center;
+                l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+                l.MouseFilter = Control.MouseFilterEnum.Ignore;
+                v.AddChild(l);
+            }
+            _banner.AddChild(v);
+            AddChild(_banner);
+            UiTheme.Place(_banner, 0.5f, 0, 0.5f, 0, -520, 96, 520, 96);
+        }
+        _bannerTitle.Text = title;
+        _bannerLine.Text = line;
+        _bannerLine.Visible = line.Length > 0;
+        _bannerT = seconds;
+    }
+
+    void QuitToMap() { Game.QuitToMenu(); Game.App.Menu.OpenCampaign(); }
+
+    /// A lost chapter costs nothing that was saved: the retry starts from the colony as it was when the chapter began.
+    static string[] Retry(string[] lines)
+    {
+        var l = new System.Collections.Generic.List<string>(lines) { "", "The colony that began this chapter is waiting. Try again: nothing you saved is lost." };
+        return l.ToArray();
+    }
+
+    /// The comic beat before a level (or the epilogue), over everything; the game stays paused until it closes.
+    public void ShowStory(Comic.Panel[] panels, string heading, System.Action done)
+    {
+        Game.SetPaused(true);
+        var strip = new ComicStrip { Panels = panels, Heading = heading, Done = done };
+        _root.AddChild(strip);
+        Story = strip;
+    }
+    public ComicStrip Story;
+    public bool StoryOpen => Story != null && IsInstanceValid(Story) && !Story.IsQueuedForDeletion();
+
+    /// The result of a won level: three stars that land one after the other, each goal met or missed, and
+    /// what the stars bought (or what the next unlock costs).
+    void AddResult(Control end)
+    {
+        var body = (VBoxContainer)end.GetChild(0).GetChild(0);
+        int id = Game.Episode;
+        // the colony first: who walks on into the next chapter, and who did not
+        if (Game.Survivors is { } r)
+        {
+            int vets = 0; foreach (var v in r.Veterans) if (v.Level >= 2 || v.Name != "") vets++;
+            var queen = Config.QueenTitles[Mathf.Clamp(r.QueenTier, 1, Config.QueenTitles.Length - 1)];
+            var colony = UiTheme.Text($"THE COLONY  ·  {r.Total} ants walk on  ·  {vets} veterans  ·  {r.Chambers.Count} chambers  ·  the {queen}", 17, UiTheme.Title, UiTheme.Gold);
+            colony.HorizontalAlignment = HorizontalAlignment.Center;
+            body.AddChild(colony); body.MoveChild(colony, 1);
+            var names = new System.Collections.Generic.List<string>();
+            foreach (var v in r.Veterans) if (v.Name != "") names.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
+            int at = 2;
+            if (names.Count > 0) { var l = UiTheme.Text("Still with the queen: " + string.Join(",  ", names), 14, UiTheme.Bold, UiTheme.Ink); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
+            var fallen = new System.Collections.Generic.List<string>();
+            foreach (var v in Game.Sim.Mission.Fallen) if (v.Name != "") fallen.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
+            if (fallen.Count > 0) { var l = UiTheme.Text("Fallen: " + string.Join(",  ", fallen), 14, UiTheme.Bold, new Color(1f, 0.6f, 0.45f)); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
+        }
+        // the stars come second: bragging rights, under the colony
+        var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars, CustomMinimumSize = new Vector2(0, 70) };
+        body.AddChild(big); body.MoveChild(big, body.GetChildCount() - 3);
+        var list = new StarList { Size_ = 11, FontSize = 15, Centered = true, CustomMinimumSize = new Vector2(760, 0) };
+        var rows = new System.Collections.Generic.List<(bool, string)>();
+        for (int s = 0; s < 3; s++) rows.Add(((Game.Stars & 1 << s) != 0, Levels.StarText(id, s) + ((Game.NewStars & 1 << s) != 0 ? "   NEW" : "")));
+        list.Set(rows);
+        body.AddChild(list); body.MoveChild(list, body.GetChildCount() - 3);
+        int total = CampaignProgress.TotalStars;
+        string unlock = "";
+        foreach (var u in Levels.Unlocks) if (u.Stars > Game.StarsBefore && u.Stars <= total) unlock += (unlock == "" ? "" : "  ·  ") + $"{u.Kind}: {CampaignProgress.UnlockName(u)}";
+        var next = Levels.NextUnlock(total);
+        var line = UiTheme.Text(unlock != "" ? $"UNLOCKED  ·  {unlock}" : next != null ? $"{total} stars  ·  {CampaignProgress.UnlockName(next)} at {next.Stars}" : $"{total} stars  ·  every unlock earned", 16, UiTheme.Bold, unlock != "" ? new Color(0.6f, 1f, 0.55f) : UiTheme.Gold);
+        line.HorizontalAlignment = HorizontalAlignment.Center;
+        line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        body.AddChild(line); body.MoveChild(line, body.GetChildCount() - 3);
+        Grow(end, 340);
+        Game.Audio.Ui("research");
     }
 
     public void Alert(string text, Color? c = null)
@@ -727,6 +886,13 @@ public partial class Hud : CanvasLayer
         if (Game?.Sim == null) return;
         _alertT -= dt;
         _alert.Modulate = new Color(1, 1, 1, Mathf.Clamp(_alertT, 0, 1));
+        if (_banner != null)
+        {
+            _bannerT -= dt;
+            _banner.Visible = _bannerT > 0;
+            _banner.Modulate = new Color(1, 1, 1, Mathf.Clamp(_bannerT * 2, 0, 1));
+            if (CommandHud != null) _banner.Position = new Vector2(_banner.Position.X, CommandHud.TopEdge + 46);
+        }
         if (CommandHud != null)
         {
             CommandHud.Refresh((float)delta);
@@ -782,8 +948,11 @@ public partial class Hud : CanvasLayer
                 _heroStatus[i].AddThemeColorOverride("font_color", alive ? new Color(0.6f, 1f, 0.5f) : UiTheme.Ink);
             }
             _prod[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, unlocked ? 0.45f : 0.3f);
+            // the campaign leaves out what it has not introduced yet (never shown greyed)
+            if (sim.Mission is { } story && k != ProdKind.Chamber && !story.AllowsProd(k)) _prod[i].Visible = false;
             _prodLock[i].Visible = !unlocked;
         }
+        if (sim.Mission is { ShowsHeroes: false }) _heroPanel.Visible = false;
         for (int i = 0; i < 5; i++)
         {
             var u = (Upgrade)i;
@@ -793,6 +962,7 @@ public partial class Hud : CanvasLayer
             bool active = c.Researching && c.ResearchKind == u;
             _res[i].Modulate = active ? new Color(1.2f, 1.1f, 0.8f) : r == ResearchResult.Ok ? Colors.White : new Color(1, 1, 1, maxed ? 0.55f : 0.35f);
             _res[i].TooltipText = ResearchTooltip(c, u);
+            if (sim.Mission is { } story && !story.ShowsResearch(u)) _res[i].Visible = false;
             _resTier[i].Text = Config.MaxTier(u) > 1 ? $"{c.T(u)}/{Config.MaxTier(u)}" : (c.T(u) > 0 ? "done" : "");
             _resCost[i].Text = maxed ? "" : ((int)Config.ResearchCost(u, next)).ToString();
         }
@@ -883,7 +1053,7 @@ public partial class Hud : CanvasLayer
             _selTitle.AddThemeColorOverride("font_color", Config.TeamUi(a.Team));
             _selHp.Value = a.Hp / a.MaxHp;
             _selDetail.Text = wild
-                 ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood:0} food."
+                 ? $"Wild bug guarding its lair.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}.  Slay it for experience and a feast of {st.CorpseFood * Config.FoodValue(FoodKind.Corpse):0} food."
                 : $"{Local.ColonyName(a.Team)}.  HP {(int)a.Hp} / {(int)a.MaxHp}  ·  Bite {st.Damage * a.DmgMul:0}";
             AddIcon(a.Type, 1);
             return;
@@ -1033,5 +1203,31 @@ public partial class SelectionBox : Control
         var r = Rect.Abs();
         DrawRect(r, new Color(0.55f, 1f, 0.45f, 0.08f));
         DrawRect(r, new Color(0.55f, 1f, 0.45f, 0.85f), false, 1.5f);
+    }
+}
+
+/// The end card's three big stars: earned ones drop in one after the other, new ones flash.
+public partial class ResultStars : Control
+{
+    public int Bits, Fresh;
+    float _t;
+    public ResultStars() { CustomMinimumSize = new Vector2(0, 96); MouseFilter = MouseFilterEnum.Ignore; }
+    public override void _Process(double delta) { _t += (float)delta; if (_t < 4) QueueRedraw(); }
+    public override void _Draw()
+    {
+        for (int s = 0; s < 3; s++)
+        {
+            float delay = 0.35f + s * 0.45f;
+            float k = Mathf.Clamp((_t - delay) / 0.3f, 0, 1);
+            bool on = (Bits & 1 << s) != 0;
+            var c = new Vector2(Size.X / 2 + (s - 1) * 92, 50 - (s == 1 ? 8 : 0));
+            float r = s == 1 ? 40 : 32;
+            Emblem.Star(this, c, r, false);
+            if (on && k > 0)
+            {
+                float pop = 1 + 0.35f * Mathf.Sin(k * Mathf.Pi);
+                Emblem.Star(this, c, r * pop * Mathf.Min(1, k * 1.4f), true, (Fresh & 1 << s) != 0 ? 1 : 0.4f);
+            }
+        }
     }
 }
