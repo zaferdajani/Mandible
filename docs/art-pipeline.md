@@ -196,3 +196,19 @@ Readability now passes for five of nine views. Every art check still fails. The 
 2. The sugar cubes and the seeds are code primitives. They need scanned or Blender-made meshes, which need Blender to be allowed in this session.
 3. The berries are one lychee scan repeated. They need several fruit scans or modelled variants.
 4. Brood and ants belong to the ant session.
+
+**2026-11-03, round 6, after the Blender models and bark sticks (commit f55a7b7).** Art scores, out of 5: repetition, primitives, scale, material, light, palette. Readability is out of 5.
+
+| View | Art | Readability |
+|---|---|---|
+| a-opening | 3 2 2 3 4 3 fail | 3 fail |
+| b-yard | 2 1 2 2 3 3 fail | 2 fail: no ants or trail in the frame |
+| c-level-map | 3 3 3 3 3 4 fail | 3 fail: locked labels small, an unlabelled pit |
+| d-chamber | 2 2 3 2 3 3 fail | **4 pass** |
+| e-food-crumb | 2 2 2 2 3 4 fail | 2 fail |
+| e-food-seed | 2 2 3 2 3 3 fail | **4 pass** |
+| e-food-sugar | 3 1 2 1 3 3 fail | **4 pass** |
+| e-food-berry | 2 1 2 2 3 3 fail | **5 pass** |
+| f-fog-of-war | 3 2 3 3 3 4 fail | **4 pass** |
+
+Readability passes for five views; the colony map moved from 4 to 3 between rounds with no change to the map. Art scores have stayed between 1 and 3 for six rounds; only light reached 4, on the opening. The art reviewers compare a game frame with a macro photograph. They call anything with clean geometry a "primitive", even Blender-modelled sunflower seeds and currants, and they ask for elements the frame does not show (a whole ant column, honey, droplets). Two things move it now: ants that are not primitives (the ant session), and much denser near-camera ground detail (litter, grit, plant cover). Asset swaps alone have not moved the art scores.
