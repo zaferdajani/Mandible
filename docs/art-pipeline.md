@@ -239,3 +239,21 @@ The ground cover moved the yard's material to 3 and light and palette to 4, and 
 - The sugar crystals are opaque white.
 - The berries and seeds are high-contrast copies.
 - The bread crumbs need a porous texture.
+
+**2026-11-03, round 8, after the sugar, berry, seed, chamber and fog refinements (commit 43e7813).** Art scores, out of 5: repetition, primitives, scale, material, light, palette. Readability is out of 5.
+
+| View | Art | Readability |
+|---|---|---|
+| a-opening | 3 2 2 2 3 3 fail | 3 fail |
+| b-yard | 2 2 3 2 3 3 fail | 2 fail |
+| c-level-map | 3 2 3 3 3 4 fail | **4 pass** |
+| d-chamber | 2 2 3 2 2 3 fail | 3 fail |
+| e-food-crumb | 3 2 2 3 3 4 fail | 2 fail |
+| e-food-seed | 2 2 2 2 3 4 fail | **4 pass** |
+| e-food-sugar | 3 2 3 2 3 4 fail | 3 fail (the pile is blurred at play zoom) |
+| e-food-berry | 2 2 3 3 3 4 fail | **4 pass** |
+| f-fog-of-war | 3 3 3 4 4 4 fail | 3 fail (no remembered ground in this frame) |
+
+Sugar and berries rose on the art check (sugar: primitives 1 to 2, scale 2 to 3, palette 3 to 4; berries: material 2 to 3, palette 3 to 4). Readability is noisier between rounds than the frames changed. Since the merge with main (85da6a6), the synctest matches main exactly: Colony `CF02B6CA`, Lanes `B5B60334`.
+
+The Low tier is back to 60 fps on the tour, Medium 61, the glass-earth view 48. The new `--perf-probe` measures Low with each art layer switched off in turn. Every layer costs under 0.5 fps on Low. The earlier 48 fps readings were measured during the tour's first seconds, while shaders were still compiling.
