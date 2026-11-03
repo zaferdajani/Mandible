@@ -219,3 +219,23 @@ Readability now passes for five of nine views. Every art check still fails. The 
 | f-fog-of-war | 3 2 3 3 3 4 fail | **4 pass** |
 
 Readability passes for five views; the colony map moved from 4 to 3 between rounds with no change to the map. Art scores have stayed between 1 and 3 for six rounds; only light reached 4, on the opening. The art reviewers compare a game frame with a macro photograph. They call anything with clean geometry a "primitive", even Blender-modelled sunflower seeds and currants, and they ask for elements the frame does not show (a whole ant column, honey, droplets). Two things move it now: ants that are not primitives (the ant session), and much denser near-camera ground detail (litter, grit, plant cover). Asset swaps alone have not moved the art scores.
+
+**2026-11-03, round 7, the first round with the tuned art prompt and the dense ground cover (commit 69f2346).** Art scores, out of 5: repetition, primitives, scale, material, light, palette. Readability is out of 5.
+
+| View | Art | Readability |
+|---|---|---|
+| a-opening | 3 2 2 3 4 3 fail | 3 fail: the queen does not read; the tube does not read as broken |
+| b-yard | 2 2 2 3 4 4 fail | 2 fail: no ants in the frame |
+| c-level-map | 3 3 3 3 3 4 fail | **4 pass** |
+| d-chamber | 2 2 3 3 3 3 fail | 3 fail |
+| e-food-crumb | 3 2 3 2 3 4 fail | 3 fail |
+| e-food-seed | 2 2 3 2 3 3 fail | **5 pass** |
+| e-food-sugar | 2 1 2 1 3 3 fail | **4 pass** |
+| e-food-berry | 2 2 3 2 3 3 fail | **5 pass** |
+| f-fog-of-war | **3 3 3 4 4 4** fail (closest yet) | **4 pass** |
+
+The ground cover moved the yard's material to 3 and light and palette to 4, and the fog of war is one step from passing art. Still blocking:
+- One grass scan reads as cards.
+- The sugar crystals are opaque white.
+- The berries and seeds are high-contrast copies.
+- The bread crumbs need a porous texture.
