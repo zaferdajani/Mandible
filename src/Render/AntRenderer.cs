@@ -266,7 +266,6 @@ public sealed class AntRenderer
             if (Config.IsHero(type)) m.SetShaderParameter("hero", 1f);
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
-        m.SetShaderParameter("eye_color", AntMesh.EyeColor(team, type));
         if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;

@@ -34,9 +34,7 @@ uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
-uniform vec3 eye_color : source_color = vec3(0.6, 0.32, 0.08); // the iris under the catchlight
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
-uniform float detail = 0.0;   // 1 in portraits and close-ups: compound-eye facets
 varying float v_part;
 varying float v_flash;
 varying vec3 v_local;
@@ -309,18 +307,8 @@ void fragment() {
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
     if (part == 11.0) {
-        // the eye: a two-tone iris with a camera-facing pseudopupil (compound-eye optics) and a catchlight that is
-        // painted, not lit, so it stays in shadow; it brightens when the ant is selected or under the cursor
-        vec3 nv = NORMAL;
-        float pupil = smoothstep(0.76, 0.95, clamp(nv.z, 0.0, 1.0));
-        float catch = pow(clamp(dot(nv, normalize(vec3(-0.45, 0.6, 1.0))), 0.0, 1.0), 48.0);
-        float pulse = 0.85 + 0.15 * sin(TIME * 0.7 + v_seed);
-        vec3 iris = eye_color * (1.0 + 0.7 * fres);
-        float facet = detail * step(0.5, fract(v_local.x * 190.0 + v_local.z * 60.0)) * step(0.5, fract(v_local.y * 110.0 + v_local.x * 95.0));
-        iris = mix(iris, iris * 0.7, facet);
-        c = mix(iris, vec3(0.012), pupil);
-        rough = 0.12; cc = 0.0;
-        eyeEm = iris * 0.12 * pulse + vec3(1.0, 0.97, 0.9) * catch * (0.9 + 0.7 * v_sel + 0.9 * v_hov) + iris * 0.5 * v_sel * pulse;
+        // part 11 is now only the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture
+        c = vec3(0.012); rough = 0.3; cc = 0.0;
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips

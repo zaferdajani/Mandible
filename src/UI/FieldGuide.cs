@@ -49,7 +49,6 @@ public partial class AntPortrait : SubViewportContainer
         _turn.AddChild(holder);
         _body = OneInstance(mesh);
         var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, Type, false);
-        mat.SetShaderParameter("detail", 1f); // close enough to see the facets of the eyes
         holder.AddChild(new MultiMeshInstance3D { Multimesh = _body, MaterialOverride = mat });
         if (Config.Flies(Type))
         {
