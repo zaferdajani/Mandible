@@ -66,7 +66,7 @@ owner's request after round 6, and are not a softening:
 - Ant bodies are scored by the ant session's gate, not here.
 
 The owner is the final judge. Views that pass readability go to the owner on a review sheet labelled with their art
-scores, even when the art check has not passed (round 6: `D:\MandibleBuildseviewrt-round6.jpg`).
+scores, even when the art check has not passed (round 6: `D:/MandibleBuilds/review/art-round6.jpg`).
 
 **Ants are judged by the ant session's work.** The ants are code-built (`src/Render/AntMesh.cs`), and a separate
 ant session rebuilds them against its own approved target, with the same two-part gate. Until that lands, an art
