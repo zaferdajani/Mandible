@@ -32,6 +32,7 @@ public sealed partial class NestInterior
         public int ContentCount = -1, Tier, TierStamp = -1;
         public float ShownProgress = -1;
         public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
+        public OmniLight3D Glow;      // the warm light low in the room that models its walls (High and Ultra only)
     }
 
     public NestInterior(GameSession g)
@@ -149,6 +150,7 @@ public sealed partial class NestInterior
             m.SetShaderParameter("shade", low ? 1.55f : 0.94f);
         }
         for (int team = 0; team < 2; team++) _meshRevision[team] = -1;
+        foreach (var r in _rooms.Values) if (r.Glow != null) r.Glow.Visible = Settings.Gfx >= Settings.Quality.High;
         _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
     }
 
@@ -298,6 +300,16 @@ public sealed partial class NestInterior
         };
         room.Node.AddChild(room.Contents);
         room.Node.AddChild(room.Label);
+        // light held low against one wall, as if from the sunlit opening above: the far banks catch it, the near ones
+        // fall into shade, and the brood throws short shadows across the floor
+        var (rw, _, rd) = NestGeometry.RoomSize(ch);
+        room.Glow = new OmniLight3D
+        {
+            LightColor = new Color(1f, 0.74f, 0.45f), LightEnergy = 1.6f, OmniRange = Mathf.Max(rw, rd) * 1.35f, OmniAttenuation = 1.4f,
+            Position = new Vector3(-rw * 0.38f, 1.5f, -rd * 0.32f), ShadowEnabled = false, LightSpecular = 0.4f, // shadowed omni lights per room cost 2.5x the frame time
+            Visible = Settings.Gfx >= Settings.Quality.High,
+        };
+        room.Node.AddChild(room.Glow);
         return room;
     }
 

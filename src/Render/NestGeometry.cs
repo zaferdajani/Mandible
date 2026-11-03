@@ -7,7 +7,7 @@ namespace Mandible;
 /// the soil roof and hit testing. It never changes the simulation's graph, paths or random stream.
 public sealed class NestGeometry
 {
-    public const float Depth = 2.4f;
+    public const float Depth = 3.0f; // deep enough that the cut reads as a hollow in the earth, not a stain on it
     public const int MaxSegments = 32, Stride = 7;
     public readonly float[] Network = new float[MaxSegments * Stride];
     public int Count { get; private set; }
@@ -91,11 +91,13 @@ public sealed class NestGeometry
                     + 0.045f * Mathf.Sin(p.X * 5.7f + p.Y * 4.3f);
     }
 
-    public static float Height(float distance) => Mathf.Lerp(-Depth, -0.18f, Mathf.SmoothStep(-0.72f, 0.22f, distance));
+    /// Floor flat to the foot of the wall, then a steep, slightly undercut bank (the earth overhangs a little before the
+    /// lip, as dug soil does), then the lip just under the surface.
+    public static float Height(float distance) => Mathf.Lerp(-Depth, -0.18f, Mathf.Pow(Mathf.SmoothStep(-0.5f, 0.18f, distance), 0.8f));
 
     /// A single welded heightfield: overlapping room/tunnel fields are unioned BEFORE triangulation,
     /// so there are no bowl walls blocking doorways, stacked floors or transform-scaled tube stubs.
-    public ArrayMesh BuildMesh(float step = 0.24f)
+    public ArrayMesh BuildMesh(float step = 0.16f)
     {
         int nx = Mathf.CeilToInt((_max.X - _min.X) / step), nz = Mathf.CeilToInt((_max.Y - _min.Y) / step);
         var mesh = new MeshKit();
@@ -106,7 +108,11 @@ public sealed class NestGeometry
                 var p = _min + new Vector2(x * step, z * step);
                 float d = Distance(p);
                 distances[z * (nx + 1) + x] = d;
-                mesh.Add(new Vector3(p.X, Height(d), p.Y), Vector3.Up, Colors.White, new Vector2(d, 0), Vector2.Zero);
+                float y = Height(d);
+                float bank = Mathf.SmoothStep(-0.5f, -0.3f, d) * (1 - Mathf.SmoothStep(0.05f, 0.2f, d)); // 0 on the floor and above the lip
+                y += bank * (0.16f * Mathf.Sin(p.X * 4.3f + Mathf.Sin(p.Y * 3.1f) * 2) * Mathf.Sin(p.Y * 3.7f + p.X * 0.9f)
+                             + 0.07f * Mathf.Sin(p.X * 11.3f + p.Y * 9.7f));
+                mesh.Add(new Vector3(p.X, y, p.Y), Vector3.Up, Colors.White, new Vector2(d, 0), Vector2.Zero);
             }
         for (int z = 0; z < nz; z++)
             for (int x = 0; x < nx; x++)

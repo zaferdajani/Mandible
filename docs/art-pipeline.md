@@ -109,3 +109,23 @@ The scores have plateaued between pass 1 and pass 2. What keeps failing is not t
 1. **Readability at game zoom.** At play distance an ant is 1-2% of the frame; in the macro targets it is 5-10%. Every food and fog view loses its readability score on this. Either the gate judges material at the target's framing (a close camera) and readability separately at game zoom, or the food piles and ants have to be scaled up beyond life-size.
 2. **Soil reads smooth at 40+ units.** A 1-2k texture tiled at real scale cannot show grain at that distance on a 1600-px frame. Parallax or displaced geometry, or bigger stones in the near ground, would show it.
 3. **Chambers.** The nest interior is still the old top-down cut with an outline band. It needs a real rebuild of the cavity walls and lighting (the NestInterior and Earth shader), not a texture change.
+
+**2026-11-03, round 3: the first run of the two-part gate (commit 53dc1ee).** Art scores, out of 5: repetition, primitives, scale, material, light, palette. Readability is out of 5.
+
+| View | Art | Readability |
+|---|---|---|
+| a-opening | 3 2 2 2 3 3 fail | 3 fail: the queen does not read larger than the workers; no trail line |
+| b-yard | 3 1 2 2 3 4 fail (a near-lens shard) | 2 fail: no ant trail; sticks and stones blend into the soil |
+| c-level-map | 3 3 3 3 3 4 fail | 3 fail: locked chambers and names too dark; no selection highlight |
+| d-chamber | 2 2 3 2 2 3 fail | **4 pass** |
+| e-food-crumb | 3 2 2 3 3 4 fail | 1 fail: the crumbs read as stones |
+| e-food-seed | 2 2 3 2 3 3 fail | **4 pass** |
+| e-food-sugar | 3 2 3 2 3 3 fail | **5 pass** |
+| e-food-berry | 2 2 2 2 3 2 fail | **5 pass** |
+| f-fog-of-war | 3 3 2 3 3 4 fail | 3 fail: dimmed and clear ground too alike |
+
+Readability now passes for four views. Every art check fails. Two findings recur in almost every art review and are bigger than this pipeline's assets:
+- **The ants themselves read as primitives** (ellipsoid bodies, stick legs). They are code-built in `AntMesh.cs`. The graphics council plan (`graphics-council.md` in the shared notes) covers them. The art check cannot pass while the subject of every frame is a primitive.
+- **Soil material at close range:** one tiled 1-2k photo set cannot match a macro photograph at ant framing. It needs a macro soil layer (photoscanned pebbles and crumb as a decal or displacement) close to the camera.
+
+After round 3: the chamber cavities are rebuilt (a deeper excavation at 3.0, steep scalloped banks on a finer mesh, a soft shade over the lip instead of the outline band, and a warm unshadowed light low in each room on High and Ultra; 42 fps). The berry cut that showed an empty shell is removed.

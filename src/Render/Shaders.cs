@@ -467,7 +467,7 @@ void fragment() {
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
     float glass = xray_on * (1.0 - smoothstep(-0.15, 0.85, nd));
-    float band = exp(-pow((nd - 0.1) / 0.9, 2.0)) * xray_on;
+    float band = exp(-pow((nd - 0.35) / 1.4, 2.0)) * xray_on * 0.55; // a soft shade spilling over the lip, not an outline
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
     float inHollow = smoothstep(0.05, 0.7, hollow);
