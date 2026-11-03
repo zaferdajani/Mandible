@@ -181,20 +181,32 @@ public static class NatureScatter
         var grit = NatureAssets.Kind("grit");
         if (grit.Count > 0 && Settings.Gfx > Settings.Quality.Low) // phones: the ground set alone carries the grain
         {
-            int grains = (int)(areaSize / 11f * density);
+            int grains = (int)(areaSize / 6f * density);
             for (int i = 0; i < grains; i++)
             {
                 var at = area.Position + new Vector2(rng.F() * area.Size.X, rng.F() * area.Size.Y);
                 float hol = hollowAt(at.X, at.Y), tr = trail(at);
                 float edge = tr < 1e5f ? Mathf.Exp(-Mathf.Pow((tr - 5.5f) / 3f, 2)) : 0;
                 float patch = gaps.GetNoise2D(at.X * 2.3f + 17, at.Y * 2.3f) * 0.5f + 0.5f;
-                if (rng.F() > Mathf.Clamp(0.12f + hol * 0.9f + edge * 0.7f, 0, 1) * Mathf.SmoothStep(0.25f, 0.65f, patch) || keepOut(at)) continue;
+                if (rng.F() > Mathf.Clamp(0.4f + hol * 0.9f + edge * 0.7f, 0, 1) * Mathf.SmoothStep(0.15f, 0.55f, patch) || keepOut(at)) continue;
                 d.Place(d.Pick(grit), at, rng.R(0.12f, 0.5f) * (1 + hol * 0.5f), rng.R(0.3f, 0.6f), 0.6f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.8f, 1.05f));
             }
         }
 
-        // 4. organic debris: bark, twigs and leaves where the gap noise allows, never on a walked trail
-        int bits = (int)(areaSize / 90f * density);
+        // 4. ground cover at the scale of the ant: single grass sprigs, thicker where it is damp and off the trail, and
+        //    thin elsewhere, with wide bare patches; this is what makes the soil read as a forest floor up close
+        int sprigs = (int)(areaSize / 45f * density);
+        for (int i = 0; i < sprigs; i++)
+        {
+            var at = area.Position + new Vector2(rng.F() * area.Size.X, rng.F() * area.Size.Y);
+            float g = gaps.GetNoise2D(at.X * 1.3f - 40, at.Y * 1.3f) * 0.5f + 0.5f, hol = hollowAt(at.X, at.Y);
+            if (rng.F() > Mathf.SmoothStep(0.3f, 0.7f, g) * (0.7f + hol) || keepOut(at) || trail(at) < 4f) continue;
+            int tuft = rng.I(1, 5);
+            for (int k = 0; k < tuft; k++) d.Sprig(at + rng.InDisk(0.9f), rng.R(2.5f, 8f), rng.R(0.1f, 0.9f));
+        }
+
+        // 5. organic debris: bark, twigs and leaves where the gap noise allows, never on a walked trail
+        int bits = (int)(areaSize / 60f * density);
         for (int i = 0; i < bits; i++)
         {
             var at = area.Position + new Vector2(rng.F() * area.Size.X, rng.F() * area.Size.Y);
@@ -206,6 +218,45 @@ public static class NatureScatter
             else d.Debris(d.Bark, at, rng.R(1.2f, 3.5f), rng.R(0, Mathf.Tau));
         }
         d.Commit();
+        LeafLitter(w, rng, trail, keepOut, area, density, gaps);
+    }
+
+    /// 6. leaf litter: thousands of small fallen leaves and leaf fragments (the scanned leaf atlas on flat cards, one
+    /// MultiMesh), each its own species, age and size, drifted into hollows, against rocks and along trail edges.
+    static void LeafLitter(World w, Rng rng, Func<Vector2, float> trail, Func<Vector2, bool> keepOut, Rect2 area, float density, FastNoiseLite gaps)
+    {
+        if (Settings.Gfx == Settings.Quality.Low) return; // phones: the forest-litter ground set carries it
+        var hf = w.HF;
+        var hollowAt = HollowField(hf);
+        var xf = new List<Transform3D>();
+        var col = new List<Color>();
+        int n = (int)(area.Size.X * area.Size.Y / 9f * density);
+        for (int i = 0; i < n; i++)
+        {
+            var at = area.Position + new Vector2(rng.F() * area.Size.X, rng.F() * area.Size.Y);
+            float hol = hollowAt(at.X, at.Y), tr = trail(at);
+            float edge = tr < 1e5f ? Mathf.Exp(-Mathf.Pow((tr - 6f) / 3f, 2)) : 0;
+            float drift = gaps.GetNoise2D(at.X * 0.9f + 90, at.Y * 0.9f) * 0.5f + 0.5f;
+            if (rng.F() > Mathf.Clamp(0.35f + hol * 0.8f + edge * 0.6f, 0, 1) * Mathf.SmoothStep(0.2f, 0.6f, drift) || keepOut(at) || tr < 3f) continue;
+            int sp = rng.F() < 0.55f ? 0 : rng.F() < 0.5f ? 2 : 1;
+            float len = rng.R(1.0f, 3.2f) * (rng.F() < 0.1f ? 1.6f : 1);
+            float wid = len * (sp == 1 ? 0.3f : 0.55f);
+            var nrm = hf.Normal(at.X, at.Y);
+            var axis = nrm.Cross(Vector3.Up);
+            var toSlope = axis.LengthSquared() > 1e-6f ? new Basis(axis.Normalized(), -Mathf.Acos(Mathf.Clamp(nrm.Y, -1, 1))) : Basis.Identity;
+            // flat on the soil, curled a little by a tilt, turned any way
+            var basis = toSlope * new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, -Mathf.Pi / 2 + rng.R(-0.25f, 0.25f)) * Basis.FromScale(new Vector3(wid, len, 1));
+            xf.Add(new Transform3D(basis, new Vector3(at.X, hf.Sample(at.X, at.Y) + 0.04f, at.Y)));
+            col.Add(new Color(Mathf.Clamp(0.45f + rng.F() * 0.55f + hol * 0.2f, 0, 1), rng.F(), sp * 0.5f, 1)); // age, seed, species
+        }
+        if (xf.Count == 0) return;
+        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = new QuadMesh { Size = Vector2.One }, InstanceCount = xf.Count };
+        for (int i = 0; i < xf.Count; i++) { mm.SetInstanceTransform(i, xf[i]); mm.SetInstanceColor(i, col[i]); }
+        var m = WorldBuilder.Mat(w, Shaders.Leaf);
+        m.SetShaderParameter("leaf_tex", NatureAssets.Texture("tex/leaf_atlas_diff"));
+        m.SetShaderParameter("leaf_nor", NatureAssets.Texture("tex/leaf_atlas_nor"));
+        var mi = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = m, Name = "LeafLitter", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        w.Root.AddChild(mi);
     }
 
     static float Gauss(Rng rng) => (rng.F() + rng.F() + rng.F() - 1.5f) * 1.4f;
