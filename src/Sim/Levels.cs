@@ -219,7 +219,7 @@ public static class Levels
 public sealed partial class Expedition
 {
     // ---------------------------------------------------------------- levels 5-12: generic objectives
-    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen, Raise, Haul }
+    public enum Obj { Dig, Gather, Taste, Hatch, Research, Hero, Reach, Escort, Group, Waves, KillQueen, Raise, Haul, Evolve }
 
     public sealed class Objective
     {
@@ -447,6 +447,7 @@ public sealed partial class Sim
                 m.WaveAt = 330; m.WaveGap = 300;
                 Add(Expedition.Obj.Group, "Raid a lair", "Your workers have nothing to forage. March the army on a bug lair (the gold rings): every bug it kills is a carcass to haul home. Lairs left: {0}.", b: -1);
                 Add(Expedition.Obj.Haul, "Haul the feast home", "Workers carry the remains home on their own: they feed the larder as well as the reserve. Hatch more (Z) to haul faster, and hunt the next lair. Organic matter: {0}/{1}.", amount: 80);
+                Add(Expedition.Obj.Evolve, "Feed a fighter", "Remains do more than fill the stores: a fighter that eats them evolves. Bring a squad to the nest and feed it from the reserve (select it, then Feed from the reserve), or right-click remains with it. Evolved fighters: {0}/{1}.", b: 1);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The red colony is starving and its raids are thin. Gather the army and send everyone down the red shaft.");
                 break;
             case 9: // Wings and Acid
@@ -515,8 +516,9 @@ public sealed partial class Sim
                 ApplyLevel(ref Ants[player.QueenId]); Ants[player.QueenId].Hp = Ants[player.QueenId].MaxHp;
                 player.Food = 600;
                 Muster(0, AntType.Worker, 10, home);
-                Muster(0, AntType.Soldier, 30, home + toFoe * 9);
-                Muster(0, AntType.Major, 6, home + toFoe * 12);
+                // a squad and two majors more since the rival heals by eating (Reveal.Evolution): the gate fight was close
+                Muster(0, AntType.Soldier, 36, home + toFoe * 9);
+                Muster(0, AntType.Major, 8, home + toFoe * 12);
                 Muster(0, AntType.Gunner, 6, home + toFoe * 14);
                 Muster(0, AntType.Flyer, 4, home + toFoe * 10);
                 { int hero = Spawn(0, AntType.Warlord, OpenGround(home + toFoe * 12), toFoe.AngleD(), 3); if (hero >= 0) Ants[hero].State = AntState.Idle; }
@@ -722,6 +724,7 @@ public sealed partial class Sim
             Expedition.Obj.Haul => c.OrganicGathered - m.OrganicBase >= o.Amount,
             Expedition.Obj.Hatch => c.Count[o.A] >= o.B,
             Expedition.Obj.Raise => m.SoldiersHatched >= o.B,
+            Expedition.Obj.Evolve => Evolved() >= o.B,
             Expedition.Obj.Research => c.T((Upgrade)o.A) >= o.B,
             Expedition.Obj.Hero => c.Count[(int)AntType.Warlord] + c.Count[(int)AntType.Matron] + c.Count[(int)AntType.Marshal] > 0,
             Expedition.Obj.Reach => m.Have <= (m.EscortId >= 0 ? 10 : 16),
@@ -741,6 +744,9 @@ public sealed partial class Sim
         return c.GatheredBy[kind] > m.KindBase[kind];
     }
 
+    /// The player's fighters that have evolved at least once by eating.
+    int Evolved() { int n = 0; for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Stage > 0) n++; return n; }
+
     int CountLarders() { int n = 0; foreach (bool l in Mission.Larder) if (l) n++; return n; }
 
     /// The guide panel's numbers and the map marker for the current objective.
@@ -759,6 +765,7 @@ public sealed partial class Sim
             case Expedition.Obj.Gather: m.Have = (int)(c.Gathered - m.GatherBase); m.Need = (int)o.Amount; break;
             case Expedition.Obj.Hatch: m.Have = c.Count[o.A]; m.Need = o.B; break;
             case Expedition.Obj.Raise: m.Have = m.SoldiersHatched; m.Need = o.B; break;
+            case Expedition.Obj.Evolve: m.Have = Evolved(); m.Need = o.B; break;
             case Expedition.Obj.Haul: m.Have = (int)(c.OrganicGathered - m.OrganicBase); m.Need = (int)o.Amount; m.MarkerPos = GroupMarker(-1, home); break;
             case Expedition.Obj.Taste:
                 m.MarkerPos = NearestFood((FoodKind)o.A, home, m.Groups.Count > 0 ? m.GroupPos[0] : home);

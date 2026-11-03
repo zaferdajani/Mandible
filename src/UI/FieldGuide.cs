@@ -659,7 +659,8 @@ public partial class FieldGuide : ColorRect
             "The queen ascends only on organic matter, larvae need a little of it besides food, and fighters brought home can be [b]fed from the reserve[/b] (the button under the evolution bar). " +
             "In Colony Command, [b]Remains[/b] tells the workers whether to haul remains home or leave them on the ground for the army.\n\n" +
             "[color=#e8c27a]Only other kinds feed you.[/color]  A colony gets nothing from its own race: its dead are carried to the midden. Wild bugs and the other colony's ants are the only prey, so protect your fallen from the enemy, who will happily eat them. " +
-            $"The one exception is the fire ants' Warlord: [b]{Config.DevourName}[/b]. {Config.DevourDesc}"));
+            $"The one exception is the fire ants' Warlord: [b]{Config.DevourName}[/b]. {Config.DevourDesc}\n\n" +
+            "[color=#e8c27a]In the campaign[/color]  the colony's squads still rank up in battle, as they always have; from The Dry Spell on, eating evolves them on top of that."));
         // the stages, and what each costs
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 24);

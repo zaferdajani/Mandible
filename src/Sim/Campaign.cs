@@ -50,7 +50,7 @@ public sealed partial class Expedition
     /// The episode's main victory, always on show: every step leads here.
     public string Goal => IsLevel ? LevelGoal : Episode switch
     {
-        1 => "Found the Glass Queen's nest. One day its army will march on the red queens.",
+        1 => "Found the Glass Queen's nest and hatch her first brood.",
         2 => "Kill the young red queen in her royal chamber.",
         _ => "Kill the red queen in her royal chamber.",
     };

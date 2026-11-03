@@ -284,6 +284,7 @@ public sealed partial class Sim
     {
         if (Config.IsHero(a.Type)) { GrantXp(i, organic * Config.HeroXpPerOrganic, true); return; }
         if (!Evolves(a) || a.Stage >= Config.MaxStage) return;
+        if (Mission != null && a.Team == Config.Enemy) return; // the campaign's rival keeps the strength its level gives it
         a.Evo += organic;
         while (a.Stage < Config.MaxStage && a.Evo >= Config.StageCost(a.Stage + 1))
         {

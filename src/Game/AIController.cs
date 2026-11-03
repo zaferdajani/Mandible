@@ -129,7 +129,8 @@ public sealed class AIController : IColonyAI
             cmd.FoodId = f.Id;
             Orders.Issue(cmd);
         }
-        if (heroesHome.Count > 0 && c.Organic > _sim.QueenOrganic(_team) + 25f)
+        // the campaign's rival does not feed its heroes the reserve: its levels set its strength (Sim.GrantXp caps its heroes too)
+        if (heroesHome.Count > 0 && _sim.Mission == null && c.Organic > _sim.QueenOrganic(_team) + 25f)
             Orders.Issue(Cmd.Units(CmdKind.FeedReserve, _team, heroesHome, _sim));
     }
 

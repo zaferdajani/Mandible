@@ -160,7 +160,7 @@ Each chapter's briefing lists what it introduces, and that chapter's objectives 
 | 5 | | | | the queen kill |
 | 6 | | royal jelly (Matriarch), Mandible Forge and Chitin Armory rank 1 | | research |
 | 7 | the first hero raised: Burr as Warlord | | wasps, the Hornet Mother | heroes |
-| 8 | | Silk Cutters | | lairs as larders |
+| 8 | | Silk Cutters | | lairs as larders, evolution by eating |
 | 9 | flying ants, acid gunners | wings, Empress, Forge and Armory rank 2 | | wings |
 | 10 | | every remaining rank | the Old Stag | |
 
@@ -187,7 +187,11 @@ PR #8's burial, midden and morale (`Sim.CarrionRules`) stay outside the campaign
 
 A rival keeps the queen rank its level gives it. The levels are tuned on her, and remains would otherwise let a raiding rival ascend on the player's dead.
 
-**Evolution by eating** (`Sim.EatRules`) is not in the campaign yet, so its squads still rank up by kills. With it on from Chapter 8, Episode 4 and the Long March fell short of their tuning, and boosting the late musters broke Episode 4. It needs its own teaching chapter (the Dry Spell is the natural one) and a rebalance of Chapters 8-12. That is a follow-up. The groundwork is in place: `Reveal.Evolution`, `Sim.EatRules`, the colony save carrying each fighter's evolution stage, and the Remains tab and the Field Guide's Feeding page appearing with it.
+**Evolution by eating** (`Sim.EatRules`) is the Dry Spell's lesson (Chapter 8). After the lairs are hunted and the feast hauled home, its objective is **Feed a fighter**: bring a squad to the nest and feed it from the reserve, or right-click remains with it, until one fighter evolves.
+
+From then on, fighters that eat evolve through three stages, and with them come the guide arrow over remains, the Remains order tab and the Field Guide's Feeding page. The colony's save carries each fighter's stage.
+
+The campaign keeps its squads ranking up in battle on top of this. Its levels and the persistent colony's veterans are built on kill ranks, and making eating the only way to grow (skirmish's rule) left Episode 4 and the Long March short of their tuning. For the same reason the campaign's rival does not evolve.
 
 `--campaign-test` checks the whole schedule. In every chapter, nothing is on offer before the chapter that introduces it and everything introduced by then is. The HUD's research cards and tabs follow the same schedule, no unmet wild bug is on the yard, the red colony is absent through Act I, and no chapter before Ashling's is won by a queen kill.
 

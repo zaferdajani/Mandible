@@ -354,7 +354,8 @@ public sealed partial class Sim
     /// Experience. Outside the campaign only eating teaches (Carrion.cs: Nourish); a kill alone makes no one stronger.
     void GrantXp(int id, float xp, bool eaten = false)
     {
-        if (EatRules && !eaten) return;
+        // outside the campaign only eating teaches; the campaign's squads still rank up in battle (eating evolves them on top)
+        if (EatRules && !eaten && Mission == null) return;
         ref var a = ref Ants[id];
         // the campaign's rival heroes grow only so far, from kills or remains: its levels set the rival's strength
         if (Mission != null && a.Team == Config.Enemy && Config.IsHero(a.Type) && a.Level >= Config.RivalHeroCap) return;

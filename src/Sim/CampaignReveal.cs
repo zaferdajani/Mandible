@@ -12,9 +12,9 @@ public static class Reveal
     public const int FirstQueenKill = 5; // Ashling: the first chapter won by killing a queen
     public const int PerkFloor = 7;      // star perks open castes and heroes no earlier than Act III
     public const int Organic = 1;        // remains feed the reserve: the founders need food and remains (PR #9's economy)
-    /// Evolution by eating is not in the campaign yet: kills still rank its squads. It needs a chapter that teaches it and a
-    /// rebalance of the late levels, which were tuned on kill ranks (with it on from Chapter 8, Levels 10-12 fell short).
-    public const int Evolution = Levels.Count + 1;
+    /// Evolution by eating: the Dry Spell, whose lairs are the larder, teaches it. The campaign's squads still rank up in
+    /// battle (its levels and veterans are built on it); eating evolves them on top, and the rival does not evolve.
+    public const int Evolution = 8;
 
     public static int Prod(ProdKind k) => k switch
     {
@@ -77,6 +77,7 @@ public static class Reveal
         (7, "Heroes", "Raise old Burr as the Warlord (Y): a hero levels fast and fights with special moves."),
         (7, "Wasps", "Flyers that sting, climb away and come back."),
         (8, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
+        (8, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),
         (8, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),
         (9, "Wings", "Research wings to hatch flying ants (F) and acid gunners (D)."),
         (10, "The Old Stag", "The lord of the yard. Beat it and it fights for you."),

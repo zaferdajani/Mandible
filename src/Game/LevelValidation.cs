@@ -34,6 +34,10 @@ public static class LevelValidation
         _worlds.Clear();
     }
 
+    static string Heroes(Sim s) { var sb = new System.Text.StringBuilder(); for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && Config.IsHero(s.Ants[i].Type)) sb.Append($"{s.Ants[i].Team}{s.Ants[i].Type}{s.Ants[i].Level} "); for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].Stage > 0) { sb.Append("evolved "); break; } return sb.ToString(); }
+
+    static int Eating(Sim s, int team) { int n = 0; for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Team == team && (s.Ants[i].Feasting || s.Ants[i].FoodTarget != null && Config.IsWarrior(s.Ants[i].Type))) n++; return n; }
+
     static string WildNear(Sim s, Vector2 home)
     {
         var parts = new List<string>();
@@ -161,6 +165,12 @@ public static class LevelValidation
                         if (marching) s.CmdMove(army, s.W.Nests[1].Pos, true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
+                    case Expedition.Obj.Evolve:
+                        // bring the army to the nest and feed it from the reserve, as the objective teaches
+                        s.CmdMove(army, home, false);
+                        var atNest = army.FindAll(a => s.Ants[a].Pos.DistanceTo(home) < Config.ReinforceRadius && s.EvolutionNeed(s.Ants[a]) > 0);
+                        if (atNest.Count > 0) s.FeedFromReserve(0, atNest);
+                        break;
                     case Expedition.Obj.Haul:
                     case Expedition.Obj.Gather when id == 8:
                         // the Dry Spell: the lairs are the only larder, so the army keeps hunting them
@@ -182,8 +192,8 @@ public static class LevelValidation
                 }
             }
         tick:
-            if (t % 900 == 0 && OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") != "")
-                GD.Print($"[level-trace] L{Levels.NumberOf(id)} t {s.Time:0} step {m.Step} {m.Title} {m.Have}/{m.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} gathered {s.Col[0].Gathered - m.GatherBase:0} lost {s.Col[0].Lost} queen {s.Ants[s.Col[0].QueenId].Hp:0} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} rq {(s.Col[1].Alive ? s.Ants[s.Col[1].QueenId].Hp : 0):0} waves {m.WaveNext} sol {s.Col[0].Count[1]} hatchedS {m.SoldiersHatched} q {s.Col[0].Queue.Count}" + (Spare != null ? $" {Spare} {(Find(s, Spare) is int sp and >= 0 ? $"hp {s.Ants[sp].Hp:0} at {s.Ants[sp].Pos.DistanceTo(home):0} {s.Ants[sp].State}" : "gone")}" : "") + (OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") == "bugs" ? WildNear(s, home) : ""));
+            if ((t % 900 == 0 || OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") == "fine" && t % 150 == 0) && OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") != "")
+                GD.Print($"[level-trace] L{Levels.NumberOf(id)} t {s.Time:0} step {m.Step} {m.Title} {m.Have}/{m.Need} army {Army(s).Count} workers {s.Col[0].Count[0]} food {s.Col[0].Food:0} gathered {s.Col[0].Gathered - m.GatherBase:0} lost {s.Col[0].Lost} queen {s.Ants[s.Col[0].QueenId].Hp:0} rival {s.Col[1].Count[1]}+{s.Col[1].Count[2]} rq {(s.Col[1].Alive ? s.Ants[s.Col[1].QueenId].Hp : 0):0} waves {m.WaveNext} sol {s.Col[0].Count[1]} eating {Eating(s, 0)}/{Eating(s, 1)} heroes {Heroes(s)} hatchedS {m.SoldiersHatched} q {s.Col[0].Queue.Count}" + (Spare != null ? $" {Spare} {(Find(s, Spare) is int sp and >= 0 ? $"hp {s.Ants[sp].Hp:0} at {s.Ants[sp].Pos.DistanceTo(home):0} {s.Ants[sp].State}" : "gone")}" : "") + (OS.GetEnvironment("MANDIBLE_CAMPAIGN_TRACE") == "bugs" ? WildNear(s, home) : ""));
             rival?.Tick(1f / 30);
             s.Tick(1f / 30);
             Check(s.Winner != 1, $"Level {Levels.NumberOf(id)} ({Levels.Info(id).Name}) lost: {m.LossReason}; step {m.Step} ({m.Title}) {m.Have}/{m.Need}; t {s.Time:0}s");
@@ -511,6 +521,20 @@ public static class LevelValidation
             await Shot("L04-level1-tube", 3);
             app.Session.Camera.JumpTo(new Vector2(82, 256), 44);
             await Shot("L04-level1-alley", 2);
+            // the opening's new stage: the beetle is down and the founders stock the clearing with seeds and its remains
+            {
+                var s1 = app.Session.Sim; var m1 = s1.Mission;
+                foreach (int g in m1.Guards) s1.Slay(g);
+                int qid = s1.Col[0].QueenId;
+                s1.Ants[qid].Pos = s1.Ants[qid].PrevPos = Expedition.Clearing + new Vector2(-3, 0);
+                app.Session.SetPaused(false);
+                for (int i = 0; i < 200 && m1.Stage != ExpeditionStage.Provision; i++) await Wait(0.05f);
+                Check(m1.Stage == ExpeditionStage.Provision && m1.RemainsLeft, $"Level 1 did not reach the stocking stage with the beetle's remains ({m1.Stage})");
+                await Wait(1.5f);
+                app.Session.SetPaused(true);
+                app.Session.Camera.JumpTo(m1.RemainsPos, 40); // where Show objective takes the player
+                await Shot("L04-level1-stocking", 2);
+            }
             app.StartEpisode(10);
             Check(app.Session.Hud.StoryOpen, "Level 7 did not open with its comic beat");
             await Shot("L04-comic-beat-hornet", 2);

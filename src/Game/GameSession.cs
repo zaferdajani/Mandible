@@ -710,7 +710,7 @@ public partial class GameSession : Node3D
     public void Issue(Cmd c) => Orders.Issue(c);
 
     /// The first lesson of this world, shown once, at the first kill: killing makes no one stronger, eating does.
-    public void EatLesson() => Hud.Banner("Victory alone makes no one stronger", Settings.Touch
+    public void EatLesson() => Hud.Banner(Sim.Mission != null ? "Fighters evolve by eating" : "Victory alone makes no one stronger", Settings.Touch
         ? "Eat the remains: select the ant you want to grow, then tap the carcass. Or let the workers haul it home as organic matter for the queen."
         : "Eat the remains: right-click the carcass with the ant you want to grow. Or let the workers haul it home as organic matter for the queen.", 10f);
 
