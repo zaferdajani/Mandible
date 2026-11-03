@@ -257,3 +257,11 @@ The ground cover moved the yard's material to 3 and light and palette to 4, and 
 Sugar and berries rose on the art check (sugar: primitives 1 to 2, scale 2 to 3, palette 3 to 4; berries: material 2 to 3, palette 3 to 4). Readability is noisier between rounds than the frames changed. Since the merge with main (85da6a6), the synctest matches main exactly: Colony `CF02B6CA`, Lanes `B5B60334`.
 
 The Low tier is back to 60 fps on the tour, Medium 61, the glass-earth view 48. The new `--perf-probe` measures Low with each art layer switched off in turn. Every layer costs under 0.5 fps on Low. The earlier 48 fps readings were measured during the tour's first seconds, while shaders were still compiling.
+
+**2026-11-03, round 9, after the torn-bread crumbs, crisper sugar and worn trail (commit 19adf4e).** Readability now passes for four views: c-level-map (4), e-food-crumb (4, up from 2), e-food-seed (4) and e-food-berry (4). Readability still fails for sugar (3), fog (3), opening (3), chambers (3) and yard (2).
+
+Art scores (repetition, primitives, scale, material, light, palette) stay between 2 and 4, so every art check still fails. The best are berries (2 3 3 3 3 4) and fog of war (3 3 3 4 3 4).
+
+Two causes found:
+- **Sugar "blur" at play zoom:** the bright crystals' emission plus the glow pass haloed the whole pile. The emission is now removed.
+- **Fog's "no remembered tier":** the frame shows only ground currently in sight next to black. Showing the remembered tier needs a capture taken after the ants have walked somewhere and left it.

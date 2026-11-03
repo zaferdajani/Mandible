@@ -134,17 +134,17 @@ public static class FoodArt
             // amber, dark where it pools deep, the soil showing through at the thin edge; a wet mirror on top
             AlbedoColor = new Color(0.36f, 0.17f, 0.02f, 0.8f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             Roughness = 0.12f, MetallicSpecular = 0.35f, // glossy, but no sun disc blooming off it
-            ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0.0f,
+            ClearcoatEnabled = true, Clearcoat = 0.6f, ClearcoatRoughness = 0.08f,
             BacklightEnabled = true, Backlight = new Color(0.32f, 0.15f, 0.01f),
         };
         Add(pile, new MeshInstance3D { Mesh = SyrupMesh(rng, size * 0.8f), MaterialOverride = syrup, Position = new Vector3(size * 0.35f, 0.06f, size * 0.2f) }, 0.6f, null);
         var crystal = new StandardMaterial3D
         {
             // opaque enough to keep crisp facets at play zoom (a thin alpha read as a soft white smudge from afar)
-            AlbedoColor = new Color(0.93f, 0.92f, 0.89f, 0.86f), Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass,
+            AlbedoColor = new Color(0.82f, 0.81f, 0.78f, 0.86f), Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass,
             Roughness = 0.04f, MetallicSpecular = 1f, // no refraction: with it the screen copy ignores alpha and the crystal turns solid
             RimEnabled = true, Rim = 1f, RimTint = 0.05f, ClearcoatEnabled = true, Clearcoat = 1f, ClearcoatRoughness = 0f,
-            EmissionEnabled = true, Emission = new Color(1f, 0.96f, 0.86f), EmissionEnergyMultiplier = 0.03f,
+            // no emission: bright white plus the glow pass haloed the whole pile and read as blur at play zoom
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
         var crystals = NatureAssets.Kind("food_sugar");
