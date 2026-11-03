@@ -44,6 +44,9 @@ public static class CampaignProgress
         return Met(type) ? u.Name : $"a {u.Kind.ToLowerInvariant()} not yet met";
     }
 
+    /// Evolution by eating, met in its chapter (or any Skirmish or Lane War): the Field Guide's Feeding page.
+    public static bool MetEvolution { get { Ensure(); return _openModes || Frontier >= Reveal.Evolution; } }
+
     public static void MetEverything() { Ensure(); if (_openModes) return; _openModes = true; Save(); }
 
     /// The level's stars as bits: 1 the win, 2 and 4 its optional goals.

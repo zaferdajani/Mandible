@@ -373,6 +373,15 @@ public partial class PlayerInput : Node
         return all;
     }
 
+    /// Fighters and heroes at the nest eat from the colony's organic reserve.
+    public void FeedFromReserve()
+    {
+        Prune();
+        if (Selection.Count == 0) return;
+        Game.Issue(Cmd.Units(CmdKind.FeedReserve, Local.Me, Selection, Sim));
+        Game.Audio.Ui("ui_click");
+    }
+
     public void Reinforce()
     {
         Prune();
@@ -631,6 +640,25 @@ public partial class PlayerInput : Node
                 if (!f.Alive) continue;
                 float d = f.Pos.DistanceTo(world) - f.Radius;
                 if (d < 1.8f && d < best) { best = d; food = f; }
+            }
+            // remains: the fighters and heroes in the selection eat them (and evolve); the workers carry them home
+            if (food != null && food.Kind == FoodKind.Corpse && Sim.EatRules && Selection.Exists(i => Sim.Eats(Sim.Ants[i]) && Sim.CanEat(Sim.Ants[i], food)))
+            {
+                var eaters = Selection.FindAll(i => Sim.Eats(Sim.Ants[i]));
+                var fc = Cmd.Units(CmdKind.Feast, Local.Me, eaters, Sim);
+                fc.FoodId = food.Id;
+                Game.Issue(fc);
+                var workers = Selection.FindAll(i => Sim.Ants[i].Type == AntType.Worker);
+                if (workers.Count > 0)
+                {
+                    var wc = Cmd.Units(CmdKind.Gather, Local.Me, workers, Sim);
+                    wc.FoodId = food.Id;
+                    Game.Issue(wc);
+                }
+                Game.Ants.Ack(Selection, food.Pos);
+                Game.Effects.Marker(Game.World.HF.Point(food.Pos), new Color(0.95f, 0.6f, 0.2f));
+                Game.Audio.Ui("ui_click");
+                return;
             }
             if (food != null && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
             {

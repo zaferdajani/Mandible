@@ -124,7 +124,7 @@ The rival is the red fire ants' royal line: the young queen **Ashling**, then he
 
 | # | Act | Level | Novelty | Rival | Win | Star goals (2nd, 3rd) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | I · The Broken Tube | **The First Nest** (Ep 1) | workers, founding, the nest; a ground beetle blocks the alley | - | found the nest and hatch the first workers | under 9:00 · lose no more than 3 ants |
+| 1 | I · The Broken Tube | **The First Nest** (Ep 1) | the hunt, remains, founding, workers | - | hunt the beetle, stock the site with seeds and its remains, found the nest and hatch the first workers | under 9:00 · lose no more than 3 ants |
 | 2 | I | **Sweet Rain** | soldiers, food effects, storm deadline | - (a dead red ant: the first hint) | fill the galleries before the storm | under 9:00 · carry home all four kinds of food |
 | 3 | I | **The Hollow Log** | majors, spiders, raids led by an old wolf spider | - (red ants watch: the cliffhanger) | break every raid | lose no more than 30 ants · queen never below 70% |
 | 4 | II · Red Neighbours | **The Matron's Road** | the red colony arrives; escort Vetch home | young | bring Vetch home and break the red raid | under 15:00 · Vetch lives to the end |
@@ -153,18 +153,45 @@ Each chapter's briefing lists what it introduces, and that chapter's objectives 
 
 | Chapter | Castes and heroes | Chambers and research | Enemies | Systems |
 | --- | --- | --- | --- | --- |
-| 1 | workers | royal chamber, incubator, store | ground beetle | founding, Glass Earth, brood and stores |
+| 1 | workers | royal chamber, incubator, store | ground beetle | the hunt, organic matter, founding (food and remains), Glass Earth, brood and stores |
 | 2 | soldiers | | | food effects |
 | 3 | majors | | spiders | raids down the shaft |
 | 4 | Vetch (escort) | | the red colony | escort |
 | 5 | | | | the queen kill |
 | 6 | | royal jelly (Matriarch), Mandible Forge and Chitin Armory rank 1 | | research |
 | 7 | the first hero raised: Burr as Warlord | | wasps, the Hornet Mother | heroes |
-| 8 | | Silk Cutters | | lairs as larders |
+| 8 | | Silk Cutters | | lairs as larders, evolution by eating |
 | 9 | flying ants, acid gunners | wings, Empress, Forge and Armory rank 2 | | wings |
 | 10 | | every remaining rank | the Old Stag | |
 
-Star perks never break the rule early: the Acid Matron, the Sky Marshal, early gunners and early flyers open no sooner than Act III (Chapter 7). The opening chapter's hunt for small prey and its remains belongs to the organic-matter system and comes in with it.
+Star perks never break the rule early: the Acid Matron, the Sky Marshal, early gunners and early flyers open no sooner than Act III (Chapter 7). ### The opening chapter: hunt, remains, founding
+
+The tube's fall lost everything the colony carried. Chapter 1 opens with no food and no organic matter, and it plays as follows:
+
+1. **The hunt.** Burr's soldiers bring down the ground beetle that blocks the grass alley.
+2. **The march.** They lead the Glass Queen to the clearing rich in seeds.
+3. **Stocking the site.** A queen can only found her nest where the colony has stocked both **food** (seeds gathered in the clearing) and **remains** (the beetle, dragged in by four workers). The guide arrow stands over the remains, and the objective counts both against `Config.FoundFood` and `Config.FoundOrganic`.
+4. **The founding.** The royal chamber consumes the stock, then the colony builds its incubator and store and hatches its first workers.
+
+It runs on PR #9's organic-matter system (`Sim.CanFound`, the organic reserve, hauling remains); there is no second remains system. The tube's look and the alley's ground belong to the art pipeline.
+
+From Chapter 1 the campaign runs the organic economy (`Sim.OrganicRules`):
+- other creatures' remains go into the organic reserve;
+- the queen ascends on organic matter;
+- every brood needs a little of it;
+- the queen's trickle feeds only a founded colony.
+
+The campaign's levels were tuned on remains as food, so in the campaign remains also feed the larder. In the Dry Spell, where every seed has dried up, they are the larder.
+
+PR #8's burial, midden and morale (`Sim.CarrionRules`) stay outside the campaign. Its colony still eats its own dead and forages between fights, because when the campaign ran them, workers spent the battles' aftermath at the midden and the late levels starved.
+
+A rival keeps the queen rank its level gives it. The levels are tuned on her, and remains would otherwise let a raiding rival ascend on the player's dead.
+
+**Evolution by eating** (`Sim.EatRules`) is the Dry Spell's lesson (Chapter 8). After the lairs are hunted and the feast hauled home, its objective is **Feed a fighter**: bring a squad to the nest and feed it from the reserve, or right-click remains with it, until one fighter evolves.
+
+From then on, fighters that eat evolve through three stages, and with them come the guide arrow over remains, the Remains order tab and the Field Guide's Feeding page. The colony's save carries each fighter's stage.
+
+The campaign keeps its squads ranking up in battle on top of this. Its levels and the persistent colony's veterans are built on kill ranks, and making eating the only way to grow (skirmish's rule) left Episode 4 and the Long March short of their tuning. For the same reason the campaign's rival does not evolve.
 
 `--campaign-test` checks the whole schedule. In every chapter, nothing is on offer before the chapter that introduces it and everything introduced by then is. The HUD's research cards and tabs follow the same schedule, no unmet wild bug is on the yard, the red colony is absent through Act I, and no chapter before Ashling's is won by a queen kill.
 

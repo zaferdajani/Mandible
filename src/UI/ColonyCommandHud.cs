@@ -25,7 +25,7 @@ public partial class ColonyCommandHud : Control
     Panel _selectionPanel, _cardsPanel;
     readonly bool _touch = Settings.Mobile;
     Vector2 _resourcesSize, _chambersSize, _selectionSize, _cardsSize, _commandsSize;
-    Label _food, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
+    Label _food, _organic, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
     TextureRect _selectedArt, _queueArt, _nextArt;
     public Texture2D SelectedArt => _selectedArt.Texture;
     ProgressBar _health, _queueProgress;
@@ -33,12 +33,17 @@ public partial class ColonyCommandHud : Control
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
     readonly List<(Button button, Upgrade upgrade, Label status)> _research = new();
     readonly List<Button> _tabs = new();
+    readonly List<(Button button, RemainsOrder order)> _orders = new();
+    ProgressBar _evo;
+    Button _feedReserve;
+    Label _fallenStatus;
     readonly List<(Button button, TextureRect art)> _queueSlots = new();
     readonly Dictionary<int, PanelContainer> _labels = new();
     Texture2D _atlas;
     readonly Dictionary<Rect2, Texture2D> _regions = new();
     float _refresh;
     int _page = 1;
+    public static readonly Color OrganicColor = new(0.86f, 0.5f, 0.16f);
     static readonly Color Edge = new("a77e32"), Gold = new("f4cd70"), Background = new(0.035f, 0.031f, 0.022f, 0.96f);
     static readonly ChamberKind[] Rooms = { ChamberKind.Brood, ChamberKind.Storage, ChamberKind.Royal, ChamberKind.Wings, ChamberKind.Forge, ChamberKind.Armory, ChamberKind.Silk };
     static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner };
@@ -84,7 +89,7 @@ public partial class ColonyCommandHud : Control
         {
             float scale = Mathf.Min(viewport.X / 1672, viewport.Y / 941);
             _canvas.Scale = Vector2.One * scale; _canvas.Position = (viewport - new Vector2(1672, 941) * scale) / 2;
-            Place(_resources, 1064, 2, 1); Place(_chambers, 14, 71, 1); Place(_mapFrame, 14, 651, 1);
+            Place(_resources, 944, 2, 1); Place(_chambers, 14, 71, 1); Place(_mapFrame, 14, 651, 1);
             Place(_selectionBlock, 271, 709, 1); Place(_cardsBlock, 682, 689, 1); Place(_commandsBlock, 1398, 709, 1);
             Place(_network, 320, 52, 1);
             _selectionPanel.Size = new Vector2(1123, 221); // one panel runs on under the cards
@@ -187,22 +192,26 @@ public partial class ColonyCommandHud : Control
     void BuildResources()
     {
         float d = _touch ? 8 : 0; // a taller bar on phones, so its buttons are finger-sized
-        _resourcesSize = new Vector2(_touch ? 624 : 606, 40 + 2 * d);
-        var p = Panel(_canvas, 1064, 2, _resourcesSize.X, _resourcesSize.Y); _resources = p;
+        _resourcesSize = new Vector2(_touch ? 744 : 726, 40 + 2 * d);
+        var p = Panel(_canvas, 944, 2, _resourcesSize.X, _resourcesSize.Y); _resources = p;
         Text(p, "FOOD", 12, 12 + d, 35, 16, 10);
         _food = Text(p, "", 50, 6 + d, 118, 25, 17, false, Gold);
-        Text(p, "BROOD", 160, 12 + d, 42, 16, 10);
-        _brood = Text(p, "", 206, 6 + d, 85, 25, 17);
-        _queen = Text(p, "", 295, 10 + d, 136, 20, 11, false, Gold);
+        // organic matter: the colony's reserve of remains, the evolving material for the queen and the army
+        var mark = At(new OrganicMark { MouseFilter = MouseFilterEnum.Ignore }, 160, 9 + d, 22, 22); p.AddChild(mark);
+        _organic = Text(p, "", 186, 6 + d, 92, 25, 17, false, OrganicColor);
+        mark.TooltipText = _organic.TooltipText = "Organic matter: remains of bugs and enemy ants hauled home. The queen ascends on it, larvae need it, and fighters fed from it evolve.";
+        Text(p, "BROOD", 280, 12 + d, 42, 16, 10);
+        _brood = Text(p, "", 326, 6 + d, 85, 25, 17);
+        _queen = Text(p, "", 415, 10 + d, 136, 20, 11, false, Gold);
         if (_touch)
         {
-            Button(p, "Build", 433, 5, 96, 46, () => Game.Input.ToggleBuild());
-            Button(p, "Menu", 537, 5, 80, 46, () => Game.Hud.TogglePause());
+            Button(p, "Build", 553, 5, 96, 46, () => Game.Input.ToggleBuild());
+            Button(p, "Menu", 657, 5, 80, 46, () => Game.Hud.TogglePause());
         }
         else
         {
-            Button(p, "Build  N", 433, 5, 82, 30, () => Game.Input.ToggleBuild());
-            Button(p, "Menu", 527, 5, 69, 30, () => Game.Hud.TogglePause());
+            Button(p, "Build  N", 553, 5, 82, 30, () => Game.Input.ToggleBuild());
+            Button(p, "Menu", 647, 5, 69, 30, () => Game.Hud.TogglePause());
         }
     }
     static Upgrade? RoomUpgrade(ChamberKind k) => k switch
@@ -240,7 +249,7 @@ public partial class ColonyCommandHud : Control
     bool Shown(ProdKind k) => Story is not { } m || m.AllowsProd(k);
     bool Shown(ChamberKind k) => Story is not { } m || m.AllowsChamber(k);
     bool Shown(Upgrade u) => Story is not { } m || m.ShowsResearch(u);
-    bool ShownTab(int page) => page switch { 2 => Story is not { } m || m.ShowsAnyResearch, 3 => Story is not { } h || h.ShowsHeroes, _ => true };
+    bool ShownTab(int page) => page switch { 2 => Story is not { } m || m.ShowsAnyResearch, 3 => Story is not { } h || h.ShowsHeroes, 4 => Game.Sim.EatRules, _ => true }; // the Remains order matters once fighters eat
     ChamberKind[] ShownRooms => System.Array.FindAll(Rooms, Shown);
 
     void BuildRoomList()
@@ -270,7 +279,12 @@ public partial class ColonyCommandHud : Control
         _selectionPanel = Panel(_selectionBlock, 0, 0, 1123, 221);
         _selectedArt = Art(_selectionBlock, Region(new Rect2(286, 726, 154, 190)), 15, 17, 155, 190);
         _selection = Text(_selectionBlock, "BROOD CHAMBER", 180, 15, 226, 30, 18, true, Gold);
-        _health = Bar(_selectionBlock, 182, 49, 213, 6);
+        _health = Bar(_selectionBlock, 182, 47, 213, 6);
+        // the evolution bar: what this ant has eaten toward its next stage (a hero: toward its next level)
+        _evo = Bar(_selectionBlock, 182, 57, 213, 4);
+        _evo.AddThemeStyleboxOverride("fill", UiTheme.Box(OrganicColor, OrganicColor, 0, 2, 0));
+        _feedReserve = Button(_selectionBlock, "Feed from the reserve", 184, 190, 212, _touch ? 30 : 24, () => Game.Input.FeedFromReserve());
+        _feedReserve.TooltipText = "Fighters and heroes at the nest eat organic matter from the colony's reserve and evolve. What they eat, the queen cannot.";
         _counts = Text(_selectionBlock, "", 184, 74, 214, 30, _touch ? 14 : 13);
         _detail = Text(_selectionBlock, "", 185, 119, 212, _touch ? 90 : 84, _touch ? 14 : 12);
         _detail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -280,7 +294,7 @@ public partial class ColonyCommandHud : Control
         _cardsBlock = Block(682, 689, _cardsSize.X, _cardsSize.Y);
         // on a computer the selection panel runs on under the cards; standing alone they need their own
         _cardsPanel = Panel(_cardsBlock, -8, cardsY - 6, _cardsSize.X + 16, _cardsSize.Y - cardsY + 6);
-        string[] names = { "Chambers", "Ants", "Research", "Heroes" };
+        string[] names = { "Chambers", "Ants", "Research", "Heroes", "Remains" };
         for (int i = 0; i < names.Length; i++)
         {
             int page = i;
@@ -335,7 +349,7 @@ public partial class ColonyCommandHud : Control
     void RebuildCards()
     {
         foreach (var child in _cards.GetChildren()) { _cards.RemoveChild(child); child.QueueFree(); }
-        _units.Clear(); _research.Clear();
+        _units.Clear(); _research.Clear(); _orders.Clear(); _fallenStatus = null;
         for (int i = 0; i < _tabs.Count; i++)
         {
             _tabs[i].AddThemeStyleboxOverride("normal", UiTheme.Box(i == _page ? new Color("624619") : Background, i == _page ? Gold : Edge, 1, 3, 0));
@@ -352,12 +366,34 @@ public partial class ColonyCommandHud : Control
                 var b = Button(_cards, "", slot++ * 133, 0, 129, 125, () => Game.TryEnqueue(kind));
                 var title = Text(b, Config.ProdName(kind), 2, 4, 125, 24, 13); title.HorizontalAlignment = HorizontalAlignment.Center;
                 Art(b, UnitArt(kind), 3, 26, 123, 64);
-                Text(b, $"{Config.ProdCost(kind):0} food", 26, 91, 94, 17, _touch ? 13 : 12);
+                float protein = Game.Sim.OrganicCost(kind);
+                Text(b, protein > 0 ? $"{Config.ProdCost(kind):0} · {protein:0.#} org" : $"{Config.ProdCost(kind):0} food", 26, 91, 100, 17, _touch ? 13 : 12);
                 Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", 26, 106, 88, 17, _touch ? 13 : 12);
                 if (!_touch) Text(b, key, 105, 101, 20, 18, 13);
                 Art(b, Region(new Rect2(691, 820, 13, 22)), 8, 94, 13, 22);
                 _units.Add((b, kind));
             }
+        }
+        else if (_page == 4)
+        {
+            // what the workers do with other creatures' remains: haul them home as organic matter, or leave them for the army
+            for (int i = 0; i < 2; i++)
+            {
+                var order = (RemainsOrder)i;
+                var b = Button(_cards, "", i * 268, 0, 262, 125, () => Game.Issue(new Cmd { Kind = CmdKind.Remains, Team = (byte)Local.Me, Arg = (byte)order }));
+                Text(b, Config.RemainsName(order).ToUpperInvariant(), 10, 6, 242, 22, 13, true, Gold);
+                // wrap first, then the text: a label given its text unwrapped keeps the full line's width
+                var d = Text(b, "", 10, 30, 242, 90, _touch ? 13 : 12);
+                d.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+                d.CustomMinimumSize = new Vector2(242, 0);
+                d.Text = Config.RemainsDesc(order);
+                d.Size = new Vector2(242, 90);
+                _orders.Add((b, order));
+            }
+            _fallenStatus = Text(_cards, "", 544, 4, 150, 118, _touch ? 13 : 12, false, UiTheme.Dim);
+            _fallenStatus.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            _fallenStatus.Size = new Vector2(150, 118);
+            RefreshRemains(Game.Sim.Col[Local.Me]);
         }
         else if (_page == 0)
         {
@@ -394,6 +430,7 @@ public partial class ColonyCommandHud : Control
         var sim = Game.Sim; var c = sim.Col[Local.Me];
         _food.Text = $"{(int)c.Food} / {(int)c.FoodCap}"; _brood.Text = $"{c.PopUsed} / {c.PopCap}";
         _queen.Text = Config.QueenTitles[c.T(Upgrade.Queen)].ToUpperInvariant();
+        _organic.Text = $"{c.Organic:0}";
         _chambers.Visible = Game.NestView;
         foreach (var (button, kind, status) in _rooms)
         {
@@ -401,7 +438,7 @@ public partial class ColonyCommandHud : Control
             if (RoomUpgrade(kind) is { } u)
             {
                 bool complete = c.T(u) >= Config.MaxTier(u);
-                status.Text = c.Researching && c.ResearchKind == u ? $"{100 * c.ResearchProgress / c.ResearchTime:0}%" : complete ? "Complete" : episodeLock ? (Shown(u) ? $"Rank {c.T(u)}" : "") : $"{Config.ResearchCost(u, c.T(u) + 1):0}";
+                status.Text = c.Researching && c.ResearchKind == u ? $"{100 * c.ResearchProgress / c.ResearchTime:0}%" : complete ? "Complete" : episodeLock ? (Shown(u) ? $"Rank {c.T(u)}" : "") : Price(sim, u, c.T(u) + 1, true);
                 button.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             }
             else { status.Text = $"{(kind == ChamberKind.Brood ? Sim.BroodCost : Sim.StorageCost):0}"; button.Disabled = sim.CanDig(Local.Me, kind) != Sim.DigResult.Ok; }
@@ -419,11 +456,33 @@ public partial class ColonyCommandHud : Control
         {
             b.Disabled = sim.CanResearch(Local.Me, u) != ResearchResult.Ok;
             bool active = c.Researching && c.ResearchKind == u;
-            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? $"Rank {c.T(u)}" : $"{Config.ResearchCost(u, c.T(u) + 1):0} food";
+            status.Text = active ? $"Research {100 * c.ResearchProgress / c.ResearchTime:0}%" : c.T(u) >= Config.MaxTier(u) ? "Complete" : sim.Mission != null && !sim.Mission.AllowsResearch(u, c.T(u) + 1) ? $"Rank {c.T(u)}" : Price(sim, u, c.T(u) + 1, false);
             b.TooltipText = active ? "Right-click to cancel research and refund food." : Sim.ChamberName(Sim.KindOf(u));
         }
+        RefreshRemains(c);
         RefreshSelection(c); RefreshQueue(c);
         if (Game.Net is { } net) _network.Text = $"vs {net.PeerName} · {net.PingMs:0} ms" + (net.Desyncs > 0 ? " · SYNC ERROR" : Game.NetStall > 0.4f ? " · Waiting for player…" : "");
+    }
+    /// Opens a tab of the cards (tests).
+    internal void ShowPage(int page) { _page = page; RebuildCards(); }
+    /// The price of the next tier: the queen ascends on organic matter, the rest on food.
+    static string Price(Sim sim, Upgrade u, int next, bool brief)
+    {
+        float org = sim.ResearchOrganic(u, next);
+        if (org > 0) return brief ? $"{org:0} org" : $"{org:0} organic";
+        return brief ? $"{sim.ResearchFood(u, next):0}" : $"{sim.ResearchFood(u, next):0} food";
+    }
+    void RefreshRemains(Colony c)
+    {
+        foreach (var (b, order) in _orders)
+        {
+            bool on = c.Remains == order;
+            b.AddThemeStyleboxOverride("normal", UiTheme.Box(on ? new Color("3c2a0e") : new Color(0.035f, 0.03f, 0.02f, 0.98f), on ? Gold : Edge, on ? 2 : 1, 3, 0));
+            b.Modulate = new Color(1, 1, 1, on ? 1f : 0.75f);
+        }
+        if (_fallenStatus == null) return;
+        string resolve = c.MournT > 0 ? $"Resolve: {c.MournT:0}s\n" : "";
+        _fallenStatus.Text = $"Reserve: {c.Organic:0} organic\nOur dead go to the midden ({c.Buried})\n{resolve}Only other creatures' remains feed the colony.";
     }
     void RefreshSelection(Colony c)
     {
@@ -450,7 +509,15 @@ public partial class ColonyCommandHud : Control
         _detail.Text = _touch
             ? n > 0 ? "Tap the ground to move or an enemy to attack. Hold for attack-move." : "Tap ants to command them. Tap the nest hole or Build to see the chambers."
             : n > 0 ? "Right-click to move or attack. Workers gather food and dig chambers." : "Select ants to command them. Click a chamber to inspect it. N opens the nest.";
-        if (input.InspectFood is { Alive: true } food && n == 0) { _selection.Text = Config.FoodName(food.Kind); _counts.Text = $"{food.Amount:0} loads remaining"; _detail.Text = Config.FoodEffectShort(food.Kind); }
+        RefreshEvolution(c, input, n);
+        if (input.InspectFood is { Alive: true } food && n == 0)
+        {
+            _selection.Text = food.Kind == FoodKind.Corpse ? $"{Config.Of(food.AntType).Name} remains" : Config.FoodName(food.Kind);
+            _counts.Text = $"{food.Amount:0} loads remaining";
+            _detail.Text = food.Kind != FoodKind.Corpse || !Game.Sim.OrganicRules ? Config.FoodEffectShort(food.Kind)
+                : food.Team == Local.Me ? "One of ours. The workers carry our dead to the midden; they feed no one of our kind."
+                : $"{Sim.RemainsValue(food):0} organic matter. Haul it home for the queen and the brood, or have fighters eat it to evolve.";
+        }
         if (n == 0 && Game.Sim.Valid(input.Inspect, input.InspectSerial))
         {
             var enemy = Game.Sim.Ants[input.Inspect];
@@ -460,6 +527,40 @@ public partial class ColonyCommandHud : Control
             _counts.Text = $"{enemy.Hp:0} / {enemy.MaxHp:0} health";
             _detail.Text = enemy.Team == Config.Wild ? "Wild insect. Defeat it for experience and protein." : "Enemy colony. Select your attackers and right-click to attack.";
         }
+    }
+    /// Below the health bar: how far the selected fighters (or hero) have eaten toward their next stage, what it gives,
+    /// what it needs, and the order to feed them from the reserve.
+    void RefreshEvolution(Colony c, PlayerInput input, int n)
+    {
+        var sim = Game.Sim;
+        int eaters = 0, best = -1; float progress = 0, need = 0;
+        foreach (int id in input.Selection)
+        {
+            ref var a = ref sim.Ants[id];
+            if (!a.Alive || !sim.Eats(a)) continue;
+            eaters++;
+            progress += sim.EvolutionProgress(a);
+            float nd = sim.EvolutionNeed(a);
+            if (best < 0 || nd > need) { best = id; need = nd; }
+        }
+        bool show = eaters > 0 && sim.EatRules && n > 0;
+        _evo.Visible = show;
+        _feedReserve.Visible = show && c.Organic >= 1 && need > 0;
+        _detail.Size = new Vector2(212, show ? 68 : (_touch ? 90 : 84));
+        if (!show) return;
+        _evo.Value = progress / eaters;
+        ref var b = ref sim.Ants[best];
+        if (Config.IsHero(b.Type))
+        {
+            _counts.Text = $"{_counts.Text}  ·  Level {b.Level}";
+            _detail.Text = b.Level >= Config.HeroMaxLevel ? "A legend: nothing left to learn." :
+                $"Level {b.Level + 1} needs {need:0} more organic matter. Only eating teaches: right-click remains to feast.{(sim.Cannibal(b) ? " Devours our own fallen too." : "")}";
+            return;
+        }
+        string stage = Config.StageNames[b.Stage];
+        _counts.Text = eaters == 1 ? $"{_counts.Text}  ·  {stage}" : $"{_counts.Text}  ·  evolution {progress / eaters * 100:0}%";
+        _detail.Text = b.Stage >= Config.MaxStage ? $"{stage}: fully evolved." :
+            $"Next, {Config.StageNames[b.Stage + 1]}: {Config.StageGain(b.Stage + 1)}. Needs {need:0} more organic matter: eat the remains of bugs or enemy ants (right-click them), or feed from the reserve.";
     }
     void RefreshQueue(Colony c)
     {
@@ -536,5 +637,21 @@ public partial class CommandMark : Control
         else if (Kind == 4) { DrawLine(new Vector2(5, 2), new Vector2(5, 22), gold, 2); DrawColoredPolygon(new[] { new Vector2(6, 3), new Vector2(20, 7), new Vector2(6, 12) }, gold); }
         else if (Kind == 5) { for (int i = 0; i < 3; i++) { DrawCircle(new Vector2(5 + i * 7, 6), 2.6f, gold); DrawRect(new Rect2(2 + i * 7, 10, 6, 10), gold); } }
         else { DrawCircle(c, 3, gold); DrawCircle(c + new Vector2(0, 7), 4, gold); DrawCircle(c + new Vector2(0, -6), 2.5f, gold); for (int i = -1; i <= 1; i++) { DrawLine(c + new Vector2(-2, i * 3), c + new Vector2(-10, i * 8), gold, 1.4f, true); DrawLine(c + new Vector2(2, i * 3), c + new Vector2(10, i * 8), gold, 1.4f, true); } }
+    }
+}
+
+/// The organic matter glyph: a segmented gaster with a stub of leg, drawn in the reserve's amber.
+public partial class OrganicMark : Control
+{
+    public override void _Draw()
+    {
+        var c = Size * 0.5f; float r = Mathf.Min(Size.X, Size.Y) * 0.42f;
+        var amber = ColonyCommandHud.OrganicColor;
+        DrawSetTransform(c, -0.5f, new Vector2(0.72f, 1f));
+        DrawCircle(Vector2.Zero, r, amber.Darkened(0.35f));
+        DrawCircle(new Vector2(0, -r * 0.1f), r * 0.82f, amber);
+        for (int k = -1; k <= 1; k++) DrawLine(new Vector2(-r * 0.78f, k * r * 0.42f), new Vector2(r * 0.78f, k * r * 0.42f), amber.Darkened(0.45f), 1.4f);
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+        DrawLine(c + new Vector2(r * 0.5f, r * 0.55f), c + new Vector2(r * 1.05f, r * 1.0f), amber.Darkened(0.2f), 1.6f);
     }
 }

@@ -11,6 +11,10 @@ public static class Reveal
     public const int RedColony = 4;      // the red colony is a real opponent from the start of Act II
     public const int FirstQueenKill = 5; // Ashling: the first chapter won by killing a queen
     public const int PerkFloor = 7;      // star perks open castes and heroes no earlier than Act III
+    public const int Organic = 1;        // remains feed the reserve: the founders need food and remains (PR #9's economy)
+    /// Evolution by eating: the Dry Spell, whose lairs are the larder, teaches it. The campaign's squads still rank up in
+    /// battle (its levels and veterans are built on it); eating evolves them on top, and the rival does not evolve.
+    public const int Evolution = 8;
 
     public static int Prod(ProdKind k) => k switch
     {
@@ -54,7 +58,9 @@ public static class Reveal
     /// What each chapter introduces, for the briefing ("New in this chapter") and the docs.
     public static readonly (int chapter, string name, string text)[] Systems =
     {
-        (1, "Founding", "Lead the queen to a site rich in food and dig her royal chamber."),
+        (1, "Hunting", "Burr's soldiers bring down a ground beetle; its remains are the colony's first organic matter."),
+        (1, "Founding", "A queen founds her nest only where the colony has stocked both food and remains."),
+        (1, "Organic matter", "Remains of other creatures, hauled home into the reserve: the queen and every brood need it."),
         (1, "Glass Earth", "The ground over the nest turns to glass so the chambers show."),
         (1, "Brood and stores", "Incubators hatch the brood; stores hold the harvest."),
         (1, "Workers", "Hatch workers (Z) to forage and dig."),
@@ -70,7 +76,8 @@ public static class Reveal
         (6, "Research", "Royal jelly, the Mandible Forge and the Chitin Armory."),
         (7, "Heroes", "Raise old Burr as the Warlord (Y): a hero levels fast and fights with special moves."),
         (7, "Wasps", "Flyers that sting, climb away and come back."),
-        (8, "Lairs as larders", "Every bug the army kills is a carcass the workers haul home."),
+        (8, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
+        (8, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),
         (8, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),
         (9, "Wings", "Research wings to hatch flying ants (F) and acid gunners (D)."),
         (10, "The Old Stag", "The lord of the yard. Beat it and it fights for you."),
@@ -86,6 +93,13 @@ public sealed partial class Expedition
 {
     /// This mission's place on the map (1-12).
     public int Chapter => Levels.NumberOf(Episode);
+
+    /// The organic economy (Sim.OrganicRules) and evolution by eating (Sim.EatRules), from the chapters that teach them.
+    public bool Organic => Chapter >= Reveal.Organic;
+    /// In the campaign remains feed the larder as well as the organic reserve: its levels were tuned on a colony that
+    /// eats what it hunts (in the Dry Spell, with every seed dried up, that is all there is).
+    public bool RemainsFeed => true;
+    public bool Evolution => Chapter >= Reveal.Evolution;
 
     /// A caste or hero this chapter lets the player hatch: revealed by the story, or opened early by a star perk.
     public bool AllowsProd(ProdKind k) => Reveal.Prod(k) <= Chapter || PerkAllowsProd(k);

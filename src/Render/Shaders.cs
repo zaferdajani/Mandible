@@ -73,9 +73,7 @@ uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
-uniform vec3 eye_color : source_color = vec3(0.6, 0.32, 0.08); // the iris under the catchlight
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
-uniform float detail = 0.0;   // 1 in portraits and close-ups: compound-eye facets
 varying float v_part;
 varying float v_flash;
 varying vec3 v_local;
@@ -88,6 +86,8 @@ varying float v_sel;
 varying float v_hov;
 varying float v_ao;
 varying float v_pale;
+varying float v_etch;
+varying float v_stage;
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
@@ -95,6 +95,7 @@ float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_x(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
 vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
+float bit_of(float m, float b) { return mod(floor(m / exp2(b)), 2.0); }
 
 void vertex() {
     float part = floor(COLOR.r * 255.0 + 0.5);
@@ -103,10 +104,17 @@ void vertex() {
     // Per-instance data, packed by AntRenderer:
     //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening, 3 grooming) + gait fraction (distance-locked in the sim)
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
-    //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15) + bite fraction
-    //   w = 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15)
+    //       + 1024 * missing parts (bits: legs 0-5, antennae 6-7, head 8, thorax 9, gaster 10) + bite fraction
+    //   w = 512 * evolution stage (0..3) + 64 * acid etching (0..7) + 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
     float xi = floor(INSTANCE_CUSTOM.x);
     float phase = fract(INSTANCE_CUSTOM.x) * TAU;
+    float lost = floor(floor(INSTANCE_CUSTOM.z) / 1024.0);
+    float legsLost = mod(lost, 64.0);
+    float limp = step(0.5, legsLost);
+    // a missing leg breaks the rhythm: the stride hitches on the short side and the body sags toward it
+    float limpSide = step(0.5, mod(legsLost, 8.0)) - step(0.5, floor(legsLost / 8.0));
+    phase += limp * 0.6 * sin(phase);
     float seed = mod(xi, 16.0);
     float pose = floor(xi / 16.0);
     float yi = floor(INSTANCE_CUSTOM.y);
@@ -116,6 +124,7 @@ void vertex() {
     float cz = INSTANCE_CUSTOM.z;
     float zi = floor(cz);
     float bite = fract(cz);
+    zi -= lost * 1024.0;
     float hitq = floor(zi / 64.0); zi -= hitq * 64.0;
     float hov = step(32.0, zi); zi -= hov * 32.0;
     float sel = step(16.0, zi); zi -= sel * 16.0;
@@ -123,6 +132,10 @@ void vertex() {
     float charge = step(4.0, zi); zi -= charge * 4.0;
     float block = step(2.0, zi);
     float wi = floor(INSTANCE_CUSTOM.w);
+    float stage = floor(wi / 512.0); wi -= stage * 512.0;
+    v_stage = stage;
+    float etch = floor(wi / 64.0); wi -= etch * 64.0;
+    v_etch = etch / 7.0;
     float kind = mod(wi, 4.0);
     v_pale = floor(wi / 4.0) / 15.0; // a callow just out of its cocoon: pale until its cuticle tans
     float ot = fract(INSTANCE_CUSTOM.w);
@@ -141,7 +154,7 @@ void vertex() {
     vec3 p = VERTEX;
     vec3 n = NORMAL;
     // weight: the body rolls with the stride and sways when standing
-    float roll = (sin(phase) * 0.035 * moving + idle * sin(TIME * 0.9 + id) * 0.02) * alive;
+    float roll = (sin(phase) * 0.035 * moving + idle * sin(TIME * 0.9 + id) * 0.02 + limpSide * (0.05 + 0.04 * sin(phase) * moving)) * alive;
     if (leg) {
         float side = part <= 3.0 ? 1.0 : -1.0;
         float idx = mod(part - 1.0, 3.0);
@@ -188,6 +201,7 @@ void vertex() {
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
+        q *= 1.0 + 0.16 * stage; // each moult grows heavier jaws
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
@@ -226,6 +240,14 @@ void vertex() {
     if (!leg) { p = rot_z(p, roll); n = rot_z(n, roll); }
     // every ant its own size (feet stay on the ground: the scale is about the origin at foot level)
     p *= 0.93 + 0.14 * hash1(seed + 0.37);
+    // severed parts: whatever is missing collapses to nothing (the pieces lying on the ground are drawn on their own)
+    if (lost > 0.5) {
+        float b = 9.0; // thorax and the waist
+        if (part >= 1.0 && part <= 8.0) b = part - 1.0;
+        else if (region < 0.25 && part >= 9.0) b = 8.0;
+        else if (region > 0.75) b = 10.0;
+        if (bit_of(lost, b) > 0.5) { p = vec3(0.0, 0.1, 0.0); n = vec3(0.0, 1.0, 0.0); }
+    }
     v_part = part;
     v_flash = hitq / 15.0;
     v_local = VERTEX;
@@ -324,18 +346,8 @@ void fragment() {
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
     if (part == 11.0) {
-        // the eye: a two-tone iris with a camera-facing pseudopupil (compound-eye optics) and a catchlight that is
-        // painted, not lit, so it stays in shadow; it brightens when the ant is selected or under the cursor
-        vec3 nv = NORMAL;
-        float pupil = smoothstep(0.76, 0.95, clamp(nv.z, 0.0, 1.0));
-        float catch = pow(clamp(dot(nv, normalize(vec3(-0.45, 0.6, 1.0))), 0.0, 1.0), 48.0);
-        float pulse = 0.85 + 0.15 * sin(TIME * 0.7 + v_seed);
-        vec3 iris = eye_color * (1.0 + 0.7 * fres);
-        float facet = detail * step(0.5, fract(v_local.x * 190.0 + v_local.z * 60.0)) * step(0.5, fract(v_local.y * 110.0 + v_local.x * 95.0));
-        iris = mix(iris, iris * 0.7, facet);
-        c = mix(iris, vec3(0.012), pupil);
-        rough = 0.12; cc = 0.0;
-        eyeEm = iris * 0.12 * pulse + vec3(1.0, 0.97, 0.9) * catch * (0.9 + 0.7 * v_sel + 0.9 * v_hov) + iris * 0.5 * v_sel * pulse;
+        // part 11 is now only the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture
+        c = vec3(0.012); rough = 0.3; cc = 0.0;
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
@@ -381,6 +393,22 @@ void fragment() {
     // structural colour: hue shifts with viewing angle, strongest at grazing angles
     vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + vec3(0.55, 0.75, 0.95)));
     c += rainbow * irid * (0.03 + 0.22 * fres) * (part >= 1.0 && part <= 10.0 ? 0.3 : 1.0);
+    if (v_stage > 0.5 && part != 11.0 && part != 14.0) {
+        // an evolved fighter: darker, harder chitin, and the healed scars of the fights it fed on
+        c *= 1.0 - 0.07 * v_stage;
+        // thin healed scratches: a few short lines across the head, thorax and gaster, more with each stage
+        float stroke = smoothstep(0.46, 0.5, abs(fract(v_local.x * 23.0 + v_local.z * 31.0 + v_seed * 0.37) - 0.5));
+        float patch = step(0.86 - 0.05 * v_stage, hash3(floor(v_local * vec3(9.0, 40.0, 9.0))));
+        float body = (part == 0.0 || part == 12.0 || part == 13.0) ? 1.0 : 0.0;
+        c += vec3(0.05, 0.038, 0.026) * stroke * patch * body;
+        rough += 0.05 * v_stage;
+    }
+    if (v_etch > 0.0 && part != 11.0 && part != 14.0) {
+        // formic acid eats pits into the chitin: dull, rough, faintly yellowed craters
+        float pit = step(1.0 - v_etch * 0.45, hash3(floor(v_local * 95.0)));
+        c = mix(c, c * 0.45 + vec3(0.05, 0.045, 0.01), pit);
+        rough = mix(rough, 0.95, pit); cc *= 1.0 - pit;
+    }
     if (v_pale > 0.0 && part != 11.0) {
         // callow cuticle: soft translucent amber-cream that tans to the colony's colour within seconds
         vec3 callow = part == 13.0 ? vec3(0.46, 0.31, 0.16) : part >= 1.0 && part <= 8.0 ? vec3(0.56, 0.42, 0.25) : vec3(0.52, 0.36, 0.2);
@@ -388,6 +416,7 @@ void fragment() {
         rough = mix(rough, 0.5, v_pale); metal *= 1.0 - v_pale; cc *= 1.0 - v_pale * 0.6;
         BACKLIGHT = mix(BACKLIGHT, vec3(0.5, 0.34, 0.16), v_pale);
     }
+    BACKLIGHT *= 1.0 - dead * 0.85; // dead tissue no longer glows through
     ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
     AO = v_ao * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
     AO_LIGHT_AFFECT = 0.35;
@@ -451,7 +480,7 @@ float net_dist(vec3 p, vec3 cam) {
     vec2 shift = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
     float sl = length(shift);
     if (sl > 6.0) shift *= 6.0 / sl;
-    vec2 q = p.xz + shift * (p.y - net_ground_y + 2.4) - xray_center;
+    vec2 q = p.xz + shift * (p.y - net_ground_y) - xray_center; // the cut is at the surface: the pit's walls below are real geometry
     return nest_field(q);
 }
 float glass_at(vec3 p, vec3 cam) {
@@ -508,8 +537,11 @@ void fragment() {
     // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
-    float glass = xray_on * (1.0 - smoothstep(-0.15, 0.85, nd));
-    float band = exp(-pow((nd - 0.35) / 1.4, 2.0)) * xray_on * 0.55; // a soft shade spilling over the lip, not an outline
+    // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
+    float lip = 1.25;
+    if (xray_on > 0.5 && nd < lip) discard;
+    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.55, nd));
+    float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
     float inHollow = smoothstep(0.05, 0.7, hollow);
@@ -1090,6 +1122,7 @@ void fragment() {
     public const string Bar = @"
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled;
+uniform float evo = 0.0; // 1: the evolution bar under the health bar
 varying float v_hp;
 varying vec3 v_team;
 void vertex() {
@@ -1102,6 +1135,7 @@ void vertex() {
 void fragment() {
     float edge = step(UV.x, 0.03) + step(0.97, UV.x) + step(UV.y, 0.15) + step(0.85, UV.y);
     vec3 hpc = mix(vec3(0.95, 0.18, 0.1), mix(vec3(0.95, 0.8, 0.15), vec3(0.3, 0.9, 0.25), smoothstep(0.5, 0.8, v_hp)), smoothstep(0.15, 0.5, v_hp));
+    if (evo > 0.5) hpc = mix(vec3(0.62, 0.3, 0.07), vec3(1.0, 0.68, 0.22), v_hp); // deep amber filling to gold
     vec3 col = UV.x < v_hp ? hpc : vec3(0.06, 0.05, 0.04);
     col = mix(col, v_team * 0.35, clamp(edge, 0.0, 1.0));
     ALBEDO = col;
@@ -1224,10 +1258,12 @@ void vertex() {
 void fragment() {
     float r = length(UV - 0.5) * 2.0;
     float a = (1.0 - smoothstep(0.2, 1.0, r));
-    // kinds: 0 dust, 1 hemolymph, 2 gold sparks, 3 silk, 4 acid, 5 venom, 6 shell gleam, 7 scarlet sparks
+    // kinds: 0 dust, 1 hemolymph, 2 gold sparks, 3 silk, 4 acid, 5 venom, 6 shell gleam, 7 scarlet sparks,
+    // 8 amber ant hemolymph, 9 cloudy spider hemolymph, 10 acid vapour
     float k = v_c.z;
     vec3 col = k < 0.5 ? vec3(0.62, 0.52, 0.40) : k < 1.5 ? vec3(0.78, 0.82, 0.30) : k < 2.5 ? vec3(1.0, 0.85, 0.5) : k < 3.5 ? vec3(0.95, 0.95, 0.92)
-             : k < 4.5 ? vec3(0.55, 0.98, 0.18) : k < 5.5 ? vec3(0.72, 0.38, 0.95) : k < 6.5 ? vec3(0.45, 0.95, 0.8) : vec3(1.0, 0.42, 0.22);
+             : k < 4.5 ? vec3(0.55, 0.98, 0.18) : k < 5.5 ? vec3(0.72, 0.38, 0.95) : k < 6.5 ? vec3(0.45, 0.95, 0.8) : k < 7.5 ? vec3(1.0, 0.42, 0.22)
+             : k < 8.5 ? vec3(0.86, 0.62, 0.16) : k < 9.5 ? vec3(0.82, 0.8, 0.6) : vec3(0.86, 0.92, 0.72);
     ALBEDO = col;
     ALPHA = a * v_c.x;
 }
@@ -1259,6 +1295,44 @@ void fragment() {
     ROUGHNESS = 0.15;
     SPECULAR = 0.7;
     ALPHA = body * v_a * (0.62 + 0.3 * bub);
+}
+";
+
+    /// Hemolymph soaking into the soil: glossy and bright the moment it lands, then drunk by the earth into a dark
+    /// amber blot that fades over a minute. x alpha, y seed, z kind (0 ant amber, 1 bug yellow-green, 2 spider, 3 acid burn), w wetness.
+    public const string Stain = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+varying vec4 v_c;
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void vertex() {
+    v_c = INSTANCE_CUSTOM;
+    // a hair toward the eye along the view ray, so it never flickers into the soil (bodies lying in it stay in front)
+    vec4 vp = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    vp.xyz -= normalize(vp.xyz) * 0.04;
+    POSITION = PROJECTION_MATRIX * vp;
+}
+void fragment() {
+    vec2 p = UV - 0.5;
+    float seed = v_c.y;
+    float ang = atan(p.y, p.x);
+    float r = length(p) * 2.0 + 0.16 * sin(ang * 3.0 + seed * 11.0) + 0.08 * sin(ang * 7.0 - seed * 5.0);
+    float body = 1.0 - smoothstep(0.55, 0.75, r);
+    // satellite droplets thrown out round the blot
+    vec2 q = p * 7.0 + seed * 13.0;
+    float sat = (1.0 - smoothstep(0.12, 0.3, length(fract(q) - 0.5))) * step(0.72, hash2(floor(q))) * (1.0 - smoothstep(0.6, 0.95, length(p) * 2.0));
+    float a = max(body, sat);
+    // the rim dries darker: a coffee-ring of pigment where the film thinned
+    float rim = smoothstep(0.35, 0.65, r) * body;
+    float k = v_c.z;
+    // soil soaked dark and saturated: the hue of the fluid shows in the darkened earth, not as paint on top of it
+    vec3 col = k < 0.5 ? vec3(0.15, 0.085, 0.025) : k < 1.5 ? vec3(0.11, 0.11, 0.03) : k < 2.5 ? vec3(0.19, 0.16, 0.1) : vec3(0.07, 0.09, 0.015);
+    vec3 fresh = k < 0.5 ? vec3(0.3, 0.17, 0.03) : k < 1.5 ? vec3(0.25, 0.27, 0.05) : k < 2.5 ? vec3(0.38, 0.35, 0.22) : vec3(0.18, 0.3, 0.03);
+    float wet = v_c.w;
+    ALBEDO = mix(col * (1.0 - 0.35 * rim), fresh, wet * (1.0 - 0.5 * rim));
+    ROUGHNESS = mix(0.85, 0.3, wet); // a soft sheen, not a mirror: a glint off a film this thin would flare white
+    SPECULAR = mix(0.2, 0.42, wet);
+    ALPHA = a * v_c.x * mix(0.66, 0.55, wet) * (0.75 + 0.25 * rim); // a thin wet film at first, then soaked-in earth
 }
 ";
 
@@ -1370,6 +1444,10 @@ void fragment() {
         col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.8) * vec3(0.92,0.84,0.76);
         col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
         col *= 0.87 + 0.20 * g;
+        // the walls show the soil in its layers (dark topsoil, ochre loam, pale sand), the floor stays trodden sand
+        vec3 layer = mix(mix(vec3(0.46, 0.30, 0.17), vec3(1.0, 0.70, 0.40), t1), vec3(1.05, 0.90, 0.66), t2);
+        float wall = 1.0 - an.y;
+        col *= mix(vec3(1.0), layer, 0.8 * wall);
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
         col *= 1.0 - 0.32 * crevice;
         if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);

@@ -56,7 +56,7 @@ public static class NestRenderTest
         var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
         var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
         Check(indices.Length > 0 && indices.Length % 3 == 0, "No excavation triangles");
-        foreach (var v in vertices) Check(v.IsFinite() && v.Y <= -0.17f && v.Y >= -NestGeometry.Depth - 0.001f, "Invalid excavation vertex");
+        foreach (var v in vertices) Check(v.IsFinite() && v.Y <= -0.02f && v.Y >= -NestGeometry.Depth - 0.001f, "Invalid excavation vertex");
         foreach (var i in indices) Check(i >= 0 && i < vertices.Length, "Invalid triangle index");
         // Same world must be safe with no chambers and with the shader's full capacity.
         var empty = new NestGeometry(); empty.Refresh(Array.Empty<NestChamber>());

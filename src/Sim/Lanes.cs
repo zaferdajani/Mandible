@@ -312,7 +312,7 @@ public sealed partial class Sim
                 if (HerdBar >= 1)
                 {
                     Col[team].Food += Lane.HerdFood;
-                    if (HeroId[team] >= 0) GrantXp(HeroId[team], Lane.HerdXp);
+                    if (HeroId[team] >= 0) GrantXp(HeroId[team], Lane.HerdXp, true); // the honeydew it drank
                     Events.Add(new SimEvent { Kind = EvKind.HerdMilked, Pos = Pasture, Team = team });
                     HerdHere = false; HerdTeam = -1; HerdBar = 0;
                     HerdNext = Time + Lane.HerdReturn;

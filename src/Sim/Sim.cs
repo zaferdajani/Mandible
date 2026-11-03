@@ -49,9 +49,20 @@ public struct Ant
     public byte Layer;                // 0 the surface, 1 + team: inside that colony's nest
     public byte GoalLayer;            // layer the current Move / AttackMove / Dig goal is on
     public int DigP1;                 // chamber id + 1 this worker is digging (0 = none)
+    // carrion (Carrion.cs)
+    public bool Hauling;              // gripping a carcass with nestmates to drag it home
+    public bool Burying;              // carrying a dead nestmate to the midden
+    public bool Feasting;             // a hero eating at a carcass
+    public float FeastT;
+    public AntType CarryType;         // what the carried carcass piece came from (rendering)
+    public int CarryTeam;
+    // evolution by eating (Carrion.cs)
+    public float Evo;                 // organic matter eaten toward the next stage
+    public int Stage;                 // 0 as hatched, up to Config.MaxStage
+    public bool FeastOrder;           // sent to eat the remains in FoodTarget
 }
 
-public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally }
+public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve }
 
 public struct SimEvent
 {
@@ -65,6 +76,11 @@ public struct SimEvent
     public float Radius;
     public ChamberKind Chamber;
     public int HatchP1;               // Spawn of a newly hatched ant: its id + 1 (0 = none); `To` is where it hatched. Rendering only.
+    // rendering only: Hurt / Death name the victim (id + 1), the attacker's type and the blow as a share of the victim's health;
+    // Death, Pickup and Feast the carcass (food id + 1)
+    public int Who, FoodP1;
+    public AntType By;
+    public float Amount;
 }
 
 public sealed class WebZone
@@ -87,7 +103,7 @@ sealed class WebShotFx
     public float T, Dur, R, Life, Root;
 }
 
-public enum ResearchResult { Ok, NoFood, Locked, Maxed, Busy, Dead }
+public enum ResearchResult { Ok, NoFood, NoOrganic, Locked, Maxed, Busy, Dead }
 
 /// A pack of warriors hatched together. It ranks up as one, and refills and heals at its nest.
 public sealed class Squad
@@ -132,6 +148,14 @@ public sealed class Colony
     public int Produced, Lost, Killed;
     public bool PopBlocked;
     public float QueenAlarm;
+    // the dead (Carrion.cs): the standing order, its effects, and the refuse pile
+    public RemainsOrder Remains = RemainsOrder.Haul;
+    public float MournT;
+    // organic matter: the evolving material, only from other creatures' remains (Carrion.cs)
+    public float Organic = Config.StartOrganic, OrganicGathered, OrganicEaten;
+    public int Buried;
+    public Vector2 MiddenPos;
+    public bool HasMidden;
     // research: the queen starts at tier 1, everything else at 0
     public readonly int[] Tier = { 1, 0, 0, 0, 0 };
     public bool Researching;
@@ -143,7 +167,7 @@ public sealed class Colony
     public int PendingChambers() { int n = 0; foreach (var q in Queue) if (q.Kind == ProdKind.Chamber) n++; return n; }
 }
 
-public enum QueueResult { Ok, NoFood, QueueFull, MaxChambers, Dead, Locked, HeroExists }
+public enum QueueResult { Ok, NoFood, NoOrganic, QueueFull, MaxChambers, Dead, Locked, HeroExists }
 
 public sealed partial class Sim
 {
@@ -220,6 +244,13 @@ public sealed partial class Sim
             if (race == Race.BlackGarden) a.MaxHp *= Config.BlackWarriorHp;
             if (a.Type == AntType.Gunner) a.DmgMul *= race == Race.BlackGarden ? Config.BlackAcidMul : Config.RedGunnerMul;
         }
+        if (a.Stage > 0)
+        {
+            // each moult: tougher, harder-biting, a little bigger (the mandibles most of all, in the shader)
+            a.MaxHp *= 1 + Config.StageHp * a.Stage;
+            a.DmgMul *= 1 + Config.StageBite * a.Stage;
+            a.Size *= 1 + Config.StageSize * a.Stage;
+        }
         if (Config.IsHero(a.Type))
         {
             float m = Config.HeroTierMul(a.Type, a.HeroTier);
@@ -243,7 +274,9 @@ public sealed partial class Sim
     public ResearchResult CanResearch(int team, Upgrade u)
     {
         var c = Col[team];
-        if (Mission != null && (team == 0 ? !Mission.AllowsResearch(u, c.T(u) + 1) : Mission.Episode < 3)) return ResearchResult.Locked;
+        // the campaign's rival keeps the queen its level gave it: the levels were tuned on her rank, and with remains as
+        // organic matter a raiding rival would otherwise ascend on the player's dead
+        if (Mission != null && (team == 0 ? !Mission.AllowsResearch(u, c.T(u) + 1) : Mission.Episode < 3 || u == Upgrade.Queen && OrganicRules)) return ResearchResult.Locked;
         if (!c.Alive) return ResearchResult.Dead;
         if (Mode == GameMode.Lanes) return ResearchResult.Locked; // heroes buy upgrades from the shop instead
         if (!c.Founded) return ResearchResult.Locked;
@@ -251,7 +284,8 @@ public sealed partial class Sim
         if (next > Config.MaxTier(u)) return ResearchResult.Maxed;
         if (c.T(Upgrade.Queen) < Config.QueenNeeded(u, next)) return ResearchResult.Locked;
         if (c.Researching) return ResearchResult.Busy;
-        if (c.Food < Config.ResearchCost(u, next)) return ResearchResult.NoFood;
+        if (c.Food < ResearchFood(u, next)) return ResearchResult.NoFood;
+        if (c.Organic < ResearchOrganic(u, next)) return ResearchResult.NoOrganic;
         return ResearchResult.Ok;
     }
 
@@ -263,9 +297,10 @@ public sealed partial class Sim
         // a new upgrade room must be placed within reach of the tunnels; an existing one is enlarged in place
         if (ChamberOf(team, KindOf(u)) == null && at.HasValue && PlaceCheck(team, at.Value) != DigResult.Ok) return ResearchResult.Locked;
         int next = c.T(u) + 1;
-        float cost = Config.ResearchCost(u, next);
+        float cost = ResearchFood(u, next);
         c.Food -= cost;
         c.Spent += cost;
+        c.Organic -= ResearchOrganic(u, next);
         c.Researching = true;
         c.ResearchKind = u;
         c.ResearchProgress = 0;
@@ -283,13 +318,18 @@ public sealed partial class Sim
     {
         var c = Col[team];
         if (!c.Researching) return;
-        float cost = Config.ResearchCost(c.ResearchKind, c.T(c.ResearchKind) + 1);
+        float cost = ResearchFood(c.ResearchKind, c.T(c.ResearchKind) + 1);
+        c.Organic += ResearchOrganic(c.ResearchKind, c.T(c.ResearchKind) + 1);
         c.Food += cost;
         c.Spent -= cost;
         c.Researching = false;
         var ch = ChamberOf(team, KindOf(c.ResearchKind));
         if (ch != null) { ch.Work = ch.Done; if (!ch.Built) ch.Work = ch.Done = 0; } // an unbuilt room stays a hole in the plan
     }
+
+    /// What the next tier costs: the queen grows on organic matter alone (outside the campaign), everything else on food.
+    public float ResearchFood(Upgrade u, int next) => OrganicRules && u == Upgrade.Queen ? 0 : Config.ResearchCost(u, next);
+    public float ResearchOrganic(Upgrade u, int next) => OrganicRules && u == Upgrade.Queen ? Config.QueenOrganic(next) : 0;
 
     void TickResearch(Colony c, float dt)
     {
@@ -311,9 +351,14 @@ public sealed partial class Sim
         Events.Add(new SimEvent { Kind = EvKind.ResearchDone, Pos = W.Nests[c.Team].Pos, Team = c.Team, Upgrade = u, Tier = c.T(u) });
     }
 
-    void GrantXp(int id, float xp)
+    /// Experience. Outside the campaign only eating teaches (Carrion.cs: Nourish); a kill alone makes no one stronger.
+    void GrantXp(int id, float xp, bool eaten = false)
     {
+        // outside the campaign only eating teaches; the campaign's squads still rank up in battle (eating evolves them on top)
+        if (EatRules && !eaten && Mission == null) return;
         ref var a = ref Ants[id];
+        // the campaign's rival heroes grow only so far, from kills or remains: its levels set the rival's strength
+        if (Mission != null && a.Team == Config.Enemy && Config.IsHero(a.Type) && a.Level >= Config.RivalHeroCap) return;
         if (a.SquadP1 > 0) { SquadXp(Squads[a.SquadP1 - 1], xp); return; }
         int max = Config.MaxLevelOf(a.Type);
         if (!a.Alive || !Config.IsWarrior(a.Type) || a.Level >= max) return;
@@ -423,8 +468,10 @@ public sealed partial class Sim
                 s.RecruitT = 1f;
                 continue;
             }
-            if (col.Food < st.Cost) { s.RecruitT = 1f; continue; }
+            float protein = OrganicCost(Config.KindOf(s.Type)) / Config.SquadSize(s.Type);
+            if (col.Food < st.Cost || col.Organic < protein) { s.RecruitT = 1f; continue; }
             col.Food -= st.Cost;
+            col.Organic -= protein;
             col.Spent += st.Cost;
             int id = Spawn(s.Team, s.Type, nest + Rng.InDisk(1.2f), Rng.R(0, DMath.Tau));
             if (id < 0) continue;
@@ -486,6 +533,7 @@ public sealed partial class Sim
             a.Goal = ClampMap(p + off);
             a.GoalLayer = (byte)layer;
             if (a.DigP1 > 0) a.DigP1 = 0; // an ordered worker drops its shovel
+            if (a.FeastOrder) { a.FeastOrder = false; a.FoodTarget = null; }
             a.State = attack ? AntState.AttackMove : AntState.Move;
             a.Forced = false;
             a.Target = -1;
@@ -502,6 +550,7 @@ public sealed partial class Sim
             if (!a.Alive || a.Type == AntType.Queen) continue;
             a.State = AntState.Engage;
             a.Prev = AntState.Idle;
+            a.FeastOrder = false;
             a.Target = target;
             a.TargetSerial = Ants[target].Serial;
             a.Forced = true;
@@ -545,6 +594,7 @@ public sealed partial class Sim
         float cost = Config.ProdCost(kind);
         c.Food -= cost;
         c.Spent += cost;
+        c.Organic -= OrganicCost(kind);
         c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind) });
         return QueueResult.Ok;
     }
@@ -563,6 +613,7 @@ public sealed partial class Sim
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
         if (kind == ProdKind.Chamber && c.PopCap + (c.PendingChambers() + 1) * Config.ChamberPop > Config.MaxPopCap) return QueueResult.MaxChambers;
         if (c.Food < Config.ProdCost(kind)) return QueueResult.NoFood;
+        if (c.Organic < OrganicCost(kind)) return QueueResult.NoOrganic; // larvae need protein, not just sugar
         return QueueResult.Ok;
     }
 
@@ -586,13 +637,14 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT));
+            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage);
         }
         foreach (var c in Col)
         {
             Mix(F(c.Food)); Mix((uint)c.Queue.Count); Mix((uint)c.PopCap); Mix(F(c.SugarT)); Mix(F(c.JuiceT)); Mix(F(c.ProteinT));
             Mix(c.Founded ? 1u : 0u); Mix(F(c.FoodCap));
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
+            Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
         }
         Mix(Fortified ? 1u : 0u);
         if (Mode == GameMode.Lanes)
@@ -602,6 +654,7 @@ public sealed partial class Sim
             Mix(HerdHere ? 1u : 0u); Mix(F(HerdBar)); Mix((uint)HerdTeam); Mix(F(HerdNext)); Mix((uint)StagId); Mix((uint)StagTeam); Mix(F(StagNext));
         }
         Mix((uint)W.Food.Count);
+        foreach (var f in W.Food) if (f.Kind == FoodKind.Corpse) { Mix(F(f.Pos.X)); Mix(F(f.Pos.Y)); Mix(F(f.Amount)); }
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
     }
@@ -613,6 +666,7 @@ public sealed partial class Sim
         var q = c.Queue[^1];
         c.Queue.RemoveAt(c.Queue.Count - 1);
         c.Food += Config.ProdCost(q.Kind);
+        c.Organic += OrganicCost(q.Kind);
         c.Spent -= Config.ProdCost(q.Kind);
     }
 
@@ -642,7 +696,7 @@ public sealed partial class Sim
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) TickAnt(i, dt);
         Ph.Update(dt);
-        TickCorpses(dt);
+        TickCarrion(dt);
         TickExpedition(dt);
     }
 
@@ -656,6 +710,7 @@ public sealed partial class Sim
         c.SugarT = Mathf.Max(0, c.SugarT - dt);
         c.JuiceT = Mathf.Max(0, c.JuiceT - dt);
         c.ProteinT = Mathf.Max(0, c.ProteinT - dt);
+        c.MournT = Mathf.Max(0, c.MournT - dt);
         if (!c.Alive || c.Queue.Count == 0) { c.PopBlocked = false; return; }
         if (!c.Founded || c.QueenId < 0 || !Ants[c.QueenId].Alive || Ants[c.QueenId].Layer != NestLayer(c.Team) || ChamberCount(c.Team, ChamberKind.Brood, true) == 0) return;
         if (Ants[c.QueenId].Pos.DistanceTo(ChamberPos(c.Team, Royal(c.Team))) > Royal(c.Team).Radius) return;
@@ -764,21 +819,6 @@ public sealed partial class Sim
         }
     }
 
-    void TickCorpses(float dt)
-    {
-        var list = W.Food;
-        for (int i = list.Count - 1; i >= 0; i--)
-        {
-            var f = list[i];
-            if (f.Kind == FoodKind.Corpse)
-            {
-                f.Age += dt;
-                if (f.Age > 150) f.Amount = 0;
-            }
-            if (!f.Alive && f.Kind == FoodKind.Corpse) list.RemoveAt(i);
-        }
-    }
-
     // ------------------------------------------------------------------ queries
     /// Nearest enemy; ground units cannot reach targets flying high above them.
     public int FindEnemy(Vector2 p, int team, float radius, bool air = false, int layer = 0)
@@ -813,13 +853,17 @@ public sealed partial class Sim
         return best;
     }
 
-    public FoodSource NearestFood(Vector2 p, float radius, FoodSource prefer)
+    /// `team` (a forager's colony): skips other creatures' remains when that colony leaves them for its army
+    /// (its own dead are still taken to the midden).
+    public FoodSource NearestFood(Vector2 p, float radius, FoodSource prefer, int team = -1)
     {
+        bool leave = team is >= 0 and <= 1 && EatRules && Col[team].Remains == RemainsOrder.Leave;
         FoodSource best = null;
         float bestD = radius * radius;
         foreach (var f in W.Food)
         {
-            if (!f.Alive) continue;
+            if (!f.Alive || f.Layer != 0) continue; // a carcass inside a nest is the nurses' business
+            if (leave && f.Kind == FoodKind.Corpse && f.Team != team) continue;
             float rr = radius + f.Radius;
             float d = p.DistanceSquaredTo(f.Pos);
             if (d < rr * rr && d - f.Radius * f.Radius < bestD) { bestD = d - f.Radius * f.Radius; best = f; }
@@ -838,6 +882,8 @@ public sealed partial class Sim
         a.Think -= dt;
         a.HitFlash = Mathf.Max(0, a.HitFlash - dt * 5);
         a.DamagedT -= dt;
+        a.Feasting = false;
+        if (a.Hauling && a.State != AntState.Gather) a.Hauling = false;
         if (a.PoisonT > 0)
         {
             a.PoisonT -= dt;
@@ -913,6 +959,12 @@ public sealed partial class Sim
                 desired = WorkerLogic(i, ref a, st, dt, think, ref speedMul);
                 break;
             case AntState.Move:
+                if (a.FeastOrder && a.FoodTarget is { Alive: true } meal)
+                {
+                    // sent to eat: follow the remains (they may be dragged) and stop as soon as they are within reach
+                    a.Goal = meal.Pos;
+                    if (a.Pos.DistanceTo(meal.Pos) < meal.Radius + a.Size * 0.4f + 0.4f) a.Goal = a.Pos;
+                }
                 desired = a.Goal - a.Pos;
                 if (desired.Length() < 0.9f)
                 {
@@ -964,6 +1016,9 @@ public sealed partial class Sim
                     }
                 }
                 if (a.State == AntState.Hold && Valid(a.Target, a.TargetSerial)) TryBite(i, a.Target, st);
+                // a hero with nothing to fight eats at a carcass it stands by
+                if (Eats(a) && (a.State == AntState.Idle || a.State == AntState.Hold) && Feast(i, ref a, dt, think, ref desired)) break;
+                if (Eats(a) && desired.LengthSquared() > 0) { speedMul = 0.5f; break; } // stepping up to it
                 // drift back to anchor if shoved
                 if (a.State == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > 2.5f) { desired = a.Anchor - a.Pos; speedMul = 0.6f; }
                 // wild bugs lick their wounds at their lair, and prowl around it looking for prey
@@ -1084,7 +1139,7 @@ public sealed partial class Sim
         if (a.Cooldown > 0) return;
         a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f);
         a.AttackAnim = 1;
-        float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * Rng.R(0.85f, 1.15f);
+        float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * MoraleMul(a.Team) * Rng.R(0.85f, 1.15f);
         bool sting = false;
         if (a.Type == AntType.Wasp && a.AbilityCd <= 0)
         {
@@ -1411,6 +1466,9 @@ public sealed partial class Sim
         if (armor > 0) dmg *= 1f - armor;
         if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;
+        _blow = dmg / Mathf.Max(1f, t.MaxHp);
+        Events.Add(new SimEvent { Kind = EvKind.Hurt, Pos = t.Pos, To = attacker >= 0 ? Ants[attacker].Pos : t.Pos, Team = t.Team, Type = t.Type,
+            By = attacker >= 0 ? Ants[attacker].Type : t.Type, Who = target + 1, Amount = _blow });
         t.HitFlash = 1;
         t.DamagedT = 3f;
         if (t.Type == AntType.Queen)
@@ -1433,6 +1491,8 @@ public sealed partial class Sim
             }
         }
     }
+
+    float _blow; // the last blow as a share of its victim's health (rendering: how violently it dies)
 
     void Kill(int id, int killer)
     {
@@ -1465,12 +1525,15 @@ public sealed partial class Sim
                 }
             }
         }
-        W.Food.Add(new FoodSource
+        // every death leaves a carcass where it fell, above ground or in the galleries
+        var carcass = new FoodSource
         {
             Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = st.CorpseFood, Max = st.CorpseFood, Radius = t.Size * 0.45f,
-            Team = t.Team, AntType = t.Type, Heading = t.Heading,
-        });
-        Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type });
+            Team = t.Team, AntType = t.Type, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
+        };
+        if (carcass.Alive) W.Food.Add(carcass);
+        Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type, Who = id + 1, FoodP1 = carcass.Alive ? carcass.Id + 1 : 0,
+            By = killer >= 0 ? Ants[killer].Type : t.Type, Amount = killer >= 0 ? _blow : 0, To = killer >= 0 ? Ants[killer].Pos : t.Pos });
         if (Mode == GameMode.Lanes) LaneDeath(id, killer);
         if (t.Type == AntType.Queen && c != null)
         {
@@ -1503,6 +1566,13 @@ public sealed partial class Sim
             if (e < 0 && a.Layer == 0 && Col[a.Team].Founded) e = FindEnemy(nest, a.Team, NestReach(a.Team), true, NestLayer(a.Team));
             if (e >= 0) { a.Prev = AntState.Forage; a.State = AntState.Engage; a.Target = e; a.TargetSerial = Ants[e].Serial; a.Forced = false; return Vector2.Zero; }
         }
+        if (a.State == AntState.Return && a.Burying)
+        {
+            // the dead go out to the midden, not down to the stores, and no trail is laid to them
+            if (AtMidden(ref a)) return Vector2.Zero;
+            if (a.Layer > 0) return nest - a.Pos;
+            return Midden(a.Team) - a.Pos;
+        }
         if (a.State == AntState.Return)
         {
             a.Deposit -= dt;
@@ -1514,6 +1584,16 @@ public sealed partial class Sim
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
+                if (a.CarryKind == FoodKind.Corpse && (CarrionRules || OrganicRules && a.CarryTeam != a.Team))
+                {
+                    // remains are not food: they go into the organic reserve, the colony's evolving material
+                    StoreRemains(c, a.CarryType, 1);
+                    Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team, Type = a.CarryType, Amount = 1 });
+                    a.Heading += DMath.Pi;
+                    if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
+                    else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
+                    return Vector2.Zero;
+                }
                 float gain = Config.FoodValue(a.CarryKind, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, a.CarryKind) ? Config.FoodBonus(c.Race) : 1f);
                 if (c.Food + gain > c.FoodCap)
                 {
@@ -1529,7 +1609,9 @@ public sealed partial class Sim
                 {
                     case FoodKind.Sugar: c.SugarT = Mathf.Min(Config.EffectMax, c.SugarT + Config.EffectPerDelivery); break;
                     case FoodKind.Berry: c.JuiceT = Mathf.Min(Config.EffectMax, c.JuiceT + Config.EffectPerDelivery); break;
-                    case FoodKind.Corpse: c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery); break;
+                    case FoodKind.Corpse:
+                        c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery);
+                        break;
                 }
                 Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team });
                 a.Heading += DMath.Pi;
@@ -1553,7 +1635,7 @@ public sealed partial class Sim
             if (a.Assigned != null && !a.Assigned.Alive)
             {
                 // assigned pile is gone: look for the next one nearby
-                var next = NearestFood(a.Assigned.Pos, 14, null);
+                var next = NearestFood(a.Assigned.Pos, 14, null, a.Team);
                 a.Assigned = next;
                 a.FoodTarget = next;
             }
@@ -1562,7 +1644,7 @@ public sealed partial class Sim
 
         if (a.State == AntState.Forage && think)
         {
-            var f = NearestFood(a.Pos, 8.5f, null);
+            var f = NearestFood(a.Pos, 8.5f, null, a.Team);
             if (f != null) a.FoodTarget = f;
             else if (a.FoodTarget != null && !a.FoodTarget.Alive) a.FoodTarget = null;
         }
@@ -1571,6 +1653,7 @@ public sealed partial class Sim
         {
             var f = a.FoodTarget;
             var to = f.Pos - a.Pos;
+            if (f.Kind == FoodKind.Corpse && (a.Hauling || to.Length() < f.Radius + 0.7f)) return AtCarcass(i, ref a, f, st, ref speedMul);
             if (to.Length() < f.Radius + 0.7f)
             {
                 f.Amount -= 1;

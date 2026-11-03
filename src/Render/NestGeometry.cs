@@ -7,7 +7,8 @@ namespace Mandible;
 /// the soil roof and hit testing. It never changes the simulation's graph, paths or random stream.
 public sealed class NestGeometry
 {
-    public const float Depth = 3.0f; // deep enough that the cut reads as a hollow in the earth, not a stain on it
+    public const float Depth = 6.0f;      // floor below the surface: deep enough that the walls read as walls
+    public const float Lip = 1.7f;        // the bank climbs from the floor's edge to the surface over this distance
     public const int MaxSegments = 32, Stride = 7;
     public readonly float[] Network = new float[MaxSegments * Stride];
     public int Count { get; private set; }
@@ -56,9 +57,9 @@ public sealed class NestGeometry
             int k = i * Stride;
             var a = new Vector2(Network[k], Network[k + 1]);
             var b = new Vector2(Network[k + 2], Network[k + 3]);
-            var r = new Vector2(Network[k + 4] + 5f, Network[k + 5] + 5f);
-            _min = _min.Min(a - Vector2.One * 5).Min(b - r);
-            _max = _max.Max(a + Vector2.One * 5).Max(b + r);
+            var r = new Vector2(Network[k + 4] + 6f, Network[k + 5] + 6f);
+            _min = _min.Min(a - Vector2.One * 6).Min(b - r);
+            _max = _max.Max(a + Vector2.One * 6).Max(b + r);
         }
         Revision++;
         return true;
@@ -91,9 +92,13 @@ public sealed class NestGeometry
                     + 0.045f * Mathf.Sin(p.X * 5.7f + p.Y * 4.3f);
     }
 
-    /// Floor flat to the foot of the wall, then a steep, slightly undercut bank (the earth overhangs a little before the
-    /// lip, as dug soil does), then the lip just under the surface.
-    public static float Height(float distance) => Mathf.Lerp(-Depth, -0.18f, Mathf.Pow(Mathf.SmoothStep(-0.5f, 0.18f, distance), 0.8f));
+    /// The bank's profile: flat floor to the cavity's edge, then a wall that rises steeply from the foot and eases
+    /// into a sloped lip at the surface, like a pit dug in sand.
+    public static float Height(float distance)
+    {
+        float t = Mathf.Clamp((distance + 0.45f) / Lip, 0f, 1f);
+        return Mathf.Lerp(-Depth, -0.03f, Mathf.Pow(t, 1.7f));
+    }
 
     /// A single welded heightfield: overlapping room/tunnel fields are unioned BEFORE triangulation,
     /// so there are no bowl walls blocking doorways, stacked floors or transform-scaled tube stubs.
@@ -109,9 +114,11 @@ public sealed class NestGeometry
                 float d = Distance(p);
                 distances[z * (nx + 1) + x] = d;
                 float y = Height(d);
-                float bank = Mathf.SmoothStep(-0.5f, -0.3f, d) * (1 - Mathf.SmoothStep(0.05f, 0.2f, d)); // 0 on the floor and above the lip
+                // claw-dug scallops on the wall: 0 on the floor, strongest mid-wall, gone at the surface lip
+                float wallT = Mathf.Clamp((d + 0.45f) / Lip, 0f, 1f);
+                float bank = Mathf.SmoothStep(0.03f, 0.2f, wallT) * (1 - Mathf.SmoothStep(0.75f, 0.97f, wallT)) * 1.6f;
                 // the floor is trodden, not flat: low lumps and shallow scrapes, gone near the walking strip's middle
-                float floor = 1 - Mathf.SmoothStep(-0.6f, -0.45f, d);
+                float floor = 1 - Mathf.SmoothStep(-0.75f, -0.5f, d);
                 y += floor * (0.05f * Mathf.Sin(p.X * 2.7f + Mathf.Sin(p.Y * 1.9f) * 1.5f) * Mathf.Sin(p.Y * 2.3f + p.X * 0.7f)
                               + 0.025f * Mathf.Sin(p.X * 7.9f - p.Y * 6.1f));
                 y += bank * (0.16f * Mathf.Sin(p.X * 4.3f + Mathf.Sin(p.Y * 3.1f) * 2) * Mathf.Sin(p.Y * 3.7f + p.X * 0.9f)
@@ -122,7 +129,7 @@ public sealed class NestGeometry
             for (int x = 0; x < nx; x++)
             {
                 int a = z * (nx + 1) + x, b = a + 1, c = a + nx + 2, d = a + nx + 1;
-                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > 4f) continue;
+                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > Lip + 0.6f) continue;
                 mesh.Quad(a, b, c, d);
             }
         mesh.RecalcNormals();
