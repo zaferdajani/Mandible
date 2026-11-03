@@ -92,25 +92,28 @@ public static class FoodArt
 
     static void Seeds(World w, Rng rng, Pile pile, float size)
     {
+        // a heap of sunflower seeds modelled in Blender (four shells and two split halves), each turned its own way,
+        // the heap higher in the middle; a few split shells lie open on their kernels at the edge
+        var whole = NatureAssets.Kind("food_seed");
+        var halves = NatureAssets.Kind("food_seedhalf");
         int n = (int)(size * rng.R(5, 7));
-        var seedMesh = SeedMesh();
         for (int i = 0; i < n; i++)
         {
-            bool grass = rng.F() < 0.35f;
-            bool split = !grass && rng.F() < 0.18f;
-            var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.FoodCut) };
-            m.SetShaderParameter("noise_b", w.NoiseB);
-            m.SetShaderParameter("outside", grass ? 2 : 1);
-            m.SetShaderParameter("inside", 3);
-            if (split) m.SetShaderParameter("cut0", new Vector4(0, 1, 0, 0.02f)); // the shell lies open on its kernel
-            float len = grass ? rng.R(0.7f, 1.0f) : rng.R(1.3f, 1.8f); // a sunflower seed is about an ant and a half long
-            var mi = new MeshInstance3D { Mesh = seedMesh, MaterialOverride = m };
-            // seeds heap: denser and higher in the middle
             var at = rng.InDisk(size * 0.9f) * Mathf.Sqrt(rng.F());
+            bool split = halves.Count > 0 && at.Length() > size * 0.5f && rng.F() < 0.3f;
+            var list = split ? halves : whole;
+            if (list.Count == 0) continue;
+            var p = list[rng.I(0, list.Count)];
+            var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Seed) };
+            m.SetShaderParameter("noise_b", w.NoiseB);
+            m.SetShaderParameter("seed", rng.F());
+            float len = rng.R(1.25f, 1.75f); // about an ant and a half long
+            float s = len / p.Size.Y;
             float heap = Mathf.Max(0, 1 - at.Length() / size) * size * 0.25f;
-            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * new Basis(Vector3.Forward, rng.F() < 0.3f ? Mathf.Pi / 2 : rng.R(-0.3f, 0.3f))
-                       * Basis.FromScale(new Vector3(grass ? 0.42f : 0.5f, grass ? 0.32f : 0.3f, 1) * len);
-            mi.Position = new Vector3(at.X, heap + len * 0.08f, at.Y);
+            // the scan stands along y: lay it down, on its flat side mostly
+            var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, Mathf.Pi / 2 + rng.R(-0.35f, 0.35f))
+                        * new Basis(Vector3.Up, rng.F() < 0.75f ? 0 : Mathf.Pi / 2) * Basis.FromScale(Vector3.One * s);
+            var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m, Basis = basis, Position = new Vector3(at.X, heap + p.Size.Z * s * 0.4f, at.Y) };
             Add(pile, mi, (float)i / n * 0.95f, null);
         }
     }
@@ -123,19 +126,25 @@ public static class FoodArt
         Add(pile, new MeshInstance3D { Mesh = DropMesh(rng, size * 1.2f, 0.015f), MaterialOverride = stainMat, Position = new Vector3(0, 0.02f, 0) }, 0.8f, null);
         var sugar = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.93f, 0.92f, 0.89f), Roughness = 0.45f, MetallicSpecular = 0.7f,
-            BacklightEnabled = true, Backlight = new Color(0.45f, 0.43f, 0.38f),
-            Uv1Triplanar = true, Uv1Scale = new Vector3(3, 3, 3), // the grains of a pressed cube, in relief only
-            NormalEnabled = true, NormalTexture = NatureAssets.Texture("ground/gravelly_sand_nor"), NormalScale = 1.5f,
+            // clear crystal: mostly see-through, the faces catching the light at their edges
+            AlbedoColor = new Color(0.86f, 0.85f, 0.82f, 0.55f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            Roughness = 0.06f, MetallicSpecular = 1f, RimEnabled = true, Rim = 0.9f, RimTint = 0.1f,
+            RefractionEnabled = true, RefractionScale = 0.03f,
+            BacklightEnabled = true, Backlight = new Color(0.5f, 0.48f, 0.42f),
+            EmissionEnabled = true, Emission = new Color(1f, 0.97f, 0.9f), EmissionEnergyMultiplier = 0.04f, // facets catching light
         };
         var granule = (StandardMaterial3D)sugar.Duplicate(); granule.NormalEnabled = false; granule.Roughness = 0.1f;
+        var crystals = NatureAssets.Kind("food_sugar");
         var cube = CrystalMesh();
-        int cubes = rng.I(2, 4);
+        Mesh Crystal() => crystals.Count > 0 ? crystals[rng.I(0, crystals.Count)].Mesh : cube;
+        float unit = crystals.Count > 0 ? 1f / crystals[0].Longest : 1f;
+        int cubes = rng.I(3, 6);
         for (int i = 0; i < cubes; i++)
         {
             float s = size * rng.R(0.55f, 0.75f);
             var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.6f, 1.0f);
-            var mi = new MeshInstance3D { Mesh = cube, MaterialOverride = sugar, Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.15f, 0.15f)) * Basis.FromScale(new Vector3(1, i == cubes - 1 ? 0.55f : 0.95f, 1) * s), Position = new Vector3(at.X, s * 0.4f, at.Y) };
+            // cleaved crystal chunks (Blender), each broken differently, lying on a face
+            var mi = new MeshInstance3D { Mesh = Crystal(), MaterialOverride = sugar, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s * unit), Position = new Vector3(at.X, s * 0.25f, at.Y) };
             Add(pile, mi, (float)i / cubes * 0.7f, null);
         }
         int grains = (int)(size * 14);
@@ -143,36 +152,32 @@ public static class FoodArt
         {
             float s = size * rng.R(0.05f, 0.12f);
             var at = rng.InDisk(size * 1.3f);
-            Add(pile, new MeshInstance3D { Mesh = cube, MaterialOverride = granule, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s), Position = new Vector3(at.X, s * 0.3f, at.Y) }, 0.3f + 0.7f * i / grains, null);
+            Add(pile, new MeshInstance3D { Mesh = Crystal(), MaterialOverride = granule, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s * unit * rng.R(0.7f, 1.4f)), Position = new Vector3(at.X, s * 0.2f, at.Y) }, 0.3f + 0.7f * i / grains, null);
         }
     }
 
     static void Berries(World w, Rng rng, Pile pile, float size)
     {
-        // wild berries fallen in a little cluster: the scanned lychee's bumpy red skin, each one turned differently
-        var fruit = NatureAssets.Kind("food_lychee");
+        // a cluster of wild currants modelled in Blender (five shapes, each with its dried calyx and a broken stalk),
+        // every one its own red, crown up, and a stain where one burst
+        var fruit = NatureAssets.Kind("food_berry");
         if (fruit.Count == 0) return;
-        var p = fruit[0];
-        // the scan's photo under a wet, glossy skin that lets red light through
-        var skin = (StandardMaterial3D)p.Material.Duplicate();
-        skin.AlbedoColor = new Color(1.12f, 0.72f, 0.72f);
-        skin.Roughness = 0.38f;
-        skin.ClearcoatEnabled = true; skin.Clearcoat = 0.8f; skin.ClearcoatRoughness = 0.08f;
-        skin.BacklightEnabled = true; skin.Backlight = new Color(0.55f, 0.06f, 0.05f);
-        skin.RimEnabled = true; skin.Rim = 0.25f; skin.RimTint = 0.6f;
-        int n = Mathf.Clamp((int)(size * 1.6f), 3, 9);
+        int n = Mathf.Clamp((int)(size * 1.8f), 4, 11);
         for (int i = 0; i < n; i++)
         {
-            float d = size * rng.R(0.55f, 0.85f) * (i == 0 ? 1.15f : 1);
-            var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.45f, 0.95f);
-            ShaderMaterial m = null; // whole berries: a cut scan showed an empty shell, not pulp
-            var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m ?? (Material)skin, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * d / p.Footprint), Position = new Vector3(at.X, -d * 0.08f, at.Y) };
-            Add(pile, mi, (float)i / n, m);
+            var p = fruit[rng.I(0, fruit.Count)];
+            float d = size * rng.R(0.5f, 0.72f) * (i == 0 ? 1.1f : 1);
+            var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.4f, 0.95f);
+            var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.BerrySkin) };
+            m.SetShaderParameter("noise_b", w.NoiseB);
+            m.SetShaderParameter("tone", rng.R(0.7f, 1.15f));
+            var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m,
+                Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.45f, 0.45f)) * Basis.FromScale(Vector3.One * d / p.Footprint),
+                Position = new Vector3(at.X, -d * 0.05f, at.Y) };
+            Add(pile, mi, (float)i / n, null);
         }
-        // juice soaked into the soil around the burst one
-        var juice = new StandardMaterial3D { AlbedoColor = new Color(0.25f, 0.03f, 0.03f, 0.5f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.2f };
-        var stain = new MeshInstance3D { Mesh = DropMesh(rng, size * 0.7f, 0.04f), MaterialOverride = juice, Position = new Vector3(size * 0.4f, 0.02f, size * 0.2f) };
-        Add(pile, stain, 0.85f, null);
+        var juice = new StandardMaterial3D { AlbedoColor = new Color(0.25f, 0.03f, 0.03f, 0.5f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.15f };
+        Add(pile, new MeshInstance3D { Mesh = DropMesh(rng, size * 0.6f, 0.03f), MaterialOverride = juice, Position = new Vector3(size * 0.4f, 0.02f, size * 0.2f) }, 0.85f, null);
     }
 
     static void Apple(World w, Rng rng, Pile pile, float size)
@@ -194,7 +199,9 @@ public static class FoodArt
 
     static void Add(Pile pile, Node3D n, float keep, ShaderMaterial bitten)
     {
-        if (n is GeometryInstance3D g) g.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+        // food pieces are tiny meshes scaled up hundreds of times: keep their full detail, or the mesh LOD picks a
+        // faceted level for them at play distance
+        if (n is GeometryInstance3D g) { g.CastShadow = GeometryInstance3D.ShadowCastingSetting.On; g.LodBias = 64f; }
         pile.Root.AddChild(n);
         pile.Pieces.Add((n, keep));
         if (bitten != null) pile.Bitten.Add(bitten);

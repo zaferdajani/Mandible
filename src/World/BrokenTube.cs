@@ -34,8 +34,22 @@ public static partial class WorldBuilder
         var root = new Node3D { Position = new Vector3(a0.X, hf.Sample(a0.X, a0.Y) + TubeR * 0.92f, a0.Y), Rotation = new Vector3(0.03f, -yaw, 0.05f) };
         w.Root.AddChild(root);
         var jag = Jagged(rng, 9, 0.2f, 1.6f);
-        root.AddChild(new MeshInstance3D { Mesh = Shell(a => 0, a => lenA - jag(a), closedStart: true, rimAtEnd: true), MaterialOverride = glass });
-        root.AddChild(new MeshInstance3D { Mesh = Rim(a => lenA - jag(a)), MaterialOverride = edgeGlass });
+        // the glass itself is modelled in Blender (tools/blender/food_models.py): a 1.2 mm wall, the rounded closed
+        // end, and a conchoidal break with big teeth and fine chips, scaled from the real 16 mm tube to the game's
+        var tubeScan = NatureAssets.Kind("tube");
+        if (tubeScan.Count > 0)
+        {
+            var t = tubeScan[0];
+            float sr = TubeR * 2f / Mathf.Max(t.Size.X, t.Size.Z), sl = (lenA + 0.6f) / t.Size.Y;
+            // the scan's length runs up its y from the closed end; lay it along the tube's x
+            var lay = new Basis(new Vector3(0, -sr, 0), new Vector3(sl, 0, 0), new Vector3(0, 0, sr));
+            root.AddChild(new MeshInstance3D { Mesh = t.Mesh, MaterialOverride = glass, Basis = lay, Position = new Vector3(-0.6f, 0, 0) });
+        }
+        else
+        {
+            root.AddChild(new MeshInstance3D { Mesh = Shell(a => 0, a => lenA - jag(a), closedStart: true, rimAtEnd: true), MaterialOverride = glass });
+            root.AddChild(new MeshInstance3D { Mesh = Rim(a => lenA - jag(a)), MaterialOverride = edgeGlass });
+        }
 
         // inside: the water reservoir behind its cotton plug, then the colony's sand bed
         var water = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.75f, 0.72f, 0.38f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 0.0f, MetallicSpecular = 1, RefractionEnabled = true, RefractionScale = 0.06f };
@@ -69,7 +83,11 @@ public static partial class WorldBuilder
         {
             float big = i < 6 ? rng.R(1.2f, 2.6f) : rng.R(0.25f, 1.0f);
             var p = mouth + dir * rng.R(-1.5f, 7f) + new Vector2(-dir.Y, dir.X) * rng.R(-4.5f, 4.5f);
-            var shard = new MeshInstance3D { Mesh = Shard(rng, big), MaterialOverride = i % 3 == 0 ? edgeGlass : glass };
+            var shards = NatureAssets.Kind("shard");
+            var piece = shards.Count > 0 ? shards[i % shards.Count] : null;
+            var shard = piece != null
+                ? new MeshInstance3D { Mesh = piece.Mesh, MaterialOverride = i % 3 == 0 ? edgeGlass : glass, Scale = Vector3.One * (big * 2f / piece.Longest) }
+                : new MeshInstance3D { Mesh = Shard(rng, big), MaterialOverride = i % 3 == 0 ? edgeGlass : glass };
             shard.Position = new Vector3(p.X, hf.Sample(p.X, p.Y) + 0.03f, p.Y);
             // most lie flat on their curve, a few stand on edge in the grit
             shard.Rotation = rng.F() < 0.8f ? new Vector3(rng.R(-0.15f, 0.15f), rng.R(0, Mathf.Tau), rng.F() < 0.5f ? 0 : Mathf.Pi) : new Vector3(rng.R(0.9f, 1.3f), rng.R(0, Mathf.Tau), 0);

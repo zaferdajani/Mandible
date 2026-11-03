@@ -390,26 +390,74 @@ public static partial class WorldBuilder
     }
 
     /// The fallen sticks the ants climb over: each a scanned dead branch laid along the bump the sim already raised.
+    /// The fallen sticks the ants climb over. A scanned branch stretched to 40 units smeared its 512 px photo into a
+    /// dark card, so each stick is built along the bump the sim raised and wrapped in photographed bark (Poly Haven
+    /// bark_brown_02, CC0) tiled at its real scale: square texels, ridges in the outline, a slow bend, a taper to
+    /// a broken tip, and a couple of snapped side stubs.
     static void BuildTwigs(World w, Rng rng, List<TwigDef> twigs)
     {
-        var d = new NatureScatter.Dresser(w, rng);
-        var branches = d.Twigs.FindAll(p => p.Src.StartsWith("dry_branches"));
-        if (branches.Count == 0) branches = d.Twigs;
+        var bark = new StandardMaterial3D
+        {
+            AlbedoTexture = NatureAssets.Texture("tex/bark_tile_diff"), AlbedoColor = new Color(1.0f, 0.9f, 0.78f),
+            NormalEnabled = true, NormalTexture = NatureAssets.Texture("tex/bark_tile_nor"), NormalScale = 1.2f,
+            Roughness = 0.9f, TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+        };
+        var ridges = new FastNoiseLite { Seed = rng.I(1, 9999), Frequency = 0.9f };
         foreach (var t in twigs)
         {
-            var a = new Vector2(t.Pts[0].X, t.Pts[0].Z); var b = new Vector2(t.Pts[^1].X, t.Pts[^1].Z);
-            var dir = b - a;
-            var p = branches[rng.I(0, branches.Count)];
-            // the scan is laid lengthwise along z; thicken its cross-section to the stick's real girth
-            var laid = (p.Lie * p.Size).Abs();
-            float len = dir.Length();
-            // the scan is a forked branch whose forks spread up as far as sideways: press it down to the stick's own
-            // thickness (the bump the sim raised), or a 40-unit branch stands ten units tall
-            float scale = len * 1.05f / Mathf.Max(laid.X, laid.Z);
-            float flatten = Mathf.Clamp(t.R * 2.4f / (laid.Y * scale), 0.08f, 1f);
-            d.Place(p, (a + b) * 0.5f, len * 1.05f, 0.18f, 0.02f, p.Lie, Mathf.Atan2(dir.X, dir.Y), rng.R(0.85f, 1f), flatten, 0.3f);
+            var k = new MeshKit();
+            var white = new Color(1, 1, 1);
+            const int sides = 14, per = 10;
+            // a smooth path through the stick's points
+            var path = new List<Vector3>();
+            for (int i = 0; i < t.Pts.Length - 1; i++)
+                for (int j = 0; j < per; j++)
+                {
+                    float u = j / (float)per;
+                    var p0 = t.Pts[Math.Max(0, i - 1)]; var p1 = t.Pts[i]; var p2 = t.Pts[i + 1]; var p3 = t.Pts[Math.Min(t.Pts.Length - 1, i + 2)];
+                    path.Add(0.5f * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u));
+                }
+            path.Add(t.Pts[^1]);
+            float along = 0, circ = Mathf.Tau * t.R;
+            int rings = path.Count;
+            for (int r = 0; r < rings; r++)
+            {
+                var c = path[r];
+                var fwd = (path[Math.Min(rings - 1, r + 1)] - path[Math.Max(0, r - 1)]).Normalized();
+                var side = fwd.Cross(Vector3.Up).Normalized();
+                var up = side.Cross(fwd).Normalized();
+                if (r > 0) along += c.DistanceTo(path[r - 1]);
+                float f = r / (float)(rings - 1);
+                float taper = Mathf.Lerp(1.08f, 0.6f, f) * (f > 0.93f ? Mathf.Lerp(1f, 0.55f, (f - 0.93f) / 0.07f) : 1f);
+                for (int sIdx = 0; sIdx <= sides; sIdx++)
+                {
+                    float a = sIdx / (float)sides * Mathf.Tau;
+                    var dirOut = side * Mathf.Cos(a) + up * Mathf.Sin(a);
+                    float rr = t.R * taper * (1 + 0.09f * ridges.GetNoise2D(a * 3f, along * 0.8f) + 0.04f * Mathf.Sin(a * 9 + along));
+                    // bark texture tiled at its real scale: one tile around the stick, square texels along it
+                    k.Add(c + dirOut * rr, dirOut, white, new Vector2(sIdx / (float)sides, along / circ), Vector2.Zero);
+                }
+            }
+            for (int r = 0; r < rings - 1; r++)
+                for (int sIdx = 0; sIdx < sides; sIdx++)
+                {
+                    int a0 = r * (sides + 1) + sIdx;
+                    k.Quad(a0, a0 + sides + 1, a0 + sides + 2, a0 + 1);
+                }
+            // snapped side stubs
+            int stubs = rng.I(1, 3);
+            for (int sIdx = 0; sIdx < stubs; sIdx++)
+            {
+                int at = rng.I(rings / 5, rings * 4 / 5);
+                var c = path[at];
+                var fwd = (path[at + 1] - path[at - 1]).Normalized();
+                var outDir = (fwd.Cross(Vector3.Up).Normalized() * (rng.F() < 0.5f ? 1 : -1) + Vector3.Up * 0.4f + fwd * 0.5f).Normalized();
+                float sr = t.R * rng.R(0.25f, 0.4f);
+                k.Tube(c, c + outDir * t.R * rng.R(1.4f, 2.6f), sr, sr * 0.7f, 8, white, white, Vector2.Zero, true);
+            }
+            k.RecalcNormals();
+            w.Root.AddChild(new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = bark, Name = "Stick" });
         }
-        d.Commit();
     }
 
     /// Stones, debris and roots over the whole yard (NatureScatter), kept off nests, food, rocks and level 1's corridor.

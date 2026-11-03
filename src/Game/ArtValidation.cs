@@ -25,7 +25,7 @@ public static class ArtValidation
             async Task<Image> Shot(string name, float wait = 2.5f)
             {
                 var cam = app.Session?.Camera;
-                if (cam != null) cam.Cam.Near = name.EndsWith("-close") ? cam.Distance * 0.55f : 0.2f;
+                if (cam != null) cam.Cam.Near = name.EndsWith("-close") ? cam.Distance * 0.35f : 0.2f;
                 await app.ToSignal(app.GetTree().CreateTimer(wait), SceneTreeTimer.SignalName.Timeout);
                 await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var im = app.GetViewport().GetTexture().GetImage();

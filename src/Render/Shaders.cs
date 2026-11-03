@@ -794,6 +794,53 @@ void fragment() {
 }
 ";
 
+    /// A sunflower seed modelled in Blender: UV.x runs around the shell, UV.y along it. Dark grey-black with thin
+    /// pale stripes along its length, a little glossy; the split halves show the cream kernel inside.
+    public const string Seed = @"
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float seed = 0.0;
+void fragment() {
+    float n = texture(noise_b, UV * vec2(3.0, 9.0) + seed).r;
+    if (FRONT_FACING) {
+        float stripes = smoothstep(0.82, 0.94, abs(sin((UV.x * 5.0 + n * 0.25) * 3.14159)));
+        float tip = smoothstep(0.85, 1.0, UV.y);
+        vec3 shell = mix(vec3(0.05, 0.048, 0.045), vec3(0.6, 0.57, 0.5), stripes * (1.0 - tip * 0.6));
+        ALBEDO = shell * (0.85 + 0.3 * n);
+        ROUGHNESS = 0.5 + 0.2 * n;
+        SPECULAR = 0.35;
+        CLEARCOAT = 0.25; CLEARCOAT_ROUGHNESS = 0.4;
+    } else {
+        ALBEDO = vec3(0.86, 0.8, 0.66) * (0.85 + 0.2 * n);
+        ROUGHNESS = 0.7;
+    }
+}
+";
+
+    /// A currant modelled in Blender: vertex colour 1 is skin, 0 the dried calyx and stalk. Glossy, light passing
+    /// through the skin, pale veins, each berry its own red.
+    public const string BerrySkin = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float tone = 1.0;
+varying float skin;
+varying vec3 lp;
+void vertex() { skin = COLOR.r; lp = VERTEX; }
+void fragment() {
+    float n = texture(noise_b, UV * 4.0 + tone).r;
+    vec3 red = mix(vec3(0.08, 0.005, 0.015), vec3(0.24, 0.018, 0.03), clamp(tone * (0.65 + 0.45 * n), 0.0, 1.0));
+    float vein = smoothstep(0.93, 1.0, abs(sin(atan(lp.x, lp.z) * 5.0))) * 0.25;
+    vec3 col = mix(red, red * 1.7 + vec3(0.05, 0.0, 0.0), vein);
+    vec3 dry = vec3(0.16, 0.1, 0.05) * (0.8 + 0.4 * n);
+    ALBEDO = mix(dry, col, skin);
+    ROUGHNESS = mix(0.85, 0.16 + 0.1 * n, skin);
+    SPECULAR = mix(0.2, 0.55, skin);
+    CLEARCOAT = 0.4 * skin; CLEARCOAT_ROUGHNESS = 0.12;
+    BACKLIGHT = vec3(0.22, 0.02, 0.02) * skin;
+}
+";
+
     public static readonly string Leaf = @"
 shader_type spatial;
 render_mode cull_disabled;

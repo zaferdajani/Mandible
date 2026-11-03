@@ -29,6 +29,8 @@ func _init() -> void:
 				continue
 			var reduced := _decimate(arrays, int(entry["tris"]))
 			var size := _recentre(reduced)
+			if entry.get("radial_normals", false):
+				_radial_normals(reduced) # round fruit: smooth normals from the centre, whatever the decimation left
 			var im := ImporterMesh.new()
 			im.add_surface(Mesh.PRIMITIVE_TRIANGLES, reduced)
 			im.generate_lods(25.0, 60.0, [])
@@ -81,6 +83,7 @@ func _baked(mi: MeshInstance3D) -> Array:
 	if t.size() > 0:
 		out[Mesh.ARRAY_TANGENT] = t
 	out[Mesh.ARRAY_TEX_UV] = a[Mesh.ARRAY_TEX_UV]
+	out[Mesh.ARRAY_COLOR] = a[Mesh.ARRAY_COLOR] # vertex colours mark parts (a berry's skin vs its calyx)
 	out[Mesh.ARRAY_INDEX] = a[Mesh.ARRAY_INDEX]
 	return out
 
@@ -107,6 +110,8 @@ func _decimate(a: Array, budget: int) -> Array:
 	var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
 	var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
 	var t = a[Mesh.ARRAY_TANGENT]
+	var col = a[Mesh.ARRAY_COLOR]
+	var nc := PackedColorArray()
 	var ni := PackedInt32Array()
 	ni.resize(best.size())
 	for i in best.size():
@@ -114,6 +119,8 @@ func _decimate(a: Array, budget: int) -> Array:
 		if not remap.has(o):
 			remap[o] = nv.size()
 			nv.append(v[o]); nn.append(n[o]); nuv.append(uv[o])
+			if col != null:
+				nc.append(col[o])
 			if t != null:
 				nt.append_array([t[o * 4], t[o * 4 + 1], t[o * 4 + 2], t[o * 4 + 3]])
 		ni[i] = remap[o]
@@ -122,6 +129,8 @@ func _decimate(a: Array, budget: int) -> Array:
 	out[Mesh.ARRAY_TEX_UV] = nuv
 	if t != null:
 		out[Mesh.ARRAY_TANGENT] = nt
+	if col != null:
+		out[Mesh.ARRAY_COLOR] = nc
 	out[Mesh.ARRAY_INDEX] = ni
 	return out
 
@@ -136,3 +145,16 @@ func _recentre(a: Array) -> Vector3:
 		v[i] -= off
 	a[Mesh.ARRAY_VERTEX] = v
 	return hi - lo
+
+## Normals pointing out from the piece's middle: for round fruit, so decimation never leaves it faceted.
+func _radial_normals(a: Array) -> void:
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+	var lo := v[0]; var hi := v[0]
+	for p in v:
+		lo = lo.min(p); hi = hi.max(p)
+	var c := (lo + hi) * 0.5
+	for i in v.size():
+		var r := (v[i] - c).normalized()
+		n[i] = r if n[i].dot(r) > 0.2 else n[i] # keep the calyx and stalk's own normals
+	a[Mesh.ARRAY_NORMAL] = n
