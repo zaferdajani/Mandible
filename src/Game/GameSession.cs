@@ -171,7 +171,7 @@ public partial class GameSession : Node3D
             },
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightSkyContribution = 0.6f, AmbientLightColor = new Color(0.78f, 0.68f, 0.56f), // sky fill blended with warm bounce off the sand, so shadows never go blue
-            AmbientLightEnergy = 0.45f,
+            AmbientLightEnergy = 0.34f, // less sky fill: shadows hold their shape and the soil keeps its relief
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Aces,
             TonemapExposure = 1.05f,
@@ -179,11 +179,11 @@ public partial class GameSession : Node3D
             SsaoRadius = 1.2f, SsaoIntensity = 2.2f, SsaoPower = 1.5f, SsaoDetail = 0.8f,
             SsilRadius = 5f, SsilIntensity = 0.45f,
             GlowIntensity = 0.4f, GlowBloom = 0.03f, GlowHdrThreshold = 1.15f,
-            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0011f, FogAerialPerspective = 0.3f, FogSkyAffect = 0.3f,
+            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0005f, FogAerialPerspective = 0.12f, FogSkyAffect = 0.3f, // only the far distance hazes
             // Ultra: a breath of dust in the air that the sun shafts through; set up once, switched by the tier
             VolumetricFogDensity = 0.004f, VolumetricFogAlbedo = new Color(0.95f, 0.9f, 0.82f), VolumetricFogEmission = new Color(0.2f, 0.17f, 0.12f), VolumetricFogEmissionEnergy = 0.02f,
             VolumetricFogAnisotropy = 0.55f, VolumetricFogLength = 180f, VolumetricFogDetailSpread = 1.6f, VolumetricFogAmbientInject = 0.15f, VolumetricFogSkyAffect = 0.2f,
-            AdjustmentEnabled = true, AdjustmentSaturation = 1.1f, AdjustmentContrast = 1.07f, AdjustmentBrightness = 1.0f,
+            AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.14f, AdjustmentBrightness = 0.98f,
         };
         AddChild(new WorldEnvironment { Environment = _env });
         _sun = new DirectionalLight3D

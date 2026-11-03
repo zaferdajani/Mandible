@@ -28,13 +28,18 @@ public static class FoodArt
     {
         var pile = new Pile { Root = new Node3D { Name = "Food" + f.Id } };
         var hf = w.HF;
-        float size = f.Radius;
+        // drawn a little larger than the sim's radius (rocks and ants stay true to scale) so a pile reads at play zoom
+        float size = f.Radius * 1.4f;
+        // a soft dark bed of shade and damp under every pile, to lift it off the sand
+        var bed = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.07f, 0.03f, 0.4f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 1, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        var bedMesh = new MeshInstance3D { Mesh = DropMesh(rng, size * 1.25f, 0.01f), MaterialOverride = bed, Position = new Vector3(0, 0.015f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        pile.Root.AddChild(bedMesh);
         switch (f.Kind)
         {
             case FoodKind.Crumb: Crumbs(w, rng, pile, size); break;
             case FoodKind.Seed: Seeds(w, rng, pile, size); break;
             case FoodKind.Sugar: Sugar(w, rng, pile, size); break;
-            default: if (size > 4.8f) Apple(w, rng, pile, size); else Berries(w, rng, pile, size); break;
+            default: if (f.Radius > 4.8f) Apple(w, rng, pile, size); else Berries(w, rng, pile, size); break; // the sim's size picks the kind
         }
         // every piece sits on the soil where it lies
         var origin = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y), f.Pos.Y);
@@ -65,22 +70,26 @@ public static class FoodArt
 
     static void Crumbs(World w, Rng rng, Pile pile, float size)
     {
-        // one broken chunk of bread, and the scatter of smaller crumbs that came off it as it fell
-        var bread = NatureAssets.Kind("food_bread");
-        int n = rng.I(7, 12);
+        // one broken chunk of bread, and the scatter of smaller crumbs that came off it as it fell. The chunk shapes are
+        // the scanned stones' broken forms; the Crumb shader makes them bread (crust up, porous crumb on the breaks).
+        var shapes = NatureAssets.Kind("stone");
+        var mat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Crumb) };
+        mat.SetShaderParameter("noise_b", w.NoiseB);
+        int n = rng.I(8, 14);
         for (int i = 0; i < n; i++)
         {
-            var p = bread[rng.I(0, bread.Count)];
+            var p = shapes[rng.I(0, shapes.Count)];
             bool chunk = i == 0;
-            float across = chunk ? size * 1.6f : size * Mathf.Lerp(0.35f, 0.85f, Mathf.Pow(rng.F(), 1.4f));
+            float across = chunk ? size * 1.3f : size * Mathf.Lerp(0.25f, 0.7f, Mathf.Pow(rng.F(), 1.5f));
             float s = across / p.Footprint;
-            var m = Cut(p, rng, chunk ? 2 : rng.I(1, 3), chunk ? 0.1f : 0.15f, chunk ? 0.45f : 0.45f, 0); // every crumb keeps most of itself, crust and all
+            var m = (ShaderMaterial)mat.Duplicate();
+            m.SetShaderParameter("seed", rng.F());
             // crumbs fan out from the chunk, most close by, a few further
-            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.6f + Mathf.Pow(rng.F(), 1.5f) * 1.4f);
+            var at = chunk ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * (0.55f + Mathf.Pow(rng.F(), 1.5f) * 1.3f);
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m };
-            mi.Basis = Tumble(rng) * Basis.FromScale(Vector3.One * s);
-            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.2f, at.Y);
-            Add(pile, mi, chunk ? 0 : (float)i / n, m);
+            mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * Basis.FromScale(new Vector3(1, rng.R(0.8f, 1.2f), 1) * s);
+            mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.1f, at.Y);
+            Add(pile, mi, chunk ? 0 : (float)i / n, null);
         }
     }
 
@@ -159,7 +168,7 @@ public static class FoodArt
         {
             float d = size * rng.R(0.55f, 0.85f) * (i == 0 ? 1.15f : 1);
             var at = i == 0 ? Vector2.Zero : MathX.Dir(rng.R(0, Mathf.Tau)) * size * rng.R(0.45f, 0.95f);
-            var m = i == 1 ? Cut(p, rng, 1, 0.1f, 0.25f, 2) : (ShaderMaterial)null; // one burst open on its pulp
+            ShaderMaterial m = null; // whole berries: a cut scan showed an empty shell, not pulp
             var mi = new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = m ?? (Material)skin, Basis = Tumble(rng) * Basis.FromScale(Vector3.One * d / p.Footprint), Position = new Vector3(at.X, -d * 0.08f, at.Y) };
             Add(pile, mi, (float)i / n, m);
         }

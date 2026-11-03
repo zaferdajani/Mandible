@@ -16,6 +16,7 @@ public partial class RtsCamera : Node3D
     public bool UserControl = true;
     public bool EdgeScroll = !Settings.Mobile;
     public bool NestView;           // Glass Earth: the camera may come lower and closer to look into the nest
+    public float PitchOverride;     // degrees; > 0 fixes the pitch (art captures at a target's framing), 0 follows the zoom
     public Vector2 Focus2D => new(Focus.X, Focus.Z);
     Vector3 _focusTarget;
     float _yawTarget;
@@ -123,7 +124,7 @@ public partial class RtsCamera : Node3D
     public void Apply()
     {
         float t = Mathf.Clamp((Distance - MinDist) / (MaxDist - MinDist), 0, 1);
-        float pitch = Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(64), _nestTilt);
+        float pitch = PitchOverride > 0 ? Mathf.DegToRad(PitchOverride) : Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(64), _nestTilt);
         var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(Yaw) * Mathf.Cos(pitch)) * Distance;
         var pos = Focus + offset;
         if (HF != null) pos.Y = Mathf.Max(pos.Y, HF.Sample(pos.X, pos.Z) + 3);

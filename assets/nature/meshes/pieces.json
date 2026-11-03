@@ -845,5 +845,126 @@
 		],
 		"src": "grass_bermuda_01",
 		"tris": 10
+	},
+	{
+		"file": "grit_namaqualand_stones_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.0732966661453247,
+			0.0354829058051109,
+			0.0608057342469692
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 46
+	},
+	{
+		"file": "grit_namaqualand_stones_01_1.res",
+		"kind": "grit",
+		"size": [
+			0.142875194549561,
+			0.0709535926580429,
+			0.0674606710672379
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 34
+	},
+	{
+		"file": "grit_namaqualand_stones_01_2.res",
+		"kind": "grit",
+		"size": [
+			0.0965082347393036,
+			0.0514905527234077,
+			0.0936841890215874
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 38
+	},
+	{
+		"file": "grit_namaqualand_stones_01_3.res",
+		"kind": "grit",
+		"size": [
+			0.110551163554192,
+			0.0284955222159624,
+			0.0817994028329849
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 44
+	},
+	{
+		"file": "grit_namaqualand_stones_01_4.res",
+		"kind": "grit",
+		"size": [
+			0.110362768173218,
+			0.0708069577813149,
+			0.111394211649895
+		],
+		"src": "namaqualand_stones_01",
+		"tris": 42
+	},
+	{
+		"file": "grit_stone_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.143548056483269,
+			0.0643697008490562,
+			0.08751530200243
+		],
+		"src": "stone_01",
+		"tris": 52
+	},
+	{
+		"file": "grit_rock_09_0.res",
+		"kind": "grit",
+		"size": [
+			0.0723825171589851,
+			0.0295641664415598,
+			0.14168943464756
+		],
+		"src": "rock_09",
+		"tris": 48
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_0.res",
+		"kind": "grit",
+		"size": [
+			0.211639404296875,
+			0.142629116773605,
+			0.195159494876862
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 52
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_1.res",
+		"kind": "grit",
+		"size": [
+			0.21169638633728,
+			0.0705338716506958,
+			0.14831006526947
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 48
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_2.res",
+		"kind": "grit",
+		"size": [
+			0.194687128067017,
+			0.079845018684864,
+			0.144775390625
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 42
+	},
+	{
+		"file": "grit_namaqualand_rocks_01_3.res",
+		"kind": "grit",
+		"size": [
+			0.183980822563171,
+			0.116854272782803,
+			0.152003765106201
+		],
+		"src": "namaqualand_rocks_01",
+		"tris": 48
 	}
 ]

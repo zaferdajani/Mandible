@@ -710,6 +710,32 @@ void fragment() {
 }
 ";
 
+    /// Bread crumbs: irregular broken chunks (the scanned stones' shapes, which are real broken forms) in bread:
+    /// golden-brown crust on the faces that were the loaf's outside (up), soft porous crumb on the broken sides.
+    public const string Crumb = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float seed = 0.0;
+varying vec3 lp;
+varying vec3 ln;
+void vertex() { lp = VERTEX; ln = NORMAL; }
+float tri(vec3 p, vec3 an, float s, float o) {
+    return texture(noise_b, p.yz * s + o).r * an.x + texture(noise_b, p.xz * s + o).r * an.y + texture(noise_b, p.xy * s + o).r * an.z;
+}
+void fragment() {
+    vec3 an = abs(ln); an /= an.x + an.y + an.z;
+    float n = tri(lp, an, 9.0, seed);
+    float pore = tri(lp, an, 41.0, seed + 0.37);
+    float crust = smoothstep(0.05, 0.55, ln.y + (n - 0.5) * 0.8);
+    vec3 crumbC = vec3(0.78, 0.62, 0.38) * (1.0 - 0.6 * smoothstep(0.5, 0.68, pore)) * (0.85 + 0.15 * n);
+    vec3 crustC = mix(vec3(0.33, 0.14, 0.04), vec3(0.62, 0.33, 0.1), n) * (0.85 + 0.25 * pore);
+    ALBEDO = mix(crumbC, crustC, crust);
+    ROUGHNESS = mix(0.95, 0.5, crust);
+    SPECULAR = mix(0.2, 0.45, crust);
+    NORMAL_MAP = normalize(vec3((pore - 0.5) * (1.0 - crust) * 1.6, (n - 0.5) * 0.6, 1.0)) * 0.5 + 0.5;
+}
+";
+
     public static readonly string Leaf = @"
 shader_type spatial;
 render_mode cull_disabled;

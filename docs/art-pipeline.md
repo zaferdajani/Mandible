@@ -34,29 +34,32 @@ Stones, debris and grass are placed by `src/World/Scatter.cs` (see its header). 
 (hollows, slopes, trail edges) and is seeded per map, so every player sees the same yard. One mesh is never repeated
 across an area: each cluster draws from several species and sizes, with random rotation, tilt and how deep it sinks.
 
-## 4. Review gate
+## 4. Review gate (two parts, the owner's choice of 2026-11-03)
 
-Every view that has a target is rendered from a fixed camera, set beside its target, and scored by a fresh reviewer.
+The targets are macro photographs, where an ant fills 5-10% of the frame; at RTS play zoom it fills 1-2%. So each
+view is judged twice, by different fresh reviewers:
 
-1. Render the views:
+- **Art check** at a close camera matching the target's framing (`<view>-close.png`, set beside the target):
+  repetition, primitives, scale, material, light and palette, each scored 1-5.
+- **Readability check** at real play zoom (`<view>.png`, on its own): readability scored 1-5 against a short written
+  spec for that view (in `tools/art-gate.py`: can a player tell the food types, the trail, the ants and the fog
+  edge apart at a glance?). It is not compared with the macro photo.
+
+Food piles are drawn 1.4x the sim's radius, so they read at play zoom; ants and rocks stay true to scale.
+
+1. Render the views (both framings):
    ```
-   bash D:/MandibleBuilds/godot-run.sh 400 --path . --audio-driver Dummy -- --art-capture=<frames-dir>
+   bash D:/MandibleBuilds/godot-run.sh 600 --path . --audio-driver Dummy -- --art-capture=<frames-dir>
    ```
    This also checks by pixel sampling that unexplored ground is black and the trail is not.
-2. Pair each frame with its target: `python -I tools/art-gate.py <frames-dir> <gate-dir>`. This writes one image
-   per view (target left, frame right) and `review.md`, which holds the reviewer prompt for each pair.
-3. For each pair, spawn a **fresh** reviewer agent (the Agent tool, general-purpose). Give it only the prompt from
-   `review.md`: it opens only that one image and must not read code, notes or earlier reviews. It scores the frame
-   1-5 on repetition, primitive shapes, scale, material realism, light, palette and readability, and returns JSON.
-4. A view passes when every score is 4 or 5 and the reviewer lists no blockers. Only passing frames go to the owner.
-   A failing view goes back to step 2 or 3 of this document, guided by the reviewer's `fix_first`. Record the scores
-   in the PR.
+2. Prepare the checks: `python -I tools/art-gate.py <frames-dir> <gate-dir>`. This writes `<view>-art.jpg`,
+   `<view>-read.jpg` and `review.md`, which holds one prompt per check.
+3. For each section of `review.md`, spawn a **fresh** reviewer agent and give it only that prompt. It opens only
+   the one image and must not read code, notes or earlier reviews. It returns JSON.
+4. A view passes when its art check scores 4 or 5 on every criterion with no blockers, and its readability check
+   scores 4 or 5. Only passing views go to the owner. Record every round in the gate log below.
 
-The reviewer prompt asks for the target's standard at the game camera's framing, not a pixel match. Do not soften
-the prompt to make a frame pass.
-
-Baseline, 2026-11-02, before this pipeline: the yard scored 2 on repetition, primitives, scale, material, palette
-and readability, and 3 on light. The fog of war scored 2-3 on every criterion. Both failed.
+Do not soften the prompts or the specs to make a frame pass.
 
 ## 5. Budgets
 

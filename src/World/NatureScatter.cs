@@ -175,7 +175,24 @@ public static class NatureScatter
             }
         }
 
-        // 3. organic debris: bark, twigs and leaves where the gap noise allows, never on a walked trail
+        // 3. grit: thousands of small scanned stones (cut to ~50 triangles) that give the soil real grain at play zoom,
+        //    thick in the hollows and along trail edges, thin on crests, never a uniform carpet
+        var grit = NatureAssets.Kind("grit");
+        if (grit.Count > 0)
+        {
+            int grains = (int)(areaSize / 11f * density);
+            for (int i = 0; i < grains; i++)
+            {
+                var at = area.Position + new Vector2(rng.F() * area.Size.X, rng.F() * area.Size.Y);
+                float hol = hollowAt(at.X, at.Y), tr = trail(at);
+                float edge = tr < 1e5f ? Mathf.Exp(-Mathf.Pow((tr - 5.5f) / 3f, 2)) : 0;
+                float patch = gaps.GetNoise2D(at.X * 2.3f + 17, at.Y * 2.3f) * 0.5f + 0.5f;
+                if (rng.F() > Mathf.Clamp(0.12f + hol * 0.9f + edge * 0.7f, 0, 1) * Mathf.SmoothStep(0.25f, 0.65f, patch) || keepOut(at)) continue;
+                d.Place(d.Pick(grit), at, rng.R(0.12f, 0.5f) * (1 + hol * 0.5f), rng.R(0.3f, 0.6f), 0.6f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.8f, 1.05f));
+            }
+        }
+
+        // 4. organic debris: bark, twigs and leaves where the gap noise allows, never on a walked trail
         int bits = (int)(areaSize / 90f * density);
         for (int i = 0; i < bits; i++)
         {

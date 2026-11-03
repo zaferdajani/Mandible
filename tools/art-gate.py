@@ -1,9 +1,12 @@
-"""Art review gate, step 2: sets each captured frame beside its approved target.
+"""Art review gate, step 2: prepares both checks of the two-part gate for fresh reviewers.
 
 Usage: python -I tools/art-gate.py <frames-dir> <out-dir>
-  <frames-dir> is what `--art-capture=<dir>` wrote. For every view with a target it writes <out-dir>/<view>.jpg
-  (target left, game frame right, same height, no captions, so the reviewer judges pictures, not labels) and
-  <out-dir>/review.md, the list of pairs plus the reviewer prompt. docs/art-pipeline.md explains the rest.
+  <frames-dir> is what `--art-capture=<dir>` wrote. For every view it writes:
+  - <out-dir>/<view>-art.jpg: the approved target (left) beside the close frame `<view>-close.png` (right), for the
+    ART check: repetition, primitives, scale, material, light and palette, at the target's own framing;
+  - <out-dir>/<view>-read.jpg: the play-zoom frame `<view>.png` alone, for the READABILITY check against the
+    written spec below (a player's question, not a comparison with the macro photo);
+  - <out-dir>/review.md: one reviewer prompt per check. docs/art-pipeline.md explains the rest.
 """
 import os
 import sys
@@ -13,26 +16,34 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TARGETS = os.path.join(ROOT, "docs", "art-targets")
 
-# view (frame name) -> approved target, and what the frame must show
+# view -> (approved target, what the frame shows, readability spec at play zoom)
 VIEWS = {
-    "a-opening": ("a-opening-tube.jpg", "level 1 as it opens: the broken lab tube on the woodland trail"),
-    "a-tube-close": ("a-opening-tube.jpg", "close view of the broken lab tube"),
-    "a-opening-low": ("a-opening-tube.jpg", "level 1 on the Low (phone) tier"),
-    "b-yard": ("b-yard-ground.jpg", "the open yard: soil, stones, grass, debris"),
-    "c-level-map": ("c-level-map-section.jpg", "the colony level map as a nest cross-section"),
-    "d-chamber": ("d-chamber.jpg", "nest chambers seen through the glass earth"),
-    "e-food-crumb": ("e-food-small.jpg", "a crumb food pile"),
-    "e-food-seed": ("e-food-small.jpg", "a seed food pile"),
-    "e-food-sugar": ("e-food-small.jpg", "a sugar food source"),
-    "e-food-berry": ("e-food-fruit-protein.jpg", "a berry food source"),
-    "f-fog-of-war": ("f-fog-of-war.jpg", "level start under fog of war"),
+    "a-opening": ("a-opening-tube.jpg", "level 1 as it opens: the broken lab tube on the woodland trail",
+                  "A player can see at once that a glass tube lies broken at the start of the trail, that the black "
+                  "ants (the queen larger) have come out of it, and which way the trail leads."),
+    "b-yard": ("b-yard-ground.jpg", "the open yard: soil, stones, grass, debris, ants foraging",
+               "Ants stand out from the soil; the ant trail is visible; stones, grass, sticks and any food are told "
+               "apart from each other and from the soil."),
+    "c-level-map": ("c-level-map-section.jpg", "the colony level map as a nest cross-section",
+                    "Each chamber is a separate, recognisable place; a player can tell which chambers are dug or won "
+                    "and which are still locked; the numerals and names can be read; the selected chamber stands out."),
+    "d-chamber": ("d-chamber.jpg", "nest chambers seen through the glass earth",
+                  "Chambers read as hollows in the earth; eggs, larvae and cocoons are told apart; the queen and the "
+                  "worker ants are visible and distinct from the brood."),
+    "e-food-crumb": ("e-food-small.jpg", "a crumb food pile", "The pile is recognisably bread crumbs, stands out from the soil, and is not mistaken for stones or seeds."),
+    "e-food-seed": ("e-food-small.jpg", "a seed food pile", "The pile is recognisably seeds, stands out from the soil, and is not mistaken for stones or crumbs."),
+    "e-food-sugar": ("e-food-small.jpg", "a sugar food source", "The source is recognisably sugar, stands out from the soil, and is not mistaken for stones."),
+    "e-food-berry": ("e-food-fruit-protein.jpg", "a berry food source", "The source is recognisably fruit or berries, stands out from the soil, and is not mistaken for stones."),
+    "f-fog-of-war": ("f-fog-of-war.jpg", "level start under fog of war",
+                     "Ground never seen is black, ground seen before is dimmed, ground in sight is clear: the three "
+                     "are told apart; the ants and the trail inside the visible area read; the edge is soft, not a hard cut."),
 }
 
-PROMPT = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
-Open ONLY this image: {pair}
-Its left half is the approved TARGET; its right half is a FRAME from the game ({what}).
-The frame is seen from the game's camera, which may be farther out than the target; judge whether the frame
-reaches the target's quality at its own framing, not a pixel match. Ignore any UI.
+ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
+Open ONLY this image: {img}
+Its left half is the approved TARGET; its right half is a close FRAME from the game ({what}) at about the
+target's framing. Judge whether the frame reaches the target's quality; it need not match the composition.
+Ignore any UI.
 
 Score the FRAME 1-5 on each (5 = matches the target's standard):
 - repetition: no visible copies of one mesh or texture, no rhythm or grid in placement
@@ -41,16 +52,28 @@ Score the FRAME 1-5 on each (5 = matches the target's standard):
 - material: surfaces read as real materials (soil grain, stone mineral, glass refraction, food texture)
 - light: warm directional sun, grounded contact shadows, no flat or plastic shading
 - palette: warm earth palette, no grey cast, no cartoon saturation
-- readability: the gameplay subject (ants, food, tube, chambers, fog edge) reads at a glance
 
 Reply with JSON only:
-{{"view": "{view}", "scores": {{"repetition": n, "primitives": n, "scale": n, "material": n, "light": n,
-"palette": n, "readability": n}}, "blockers": ["..."], "pass": true|false, "fix_first": "one sentence"}}
+{{"view": "{view}", "check": "art", "scores": {{"repetition": n, "primitives": n, "scale": n, "material": n,
+"light": n, "palette": n}}, "blockers": ["..."], "pass": true|false, "fix_first": "one sentence"}}
 pass is true only when every score is 4 or 5 and blockers is empty.
 """
 
+READ = """You are an independent playtester for a real-time strategy game about an ant colony.
+Open ONLY this image: {img}
+It is a frame from the game at the normal play zoom ({what}). Ignore any UI.
+Judge only READABILITY against this spec:
+  {spec}
+Score readability 1-5 (5 = everything in the spec reads at a glance, 3 = readable with effort, 1 = not readable).
 
-def pair(target_path, frame_path, out_path, height=720):
+Reply with JSON only:
+{{"view": "{view}", "check": "read", "readability": n, "unreadable": ["what cannot be told apart"], "pass": true|false,
+"fix_first": "one sentence"}}
+pass is true only when readability is 4 or 5.
+"""
+
+
+def side_by_side(target_path, frame_path, out_path, height=720):
     t = Image.open(target_path).convert("RGB")
     f = Image.open(frame_path).convert("RGB")
     t = t.resize((round(t.width * height / t.height), height), Image.LANCZOS)
@@ -64,15 +87,20 @@ def pair(target_path, frame_path, out_path, height=720):
 def main():
     frames, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
-    lines = ["# Art gate pairs", "", "Spawn one fresh reviewer per pair with the prompt below; give it nothing else.", ""]
-    for view, (target, what) in VIEWS.items():
-        fp = os.path.join(frames, view + ".png")
-        if not os.path.exists(fp):
-            continue
-        op = os.path.abspath(os.path.join(out, view + ".jpg"))
-        pair(os.path.join(TARGETS, target), fp, op)
-        lines += [f"## {view}", "", "```", PROMPT.format(pair=op, what=what, view=view).strip(), "```", ""]
-        print(op)
+    lines = ["# Art gate", "", "Spawn one fresh reviewer per section with its prompt; give it nothing else.", ""]
+    for view, (target, what, spec) in VIEWS.items():
+        close = os.path.join(frames, view + "-close.png")
+        play = os.path.join(frames, view + ".png")
+        if os.path.exists(close):
+            img = os.path.abspath(os.path.join(out, view + "-art.jpg"))
+            side_by_side(os.path.join(TARGETS, target), close, img)
+            lines += [f"## {view} art", "", "```", ART.format(img=img, what=what, view=view).strip(), "```", ""]
+            print(img)
+        if os.path.exists(play):
+            img = os.path.abspath(os.path.join(out, view + "-read.jpg"))
+            Image.open(play).convert("RGB").save(img, quality=90)
+            lines += [f"## {view} read", "", "```", READ.format(img=img, what=what, view=view, spec=spec).strip(), "```", ""]
+            print(img)
     open(os.path.join(out, "review.md"), "w", encoding="utf-8").write("\n".join(lines))
 
 
