@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -85,6 +85,7 @@ public sealed class Cmd
                 break;
             }
             case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;
+            case CmdKind.Entrance: sim.OrderEntrance(Team, ids); break; // the opening: the founders dig the first nest
             case CmdKind.Rally:
                 sim.Col[Team].Rally = P;
                 sim.Col[Team].HasRally = true;

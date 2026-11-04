@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 
@@ -91,6 +92,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
+        foreach (var a in args) if (a == "--savetest") SaveValidation.Run(this);
         foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
     }
 
@@ -147,6 +149,21 @@ public partial class Main : Node
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         int id = System.Math.Clamp(episode, 1, CampaignEpisodes.Count);
         Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, Episode = id, Seed = Levels.Info(id).Seed });
+    }
+
+    /// Rebuilds a saved single-player game exactly as it began and replays it to the moment it was saved.
+    public void LoadSave(string slot)
+    {
+        var save = SaveGame.Read(slot);
+        if (save == null) { GD.PushWarning($"[save] slot {slot} could not be read"); return; }
+        Local.Me = save.Team;
+        Audio.FadeMusic(1);
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
+        Swap(new GameSession
+        {
+            Demo = false, App = this, Resume = save, Mode = save.Mode, Episode = save.Episode, Seed = save.Seed, Diff = save.Diff,
+            Skirmish = save.Skirmish, Fortified = save.Fortified, Heroes = new[] { save.Hero0, save.Hero1 },
+        });
     }
 
     public void StartSkirmish(int team = 0)
@@ -219,8 +236,12 @@ public partial class MainMenu : CanvasLayer
         UiTheme.Place(sub, 0, 0, 1, 0, 0, 300, 0, 340);
         _root.AddChild(sub);
 
-        _main = Column(
-            ("Campaign", OpenCampaign),
+        var latest = SaveGame.All();
+        var items = new System.Collections.Generic.List<(string, System.Action)>();
+        if (latest.Count > 0) items.Add(($"Continue  ·  {latest[0].Label}", () => App.LoadSave(latest[0].Slot)));
+        items.Add(("Campaign", OpenCampaign));
+        if (latest.Count > 0) items.Add(("Load game", OpenLoad));
+        _main = Column(items.Concat(new (string, System.Action)[] {
             ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
             ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
@@ -229,7 +250,7 @@ public partial class MainMenu : CanvasLayer
             ($"Graphics: {Settings.Gfx}", OpenGraphics),
             (DisplayLabel(), ToggleDisplay),
             (Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)"), CycleVolume),
-            ("Quit", () => GetTree().Quit()));
+            ("Quit", () => GetTree().Quit()) }).ToArray());
         _diff = Column(
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
             ("Normal  ·  a fair war", () => Start(Difficulty.Normal)),
@@ -425,6 +446,48 @@ public partial class MainMenu : CanvasLayer
         v.AddChild(foot);
         panel.AddChild(v);
         Refresh();
+        _overlay = panel;
+        _root.AddChild(panel);
+    }
+
+    /// Saved games, newest first: the milestone autosave and three slots of your own.
+    void OpenLoad()
+    {
+        _main.Visible = false;
+        CloseOverlay();
+        var panel = new PanelContainer();
+        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -380, -300, 380, 300);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 10);
+        var title = UiTheme.Text("LOAD GAME", 34, UiTheme.Title, UiTheme.Gold);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(title);
+        var saves = SaveGame.All();
+        if (saves.Count == 0)
+        {
+            var none = UiTheme.Text("No saved games yet. The game saves itself at every milestone, and you can save any time from the pause menu (Esc).", 16, null, UiTheme.Dim);
+            none.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            none.HorizontalAlignment = HorizontalAlignment.Center;
+            v.AddChild(none);
+        }
+        foreach (var s in saves)
+        {
+            var save = s;
+            var b = new Button { CustomMinimumSize = new Vector2(0, 64), Alignment = HorizontalAlignment.Left };
+            b.Text = $"{(save.Slot == SaveGame.Auto ? "Autosave" : $"Slot {save.Slot}")}  ·  {save.Label}  ·  {save.Clock} played\n{save.When}";
+            b.AddThemeFontSizeOverride("font_size", 17);
+            b.Pressed += () => { App.Audio.Ui("ui_click"); App.LoadSave(save.Slot); };
+            b.MouseEntered += () => App.Audio.Ui("ui_hover");
+            v.AddChild(b);
+        }
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(170, 48) };
+        back.AddThemeFontOverride("font", UiTheme.Title);
+        back.Pressed += () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; };
+        var foot = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        foot.AddChild(back);
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6) });
+        v.AddChild(foot);
+        panel.AddChild(v);
         _overlay = panel;
         _root.AddChild(panel);
     }

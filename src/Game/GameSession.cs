@@ -61,10 +61,21 @@ public partial class GameSession : Node3D
         if (Skirmish) Sim.BeginSkirmish();
         if (!Campaign) CampaignProgress.MetEverything(); // a Skirmish or Lane War shows every caste and bug
         if (Episode > 1) Sim.BeginEpisode(Episode);
-        if (Campaign) { Sim.ApplyRoster(CampaignProgress.RosterFor(Episode), Levels.NumberOf(Episode)); Sim.ApplyPerks(CampaignProgress.Perks); }
+        if (Campaign)
+        {
+            // a loaded game rebuilds the colony that entered the level, not the one saved since
+            var roster = Resume != null ? (Resume.Roster.Length > 0 ? ColonyRoster.Load(Resume.Roster) : null) : CampaignProgress.RosterFor(Episode);
+            var perks = Resume != null ? (Perk)Resume.Perks : CampaignProgress.Perks;
+            RosterAtStart = roster?.Save(); PerksAtStart = (int)perks;
+            Sim.ApplyRoster(roster, Levels.NumberOf(Episode));
+            Sim.ApplyPerks(perks);
+        }
         foreach (var f in World.Food) if (!f.Alive && f.Node != null) f.Node.Visible = false; // the Dry Spell's dried-up food
         CampaignProgress.ApplyLook(!Demo && Local.Me == Config.Player);
-        Orders = Net != null ? Net : new DirectOrders(Sim);
+        // single player keeps a log of the player's orders: with the setup above it is the whole save game
+        if (Net != null) Orders = Net;
+        else if (Demo) Orders = new DirectOrders(Sim);
+        else Orders = Recorder = new RecordingOrders(Sim, new DirectOrders(Sim));
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
         long tAnts = sw.ElapsedMilliseconds;
@@ -154,6 +165,77 @@ public partial class GameSession : Node3D
                 Input.SelectedRoom = Sim.ChamberOf(Local.Me, ChamberKind.Brood).Id;
             }
         }
+        if (Resume != null) ReplaySave(Resume);
+    }
+
+    // ------------------------------------------------------------- save, load, autosave
+    public SaveData Resume;              // set by Main.LoadSave: rebuild this game, then replay it to where it was saved
+    public RecordingOrders Recorder;     // single player only
+    public string RosterAtStart;         // the campaign colony as it entered the level
+    public int PerksAtStart;
+    public bool Restoring { get; private set; }
+    float _autosaveCd;
+    int _milestoneMark = -1;
+
+    /// Plays the saved orders back at full speed, tick for tick, exactly as they were first given; the AI
+    /// decides again from the same state, so the result is the same game. The briefing and story are not shown again.
+    void ReplaySave(SaveData save)
+    {
+        Restoring = true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int next = 0;
+        while (true)
+        {
+            while (next < save.Orders.Count && save.Orders[next].Tick <= Sim.Ticks) Recorder.Issue(save.Orders[next++].Cmd);
+            if (Sim.Ticks >= save.Ticks) break;
+            Sim.Tick(TickDt);
+            foreach (var ai in _ai) ai.Tick(TickDt);
+            Sim.Events.Clear(); // no sounds, alerts or effects for what already happened
+            if (Fog != null && Sim.Ticks % 4 == 0) Fog.Update(Sim, 0.13f); // the ground you had explored is explored again
+        }
+        Restoring = false;
+        _milestoneMark = Milestone();
+        Hud?.CloseBriefing();
+        Camera.JumpTo(save.CameraFocus, save.CameraDistance);
+        bool exact = Sim.Checksum() == save.Checksum;
+        GD.Print($"[save] restored {save.Label} at {save.Clock} ({save.Ticks} ticks, {save.Orders.Count} orders) in {sw.ElapsedMilliseconds} ms, {(exact ? "exact" : "CHECKSUM MISMATCH")}");
+        Hud?.Alert(exact ? $"Loaded: {save.Label} · {save.Clock}" : "Loaded, but this save was made by another version and may differ slightly", exact ? UiTheme.Gold : UiTheme.Dim);
+    }
+
+    /// Saves to a slot now (manual saves, and autosaves at milestones). Multiplayer and the menu backdrop never save.
+    public bool SaveTo(string slot)
+    {
+        if (Recorder == null || _ended || Sim.Winner >= 0) return false;
+        bool ok = SaveGame.Write(this, slot);
+        if (ok && slot != SaveGame.Auto) Hud?.Alert($"Saved to slot {slot}", UiTheme.Gold);
+        return ok;
+    }
+
+    /// A number that rises with every real step forward: a campaign objective done, a nest founded, a chamber finished,
+    /// a hero raised, a research tier reached, an enemy queen killed. Autosave happens only when it rises, never on a timer,
+    /// so the save marks the moments the player is proud of and leaves the rest of the session to be played.
+    int Milestone()
+    {
+        if (Recorder == null) return 0;
+        var c = Sim.Col[Local.Me];
+        int n = (Sim.Mission != null ? Sim.Mission.Step * 100 + (int)Sim.Mission.Stage * 1000 : 0) + (c.Founded ? 1 : 0);
+        foreach (var ch in c.Chambers) if (ch.Built) n += 3;
+        for (int u = 0; u < c.Tier.Length; u++) n += c.Tier[u] * 5;
+        for (int i = 0; i < Sim.High; i++) if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Local.Me && Config.IsHero(Sim.Ants[i].Type)) n += 7;
+        if (!Sim.Col[Local.Foe].Alive) n += 10000;
+        return n;
+    }
+
+    void CheckAutosave(float dt)
+    {
+        if (Recorder == null || Restoring || _ended) return;
+        _autosaveCd -= dt;
+        int m = Milestone();
+        if (_milestoneMark < 0) { _milestoneMark = m; return; }
+        if (m <= _milestoneMark || _autosaveCd > 0) return;
+        _milestoneMark = m;
+        _autosaveCd = 15f; // two milestones a moment apart make one save
+        if (SaveTo(SaveGame.Auto)) Hud?.Alert("Progress saved", UiTheme.Dim);
     }
 
     Environment _env;
@@ -690,6 +772,7 @@ public partial class GameSession : Node3D
         if (Demo) DemoCamera(dt);
         if (Lanes) UpdateMounds();
         ConfineMouse();
+        CheckAutosave(dt);
         CheckEnd();
     }
 

@@ -44,7 +44,9 @@ public partial class ExpeditionGuide : PanelContainer
         _dig = new Button { Text = "Dig entrance", CustomMinimumSize = finger }; row.AddChild(_dig);
         _dig.Pressed += () =>
         {
-            if (Game.Sim.OrderEntrance(Local.Me, Game.Input.Selection)) { Game.Audio.Ui("ui_queue"); Game.SetNestView(true); }
+            // an order like any other, so saved games replay it
+            Game.Issue(Cmd.Units(CmdKind.Entrance, Local.Me, Game.Input.Selection, Game.Sim));
+            if (Game.Sim.Mission is { EntranceOrdered: true }) { Game.Audio.Ui("ui_queue"); Game.SetNestView(true); }
             else Game.Hud.Alert("Select workers at the food clearing with F3 first.");
         };
     }
