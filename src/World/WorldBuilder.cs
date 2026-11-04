@@ -35,7 +35,8 @@ public static partial class WorldBuilder
             w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3));
         }
         RockDips(hf, rocks);
-        Crater(hf, w.Nests[0].Pos);
+        // the first nest is founded during play: its site starts as plain ground, with no crater dug yet
+        if (!firstNest) Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
         hf.SnapshotGround();
 

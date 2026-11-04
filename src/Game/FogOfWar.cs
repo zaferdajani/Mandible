@@ -59,6 +59,9 @@ public sealed class FogOfWar
                 Stamp(a.Pos, Config.Of(a.Type).Sight);
             }
             Stamp(sim.W.Nests[Local.Me].Pos, 34);
+            // the opening's first target stays in sight so it can be seen, clicked and attacked from the start
+            if (sim.Mission is { Episode: 1, Stage: ExpeditionStage.ClearTrail } m)
+                foreach (int id in m.Guards) if (sim.Ants[id].Alive) Stamp(sim.Ants[id].Pos, 7);
         }
         float k = Mathf.Min(1, dt * 5);
         for (int i = 0; i < _vis.Length; i++)

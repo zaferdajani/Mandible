@@ -65,6 +65,7 @@ public partial class Main : Node
             }
         }
         Settings.Load();
+        Settings.ApplyVolume();
         if (_gfx != null && System.Enum.TryParse<Settings.Quality>(_gfx, true, out var gq)) Settings.Gfx = gq;
         if (args.Count == 0) Settings.ApplyDisplay(); // test runs keep the window size they asked for
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
@@ -225,6 +226,7 @@ public partial class MainMenu : CanvasLayer
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", OpenGraphics),
             (DisplayLabel(), ToggleDisplay),
+            (Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)"), CycleVolume),
             ("Quit", () => GetTree().Quit()));
         _diff = Column(
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
@@ -298,10 +300,40 @@ public partial class MainMenu : CanvasLayer
             if (n is Button b && b.Text.StartsWith("Display")) b.Text = DisplayLabel();
     }
 
+    /// The Sound button steps the volume down and wraps from off back to full.
+    void CycleVolume()
+    {
+        Settings.Volume = Settings.Volume <= 0.001f ? 1f : Settings.Volume - 0.2f;
+        Settings.ApplyVolume(save: true);
+        RefreshVolumeLabel();
+    }
+
+    void RefreshVolumeLabel()
+    {
+        if (_main == null) return;
+        foreach (var n in _main.GetChildren())
+            if (n is Button b && b.Text.StartsWith("Sound")) b.Text = Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)");
+    }
+
     public override void _UnhandledKeyInput(InputEvent e)
     {
+        if (e is not InputEventKey { Pressed: true } k) return;
         // F11 also works in the menus
-        if (Visible && e is InputEventKey { Pressed: true, Echo: false } k && k.PhysicalKeycode == Key.F11) ToggleDisplay();
+        if (Visible && !k.Echo && k.PhysicalKeycode == Key.F11) ToggleDisplay();
+        // volume works everywhere, in the menus and in battle: - and = (and the keypad), or the keyboard's media keys
+        float step = k.Keycode switch
+        {
+            Key.Minus or Key.KpSubtract or Key.Volumedown => -Settings.VolumeStep,
+            Key.Equal or Key.Plus or Key.KpAdd or Key.Volumeup => Settings.VolumeStep,
+            _ => 0f,
+        };
+        if (k.Keycode == Key.Volumemute && !k.Echo) step = Settings.Volume > 0.001f ? -1f : 0.8f;
+        if (step == 0f) return;
+        Settings.Volume += step;
+        Settings.ApplyVolume(save: true);
+        RefreshVolumeLabel();
+        App?.Session?.Hud?.Alert(Settings.VolumeLabel(), UiTheme.Dim);
+        GetViewport().SetInputAsHandled();
     }
 
     /// The graphics panel: the four tiers with a line on each, applied to the yard behind the menu as you click.

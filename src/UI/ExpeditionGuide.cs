@@ -56,10 +56,30 @@ public partial class ExpeditionGuide : PanelContainer
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
         _dig.Visible = m.Episode == 1 && m.Stage == ExpeditionStage.DigEntrance;
-        bool stocking = m.Episode == 1 && m.Stage == ExpeditionStage.Provision && m.RemainsLeft;
-        if (stocking) Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
-        else if (_guiding) Game.Guide.Clear();
-        _guiding = stocking;
+        // the opening always points at what to do next: the live beetle, its remains, then the nest site
+        bool guiding = false;
+        if (m.Episode == 1)
+        {
+            int beetle = m.Guards.Count > 0 && Game.Sim.Ants[m.Guards[0]].Alive ? m.Guards[0] : -1;
+            if (m.Stage == ExpeditionStage.ClearTrail && beetle >= 0)
+            {
+                guiding = true;
+                Game.Guide.Show(Game.Sim.Ants[beetle].Pos, "GROUND BEETLE · ATTACK",
+                    Settings.Mobile ? "Tap Army, then tap the beetle. Workers wait behind the queen until it is dead" : "Soldiers (F2), then right-click it. Workers wait behind the queen until it is dead");
+            }
+            else if (m.Stage == ExpeditionStage.Provision && m.RemainsLeft)
+            {
+                guiding = true;
+                Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
+            }
+            else if (m.Stage == ExpeditionStage.DigEntrance)
+            {
+                guiding = true;
+                Game.Guide.Show(Expedition.Clearing, "NEST SITE · DIG HERE", Settings.Mobile ? "Tap Workers, then Dig the entrance" : "Workers (F3), then press Dig the entrance");
+            }
+        }
+        if (!guiding && _guiding) Game.Guide.Clear();
+        _guiding = guiding;
         if (_list != null)
         {
             var sb = new System.Text.StringBuilder();

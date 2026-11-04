@@ -13,6 +13,9 @@ public sealed partial class NestInterior
     readonly Dictionary<(int team, int id), Room> _rooms = new();
     readonly Label3D[] _status = new Label3D[2];
     readonly MeshInstance3D[] _plug = new MeshInstance3D[2];
+    // the open entrance: nothing of it exists until the founders start digging (a site is only a site)
+    readonly MeshInstance3D[] _mouth = new MeshInstance3D[2], _mouthShadow = new MeshInstance3D[2];
+    readonly Node3D[] _mouthLight = new Node3D[2];
     readonly NestGeometry[] _geometry = { new(), new() };
     readonly MeshInstance3D[] _excavation = new MeshInstance3D[2];
     readonly int[] _meshRevision = { -1, -1 };
@@ -81,8 +84,9 @@ public sealed partial class NestInterior
         n.AddChild(_excavation[team]);
         // The entrance is the only genuinely open hole in the surface.
         // the shaft: the ragged funnel runs from the lip all the way down to the pit floor
-        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false), Scale = new Vector3(1, (NestGeometry.Depth - 0.2f) / 1.9f, 1) });
-        n.AddChild(new MeshInstance3D
+        _mouth[team] = new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false), Scale = new Vector3(1, (NestGeometry.Depth - 0.2f) / 1.9f, 1) };
+        n.AddChild(_mouth[team]);
+        n.AddChild(_mouthShadow[team] = new MeshInstance3D
         {
             Name = "EntranceShadow", Mesh = new CylinderMesh { TopRadius = 0.8f, BottomRadius = 0.8f, Height = 0.03f, RadialSegments = 24 },
             Position = new Vector3(0, -NestGeometry.Depth + 0.08f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
@@ -92,7 +96,7 @@ public sealed partial class NestInterior
         _plug[team] = new MeshInstance3D { Mesh = RoughLump(), Scale = new Vector3(1.25f, 0.3f, 1.25f), MaterialOverride = Soil(gy + 1.2f, 1.0f, 0.3f, 0.5f, false), Position = new Vector3(0, 0.25f, 0) };
         n.AddChild(_plug[team]);
         // the sun falling down the shaft
-        n.AddChild(MakeShaft(team, new Vector3(0, 0.3f, 0), 0.9f, 1.8f, 6f));
+        n.AddChild(_mouthLight[team] = MakeShaft(team, new Vector3(0, 0.3f, 0), 0.9f, 1.8f, 6f));
         // status over the entrance
         _status[team] = new Label3D
         {
@@ -368,7 +372,10 @@ public sealed partial class NestInterior
             // the founders' plug
             var royal = sim.Royal(team);
             float dug = royal == null ? 0 : royal.Progress;
-            _plug[team].Visible = !col.Founded;
+            // before the founders dig, the site is plain ground: no hole, no plug, no light down a shaft
+            bool dugInto = col.Founded || royal != null;
+            _mouth[team].Visible = _mouthShadow[team].Visible = _mouthLight[team].Visible = dugInto;
+            _plug[team].Visible = !col.Founded && royal != null;
             if (!col.Founded) { _plug[team].Position = new Vector3(0, 0.25f - dug * 1.1f, 0); _plug[team].Scale = new Vector3(1 - dug * 0.6f, 1, 1 - dug * 0.6f); }
             bool shown = mine && _open > 0.001f;
             _excavation[team].Visible = shown;
