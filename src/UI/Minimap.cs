@@ -50,7 +50,7 @@ public partial class Minimap : Control
                 for (int x = 0; x < _res; x++)
                 {
                     int fx = x * fogN / _res, fz = y * fogN / _res;
-                    float m = !fog.ExploredCell(fx, fz) ? 0.12f : Mathf.Lerp(0.5f, 1f, fog.VisibleValue(fx, fz));
+                    float m = Mathf.SmoothStep(0.08f, 0.75f, fog.ExploredValue(fx, fz)) * Mathf.Lerp(0.42f, 1f, fog.VisibleValue(fx, fz)); // unknown ground is black
                     int i = (y * _res + x) * 4;
                     _px[i] = (byte)(_px[i] * m); _px[i + 1] = (byte)(_px[i + 1] * m); _px[i + 2] = (byte)(_px[i + 2] * m);
                 }

@@ -74,6 +74,8 @@ public partial class GameSession : Node3D
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
         Ants.Brood = Interior;
+        var nestPos = World.Nests[Local.Me].Pos;
+        Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
         if (Episode == 2) BuildHerdDressing();
@@ -106,6 +108,10 @@ public partial class GameSession : Node3D
         {
             Fog = new FogOfWar(World);
             Ants.VisibleToPlayer = Fog.Visible;
+            FogOverlay.Attach(Camera.Cam, World);
+            // level 1 opens on the trail alone: it is known (dim) before anyone walks it, everything else is black
+            if (Sim.Mission is { Episode: 1 })
+                Fog.Know(p => 1f - Mathf.SmoothStep(3f, 7f, p.DistanceTo(new Vector2(Mathf.Clamp(p.X, 36, 128), Mathf.Clamp(p.Y, 252, 260)))));
             if (Lanes)
             {
                 if (Net == null) _ai.Add(new LaneAI(Sim, Local.Foe, Diff));
@@ -151,6 +157,16 @@ public partial class GameSession : Node3D
     }
 
     Environment _env;
+    const float SurfaceExposure = 1.05f, NestExposure = 1.6f;
+    float _underT; // 0 = looking at the yard, 1 = looking into the nest; eased over ~0.6 s
+
+    /// Eye adaptation going underground: the exposure rises and falls smoothly as the camera drops into the nest
+    /// (and back), so the dark tunnels stay readable and nothing pops at the entrance.
+    void UpdateExposure(float dt)
+    {
+        _underT = Mathf.MoveToward(_underT, Camera.NestView ? 1f : 0f, dt / 0.6f);
+        _env.TonemapExposure = Mathf.Lerp(SurfaceExposure, NestExposure, Mathf.SmoothStep(0f, 1f, _underT));
+    }
 
     /// One sun, one sky. The ProceduralSkyMaterial draws its sun disc where the DirectionalLight3D points, the
     /// ambient and reflections come from that sky, and the sun is the only light in the scene: every shadow in
@@ -172,7 +188,7 @@ public partial class GameSession : Node3D
             },
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightSkyContribution = 0.6f, AmbientLightColor = new Color(0.78f, 0.68f, 0.56f), // sky fill blended with warm bounce off the sand, so shadows never go blue
-            AmbientLightEnergy = 0.45f,
+            AmbientLightEnergy = 0.34f, // less sky fill: shadows hold their shape and the soil keeps its relief
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Aces,
             TonemapExposure = 1.05f,
@@ -180,18 +196,19 @@ public partial class GameSession : Node3D
             SsaoRadius = 1.2f, SsaoIntensity = 2.2f, SsaoPower = 1.5f, SsaoDetail = 0.8f,
             SsilRadius = 5f, SsilIntensity = 0.45f,
             GlowIntensity = 0.4f, GlowBloom = 0.03f, GlowHdrThreshold = 1.15f,
-            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0011f, FogAerialPerspective = 0.3f, FogSkyAffect = 0.3f,
+            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0005f, FogAerialPerspective = 0.12f, FogSkyAffect = 0.3f, // only the far distance hazes
             // Ultra: a breath of dust in the air that the sun shafts through; set up once, switched by the tier
             VolumetricFogDensity = 0.004f, VolumetricFogAlbedo = new Color(0.95f, 0.9f, 0.82f), VolumetricFogEmission = new Color(0.2f, 0.17f, 0.12f), VolumetricFogEmissionEnergy = 0.02f,
             VolumetricFogAnisotropy = 0.55f, VolumetricFogLength = 180f, VolumetricFogDetailSpread = 1.6f, VolumetricFogAmbientInject = 0.15f, VolumetricFogSkyAffect = 0.2f,
-            AdjustmentEnabled = true, AdjustmentSaturation = 1.1f, AdjustmentContrast = 1.07f, AdjustmentBrightness = 1.0f,
+            AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.14f, AdjustmentBrightness = 0.98f,
         };
         AddChild(new WorldEnvironment { Environment = _env });
         _sun = new DirectionalLight3D
         {
             LightColor = new Color(1f, 0.94f, 0.84f), LightEnergy = 1.85f, ShadowEnabled = true,
             DirectionalShadowBlendSplits = true, DirectionalShadowFadeStart = 0.85f, DirectionalShadowPancakeSize = 10f,
-            ShadowBias = 0.03f, ShadowNormalBias = 1.6f, ShadowOpacity = 1f,
+            ShadowBias = 0.03f, ShadowNormalBias = 0.9f, ShadowOpacity = 1f, // low normal bias: ant legs meet their shadows
+            LightCullMask = NestInterior.SunMask, // the dug nest is lit by its lamps, never by the sun
         };
         _sun.RotationDegrees = SunAngles;
         AddChild(_sun);
@@ -216,7 +233,7 @@ public partial class GameSession : Node3D
         {
             case Settings.Quality.Low:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 110;
-                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f;
+                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f; // phones: hard sun shadows (soft ones cost a fifth of the frame)
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
                 break;
@@ -234,7 +251,7 @@ public partial class GameSession : Node3D
                 break;
             default:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits; _sun.DirectionalShadowMaxDistance = 260;
-                _sun.LightAngularDistance = 1.2f; _sun.ShadowBlur = 1.6f;
+                _sun.LightAngularDistance = 1.0f; _sun.ShadowBlur = 1.5f;
                 RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftHigh);
                 break;
@@ -662,7 +679,7 @@ public partial class GameSession : Node3D
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
-        if (!Demo) UpdateGlass(dt);
+        if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);
         if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
@@ -724,7 +741,7 @@ public partial class GameSession : Node3D
                 if (f.Node.Visible) { f.Node.Visible = false; Effects.Burst(World.HF.Point(f.Pos, 0.5f), 10, 2, 3, 0.5f, 0.8f); }
                 continue;
             }
-            f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
+            if (!FoodArt.Update(f)) f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
         }
     }
 
@@ -866,7 +883,10 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.Spit:
                 {
-                    var from = World.HF.Point(e.Pos, 0.8f);
+                    // formicine acid leaves the acidopore: the gaster tip, curled forward under the body (target G7)
+                    float size = Config.Of(e.Type).Size;
+                    var aim = (e.To - e.Pos).LengthSquared() > 1e-6f ? (e.To - e.Pos).Normalized() : Vector2.Right;
+                    var from = World.HF.Point(e.Pos + aim * (0.12f * size), 0.12f * size);
                     var to = World.HF.Point(e.To, 0.5f);
                     if (seen)
                     {

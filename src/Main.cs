@@ -83,6 +83,8 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--level-capture=")) _ = LevelValidation.Capture(this, a["--level-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--map-capture=")) _ = LevelValidation.MapCapture(this, a["--map-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--tube-capture=")) _ = LevelValidation.TubeCapture(this, a["--tube-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--art-capture=")) _ = ArtValidation.Capture(this, a["--art-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--ant-capture=")) _ = AntValidation.Capture(this, a["--ant-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--gore-capture=")) _ = GoreValidation.Capture(this, a["--gore-capture=".Length..]);

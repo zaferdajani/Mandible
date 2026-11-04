@@ -78,6 +78,9 @@ public sealed class AntRenderer
     /// The rank and file far from the camera: the same material on a mesh with half the detail, no shadow.
     readonly Batch[,] _far = new Batch[3, 13];
     public const float FarDist = 62f;
+    /// Ants this near the camera get the full anatomy: setae, claws, tarsal segments, mandible teeth.
+    readonly Batch[,] _close = new Batch[3, 13];
+    public const float CloseDist = 26f;
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
     float _now, _lastNow = -1;
@@ -127,10 +130,11 @@ public sealed class AntRenderer
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
     public bool ShowAllBars;
 
-    static readonly Color[] Body = { new(0.028f, 0.025f, 0.024f), new(0.42f, 0.11f, 0.04f) };
-    static readonly Color[] HeadC = { new(0.034f, 0.03f, 0.028f), new(0.46f, 0.13f, 0.05f) };
-    static readonly Color[] GasterC = { new(0.022f, 0.02f, 0.019f), new(0.10f, 0.035f, 0.025f) };
-    static readonly Color[] LegC = { new(0.07f, 0.05f, 0.04f), new(0.48f, 0.18f, 0.08f) };
+    // Lasius niger: a warm brown-black with browner legs; Solenopsis: reddish amber over a dark brown gaster (target G)
+    static readonly Color[] Body = { new(0.11f, 0.075f, 0.05f), new(0.24f, 0.085f, 0.03f) };
+    static readonly Color[] HeadC = { new(0.1f, 0.07f, 0.047f), new(0.27f, 0.095f, 0.035f) };
+    static readonly Color[] GasterC = { new(0.09f, 0.064f, 0.044f), new(0.085f, 0.035f, 0.022f) };
+    static readonly Color[] LegC = { new(0.16f, 0.11f, 0.07f), new(0.32f, 0.12f, 0.055f) };
 
     // wild bugs: body, head, shell/abdomen, legs per species
     static readonly Dictionary<AntType, Color[]> BugColors = new()
@@ -167,13 +171,15 @@ public sealed class AntRenderer
             for (int t = 0; t < 13; t++)
             {
                 if ((team == Config.Wild) != Config.IsBug((AntType)t)) continue;
-                var mesh = AntMesh.Build((AntType)t);
+                var mesh = AntMesh.Build((AntType)t, false, team);
                 var mat = AntMat(shader, team, (AntType)t, false);
                 var dmat = AntMat(shader, team, (AntType)t, true);
                 _live[team, t] = new Batch(root, mesh, mat, true, $"Ants{team}_{t}");
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
                 if (team != Config.Wild && !Config.IsHero((AntType)t) && t != (int)AntType.Queen)
-                    _far[team, t] = new Batch(root, AntMesh.Build((AntType)t, true), mat, false, $"Far{team}_{t}");
+                    _far[team, t] = new Batch(root, AntMesh.Build((AntType)t, true, team), mat, false, $"Far{team}_{t}");
+                var near = team == Config.Wild ? null : AntMesh.Build((AntType)t, false, team, AntMesh.Detail.Near);
+                if (near != null && near != mesh) _close[team, t] = new Batch(root, near, mat, true, $"Close{team}_{t}");
             }
         ApplyQuality();
         // translucent wings for every flyer, beating in their own batch
@@ -239,6 +245,7 @@ public sealed class AntRenderer
                 var cast = !small || Settings.SmallAntShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
                 _live[team, t].Node.CastShadow = cast;
                 _dead[team, t].Node.CastShadow = cast;
+                if (_close[team, t] != null) _close[team, t].Node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
             }
     }
 
@@ -264,9 +271,18 @@ public sealed class AntRenderer
             m.SetShaderParameter("leg_color", LegC[team]);
             m.SetShaderParameter("accent", Accent[team]);
             if (Config.IsHero(type)) m.SetShaderParameter("hero", 1f);
+            // the Warlord's scarred rugose cuticle, a major's coarser sculpture
+            m.SetShaderParameter("sculpture", type switch { AntType.Warlord => 0.3f, AntType.Major => 0.15f, AntType.Soldier => 0.11f, _ => 0.08f });
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
-        if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
+        if (team != Config.Wild)
+        {
+            m.SetShaderParameter("neck", AntMesh.NeckOf(type, team));
+            m.SetShaderParameter("waist", AntMesh.WaistOf(type, team));
+            var detail = AntMesh.DetailOf(type, team);
+            if (detail != null) { m.SetShaderParameter("detail_normal", detail); m.SetShaderParameter("has_detail", 1f); }
+        }
+        else if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;
     }
@@ -282,6 +298,7 @@ public sealed class AntRenderer
     public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
         foreach (var b in _live) b?.Begin();
+        foreach (var b in _close) b?.Begin();
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         foreach (var cargo in _cargo) cargo.Begin();
@@ -293,7 +310,7 @@ public sealed class AntRenderer
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camUp = cam.GlobalTransform.Basis.Y.Normalized();
-        var camPos = cam.GlobalPosition;
+        var camPos = (cam.GetViewport()?.GetCamera3D() ?? cam).GlobalPosition; // the camera actually drawing (a capture may use its own lens)
         var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
         _now = Time.GetTicksMsec() * 0.001f;
@@ -348,7 +365,9 @@ public sealed class AntRenderer
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
             data.A += 4 * callow.Pale;
             var farBatch = _far[a.Team, (int)a.Type];
+            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[a.Team, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
             if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
+            else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
             else _live[a.Team, (int)a.Type].Add(b, o, data);
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
@@ -490,6 +509,7 @@ public sealed class AntRenderer
         }
         Brood?.DrawNurses(this);
         foreach (var b in _live) b?.End();
+        foreach (var b in _close) b?.End();
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
         foreach (var cargo in _cargo) cargo.End();

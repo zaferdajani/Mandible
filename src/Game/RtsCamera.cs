@@ -16,6 +16,7 @@ public partial class RtsCamera : Node3D
     public bool UserControl = true;
     public bool EdgeScroll = !Settings.Mobile;
     public bool NestView;           // Glass Earth: the camera may come lower and closer to look into the nest
+    public float PitchOverride;     // degrees; > 0 fixes the pitch (art captures at a target's framing), 0 follows the zoom
     public Vector2 Focus2D => new(Focus.X, Focus.Z);
     Vector3 _focusTarget;
     float _yawTarget;
@@ -123,7 +124,7 @@ public partial class RtsCamera : Node3D
     public void Apply()
     {
         float t = Mathf.Clamp((Distance - MinDist) / (MaxDist - MinDist), 0, 1);
-        float pitch = Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(50), _nestTilt);
+        float pitch = PitchOverride > 0 ? Mathf.DegToRad(PitchOverride) : Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(50), _nestTilt);
         var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(Yaw) * Mathf.Cos(pitch)) * Distance;
         var pos = Focus + offset;
         if (HF != null) pos.Y = Mathf.Max(pos.Y, HF.Sample(pos.X, pos.Z) + 3);
@@ -138,7 +139,12 @@ public partial class RtsCamera : Node3D
         Attr.DofBlurAmount = Mathf.Lerp(0.09f, 0.035f, t);
         // Transparent soil does not write depth. Lens blur would focus on the wrong surface
         // and smear the entire colony on High/Ultra; build mode needs crisp rooms at every zoom.
-        Attr.DofBlurFarEnabled = Attr.DofBlurNearEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
+        // Gameplay views stay sharp edge to edge: the tilt-shift blur smeared the soil grain the ground sets carry
+        // (the art gate's first finding). Only the far horizon softens, beyond the play area.
+        Attr.DofBlurNearEnabled = false;
+        Attr.DofBlurFarDistance = d * 2.6f;
+        Attr.DofBlurFarTransition = d * 1.5f;
+        Attr.DofBlurFarEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
     }
 
     public bool ScreenToGround(Vector2 screen, out Vector3 hit)
