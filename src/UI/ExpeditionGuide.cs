@@ -9,7 +9,6 @@ public partial class ExpeditionGuide : PanelContainer
     public GameSession Game;
     Label _goal, _heading, _body, _list, _stake;
     StarList _stars;
-    Button _dig;
     int _shown = -1;
     public override void _Ready()
     {
@@ -41,14 +40,8 @@ public partial class ExpeditionGuide : PanelContainer
         var finger = new Vector2(0, Settings.Mobile ? 46 : 0);
         var show = new Button { Text = "Show objective", CustomMinimumSize = finger }; row.AddChild(show);
         show.Pressed += () => Game.Camera.PanTo(Game.Sim.Mission.Marker);
-        _dig = new Button { Text = "Dig entrance", CustomMinimumSize = finger }; row.AddChild(_dig);
-        _dig.Pressed += () =>
-        {
-            // an order like any other, so saved games replay it
-            Game.Issue(Cmd.Units(CmdKind.Entrance, Local.Me, Game.Input.Selection, Game.Sim));
-            if (Game.Sim.Mission is { EntranceOrdered: true }) { Game.Audio.Ui("ui_queue"); Game.SetNestView(true); }
-            else Game.Hud.Alert("Select workers at the food clearing with F3 first.");
-        };
+        // the founding's numbers and its one button live in their own panel, top centre (FoundingPanel)
+        if (m.Episode == 1) Game.Hud.AddPanel(new FoundingPanel { Game = Game });
     }
     public override void _Process(double delta)
     {
@@ -57,7 +50,6 @@ public partial class ExpeditionGuide : PanelContainer
         _heading.Text = m.Title;
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
-        _dig.Visible = m.Episode == 1 && m.Stage == ExpeditionStage.DigEntrance;
         // the opening always points at what to do next: the live beetle, its remains, then the nest site
         bool guiding = false;
         if (m.Episode == 1)
@@ -77,7 +69,7 @@ public partial class ExpeditionGuide : PanelContainer
             else if (m.Stage == ExpeditionStage.DigEntrance)
             {
                 guiding = true;
-                Game.Guide.Show(Expedition.Clearing, "NEST SITE · DIG HERE", Settings.Mobile ? "Tap Workers, then Dig the entrance" : "Workers (F3), then press Dig the entrance");
+                Game.Guide.Show(Expedition.Clearing, "NEST SITE", ""); // the panel at the top carries the button and the words
             }
         }
         if (!guiding && _guiding) Game.Guide.Clear();

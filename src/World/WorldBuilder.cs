@@ -571,7 +571,8 @@ public static partial class WorldBuilder
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
         Ground(w.TerrainMaterial);
-        w.TerrainMaterial.SetShaderParameter("entrance_a", w.Nests[0].Pos);
+        // the first nest has no hole until its founders dig one (NestInterior opens it)
+        w.TerrainMaterial.SetShaderParameter("entrance_a", w.FirstNest ? new Vector2(-1000, -1000) : w.Nests[0].Pos);
         w.TerrainMaterial.SetShaderParameter("entrance_b", w.Nests[1].Pos);
         w.TerrainMaterials.Add(w.TerrainMaterial);
         var mi = new MeshInstance3D { Mesh = mesh, MaterialOverride = w.TerrainMaterial, Name = "Terrain" };

@@ -70,8 +70,41 @@ public static class SaveValidation
                 else if (s.Sim.Ants[i].Type == AntType.Worker) workers.Add(i);
             }
         if (step == 0 && army.Count > 0) { var c = Cmd.Units(CmdKind.AttackMove, Local.Me, army, s.Sim); c.P = Expedition.Ambush + new Vector2(4, 0); s.Issue(c); }
-        if (step == 12 && army.Count > 0) { var c = Cmd.Units(CmdKind.Move, Local.Me, army, s.Sim); c.P = Expedition.Clearing + new Vector2(-6, 2); s.Issue(c); }
+        if (step == 12 && army.Count > 0) { var c = Cmd.Units(CmdKind.Move, Local.Me, army, s.Sim); c.P = Expedition.Clearing + new Vector2(6, 2); s.Issue(c); }
         if (step >= 14 && step % 5 == 4 && workers.Count > 0) s.Issue(Cmd.Units(CmdKind.Entrance, Local.Me, workers, s.Sim));
+    }
+
+    /// --founding-capture=<dir>: Level 1 played to each founding step (stocking, ready to dig, digging) with a frame of each.
+    public static async void FoundingCapture(Main app, string dir)
+    {
+        _app = app;
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        await Frames(10);
+        app.StartEpisode(1);
+        await Frames(3);
+        var s = app.Session;
+        s.Hud?.CloseBriefing();
+        PlayOpeningOrders(s, 0);
+        async Task Until(System.Func<bool> done, int maxTicks) { int end = s.Sim.Ticks + maxTicks; while (!done() && s.Sim.Ticks < end) await Ticks(s, 30); }
+        async Task Shot(string name)
+        {
+            s.FastForward = 0; s.Camera.JumpTo(Expedition.Clearing + new Vector2(-4, 6), 46);
+            await Frames(20);
+            await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            app.GetViewport().GetTexture().GetImage().SavePng($"{dir}/{name}.png");
+            GD.Print($"[founding-capture] {name}: stage {s.Sim.Mission.Stage}, food {s.Sim.Col[0].Food:0}, remains {s.Sim.Col[0].Organic:0}");
+        }
+        await Until(() => s.Sim.Mission.Stage == ExpeditionStage.EscortQueen, 9000);
+        PlayOpeningOrders(s, 12); // the soldiers lead on to the clearing; the queen and workers follow
+        await Until(() => s.Sim.Mission.Stage == ExpeditionStage.Provision, 9000);
+        await Ticks(s, 240);
+        await Shot("1-stocking");
+        await Until(() => s.Sim.Mission.Stage == ExpeditionStage.DigEntrance, 18000);
+        await Shot("2-ready-to-dig");
+        PlayOpeningOrders(s, 14);
+        await Ticks(s, 300);
+        await Shot("3-digging");
+        app.GetTree().Quit();
     }
 
     static void Report(bool ok, string what) { GD.Print($"[savetest] {(ok ? "PASS" : "FAIL")} {what}"); if (!ok) _fails++; }

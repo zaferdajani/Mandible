@@ -16,6 +16,7 @@ public sealed partial class NestInterior
     // the open entrance: nothing of it exists until the founders start digging (a site is only a site)
     readonly MeshInstance3D[] _mouth = new MeshInstance3D[2], _mouthShadow = new MeshInstance3D[2];
     readonly Node3D[] _mouthLight = new Node3D[2];
+    readonly bool[] _holeCut = { false, false };
     readonly NestGeometry[] _geometry = { new(), new() };
     readonly MeshInstance3D[] _excavation = new MeshInstance3D[2];
     readonly int[] _meshRevision = { -1, -1 };
@@ -120,8 +121,9 @@ public sealed partial class NestInterior
         // status over the entrance
         _status[team] = new Label3D
         {
-            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 36, OutlineSize = 10, PixelSize = 0.011f,
-            Modulate = new Color(1f, 0.9f, 0.6f), OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
+            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 36, OutlineSize = 14, PixelSize = 0.011f,
+            // white on a heavy black outline: the old sand-gold vanished against the ground it floats over
+            Modulate = Colors.White, OutlineModulate = new Color(0.01f, 0.008f, 0.005f, 1f), Font = UiTheme.Title,
             Position = new Vector3(0, 4.2f, 0), Visible = false,
         };
         n.AddChild(_status[team]);
@@ -401,6 +403,12 @@ public sealed partial class NestInterior
             bool dugInto = col.Founded || royal != null;
             _mouth[team].Visible = _mouthShadow[team].Visible = _mouthLight[team].Visible = dugInto;
             _plug[team].Visible = !col.Founded && royal != null;
+            if (dugInto != _holeCut[team])
+            {
+                // the terrain's own hole at the entrance opens with the dig, not before
+                _holeCut[team] = dugInto;
+                foreach (var m in _g.World.TerrainMaterials) m.SetShaderParameter(team == 0 ? "entrance_a" : "entrance_b", dugInto ? nestPos : new Vector2(-1000, -1000));
+            }
             if (!col.Founded) { _plug[team].Position = new Vector3(0, 0.25f - dug * 1.1f, 0); _plug[team].Scale = new Vector3(1 - dug * 0.6f, 1, 1 - dug * 0.6f); }
             bool shown = mine && _open > 0.001f;
             _excavation[team].Visible = shown;
@@ -436,9 +444,12 @@ public sealed partial class NestInterior
             {
                 // status over the entrance: the founding dig, then whatever is being dug below
                 var lines = new List<string>();
-                if (!col.Founded) lines.Add($"Digging the nest  {dug * 100:0}%  ·  {royal?.Diggers ?? 0} workers");
+                // the first nest's founding dig has its own panel at the top of the screen (FoundingPanel)
+                bool panelShowsIt = !col.Founded && sim.Mission is { Episode: 1 };
+                if (!col.Founded && !panelShowsIt) lines.Add($"Digging the nest  {dug * 100:0}%  ·  {royal?.Diggers ?? 0} workers");
                 else foreach (var ch in col.Chambers) if (ch.Digging) lines.Add($"{Sim.ChamberName(ch.Kind)}  {ch.Progress * 100:0}%  ·  {ch.Diggers} digging");
-                _status[team].Visible = mine && lines.Count > 0 && !nestView;
+                // no "digging 0%" floating over a site nobody is digging yet
+                _status[team].Visible = mine && lines.Count > 0 && !nestView && (col.Founded || sim.Royal(team) != null);
                 _status[team].Text = string.Join("\n", lines);
             }
         }

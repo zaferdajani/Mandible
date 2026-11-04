@@ -40,7 +40,8 @@ public sealed class Guidance
             var l = new Label3D
             {
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FixedSize = true, FontSize = size,
-                OutlineSize = size / 4, Font = font, Modulate = color, OutlineModulate = new Color(0.02f, 0.015f, 0.01f, 0.92f),
+                // a heavy near-black outline: gold or cream on sunlit sand needs it to read at all
+                OutlineSize = size / 3, Font = font, Modulate = color, OutlineModulate = new Color(0.01f, 0.008f, 0.005f, 1f),
                 RenderPriority = 12, OutlineRenderPriority = 11, Visible = false, PixelSize = 0.0006f,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
@@ -48,8 +49,8 @@ public sealed class Guidance
             return l;
         }
         bool phone = Settings.Mobile;
-        _title = Label(phone ? 80 : 56, UiTheme.Title, UiTheme.Gold);
-        _line = Label(phone ? 56 : 38, UiTheme.Bold ?? UiTheme.Body, new Color(1f, 0.93f, 0.8f));
+        _title = Label(phone ? 80 : 56, UiTheme.Title, new Color(1f, 0.84f, 0.42f));
+        _line = Label(phone ? 56 : 38, UiTheme.Bold ?? UiTheme.Body, Colors.White);
     }
 
     /// The arrow: a gold shaft and head with a dark rim, lit from above, on a transparent field.
