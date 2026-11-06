@@ -176,8 +176,8 @@ public static partial class WorldBuilder
             // the excavated ring, its lip a little sharper on the inside, and a soft apron of spoil beyond it
             // A small entrance and a low apron of excavated sand. A tall crater rim hides the
             // horizontal colony under it and reads as a quarry when the roof is translucent.
-            hf.H[i] += 0.55f * Mathf.Exp(-Mathf.Pow((r - 2.1f) / (r < 2.1f ? 0.9f : 1.6f), 2))
-                       + 0.12f * Mathf.Exp(-Mathf.Pow((r - 5f) / 2.5f, 2)) - 0.7f * Mathf.Exp(-Mathf.Pow(r / 0.9f, 2));
+            hf.H[i] += 0.95f * Mathf.Exp(-Mathf.Pow((r - 2.4f) / (r < 2.4f ? 0.8f : 1.9f), 2))
+                       + 0.18f * Mathf.Exp(-Mathf.Pow((r - 5.5f) / 2.5f, 2)) - 0.9f * Mathf.Exp(-Mathf.Pow(r / 1.1f, 2));
             hf.Mound[i] = Mathf.Max(hf.Mound[i], Mathf.SmoothStep(10.5f, 3.5f, r));
         });
     }

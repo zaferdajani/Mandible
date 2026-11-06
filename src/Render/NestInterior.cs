@@ -430,7 +430,8 @@ public sealed partial class NestInterior
             float dug = royal == null ? 0 : royal.Progress;
             // before the founders dig, the site is plain ground: no hole, no plug, no light down a shaft
             bool dugInto = col.Founded || royal != null;
-            _mouth[team].Visible = _mouthShadow[team].Visible = _mouthLight[team].Visible = dugInto;
+            _mouthLight[team].Visible = dugInto;
+            _mouth[team].Visible = _mouthShadow[team].Visible = false; // the hole opens straight into the hub bowl: no shaft hangs in the pit
             _plug[team].Visible = !col.Founded && royal != null;
             if (dugInto != _holeCut[team])
             {
@@ -506,9 +507,8 @@ public sealed partial class NestInterior
         var rng = new Rng((uint)(0x7133u + (uint)team * 977u));
         var batches = new Dictionary<NatureAssets.Piece, List<Transform3D>>();
         void Add(NatureAssets.Piece p, Transform3D t) { if (!batches.TryGetValue(p, out var l)) batches[p] = l = new(); l.Add(t); }
-        float Y(Vector2 p) => NestGeometry.Height(geometry.Distance(p));
+        float Y(Vector2 p) => NestGeometry.Height(geometry.Distance(p), NestGeometry.FloorDepth(p));
         bool full = Settings.Gfx >= Settings.Quality.High;
-        float floorY = -NestGeometry.Depth;
         // a twig laid along `dir` from `at`, its length `len`, lying on the surface at `at` (or standing when `up` is set)
         void Twig(Vector2 at, float y, Vector3 axis, float len, float thick)
         {
@@ -535,15 +535,16 @@ public sealed partial class NestInterior
             // frames along the gallery: at its mouth into the room and every few units on the way, each a pair of
             // uprights leaning into the banks and a lintel across the top, slightly askew like real shoring
             float roomEdge = len - Mathf.Min(radii.X, radii.Y) * 0.9f;
-            var stations = new List<float> { Mathf.Clamp(roomEdge - 0.6f, 1.2f, len - 1f) };
+            var stations = new List<float> { Mathf.Clamp(roomEdge - 0.6f, 2.0f, len - 1f) };
             if (full) for (float d = 3.2f; d < roomEdge - 2.6f; d += rng.R(4.0f, 5.5f)) stations.Add(d);
             foreach (float d in stations)
             {
                 var c = a + dir * d;
+                float floorY = -NestGeometry.FloorDepth(c);
                 float wobble = rng.R(-0.12f, 0.12f);
                 float w = half + 0.35f;
                 Vector2 l = c + side * (w + wobble), r = c - side * (w - wobble);
-                float h = NestGeometry.Depth * rng.R(0.86f, 0.98f);
+                float h = NestGeometry.FloorDepth(c) * rng.R(0.86f, 0.98f);
                 var lean = new Vector3(side.X, 0, side.Y) * rng.R(0.06f, 0.16f);
                 Twig(l, floorY + 0.05f, (Vector3.Up + lean).Normalized(), h, 0.55f);
                 Twig(r, floorY + 0.05f, (Vector3.Up - lean).Normalized(), h, 0.55f);

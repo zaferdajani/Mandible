@@ -81,6 +81,8 @@ sealed class NestLights
 
         var want = new Dictionary<int, (Vector3 pos, float energy, float range)>();
         float y = ground - NestGeometry.Depth + 0.95f;
+        // the hub bowl under the hole: daylight spills into it, so it is the brightest spot below
+        if (chambers.Count > 0) want[-1] = (new Vector3(nest.X, ground - NestGeometry.HubDepth + 0.9f, nest.Y), 2.6f, 6f);
         foreach (var ch in chambers)
         {
             bool built = ch.Built;
@@ -96,7 +98,7 @@ sealed class NestLights
             {
                 var q = nest + from.Lerp(ch.Offset, i / (float)(n + 1));
                 if (q.DistanceTo(nest) < 3f) continue;
-                want[ch.Id * 8 + i] = (new Vector3(q.X, y + 0.1f, q.Y), 2.2f, 4.5f);
+                want[ch.Id * 8 + i] = (new Vector3(q.X, ground - NestGeometry.FloorDepth(q - nest) + 1.05f, q.Y), 2.2f, 4.5f);
             }
         }
         foreach (var key in new List<int>(_lamps.Keys))

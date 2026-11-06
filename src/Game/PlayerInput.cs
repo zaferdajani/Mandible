@@ -433,7 +433,7 @@ public partial class PlayerInput : Node
         sp = Vector2.Zero;
         if (a.Layer > 0 && (!Game.NestView || a.Layer != Sim.NestLayer(Local.Me))) return false;
         var nest = a.Layer > 0 ? Game.World.Nests[a.Layer - 1].Pos : Vector2.Zero;
-        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.Depth : a.Height;
+        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.FloorDepth(a.Pos - nest) : a.Height;
         var wp = new Vector3(a.Pos.X, height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         if (Cam.Cam.IsPositionBehind(wp)) return false;
         sp = Cam.Cam.UnprojectPosition(wp);

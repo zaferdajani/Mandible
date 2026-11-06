@@ -585,12 +585,12 @@ void fragment() {
     vec2 uv = wpos.xz;
     // Actual small entrance holes remain readable with build mode both open and closed.
     vec2 mouth = distance(uv, entrance_a) < distance(uv, entrance_b) ? uv - entrance_a : uv - entrance_b;
-    if (length(mouth) < 0.82 + 0.055 * sin(atan(mouth.y, mouth.x) * 7.0)) discard;
+    if (length(mouth) < 1.15 + 0.07 * sin(atan(mouth.y, mouth.x) * 7.0)) discard;
     // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
     // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
-    float lip = 1.25;
+    float lip = 0.9;
     if (xray_on > 0.5 && nd < lip) discard;
     float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.55, nd));
     float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;

@@ -8,7 +8,13 @@ namespace Mandible;
 public sealed class NestGeometry
 {
     public const float Depth = 6.0f;      // floor below the surface: deep enough that the walls read as walls
-    public const float Lip = 1.7f;        // the bank climbs from the floor's edge to the surface over this distance
+    public const float Lip = 0.7f;        // the bank climbs from the floor's edge to the surface over this distance: steep, like a dug wall
+    public const float HubDepth = 1.0f;   // the bowl under the entrance hole, where the galleries start
+    public const float RampFrom = 1.4f, RampTo = 7.5f; // galleries dive from the hub's depth to full depth over this stretch
+
+    /// How deep the floor lies at a nest-local point: the hub's bowl near the entrance, ramping down each gallery
+    /// to the rooms' depth. Ants are drawn at this height, so one walks in through the hole and down the slope.
+    public static float FloorDepth(Vector2 local) => Mathf.Lerp(HubDepth, Depth, Mathf.SmoothStep(RampFrom, RampTo, local.Length()));
     public const int MaxSegments = 32, Stride = 7;
     public readonly float[] Network = new float[MaxSegments * Stride];
     public int Count { get; private set; }
@@ -20,10 +26,10 @@ public sealed class NestGeometry
 
     public static (float w, float h, float d) RoomSize(NestChamber ch) => ch.Kind switch
     {
-        ChamberKind.Royal => (4.6f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.5f + 0.10f * ch.Tier),
-        ChamberKind.Brood => (4.7f, 1.2f, 3.7f),
-        ChamberKind.Storage => (4.0f, 1.4f, 3.2f),
-        _ => (3.6f + 0.10f * ch.Tier, 1.3f, 2.9f + 0.08f * ch.Tier),
+        ChamberKind.Royal => (3.9f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.0f + 0.10f * ch.Tier),
+        ChamberKind.Brood => (3.4f, 1.2f, 2.7f),
+        ChamberKind.Storage => (3.0f, 1.4f, 2.4f),
+        _ => (2.8f + 0.10f * ch.Tier, 1.3f, 2.3f + 0.08f * ch.Tier),
     };
 
     public bool Refresh(IReadOnlyList<NestChamber> chambers)
@@ -36,7 +42,7 @@ public sealed class NestGeometry
             _next[k] = a.X; _next[k + 1] = a.Y; _next[k + 2] = b.X; _next[k + 3] = b.Y;
             _next[k + 4] = rx; _next[k + 5] = rz; _next[k + 6] = width;
         }
-        Add(Vector2.Zero, Vector2.Zero, 1.3f, 1.3f, 1.1f);
+        Add(Vector2.Zero, Vector2.Zero, 1.6f, 1.6f, 1.0f); // the hub bowl under the hole
         foreach (var ch in chambers)
         {
             var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent].Offset : Vector2.Zero;
@@ -44,7 +50,7 @@ public sealed class NestGeometry
             float p = Progress(ch);
             // The flat walking strip must contain the simulation's 0.9-unit
             // lateral allowance plus the worker and its load, before the banks rise.
-            Add(parent, ch.Offset, w * p, d * p, 1.15f + 0.6f * p);
+            Add(parent, ch.Offset, w * p, d * p, 0.72f + 0.33f * p); // a corridor: the sim's 0.9 lateral allowance plus a load, no more
         }
         bool changed = count != Count;
         for (int i = 0; i < count * Stride; i++) changed |= _next[i] != Network[i];
@@ -94,10 +100,12 @@ public sealed class NestGeometry
 
     /// The bank's profile: flat floor to the cavity's edge, then a wall that rises steeply from the foot and eases
     /// into a sloped lip at the surface, like a pit dug in sand.
-    public static float Height(float distance)
+    public static float Height(float distance) => Height(distance, Depth);
+
+    public static float Height(float distance, float floorDepth)
     {
         float t = Mathf.Clamp((distance + 0.45f) / Lip, 0f, 1f);
-        return Mathf.Lerp(-Depth, -0.03f, Mathf.Pow(t, 1.7f));
+        return Mathf.Lerp(-floorDepth, -0.03f, Mathf.Pow(t, 1.7f));
     }
 
     /// A single welded heightfield: overlapping room/tunnel fields are unioned BEFORE triangulation,
@@ -117,7 +125,7 @@ public sealed class NestGeometry
                 var p = _min + new Vector2(x * step, z * step);
                 float d = Distance(p);
                 distances[z * (nx + 1) + x] = d;
-                float y = Height(d);
+                float y = Height(d, FloorDepth(p));
                 float bank = Mathf.SmoothStep(-0.5f, -0.3f, d) * (1 - Mathf.SmoothStep(0.05f, 0.2f, d)); // 0 on the floor and above the lip
                 y += bank * (0.16f * Mathf.Sin(p.X * 4.3f + Mathf.Sin(p.Y * 3.1f) * 2) * Mathf.Sin(p.Y * 3.7f + p.X * 0.9f)
                              + 0.07f * Mathf.Sin(p.X * 11.3f + p.Y * 9.7f));
