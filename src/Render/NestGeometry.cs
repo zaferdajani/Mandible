@@ -26,10 +26,10 @@ public sealed class NestGeometry
 
     public static (float w, float h, float d) RoomSize(NestChamber ch) => ch.Kind switch
     {
-        ChamberKind.Royal => (3.9f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.0f + 0.10f * ch.Tier),
-        ChamberKind.Brood => (3.4f, 1.2f, 2.7f),
-        ChamberKind.Storage => (3.0f, 1.4f, 2.4f),
-        _ => (2.8f + 0.10f * ch.Tier, 1.3f, 2.3f + 0.08f * ch.Tier),
+        ChamberKind.Royal => (3.3f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 2.6f + 0.10f * ch.Tier),
+        ChamberKind.Brood => (2.8f, 1.2f, 2.2f),
+        ChamberKind.Storage => (2.5f, 1.4f, 2.0f),
+        _ => (2.4f + 0.10f * ch.Tier, 1.3f, 2.0f + 0.08f * ch.Tier),
     };
 
     public bool Refresh(IReadOnlyList<NestChamber> chambers)
@@ -42,7 +42,7 @@ public sealed class NestGeometry
             _next[k] = a.X; _next[k + 1] = a.Y; _next[k + 2] = b.X; _next[k + 3] = b.Y;
             _next[k + 4] = rx; _next[k + 5] = rz; _next[k + 6] = width;
         }
-        Add(Vector2.Zero, Vector2.Zero, 1.6f, 1.6f, 1.0f); // the hub bowl under the hole
+        Add(Vector2.Zero, Vector2.Zero, 1.4f, 1.4f, 0.9f); // the hub bowl under the hole
         foreach (var ch in chambers)
         {
             var parent = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent].Offset : Vector2.Zero;
@@ -50,7 +50,7 @@ public sealed class NestGeometry
             float p = Progress(ch);
             // The flat walking strip must contain the simulation's 0.9-unit
             // lateral allowance plus the worker and its load, before the banks rise.
-            Add(parent, ch.Offset, w * p, d * p, 0.72f + 0.33f * p); // a corridor: the sim's 0.9 lateral allowance plus a load, no more
+            Add(parent, ch.Offset, w * p, d * p, 0.62f + 0.3f * p); // a corridor: just the sim's 0.9 lateral allowance, the lip takes the rest
         }
         bool changed = count != Count;
         for (int i = 0; i < count * Stride; i++) changed |= _next[i] != Network[i];
