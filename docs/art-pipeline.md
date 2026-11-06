@@ -306,3 +306,25 @@ where the target's fills a quarter to a half), so the eyes, the scanned sculptur
 pixels; and at play zoom a worker is a speck. Both point at framing and on-screen size rather than at the meshes:
 the capture's close framings, and (an owner decision) whether ants are drawn larger than life at play zoom, as the
 food piles already are (1.4x), or given a light rim.
+
+**2026-11-06, ant round 4, the owner's two decisions applied: the close views framed like the targets (the ants
+fill a quarter to half of the frame, the castes side by side facing the lens), and ants drawn larger than life at
+play zoom (`AntRenderer.PlayScale`: 1x up close rising to 1.9x by the usual play distance; render only, the sim, the
+picking and the synctest are unchanged).** Every view still fails.
+
+| View | Art (anatomy, primitives, eyes, material, light, palette) |
+|---|---|
+| g-castes-black | 2 2 1 2 3 2 |
+| g-castes-red | 2 2 1 2 3 3 |
+| g-warlord | 2 2 1 2 3 2 |
+| g-matron | 2 1 1 2 3 3 |
+| g-marshal | 2 2 1 2 3 3 |
+| g-eyes | 2 2 1 2 3 3 |
+| g-eyes-queen | 1 1 1 2 2 2 |
+| g-play (read) | 3 |
+
+Four rounds, three model approaches (lofted, lofted and refined, real specimen scans) and two framings have moved the
+scores by at most one point. The reviewers judge a real-time frame against a generated macro photograph and name the
+same gaps every time: no catchlit compound eye at a few pixels, legs without visible joints, no rim-lit setae. On
+the play view they ask for a light rim around each ant. What remains is a decision for the owner, not a modelling
+step: judge the frames directly (`docs/art-targets/ants-round4.jpg`), or change what the gate compares against.

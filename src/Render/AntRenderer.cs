@@ -287,6 +287,10 @@ public sealed class AntRenderer
         return m;
     }
 
+    /// How much larger than life an ant is drawn at this camera distance: 1 up close (the macro view and the cards),
+    /// rising to 1.9 by the usual play zoom.
+    public static float PlayScale(float camDist) => 1f + 0.9f * Mathf.SmoothStep(18f, 45f, camDist);
+
     public static Basis Orient(Vector3 up, float heading, float scale)
     {
         var f = new Vector3(Mathf.Cos(heading), 0, Mathf.Sin(heading));
@@ -311,6 +315,7 @@ public sealed class AntRenderer
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camUp = cam.GlobalTransform.Basis.Y.Normalized();
         var camPos = (cam.GetViewport()?.GetCamera3D() ?? cam).GlobalPosition; // the camera actually drawing (a capture may use its own lens)
+        _camPos = camPos;
         var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
         _now = Time.GetTicksMsec() * 0.001f;
@@ -361,6 +366,10 @@ public sealed class AntRenderer
             if (a.Root > 0) amp = 0.35f; // struggling in silk
             if (callow.Active) amp = callow.Amp;
             float camDist = camPos.DistanceTo(o);
+            // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
+            // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
+            float show = PlayScale(camDist), size = st.Size * show;
+            if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
             data.A += 4 * callow.Pale;
@@ -372,17 +381,17 @@ public sealed class AntRenderer
             if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
-                _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
+                _cocoons.Add(Orient(up, ih, size * 1.05f), o + up * (0.13f * size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (a.Carrying && a.Type == AntType.Worker)
             {
                 if (a.Burying)
                 {
                     // a dead nestmate held crosswise in the jaws, legs curled, carried out to the midden
-                    var body = Orient(up, ih + Mathf.Pi * 0.5f, st.Size * 0.8f);
+                    var body = Orient(up, ih + Mathf.Pi * 0.5f, size * 0.8f);
                     body = new Basis(-body.X, -body.Y, body.Z);
                     var fwd = new Vector3(Mathf.Cos(ih), 0, Mathf.Sin(ih));
                     var dead = Config.HaulNeed(a.CarryType) == 0 && !Config.IsBug(a.CarryType) ? a.CarryType : AntType.Worker;
-                    AddDead(a.CarryTeam, dead, body, o + fwd * (st.Size * 0.5f) + up * (st.Size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
+                    AddDead(a.CarryTeam, dead, body, o + fwd * (size * 0.5f) + up * (size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
                 }
                 else if (a.CarryKind == FoodKind.Corpse)
                     // a piece of the carcass: a head, a gaster or a bundle of legs, in the chitin it came from
@@ -392,15 +401,15 @@ public sealed class AntRenderer
                     // load clamped in its jaws on slopes, in tunnels and while turning.
                     _cargo[(int)a.CarryKind].Add(b, o, data);
             }
-            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, st.Size, camPos, rdt);
+            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, size, camPos, rdt);
             if (a.Selected)
-                _rings.Add(Basis.FromScale(Vector3.One * st.Size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
+                _rings.Add(Basis.FromScale(Vector3.One * size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
             bool wild = a.Team == Config.Wild;
-            float barY = st.Size * 0.55f + 0.5f;
+            float barY = size * 0.55f + 0.5f;
             if (a.Selected || (ShowAllBars && a.DamagedT > -6) || (a.Type == AntType.Queen && a.Hp < a.MaxHp * 0.98f) || (wild && a.Hp < a.MaxHp * 0.99f))
             {
                 var tc = Config.TeamUi(a.Team);
-                float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, st.Size * 1.0f);
+                float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
                 if (sim.EatRules && sim.Eats(a))
@@ -410,7 +419,7 @@ public sealed class AntRenderer
             int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
             if (ranks > 0)
             {
-                float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);
+                float pip = Mathf.Clamp(0.3f + size * 0.1f, 0.38f, 0.6f);
                 var top = o + Vector3.Up * (barY + 0.45f);
                 for (int p = 0; p < ranks; p++)
                 {
@@ -558,8 +567,11 @@ public sealed class AntRenderer
     internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data)
     {
         var batch = _dead[Math.Clamp(team, 0, 2), (int)type];
-        batch?.Add(b, o, data);
+        // the dead are drawn as large as the living around them
+        float show = PlayScale(_camPos.DistanceTo(o));
+        batch?.Add(show > 1.001f ? new Basis(b.X * show, b.Y * show, b.Z * show) : b, o, data);
     }
+    Vector3 _camPos;
 
     /// A render-only worker (a nurse in the nest) drawn with the colony's own, and the brood in its jaws (1 egg, 2 larva).
     internal void AddWorker(int team, in Basis b, in Vector3 o, in Color data, int brood)
