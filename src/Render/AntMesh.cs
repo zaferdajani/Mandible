@@ -60,6 +60,26 @@ public static class AntMesh
         return TipOfTeam.TryGetValue((type, team), out var t) ? t : new Vector3(0, 0.12f, -0.48f);
     }
 
+    /// The mutation track's models (tools/blender/brood_models.py, targets H3-H5).
+    /// The venom sting of a mutated black flying ant, in the flying ant's model space: draw it with the same transform,
+    /// instance data and material as the ant (its vertices carry the gaster's part, so it nods and curls with it), and
+    /// set "venom_bands" = 1 on that material for the banded gaster tip. Null if the model is missing.
+    public static ArrayMesh Sting() => LoadExtra("lasius_Flyer_sting");
+    /// The royal larva, about 1 unit long with its head at +Z: draw it with RoyalLarvaMaterial at about 4x a larva.
+    public static ArrayMesh RoyalLarva() => LoadExtra("royal_larva");
+    /// The hero's womb cocoon, about 1 unit long: draw it with WombMaterial, the hero inside it, darker, first.
+    public static ArrayMesh WombCocoon() => LoadExtra("womb_cocoon");
+    public static ShaderMaterial RoyalLarvaMaterial() => new() { Shader = Shaders.Get(Shaders.RoyalLarva) };
+    public static ShaderMaterial WombMaterial() => new() { Shader = Shaders.Get(Shaders.Womb) };
+
+    static readonly Dictionary<string, ArrayMesh> Extras = new();
+    static ArrayMesh LoadExtra(string name)
+    {
+        if (Extras.TryGetValue(name, out var m)) return m;
+        string path = $"res://assets/ants/{name}.res";
+        return Extras[name] = ResourceLoader.Exists(path) ? ResourceLoader.Load<ArrayMesh>(path) : null;
+    }
+
     /// The Blender-modelled ant (tools/blender/ant_models.py, baked by tools/ant-bake.gd), Lasius for the black
     /// colony and Solenopsis for the red; null when the model is missing, and the code-built ant stands in.
     static ArrayMesh Model(AntType type, int team, Detail d)

@@ -33,7 +33,7 @@ import bmesh
 from mathutils import Vector, noise
 from mathutils.bvhtree import BVHTree
 
-OUT = sys.argv[sys.argv.index("--") + 1]
+OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else ""
 
 BODY, HEAD, GASTER, EYE = 0, 12, 13, 11
 HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
@@ -829,4 +829,5 @@ def main():
         json.dump(manifest, fh, indent=1)
 
 
-main()
+if __name__ == "__main__":
+    main()
