@@ -13,3 +13,17 @@ Status: **approved by the owner on 2026-11-06** ("Approve all five"). These are 
 Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_5`, 16:9, 2026-11-04, five images. H1 and H4 also stand in as the two chapters' comic beats (`assets/ui/comic/b-web.jpg`, `b-cocoon.jpg`), and a crop of H2 is the mutagen icon (`assets/ui/mutagen.png`); approved with the targets, they stay until finished art replaces them.
 
 Ownership: the stinger, the royal larva and the cocoon meshes belong to the ant-rebuild session (asked on 2026-11-04); the wasp-in-web, the gland and the nursery dressing follow the art pipeline (real or Blender-modelled assets, the two-part gate).
+
+## Gate log (two-part review, fresh reviewers; pass = 4-5 on every art criterion and on readability)
+
+Built: `tools/blender/mutation_models.py` (gland, queen wasp, orb web with stems and bramble, nursery bed, ledge and heap), `src/Render/MutagenProps.cs`, frames by `--mutation-capture=<dir>`. The royal larva and cocoon are the ant-rebuild session's and are not in these frames.
+
+Art scores are listed in this order: repetition, primitives, scale, material, light, palette.
+
+| Round | H1 web: art / read | H2 haul: art / read | H3 nursery: art / read | Main blockers |
+| --- | --- | --- | --- | --- |
+| 1 | 3,2,3,2,2,2 / 2 | 3,3,3,1,3,2 / 1 | 3,2,2,2,2,3 / 3 | the web read as a fence; the wasp was lost; the gland was too small to find; the bed was flat; the heap was missing |
+| 2 | 3,3,3,3,3,3 / 3 | 4,2,2,1,2,2 / 2 | 3,2,2,3,2,3 / 3 | the stems read as poles; the gland read as an egg; the ledge sat hidden in the walls |
+| 3 | 3,3,3,3,3,2 / 3 | 4,2,2,2,3,3 / 2 | 2,2,2,2,2,3 / 2 | the stems still read as poles; the gland had no visible veins or glow and was a pale dot at play zoom; the heap pieces were too crude to read as seeds and wings |
+
+Shared blockers outside these props: the yard's cool grey soil and flat light (art pipeline), and the nest view drawing ants far larger than life. `mutation-gate-r3.jpg` puts each round-3 frame beside its target. Nothing has passed yet.

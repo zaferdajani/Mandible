@@ -17,6 +17,7 @@ public partial class GameSession : Node3D
     public Carnage Gore;
     public Guidance Guide;
     public MutagenGlow Glow;
+    public MutagenProps Props;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -74,7 +75,7 @@ public partial class GameSession : Node3D
         Guide = new Guidance(this, World.HF);
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
-        if (Campaign) Glow = new MutagenGlow(this);
+        if (Campaign) { Glow = new MutagenGlow(this); Props = new MutagenProps(this); }
         Ants.Brood = Interior;
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
@@ -667,6 +668,7 @@ public partial class GameSession : Node3D
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
         Glow?.Update(dt);
+        Props?.Update(dt);
         if (!Demo) UpdateGlass(dt);
         if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);

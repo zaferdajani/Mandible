@@ -80,6 +80,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--episode=") && int.TryParse(a["--episode=".Length..], out int ep)) StartEpisode(ep); // jump straight into a campaign episode
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--level-capture=")) _ = LevelValidation.Capture(this, a["--level-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--mutation-capture=")) _ = MutationCapture.Run(this, a["--mutation-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--map-capture=")) _ = LevelValidation.MapCapture(this, a["--map-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--tube-capture=")) _ = LevelValidation.TubeCapture(this, a["--tube-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
