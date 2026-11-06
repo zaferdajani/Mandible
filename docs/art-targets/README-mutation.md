@@ -1,6 +1,6 @@
-# Mutation targets H1-H5 (awaiting the owner's approval)
+# Mutation targets H1-H5
 
-The visuals of the mutation track (`docs/level-design.md`, section 5). Nothing is built against them until the owner approves them; until then the game draws placeholders only (`src/Render/MutagenGlow.cs`). `REVIEW-mutation.jpg` shows all five on one sheet. Kept apart from the art pipeline's `README.md` (branch claude/art-pipeline-de350c) so the two merge cleanly.
+Status: **approved by the owner on 2026-11-06** ("Approve all five"). These are the acceptance targets for the visuals of the mutation track (`docs/level-design.md`, section 5). Until the real assets land the game draws placeholders only (`src/Render/MutagenGlow.cs`). `REVIEW-mutation.jpg` shows all five on one sheet. Kept apart from the art pipeline's `README.md` (branch claude/art-pipeline-de350c) so the two merge cleanly.
 
 | Target | File | What it asks of the game |
 | --- | --- | --- |
@@ -10,6 +10,6 @@ The visuals of the mutation track (`docs/level-design.md`, section 5). Nothing i
 | H4. The womb cocoon | `h4-womb-cocoon.jpg` | a translucent silk cocoon lit from inside, the curled hero pressing against it, silk splitting at the top with light spilling out; nurses with antennae on it |
 | H5. The venom flyer | `h5-venom-flyer.jpg` | a winged Lasius alate with a short curved dark-amber wasp sting at the gaster tip, a bead of venom, the last segments faintly banded; biological, not armour |
 
-Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_5`, 16:9, 2026-11-04, five images. H1 and H4 also stand in as the two chapters' comic beats (`assets/ui/comic/b-web.jpg`, `b-cocoon.jpg`), and a crop of H2 is the mutagen icon (`assets/ui/mutagen.png`); all three are replaced if the owner rejects the targets.
+Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_5`, 16:9, 2026-11-04, five images. H1 and H4 also stand in as the two chapters' comic beats (`assets/ui/comic/b-web.jpg`, `b-cocoon.jpg`), and a crop of H2 is the mutagen icon (`assets/ui/mutagen.png`); approved with the targets, they stay until finished art replaces them.
 
 Ownership: the stinger, the royal larva and the cocoon meshes belong to the ant-rebuild session (asked on 2026-11-04); the wasp-in-web, the gland and the nursery dressing follow the art pipeline (real or Blender-modelled assets, the two-part gate).

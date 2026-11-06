@@ -300,7 +300,7 @@ From then on, **heroes in the campaign come only this way**: the Heroes tab lays
 
 ### Art
 
-The visuals of the track wait for the owner's approval of targets **H1-H5** (`docs/art-targets/REVIEW-mutation.jpg`: the queen wasp in the web, the mutagen haul and its pulse, the royal nursery and its living gauge, the womb cocoon, the venom flyer). Until then `src/Render/MutagenGlow.cs` draws placeholders only: a breathing violet-green light where mutagen lies or is carried (on the game's own wasp mesh), the sixth-sense ripple, and the light of the larva and the cocoon in the nursery. The stinger, royal larva and cocoon meshes belong to the ant-rebuild session. The comic beats for the two chapters use H1 and H4 until approved art replaces them.
+The visuals of the track are built against targets **H1-H5**, approved by the owner on 2026-11-06 (`docs/art-targets/REVIEW-mutation.jpg`: the queen wasp in the web, the mutagen haul and its pulse, the royal nursery and its living gauge, the womb cocoon, the venom flyer). Until then `src/Render/MutagenGlow.cs` draws placeholders only: a breathing violet-green light where mutagen lies or is carried (on the game's own wasp mesh), the sixth-sense ripple, and the light of the larva and the cocoon in the nursery. The stinger, royal larva and cocoon meshes belong to the ant-rebuild session. The comic beats for the two chapters use H1 and H4.
 
 ### Tests
 
