@@ -19,6 +19,8 @@ public sealed partial class NestInterior
     readonly bool[] _holeCut = { false, false };
     readonly NestGeometry[] _geometry = { new(), new() };
     readonly MeshInstance3D[] _excavation = new MeshInstance3D[2];
+    readonly Node3D[] _timber = new Node3D[2];
+    static readonly Dictionary<string, Material> _mineMats = new(); // shoring, stones and roots in the banks, rebuilt with the excavation
     readonly int[] _meshRevision = { -1, -1 };
     readonly List<ShaderMaterial> _soils = new(), _shafts = new();
     float _refresh;
@@ -71,6 +73,22 @@ public sealed partial class NestInterior
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
 
     /// One shared Earth shader per culling mode; a material per surface role, tuned by how much sun it sees.
+    static Image _relief;
+
+    /// The rock scan's displacement map, read once for the bank relief (nest-local point, repeats like the shader's wall tiling).
+    static float Relief(Vector2 p)
+    {
+        if (_relief == null)
+        {
+            _relief = GD.Load<Texture2D>("res://assets/nature/ground/rock_face_03_disp.jpg").GetImage();
+            if (_relief.IsCompressed()) _relief.Decompress();
+        }
+        int w = _relief.GetWidth(), h = _relief.GetHeight();
+        float u = p.X * 0.32f, v = p.Y * 0.32f;
+        int x = ((int)Mathf.Floor((u - Mathf.Floor(u)) * w)) % w, y = ((int)Mathf.Floor((v - Mathf.Floor(v)) * h)) % h;
+        return _relief.GetPixel(x, y).R;
+    }
+
     ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back, bool cavity = false)
     {
         var mode = cavity ? "cull_disabled, shadows_disabled, ambient_light_disabled" : back ? "cull_back" : "cull_disabled";
@@ -79,6 +97,17 @@ public sealed partial class NestInterior
         m.SetShaderParameter("noise_b", _g.World.NoiseB);
         m.SetShaderParameter("normal_c", _g.World.NormalC);
         m.SetShaderParameter("soil_albedo", NatureAssets.Texture("ground/red_mud_stones_diff")); // photographed clay with embedded stones (CC0)
+        if (cavity)
+        {
+            // the mine: Poly Haven rock_face_03 on the walls, coast_sand_05 on the floor (CC0, docs/asset-credits.md)
+            m.SetShaderParameter("mine", true);
+            m.SetShaderParameter("wall_albedo", NatureAssets.Texture("ground/rock_face_03_diff"));
+            m.SetShaderParameter("wall_normal", NatureAssets.Texture("ground/rock_face_03_nor"));
+            m.SetShaderParameter("wall_arm", NatureAssets.Texture("ground/rock_face_03_arm"));
+            m.SetShaderParameter("floor_albedo", NatureAssets.Texture("ground/coast_sand_05_diff"));
+            m.SetShaderParameter("floor_normal", NatureAssets.Texture("ground/coast_sand_05_nor"));
+            NestGeometry.WallRelief ??= Relief;
+        }
         m.SetShaderParameter("ground_y", gy);
         m.SetShaderParameter("shade", shade);
         m.SetShaderParameter("bounce", bounce);
@@ -422,6 +451,7 @@ public sealed partial class NestInterior
                     _excavation[team].Mesh = geometry.BuildMesh(Settings.Gfx == Settings.Quality.Low ? 0.34f : 0.24f);
                     previous?.Dispose();
                     _meshRevision[team] = geometry.Revision;
+                    DressMine(team, geometry);
                 }
             }
             foreach (var ch in col.Chambers)
@@ -455,5 +485,112 @@ public sealed partial class NestInterior
         }
         UpdateBrood(alpha);
         _lights.Update(1f / 60f, _open);
+    }
+
+    /// The worked look of a mine, from the scans the yard already uses: twig props and lintels at every gallery
+    /// mouth and along the long galleries (ants shore their tunnels with twigs), stones half-sunk in the banks, and
+    /// a root crossing here and there. Everything sits on the excavation's own surface. Rebuilt with the mesh; the
+    /// Low tier has none of it, Medium the mouths only.
+    void DressMine(int team, NestGeometry geometry)
+    {
+        _timber[team]?.QueueFree();
+        _timber[team] = null;
+        if (Settings.Gfx == Settings.Quality.Low) return;
+        var root = new Node3D { Name = "MineDressing" };
+        _excavation[team].AddChild(root);
+        _timber[team] = root;
+        var twigs = NatureAssets.Kind("twig").FindAll(p => p.Src.StartsWith("dry_branches"));
+        var stones = NatureAssets.Kind("stone");
+        var roots = NatureAssets.Kind("root").FindAll(p => p.Src == "single_root");
+        if (twigs.Count == 0 || stones.Count == 0) return;
+        var rng = new Rng((uint)(0x7133u + (uint)team * 977u));
+        var batches = new Dictionary<NatureAssets.Piece, List<Transform3D>>();
+        void Add(NatureAssets.Piece p, Transform3D t) { if (!batches.TryGetValue(p, out var l)) batches[p] = l = new(); l.Add(t); }
+        float Y(Vector2 p) => NestGeometry.Height(geometry.Distance(p));
+        bool full = Settings.Gfx >= Settings.Quality.High;
+        float floorY = -NestGeometry.Depth;
+        // a twig laid along `dir` from `at`, its length `len`, lying on the surface at `at` (or standing when `up` is set)
+        void Twig(Vector2 at, float y, Vector3 axis, float len, float thick)
+        {
+            var p = twigs[rng.I(0, twigs.Count)];
+            var laid = (p.Lie * p.Size).Abs();
+            float s = len / Mathf.Max(0.01f, laid.Z);
+            float st = thick / Mathf.Max(0.01f, Mathf.Max(laid.X, laid.Y));
+            var up = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.98f ? Vector3.Right : Vector3.Up;
+            var basis = Basis.LookingAt(axis, up) * new Basis(Vector3.Forward, rng.R(0, Mathf.Tau)) * Basis.FromScale(new Vector3(st, st, s)) * p.Lie;
+            Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)));
+        }
+        for (int i = 1; i < geometry.Count; i++)
+        {
+            int k = i * NestGeometry.Stride;
+            var a = new Vector2(geometry.Network[k], geometry.Network[k + 1]);
+            var b = new Vector2(geometry.Network[k + 2], geometry.Network[k + 3]);
+            var radii = new Vector2(geometry.Network[k + 4], geometry.Network[k + 5]);
+            float half = geometry.Network[k + 6];
+            var ab = b - a;
+            float len = ab.Length();
+            if (len < 2.5f) continue;
+            var dir = ab / len;
+            var side = new Vector2(-dir.Y, dir.X);
+            // frames along the gallery: at its mouth into the room and every few units on the way, each a pair of
+            // uprights leaning into the banks and a lintel across the top, slightly askew like real shoring
+            float roomEdge = len - Mathf.Min(radii.X, radii.Y) * 0.9f;
+            var stations = new List<float> { Mathf.Clamp(roomEdge - 0.6f, 1.2f, len - 1f) };
+            if (full) for (float d = 3.2f; d < roomEdge - 2.6f; d += rng.R(4.0f, 5.5f)) stations.Add(d);
+            foreach (float d in stations)
+            {
+                var c = a + dir * d;
+                float wobble = rng.R(-0.12f, 0.12f);
+                float w = half + 0.35f;
+                Vector2 l = c + side * (w + wobble), r = c - side * (w - wobble);
+                float h = NestGeometry.Depth * rng.R(0.86f, 0.98f);
+                var lean = new Vector3(side.X, 0, side.Y) * rng.R(0.06f, 0.16f);
+                Twig(l, floorY + 0.05f, (Vector3.Up + lean).Normalized(), h, 0.55f);
+                Twig(r, floorY + 0.05f, (Vector3.Up - lean).Normalized(), h, 0.55f);
+                var top = (l + r) * 0.5f;
+                Twig(top, floorY + h - 0.2f, new Vector3(side.X, rng.R(-0.04f, 0.04f), side.Y).Normalized(), l.DistanceTo(r) + 0.7f, 0.5f);
+            }
+            if (!full) continue;
+            // stones pressed into the banks on both sides, and the odd root breaking through near the lip
+            for (float d = 0.8f; d < len - 0.5f; d += rng.R(0.9f, 1.7f))
+            {
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    if (rng.F() > 0.55f) continue;
+                    float off = half + rng.R(0.15f, 1.1f);
+                    var at = a + dir * d + side * (sgn * off);
+                    float y = Y(at);
+                    var p = stones[rng.I(0, stones.Count)];
+                    float sz = rng.R(0.5f, 1.3f);
+                    float s = sz / Mathf.Max(0.01f, p.Footprint);
+                    var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * Basis.FromScale(Vector3.One * s);
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y - p.Size.Y * s * rng.R(0.3f, 0.55f), at.Y)));
+                }
+                if (roots.Count > 0 && rng.F() < 0.14f)
+                {
+                    var p = roots[rng.I(0, roots.Count)];
+                    var at = a + dir * d + side * (rng.F() < 0.5f ? -1 : 1) * (half + 0.9f);
+                    float y = Y(at) - 0.1f;
+                    float s = rng.R(1.6f, 2.6f) / Mathf.Max(0.01f, p.Longest);
+                    var basis = new Basis(Vector3.Up, dir.Angle() + rng.R(-0.4f, 0.4f)) * new Basis(Vector3.Right, rng.R(-0.3f, -0.05f)) * Basis.FromScale(Vector3.One * s) * p.Lie;
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)));
+                }
+            }
+        }
+        foreach (var (piece, list) in batches)
+        {
+            // the shoring stands above the lamps' reach: its own copy of the scan's material carries a warm fill, like the walls
+            if (!_mineMats.TryGetValue(piece.Src, out var mat))
+            {
+                var m = (StandardMaterial3D)((StandardMaterial3D)piece.Material).Duplicate();
+                m.VertexColorUseAsAlbedo = false;
+                m.EmissionEnabled = true; m.EmissionTexture = m.AlbedoTexture; m.Emission = new Color(0.55f, 0.4f, 0.26f); m.EmissionEnergyMultiplier = 0.14f;
+                _mineMats[piece.Src] = mat = m;
+            }
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = piece.Mesh, InstanceCount = list.Count };
+            for (int i = 0; i < list.Count; i++) mm.SetInstanceTransform(i, list[i]);
+            root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, CastShadow = full ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off });
+        }
+        MoveToUnderground(root); // lit by the nest's lamps, like everything else dug
     }
 }

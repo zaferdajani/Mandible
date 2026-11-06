@@ -1409,6 +1409,15 @@ uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_c : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float ground_y = 0.0;   // world height of the nest entrance
 uniform sampler2D soil_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+// the mine: a photoscanned rock face on the walls, scanned compacted sand on the floor (Poly Haven, CC0)
+uniform sampler2D wall_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D wall_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D wall_arm : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform sampler2D floor_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D floor_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float wall_scale = 0.32;    // texture repeats per world unit on the walls (one scan tile is about 3 units)
+uniform float floor_scale = 0.22;
+uniform bool mine = false;          // the scanned mine look (false keeps the older generated soil)
 uniform float shade = 1.0;      // how much of the sun this surface can see
 uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
 uniform bool cavity_surface = false;
@@ -1429,6 +1438,7 @@ void vertex() {
     TANGENT = normalize(tangent_axis - NORMAL * dot(NORMAL, tangent_axis));
     BINORMAL = normalize(cross(NORMAL, TANGENT));
 }
+vec3 unpack_n(vec2 xy) { vec2 n = xy * 2.0 - 1.0; return normalize(vec3(n, sqrt(max(1.0 - dot(n, n), 0.0)))); }
 float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
 }
@@ -1465,7 +1475,40 @@ void fragment() {
     if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
     // a trodden floor darkens toward the foot of the wall, so the cavity reads as a depression
     if (grooves < 0.01) { float rr = length(UV - 0.5) * 2.0; col *= 1.0 - 0.42 * smoothstep(0.5, 1.0, rr); }
-    if (cavity_surface) {
+    float wallness = 0.0;
+    vec3 mine_nrm = vec3(0.0, 0.0, 1.0);
+    float mine_rough = 0.9;
+    if (cavity_surface && mine) {
+        // the walls: triplanar rock face, blended by the surface's slope into the trodden sand of the floor
+        vec3 w3 = pow(an, vec3(5.0)); w3 /= max(dot(w3, vec3(1.0)), 0.001);
+        vec3 rx = texture(wall_albedo, wpos.yz * wall_scale).rgb;
+        vec3 ry = texture(wall_albedo, wpos.xz * wall_scale + 0.37).rgb;
+        vec3 rz = texture(wall_albedo, wpos.xy * wall_scale).rgb;
+        vec3 rock = rx * w3.x + ry * w3.y + rz * w3.z;
+        // the normal maps are VRAM-compressed to two channels: z is rebuilt from xy
+        vec3 nx = unpack_n(texture(wall_normal, wpos.yz * wall_scale).xy);
+        vec3 ny = unpack_n(texture(wall_normal, wpos.xz * wall_scale + 0.37).xy);
+        vec3 nz = unpack_n(texture(wall_normal, wpos.xy * wall_scale).xy);
+        vec3 rockN = normalize(nx * w3.x + ny * w3.y + nz * w3.z);
+        vec3 armv = texture(wall_arm, wpos.yz * wall_scale).rgb * w3.x + texture(wall_arm, wpos.xz * wall_scale + 0.37).rgb * w3.y + texture(wall_arm, wpos.xy * wall_scale).rgb * w3.z;
+        vec3 sand = texture(floor_albedo, wpos.xz * floor_scale).rgb;
+        vec3 sandN = unpack_n(texture(floor_normal, wpos.xz * floor_scale).xy);
+        wallness = smoothstep(0.35, 0.75, 1.0 - an.y);
+        // the walls carry the soil's layers faintly (dark topsoil at the lip, ochre loam, pale sand low down),
+        // the rock scan's own colour underneath; the floor is the surface's sand, trodden and a little darker
+        vec3 layer = mix(mix(vec3(0.62, 0.50, 0.40), vec3(1.0, 0.86, 0.68), t1), vec3(1.0, 0.95, 0.85), t2);
+        rock *= layer * vec3(1.25, 1.12, 1.0);
+        sand *= vec3(1.15, 1.08, 0.98); // the lamps are few and warm: the scans are lifted so the floor reads
+        col = mix(sand, rock, wallness);
+        col *= 0.9 + 0.2 * g;
+        float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
+        col *= 1.0 - 0.3 * crevice;
+        mine_nrm = mix(sandN, rockN, wallness);
+        mine_rough = mix(0.95, 0.8 + 0.2 * armv.g, wallness);
+        if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
+        AO = (1.0 - 0.45 * crevice) * mix(1.0, armv.r, 0.6 * wallness);
+        AO_LIGHT_AFFECT = 0.5;
+    } else if (cavity_surface) {
         // Triplanar photographic soil keeps grain continuous across the floor and banks.
         vec3 weights = pow(an, vec3(4.0)); weights /= max(dot(weights, vec3(1.0)), 0.001);
         vec3 tx = texture(soil_albedo, wpos.yz * 0.17).rgb;
@@ -1486,12 +1529,15 @@ void fragment() {
         AO_LIGHT_AFFECT = 0.5;
     }
     ALBEDO = col * shade;
-    ROUGHNESS = 0.96 - t2 * 0.08;
+    ROUGHNESS = mine && cavity_surface ? mine_rough : 0.96 - t2 * 0.08;
     SPECULAR = 0.2;
     vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
     NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
-    if (cavity_surface && !flat_lighting) {
+    if (cavity_surface && mine) {
+        NORMAL_MAP = mine_nrm * 0.5 + 0.5;
+        NORMAL_MAP_DEPTH = 1.1;
+    } else if (cavity_surface && !flat_lighting) {
         vec2 suv = (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.17;
         vec2 px = 1.0 / vec2(textureSize(soil_albedo, 0));
         float l = dot(texture(soil_albedo, suv - vec2(px.x, 0.0)).rgb, vec3(0.3333));
