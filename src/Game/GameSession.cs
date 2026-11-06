@@ -16,6 +16,7 @@ public partial class GameSession : Node3D
     public Effects Effects;
     public Carnage Gore;
     public Guidance Guide;
+    public MutagenGlow Glow;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -73,6 +74,7 @@ public partial class GameSession : Node3D
         Guide = new Guidance(this, World.HF);
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
+        if (Campaign) Glow = new MutagenGlow(this);
         Ants.Brood = Interior;
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
@@ -134,7 +136,9 @@ public partial class GameSession : Node3D
                 if (beat != null && (ForceStory || !CampaignProgress.StorySeen(Episode) && !App.TestRun))
                 {
                     var info = Levels.Info(Episode);
-                    Hud.ShowStory(beat, $"{Levels.Seasons[info.Season].ToUpperInvariant()}  ·  {Levels.SeasonThemes[info.Season].ToUpperInvariant()}", () => { CampaignProgress.SeeStory(Episode); Hud.ShowBriefing(Episode); });
+                    void Comic() => Hud.ShowStory(beat, $"{Levels.Seasons[info.Season].ToUpperInvariant()}  ·  {Levels.SeasonThemes[info.Season].ToUpperInvariant()}", () => { CampaignProgress.SeeStory(Episode); Hud.ShowBriefing(Episode); });
+                    // the opening cinematic plays before the first chapter's comic (skipped when the build has none)
+                    if (Episode == 1) { SetPaused(true); StoryVideo.Play(Hud, StoryVideo.Opening, Comic); } else Comic();
                 }
                 else Hud.ShowBriefing(Episode);
             }
@@ -662,6 +666,7 @@ public partial class GameSession : Node3D
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
+        Glow?.Update(dt);
         if (!Demo) UpdateGlass(dt);
         if (!Demo) Input?.UpdateHover();
         Ants.Update(Sim, Camera.Cam, _alpha);
@@ -788,6 +793,33 @@ public partial class GameSession : Node3D
                                 $"{Config.StageNames[Mathf.Clamp(e.Tier, 0, 3)]}: {Config.StageGain(e.Tier)}", 4.5f);
                         }
                     }
+                    break;
+                case EvKind.MutagenFree:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The gland is free", "Its glow pulses in the workers' jaws. Get it home: hunters smell it on the move.", 4f);
+                    break;
+                case EvKind.MutagenDropped:
+                    if (e.Team == Local.Me && !Demo) Hud.Alert("The carrier fell: the gland lies on the ground. Send workers to take it up.", new Color(0.85f, 0.7f, 1f));
+                    break;
+                case EvKind.MutagenHome:
+                    if (e.Team == Local.Me && !Demo) { Hud.Banner("Mutagen in the reserve", "The queen can consume it now: the mutation card is on the objectives.", 4.5f); Audio.Ui("research"); }
+                    break;
+                case EvKind.Mutate:
+                    if (e.Team == Local.Me && !Demo)
+                    {
+                        var mu = (Mutation)e.Tier;
+                        Hud.Banner($"The colony mutates: {Mutations.Name(mu)}", Mutations.Text(mu), 6f);
+                        Audio.Ui("victory", -6);
+                        Effects.Marker(wp, new Color(0.78f, 0.6f, 1f), 2.4f);
+                    }
+                    break;
+                case EvKind.Cocoon:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The royal larva spins its cocoon", "It throbs with light, and the raids will grow desperate. Hold the nursery until it bursts.", 5f);
+                    break;
+                case EvKind.HeroBorn:
+                    if (e.Team == Local.Me && !Demo) { Hud.Banner($"A hero breaks out: {Config.Of(e.Type).Name}", "Born from the royal larva. Heroes fight with special moves and grow by eating remains.", 6f); Audio.Ui("levelup"); }
+                    break;
+                case EvKind.LarvaLost:
+                    if (e.Team == Local.Me && !Demo) Hud.Alert("The royal larva has been devoured.", new Color(1f, 0.45f, 0.35f));
                     break;
                 case EvKind.WebShot:
                     if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
@@ -1044,6 +1076,8 @@ public partial class GameSession : Node3D
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");
         Camera.PanTo(World.Nests[win ? Local.Foe : Local.Me].Pos);
-        Hud.ShowEnd(win, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
+        // a won chapter's reward cinematic comes before its result card (skipped when the build has none)
+        if (win && Campaign && !App.TestRun) StoryVideo.Play(Hud, StoryVideo.Reward(Episode), () => Hud.ShowEnd(true, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time));
+        else Hud.ShowEnd(win, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
     }
 }

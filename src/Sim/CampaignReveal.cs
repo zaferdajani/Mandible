@@ -3,43 +3,47 @@ using System.Collections.Generic;
 namespace Mandible;
 
 /// The campaign shows the game one piece at a time: every caste, hero, research, chamber, wild enemy and system has
-/// the chapter (map number, 1-12) that introduces it. Before that chapter it does not exist for the player: the sim
+/// the chapter (map number, 1-14) that introduces it. Before that chapter it does not exist for the player: the sim
 /// refuses it, the HUD and research and hero tabs leave it out, and the Field Guide does not list it. Skirmish and
 /// Lane War keep everything. Star perks may open a few castes and heroes early (never before Act III).
 public static class Reveal
 {
     public const int RedColony = 4;      // the red colony is a real opponent from the start of Act II
-    public const int FirstQueenKill = 5; // Ashling: the first chapter won by killing a queen
-    public const int PerkFloor = 7;      // star perks open castes and heroes no earlier than Act III
+    public const int Mutagen = 5;        // the Silk Trap: the sixth sense, the first mutagen and the first mutation
+    public const int FirstQueenKill = 6; // Ashling: the first chapter won by killing a queen
+    public const int RoyalLarva = 7;     // the hero mutation: the royal larva, its nursery and the first hero
+    public const int PerkFloor = 9;      // star perks open castes and heroes no earlier than Act III
     public const int Organic = 1;        // remains feed the reserve: the founders need food and remains (PR #9's economy)
     /// Evolution by eating: the Dry Spell, whose lairs are the larder, teaches it. The campaign's squads still rank up in
     /// battle (its levels and veterans are built on it); eating evolves them on top, and the rival does not evolve.
-    public const int Evolution = 8;
+    public const int Evolution = 10;
+    public const int SilkTrapId = 13, RoyalLarvaId = 14; // the two mutation chapters' level ids
 
     public static int Prod(ProdKind k) => k switch
     {
         ProdKind.Worker or ProdKind.Chamber => 1,
         ProdKind.Soldier => 2,
         ProdKind.Major => 3,
-        ProdKind.Warlord => 7,           // the first hero raised: old Burr, in The Hornet Mother
-        ProdKind.Flyer or ProdKind.Gunner => 9,
-        _ => 13,                         // the Acid Matron and Sky Marshal are bought with stars (Levels.Unlocks)
+        ProdKind.Warlord => 7,           // heroes come only from a royal larva (Mutation.RoyalLarva), first in The Royal Larva
+        ProdKind.Flyer or ProdKind.Gunner => 11, // hatching them: Wings and Acid (the Silk Trap brings the first winged ants)
+        _ => 15,                         // the Acid Matron and Sky Marshal are bought with stars (Levels.Unlocks)
     };
 
     public static int Chamber(ChamberKind k) => k switch
     {
         ChamberKind.Royal or ChamberKind.Brood or ChamberKind.Storage => 1,
-        ChamberKind.Forge or ChamberKind.Armory => 6,
-        ChamberKind.Silk => 8,
-        _ => 9,                          // the wing chamber
+        ChamberKind.Forge or ChamberKind.Armory => 8,
+        ChamberKind.Silk => 10,
+        ChamberKind.Nursery => 7,        // dug when the queen takes the royal larva mutation
+        _ => 11,                         // the wing chamber
     };
 
     public static int Research(Upgrade u, int tier) => u switch
     {
-        Upgrade.Queen => tier <= 1 ? 1 : tier == 2 ? 6 : tier == 3 ? 9 : 10,
-        Upgrade.Mandibles or Upgrade.Chitin => tier <= 1 ? 6 : tier == 2 ? 9 : 10,
-        Upgrade.SilkCutters => 8,
-        _ => 9,                          // wings
+        Upgrade.Queen => tier <= 1 ? 1 : tier == 2 ? 8 : tier == 3 ? 11 : 12,
+        Upgrade.Mandibles or Upgrade.Chitin => tier <= 1 ? 8 : tier == 2 ? 11 : 12,
+        Upgrade.SilkCutters => 10,
+        _ => 11,                         // wings
     };
 
     /// Wild enemies and the colonies' castes as the player meets them in the field.
@@ -49,10 +53,12 @@ public static class Reveal
         AntType.Beetle => 1,
         AntType.Major or AntType.Spider => 3,
         AntType.Matron => 4,             // Vetch, brought home in The Matron's Road
-        AntType.Warlord or AntType.Wasp => 7,
-        AntType.Flyer or AntType.Gunner => 9,
-        AntType.StagBeetle => 10,
-        _ => 13,
+        AntType.Flyer => 5,              // the strain's first winged daughters, in The Silk Trap
+        AntType.Warlord => 7,            // Hemlock, out of the royal cocoon
+        AntType.Wasp => 9,               // the Hornet Mother's daughters (the Silk Trap's queen wasp is already dead)
+        AntType.Gunner => 11,
+        AntType.StagBeetle => 12,
+        _ => 15,
     };
 
     /// What each chapter introduces, for the briefing ("New in this chapter") and the docs.
@@ -72,15 +78,21 @@ public static class Reveal
         (3, "Raids", "Wild bugs dive down the shaft for the queen."),
         (4, "The red colony", "Fire ants: a rival colony that forages, fights and raids."),
         (4, "Escort", "Vetch, the tube's Acid Matron, walks home when the road is clear."),
-        (5, "Queen kill", "Go down a rival's shaft and end its queen."),
-        (6, "Research", "Royal jelly, the Mandible Forge and the Chitin Armory."),
-        (7, "Heroes", "Raise old Burr as the Warlord (Y): a hero levels fast and fights with special moves."),
-        (7, "Wasps", "Flyers that sting, climb away and come back."),
-        (8, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
-        (8, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),
-        (8, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),
-        (9, "Wings", "Research wings to hatch flying ants (F) and acid gunners (D)."),
-        (10, "The Old Stag", "The lord of the yard. Beat it and it fights for you."),
+        (5, "Mutagen", "A glowing substance in creatures that fed on the lab's spill. Workers carve it out and carry it home; the queen consumes it to mutate the colony."),
+        (5, "The sixth sense", "Strain M-7 feels mutagen pulse through the fog: a violet-green ripple marks every source within reach."),
+        (5, "Winged ants", "The strain's first winged daughters: fast flyers that cross the yard over every obstacle."),
+        (5, "Venom stingers", "The first mutation: flying ants grow a wasp's sting, and every strike keeps burning."),
+        (6, "Queen kill", "Go down a rival's shaft and end its queen. A dead queen's body holds mutagen."),
+        (7, "The royal larva", "The hero mutation: the queen lays a royal larva in its own nursery. Nurses feed it organic matter until it spins a cocoon."),
+        (7, "Heroes", "A hero breaks out of the royal cocoon. In the campaign every hero is born this way (the Heroes tab lays the larva)."),
+        (7, "Mutation cards", "Every queen killed from now on yields mutagen: choose one of three mutations, one of them her own trait. Each makes the woods more unstable."),
+        (8, "Research", "Royal jelly, the Mandible Forge and the Chitin Armory."),
+        (9, "Wasps", "Flyers that sting, climb away and come back."),
+        (10, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
+        (10, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),
+        (10, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),
+        (11, "Wings", "Research wings to hatch flying ants (F) and acid gunners (D)."),
+        (12, "The Old Stag", "The lord of the yard. Beat it and it fights for you."),
     };
 
     public static IEnumerable<(string name, string text)> NewIn(int chapter)
@@ -91,7 +103,7 @@ public static class Reveal
 
 public sealed partial class Expedition
 {
-    /// This mission's place on the map (1-12).
+    /// This mission's place on the map (1-14).
     public int Chapter => Levels.NumberOf(Episode);
 
     /// The organic economy (Sim.OrganicRules) and evolution by eating (Sim.EatRules), from the chapters that teach them.
