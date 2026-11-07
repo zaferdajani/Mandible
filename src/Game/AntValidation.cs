@@ -47,13 +47,14 @@ public static class AntValidation
             var across = new Vector2(Mathf.Cos(heading), Mathf.Sin(heading));
             void Lineup(int team, AntType[] types)
             {
-                // spaced by each caste's own size, so a worker stands beside a queen as it does in the target
-                float width = 0; foreach (var t in types) width += Config.Of(t).Size * 1.15f;
+                // side by side, each facing the same way, spaced by its own width (about half its size), as in the targets
+                var side = new Vector2(-across.Y, across.X);
+                float width = 0; foreach (var t in types) width += Config.Of(t).Size * 0.75f;
                 float x = -width / 2;
                 foreach (var t in types)
                 {
-                    float sz = Config.Of(t).Size * 1.15f;
-                    g.Sim.Spawn(team, t, stage + across * (x + sz / 2), heading); x += sz;
+                    float sz = Config.Of(t).Size * 0.75f;
+                    g.Sim.Spawn(team, t, stage + side * (x + sz / 2), heading); x += sz;
                 }
             }
             void Clear() => ClearAround(g.Sim, stage, 14);
@@ -76,11 +77,12 @@ public static class AntValidation
                 lens.GlobalTransform = new Transform3D(Basis.Identity, target + dir * dist).LookingAt(target, Vector3.Up);
                 lens.MakeCurrent();
             }
-            AntType[] castes = { AntType.Worker, AntType.Soldier, AntType.Major, AntType.Gunner, AntType.Flyer, AntType.Queen };
+            // the four castes the targets show (G1, G2): worker, major, queen, winged; framed so they fill the frame as there
+            AntType[] castes = { AntType.Worker, AntType.Major, AntType.Queen, AntType.Flyer };
             for (int team = 0; team < 2; team++)
             {
                 Clear(); Lineup(team, castes);
-                Frame(13, 50, 0.25f, 0.5f); await Shot($"g-castes-{(team == 0 ? "black" : "red")}-close");
+                Frame(6.5f, 50, -Mathf.Pi * 0.5f + 0.55f, 0.8f); await Shot($"g-castes-{(team == 0 ? "black" : "red")}-close");
             }
             // each hero as in its target: the black colony's on the left, the red colony's on the right
             foreach (var hero in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
@@ -93,7 +95,13 @@ public static class AntValidation
                 // a Sky Marshal hovers: aim at the height it is drawn at, not at the ground under it
                 await app.ToSignal(app.GetTree().CreateTimer(0.3f), SceneTreeTimer.SignalName.Timeout);
                 float alt = g.Sim.Ants[a0].Alt + (Config.Flies(hero) ? 0.6f : 0f);
-                Frame(3.0f * sz, 50, -0.6f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-close");
+                Frame(2.7f * sz, 50, -Mathf.Pi * 0.5f + 0.55f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-close");
+                // the same general at level 10: every growth in, the veins at their brightest
+                Clear();
+                a0 = g.Sim.Spawn(0, hero, stage + side * (0.75f * sz), heading, Config.MaxLevelOf(hero));
+                g.Sim.Spawn(1, hero, stage - side * (0.75f * sz), heading, Config.MaxLevelOf(hero));
+                await app.ToSignal(app.GetTree().CreateTimer(0.3f), SceneTreeTimer.SignalName.Timeout);
+                Frame(2.7f * sz, 50, -Mathf.Pi * 0.5f + 0.55f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-l10-close");
             }
             // the compound eyes: a worker's head filling the frame, then a queen's (larger eyes, three ocelli). The ant faces
             // the sun and the lens looks at its face from just off the sun's side, so the head is lit, not a silhouette
@@ -101,10 +109,54 @@ public static class AntValidation
             float sunH = Mathf.Atan2(toSun.Z, toSun.X);
             var face = new Vector2(Mathf.Cos(sunH), Mathf.Sin(sunH));
             float faceYaw = sunH - heading - Mathf.Pi * 0.5f + 0.45f;
-            Clear(); g.Sim.Spawn(0, AntType.Worker, stage, sunH); Frame(0.95f, 28, faceYaw, 0.15f, stage + face * 0.27f); await Shot("g-eyes-close");
+            Clear(); g.Sim.Spawn(0, AntType.Worker, stage, sunH); Frame(0.48f, 24, faceYaw, 0.15f, stage + face * 0.28f); await Shot("g-eyes-close");
             float qs = Config.Of(AntType.Queen).Size;
-            Clear(); g.Sim.Spawn(0, AntType.Queen, stage, sunH); Frame(1.0f * qs, 30, faceYaw, 0.17f * qs, stage + face * (0.3f * qs)); await Shot("g-eyes-queen-close");
+            Clear(); g.Sim.Spawn(0, AntType.Queen, stage, sunH); Frame(0.5f * qs, 26, faceYaw, 0.16f * qs, stage + face * (0.3f * qs)); await Shot("g-eyes-queen-close");
             Clear();
+
+            // H3-H5, the mutation track's models, placed on the stage directly (the mutation renderer draws them in play)
+            var showcase = new Node3D();
+            app.AddChild(showcase);
+            Vector3 Ground(Vector2 p, float lift = 0) => new(p.X, hf.Sample(p.X, p.Y) + lift, p.Y);
+            Basis Facing(float h, float scale) => AntRenderer.Orient(Vector3.Up, h, scale);
+            MeshInstance3D Place(Mesh mesh, Material mat, Basis b, Vector3 at)
+            {
+                var mi = new MeshInstance3D { Mesh = mesh, MaterialOverride = mat };
+                showcase.AddChild(mi);
+                mi.GlobalTransform = new Transform3D(b, at);
+                return mi;
+            }
+            float fs = Config.Of(AntType.Flyer).Size;
+            var flyerMat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), 0, AntType.Flyer, false);
+            flyerMat.SetShaderParameter("venom_bands", 1f);
+            var flyerAt = Ground(stage, 0.6f);
+            Place(AntMesh.Build(AntType.Flyer, false, 0, AntMesh.Detail.Near), flyerMat, Facing(heading, fs), flyerAt);
+            if (AntMesh.Sting() != null) Place(AntMesh.Sting(), flyerMat, Facing(heading, fs), flyerAt);
+            Frame(1.6f * fs, 25, 0.35f, 0.75f); await Shot("h-sting-close");
+            foreach (var c in showcase.GetChildren()) c.QueueFree();
+
+            if (AntMesh.RoyalLarva() != null)
+            {
+                Place(AntMesh.RoyalLarva(), AntMesh.RoyalLarvaMaterial(), Facing(heading + 0.6f, 3.2f), Ground(stage, 0.05f));
+                // two nurses at its side, for scale
+                g.Sim.Spawn(0, AntType.Worker, stage + new Vector2(1.6f, 0.9f), heading + 2.5f);
+                g.Sim.Spawn(0, AntType.Worker, stage - new Vector2(1.4f, 1.1f), heading - 0.4f);
+                Frame(5.5f, 45, -0.4f, 0.5f); await Shot("h-larva-close");
+                foreach (var c in showcase.GetChildren()) c.QueueFree();
+                Clear();
+            }
+            if (AntMesh.WombCocoon() != null)
+            {
+                // the hero curled inside, dark behind the lit silk
+                var heroMat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), 0, AntType.Warlord, false);
+                Place(AntMesh.Build(AntType.Warlord, false, 0, AntMesh.Detail.Mid), heroMat, Facing(heading, 2.4f), Ground(stage, 0.25f));
+                Place(AntMesh.WombCocoon(), AntMesh.WombMaterial(), Facing(heading, 4.2f), Ground(stage, -0.4f));
+                g.Sim.Spawn(0, AntType.Worker, stage + new Vector2(2.6f, 0.5f), heading + 2.8f);
+                Frame(6.5f, 35, -0.3f, 1.4f); await Shot("h-cocoon-close");
+                foreach (var c in showcase.GetChildren()) c.QueueFree();
+                Clear();
+            }
+            showcase.QueueFree();
             g.Camera.Cam.MakeCurrent();
 
             // play zoom: the busiest stretch of trail near home
