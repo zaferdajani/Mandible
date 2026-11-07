@@ -10,4 +10,5 @@ directly as the in-game textures (`assets/insignia/insignia_1..3.png`, black key
 | I2 | 4-7 | chased gold: laurel, jointed leg spokes, a crown of curved mandibles |
 | I3 | 8-10 | red-gold and rose gold, amber cabochons, mandible crests |
 
-Status: sent to the owner for approval on 2026-11-07; built meanwhile. Changing a tier only means replacing its PNG.
+Status: **approved by the owner on 2026-11-07** ("Approve all three": I1, I2, I3). Built and passed the independent
+art review (art check and play-zoom readability). Changing a tier only means replacing its PNG.

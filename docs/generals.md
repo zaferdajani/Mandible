@@ -49,9 +49,31 @@ levels draw on. Cooldowns are shown on the buttons, in seconds, with a dark swee
 - **Right-click** a skill button (long press on a phone) toggles **autocast**. Every skill starts on autocast,
   so a casual or mobile player loses nothing; Lane War heroes cast only on command, as before.
 
+## Auto-eat and automatic collection
+
+**Auto-eat** (button in the ability bar for any selected fighters or generals, hotkey **J**) is a standing order per ant,
+kept per squad (new recruits take it):
+- **ON**: after a kill the killer and its squad mates within 15 eat the remains as soon as the fight is over, and
+  evolve (a general levels). The kill is *claimed* for 25 s, so the colony's haulers leave it alone.
+- **OFF**: the kill is left whole for the workers to haul home as organic matter for the queen and the brood.
+- Default: **generals ON** (eating is their only way to level), **fighters OFF** (carcasses go to the queen unless the
+  player decides the army should grow instead). A small drop of hemolymph over an ant shows it will eat.
+- An explicit "eat this" order (right-click remains) also claims the remains from your own haulers.
+
+**Collection** (the Remains order "Haul"): the colony notices fresh remains on its own anywhere inside a ring around
+the nest, 36 + 0.25 per worker (max 80), and beyond it wherever one of its
+ants sees them. Every 2 s it ranks the remains by value and distance and crews the best one still short of carriers (fully crewed
+ones do not hold up the queue, and most foragers stay on food), skipping
+remains that are claimed or being eaten. The ring shows while the Remains page is open; queued remains get an amber
+ring; the first time remains are queued the HUD says "Workers are bringing home a beetle carcass". The computer
+colonies use the same rules.
+
+Balance: fire ants' remains bonus on **organic matter** is now +10% (it stays +25% on food from corpses), since much
+more remains are hauled home than before.
+
 ## Determinism
 
-Learning, casting and autocast toggles are Cmds (`Learn`, `Cast`, `SkillAuto`), replayed by multiplayer and saved
+Learning, casting, autocast toggles and auto-eat are Cmds (`Learn`, `Cast`, `SkillAuto`, `AutoEat`), replayed by multiplayer and saved
 games. All target choice is in the sim and is index-stable. Protocol `mandible-mp-15`.
 
 ## XP curve
@@ -64,7 +86,7 @@ bounties pay food.
 ## The insignia
 
 Under every general lies a royal seal instead of the selection ring (targets I1-I3 in
-`docs/art-targets/REVIEW-insignia.jpg`, owner approval pending at the time of writing):
+`docs/art-targets/REVIEW-insignia.jpg`, approved by the owner on 2026-11-07):
 
 - levels 1-3: aged bronze ring of antenna links with six leg spokes;
 - levels 4-7: chased gold with laurel and a crown of mandibles;
@@ -80,4 +102,6 @@ and flares when a skill is cast. The crown always points up the screen.
   and casts every skill at every rank through Cast orders: Pheromone victim count, tier and level caps and expiry;
   Brood Call types per rank, hardening and fading; each other skill's effect.
 - `--general-capture=DIR` (windowed, via `godot-run.sh`): insignia at levels 1, 5 and 10, the skill bar and tree,
-  Queen's Pheromone, each Brood Call rank, the hardened brood, Caustic Cloud and Talon Dive.
+  Queen's Pheromone, each Brood Call rank, the hardened brood, Caustic Cloud, Talon Dive, auto-eat and collection.
+- `--generaltest` also checks auto-eat ON (the squad eats its kill, haulers keep off) and OFF (left whole), and that
+  workers fetch a carcass inside the ring that no ant has seen while leaving a claimed one alone.

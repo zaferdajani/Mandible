@@ -46,7 +46,7 @@ public partial class GameSession : Node3D
     byte[] _pherPx;
     float _pherAcc, _trailView = 0.18f, _trailTarget = 0.18f;
     bool _paused, _ended;
-    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd;
+    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd, _collectAlertCd;
     float _demoT;
     DirectionalLight3D _sun;
     /// The one light in the world: a mid-morning sun. Everything, above and below ground, is lit and shadowed by it.
@@ -669,6 +669,31 @@ public partial class GameSession : Node3D
         Audio.Ui("ui_click", -4);
     }
 
+    /// The fighters and generals among the selection (Lane War: your hero) that can eat remains.
+    public List<int> Eaters()
+    {
+        var ids = new List<int>();
+        if (Lanes) { int h = Sim.HeroId[Local.Me]; if (h >= 0 && Sim.Ants[h].Alive) ids.Add(h); return ids; }
+        foreach (int id in Input.Selection)
+            if (id >= 0 && id < Sim.High && Sim.Ants[id].Alive && Sim.Ants[id].Team == Local.Me && Sim.Eats(Sim.Ants[id])) ids.Add(id);
+        return ids;
+    }
+
+    /// J or the Auto-eat button: the selected fighters (and their squads) eat what they kill, or leave it for the workers.
+    /// Mixed selections all switch on first.
+    public void ToggleAutoEat()
+    {
+        var ids = Eaters();
+        if (ids.Count == 0) { Hud.Alert("Select fighters or a general to set auto-eat", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        bool allOn = ids.TrueForAll(i => Sim.Ants[i].AutoEat);
+        var c = Cmd.Units(CmdKind.AutoEat, Local.Me, ids, Sim);
+        c.Arg = (byte)(allOn ? 0 : 1);
+        Issue(c);
+        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home to the queen"
+                        : "Auto-eat ON: they eat what they kill and evolve", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
+        Audio.Ui("ui_click", -4);
+    }
+
     /// Right-click (long press) on a skill button: autocast on or off for the selected general's skill.
     public void ToggleAutocast(int slot)
     {
@@ -804,6 +829,7 @@ public partial class GameSession : Node3D
         Interior.Update(Fog, NestView, _alpha);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
+        Ants.ShowCollect = Hud?.CommandHud?.RemainsPage == true && Sim.Col[Local.Me].Remains == RemainsOrder.Haul;
         Ants.Update(Sim, Camera.Cam, _alpha);
         if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
         Effects.Update(_paused ? 0 : dt);
@@ -1083,6 +1109,14 @@ public partial class GameSession : Node3D
                         Audio.Ui("ui_ready", -4);
                     }
                     break;
+                case EvKind.Collect:
+                    if (!Demo && e.Team == Local.Me && _collectAlertCd <= 0)
+                    {
+                        string what = Config.IsBug(e.Type) ? $"a {Config.Of(e.Type).Name.ToLowerInvariant()} carcass" : $"the remains of an enemy {Config.Of(e.Type).Name.ToLowerInvariant()}";
+                        Hud.Alert($"Workers are bringing home {what}", new Color(0.95f, 0.72f, 0.4f));
+                        _collectAlertCd = 8;
+                    }
+                    break;
                 case EvKind.SkillLearned:
                     if (seen) Effects.Burst(wp + Vector3.Up * 0.6f, 20, 2, 3.5f, 0.3f, 1.2f);
                     break;
@@ -1205,7 +1239,7 @@ public partial class GameSession : Node3D
                     break;
             }
         }
-        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60;
+        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60; _collectAlertCd -= 1f / 60;
     }
 
     void UpdateAudio(float dt)

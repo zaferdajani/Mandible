@@ -11,6 +11,7 @@ namespace Mandible;
 public static class GeneralValidation
 {
     static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    static Cmd Set(Cmd c, byte arg) { c.Arg = arg; return c; }
 
     public static void Run(Main app)
     {
@@ -204,6 +205,66 @@ public static class GeneralValidation
                 }
                 sim.Slay(g);
             }
+
+            // auto-eat: a squad with it ON eats its kill and keeps the haulers off it; with it OFF the kill is left whole
+            Sweep(-1);
+            foreach (bool on in new[] { true, false })
+            {
+                var spot = Clear(home + outv * 75 + perp * (on ? -14 : 14));
+                var squad = Spawn(0, AntType.Soldier, 6, 1, spot);
+                sim.FormSquads(squad);
+                foreach (int id in squad) Check(!sim.Ants[id].AutoEat, "fighters must start with auto-eat off");
+                if (on) Apply(Set(Cmd.Units(CmdKind.AutoEat, 0, new List<int> { squad[0] }, sim), 1));
+                foreach (int id in squad) Check(sim.Ants[id].AutoEat == on, $"auto-eat {(on ? "ON" : "OFF")} must reach the whole squad");
+                foreach (int id in squad) sim.Ants[id].State = AntState.Idle;
+                var prey = Spawn(1, AntType.Major, 1, 1, spot + outv * 1.5f)[0];
+                float evo0 = 0; foreach (int id in squad) evo0 += sim.Ants[id].Evo;
+                sim.Slay(prey, squad[0]);
+                FoodSource carcass = null;
+                foreach (var f in sim.W.Food) if (f.Kind == FoodKind.Corpse && f.Alive && f.Pos.DistanceTo(spot + outv * 1.5f) < 1f) carcass = f;
+                Check(carcass != null, "the kill left no carcass");
+                Ticks(8);
+                float evo = 0; foreach (int id in squad) evo += sim.Ants[id].Evo + 24 * sim.Ants[id].Stage;
+                bool queued = (carcass.Queued & 1) != 0;
+                GD.Print($"[general-test] auto-eat {(on ? "ON" : "OFF")}: mouthfuls {carcass.Feasted}, claim {carcass.ClaimTeam}, squad evolution {evo0:0.0} -> {evo:0.0}, queued for haulers {queued}");
+                if (on) Check(carcass.Feasted >= 3 && evo > evo0 && carcass.ClaimTeam == 1 && !queued, "auto-eat ON: the squad must eat its kill, and the haulers must leave it");
+                else Check(carcass.Feasted == 0 && carcass.ClaimTeam == 0, "auto-eat OFF: the kill must be left for the workers");
+                foreach (int id in squad) sim.Slay(id);
+            }
+
+            // collection: a carcass dropped near the nest, where no ant has seen it, is noticed and carried home; one an
+            // auto-eat fighter has claimed is left alone
+            {
+                var c0 = sim.Col[0];
+                sim.SetRemains(0, RemainsOrder.Haul);
+                for (int k = 0; k < 14; k++) { int wid = sim.Spawn(0, AntType.Worker, home + MathX.Dir(k * 0.45f) * 4f, k * 0.45f); sim.Ants[wid].State = AntState.Forage; } // the sweeps above took the workforce
+                float radius = sim.CollectRadius(0);
+                FoodSource Drop(Vector2 at)
+                {
+                    var st = Config.Of(AntType.Beetle);
+                    var f = new FoodSource { Id = sim.W.NextFoodId++, Kind = FoodKind.Corpse, Pos = at, Amount = st.CorpseFood, Max = st.CorpseFood, Radius = st.Size * 0.45f, Team = Config.Wild, AntType = AntType.Beetle, Natural = false };
+                    sim.W.Food.Add(f);
+                    return f;
+                }
+                var near = Drop(Clear(home + outv * (radius * 0.72f)));
+                float nearAt = near.Pos.DistanceTo(home);
+                var kept = Drop(Clear(home + outv * (radius * 0.5f) + perp * (radius * 0.5f)));
+                kept.ClaimTeam = 1; kept.ClaimUntil = sim.Time + 60;
+                float organic0 = c0.OrganicGathered;
+                bool alert = false;
+                for (int k = 0; k < 90 * 30 && c0.OrganicGathered < organic0 + 3; k++)
+                {
+                    sim.Tick(dt);
+                    foreach (var e in sim.Events) if (e.Kind == EvKind.Collect && e.Team == 0 && e.FoodP1 == near.Id + 1) alert = true;
+                }
+                int wk = 0, forage = 0, surface = 0; for (int i = 0; i < sim.High; i++) { ref var x = ref sim.Ants[i]; if (x.Alive && x.Team == 0 && x.Type == AntType.Worker) { wk++; if (x.State == AntState.Forage) forage++; if (x.Layer == 0) surface++; } }
+                GD.Print($"[general-test] collection workers {wk}, foraging {forage}, on the surface {surface}, remains order {c0.Remains}, founded {c0.Founded}");
+                GD.Print($"[general-test] collection: radius {radius:0}, beetle dropped {nearAt:0} from the nest queued {alert}, organic brought home {c0.OrganicGathered - organic0:0.0}, claimed one queued {(kept.Queued & 1) != 0}, untouched {kept.Amount >= kept.Max - 0.01f}");
+                Check(alert, "the workers never noticed the carcass near the nest");
+                Check(c0.OrganicGathered >= organic0 + 3, "the workers did not bring the carcass home");
+                Check((kept.Queued & 1) == 0, "a claimed carcass must be left to its eaters");
+            }
+
             // every order above went through Learn and Cast: they must also survive the wire
             var probe = new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { 7 }, Serials = new[] { 9 }, Arg = 2, Target = 3, TargetSerial = 4, P = new Vector2(1.5f, 2.5f) };
             var ms = new System.IO.MemoryStream(); var w = new System.IO.BinaryWriter(ms); probe.Write(w); ms.Position = 0;
@@ -358,6 +419,30 @@ public static class GeneralValidation
             new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { marshal }, Serials = new[] { sim.Ants[marshal].Serial }, Arg = 2, Target = prey[0], TargetSerial = sim.Ants[prey[0]].Serial }.Apply(sim);
             await Run(0.12f);
             await Shot("15-talon-dive", sim.Ants[marshal].Pos, 14f);
+
+            // 16-18: auto-eat. A squad with it on (the drops over them, the lit button), then eating its kill.
+            var mess = Clear(home + outv * 30 + perp * 22, 8);
+            Clean(mess, 20);
+            var eaters = Spawn(0, AntType.Soldier, 6, mess);
+            var leavers = Spawn(0, AntType.Soldier, 6, mess + perp * 6);
+            var c = Cmd.Units(CmdKind.AutoEat, 0, new List<int> { eaters[0] }, sim); c.Arg = 1; c.Apply(sim);
+            Select(eaters);
+            await Run(0.4f);
+            await Shot("16-auto-eat-on", mess + perp * 3, 15f, true);
+            var meal = Spawn(1, AntType.Major, 1, mess + outv * 1.5f);
+            sim.Slay(meal[0], eaters[0]);
+            await Run(3f);
+            Select(new List<int>());
+            await Shot("17-auto-eat-feasting", mess + outv * 1.5f, 12f);
+
+            // 18: the Remains page shows the collection ring; a carcass inside it is queued and fetched
+            var drop = Clear(home + outv * 24 - perp * 10, 4);
+            var bst = Config.Of(AntType.Beetle);
+            sim.W.Food.Add(new FoodSource { Id = sim.W.NextFoodId++, Kind = FoodKind.Corpse, Pos = drop, Amount = bst.CorpseFood, Max = bst.CorpseFood, Radius = bst.Size * 0.45f, Team = Config.Wild, AntType = AntType.Beetle, Natural = true });
+            game.Hud.CommandHud?.ShowPage(4);
+            await Run(4f);
+            await Shot("18-collection-radius", home + outv * 14, 60f, true);
+            await Shot("19-carcass-queued", drop, 14f);
             GD.Print("[general-capture] done");
             app.GetTree().Quit();
         }

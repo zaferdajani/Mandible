@@ -126,7 +126,10 @@ public sealed class AntRenderer
     readonly Batch _rings, _bars, _evoBars;
     readonly Batch _auraGround, _auraHalo;
     readonly Batch[] _insignia = new Batch[3]; // the generals' royal seals: bronze (levels 1-3), gold (4-7), red-gold (8-10)
-    readonly Batch _haze;                       // Queen's Pheromone: the scent film under a borrowed ant
+    readonly Batch _haze;
+    readonly Batch _drops, _collectRing, _queuedRing; // auto-eat drops over ants; the collection radius; remains queued for collection
+    /// Set by the HUD while the Remains page is open: draw the colony's collection radius.
+    public bool ShowCollect;                       // Queen's Pheromone: the scent film under a borrowed ant
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
     internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; foreach (var b in _pieceCargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
@@ -235,6 +238,14 @@ public sealed class AntRenderer
             _insignia[k] = new Batch(root, new PlaneMesh { Size = Vector2.One }, m, false, $"Insignia{k + 1}");
             _insignia[k].Node.SortingOffset = 2;
         }
+        _drops = new Batch(root, new QuadMesh { Size = Vector2.One }, new ShaderMaterial { Shader = Shaders.Get(Shaders.Drop) }, false, "AutoEatDrops");
+        _drops.Node.SortingOffset = 101;
+        var wide = new ShaderMaterial { Shader = Shaders.Get(Shaders.Circle), RenderPriority = 1 };
+        wide.SetShaderParameter("width", 0.006f);
+        _collectRing = new Batch(root, new PlaneMesh { Size = Vector2.One }, wide, false, "CollectRadius");
+        var tight = new ShaderMaterial { Shader = Shaders.Get(Shaders.Circle), RenderPriority = 1 };
+        tight.SetShaderParameter("width", 0.045f);
+        _queuedRing = new Batch(root, new PlaneMesh { Size = Vector2.One }, tight, false, "QueuedRemains");
         _haze = new Batch(root, new PlaneMesh { Size = Vector2.One }, new ShaderMaterial { Shader = Shaders.Get(Shaders.Haze), RenderPriority = 1 }, false, "PheromoneHaze");
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
@@ -318,7 +329,7 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.Begin();
         foreach (var cargo in _broodCargo) cargo.Begin();
         foreach (var cargo in _pieceCargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin();
+        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin(); _drops.Begin(); _collectRing.Begin(); _queuedRing.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
@@ -425,6 +436,9 @@ public sealed class AntRenderer
                 if (sim.EatRules && sim.Eats(a))
                     _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
+            // auto-eat: a drop of hemolymph over our own ants that will eat their kills
+            if (a.AutoEat && a.Team == Local.Me && sim.EatRules && a.CharmP1 == 0)
+                _drops.Add(Basis.FromScale(Vector3.One * Mathf.Clamp(0.32f + st.Size * 0.08f, 0.4f, 0.62f)), o + Vector3.Up * (barY + 0.15f) + camRight * (Mathf.Max(1.1f, st.Size) * 0.5f + 0.35f), new Color(0.95f, 0, 0, 0));
             // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
             int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
             if (ranks > 0)
@@ -506,6 +520,20 @@ public sealed class AntRenderer
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
             _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
+        // remains our workers have been sent to bring home: a slowly turning amber ring around each
+        foreach (var f in sim.W.Food)
+        {
+            if (f.Kind != FoodKind.Corpse || !f.Alive || (f.Queued & (1 << Local.Me)) == 0 || f.Layer != 0) continue;
+            var qo = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.08f, f.Pos.Y);
+            _queuedRing.Add(Basis.FromScale(new Vector3(f.Radius * 2.6f + 1.4f, 1, f.Radius * 2.6f + 1.4f)), qo, new Color(0.95f, 0.6f, 0.2f, 0.6f));
+        }
+        if (ShowCollect && Local.Me < 2)
+        {
+            var nest = sim.NestEntrance(Local.Me);
+            float r = sim.CollectRadius(Local.Me);
+            var no = new Vector3(nest.X, hf.Sample(nest.X, nest.Y) + 0.3f, nest.Y);
+            _collectRing.Add(Basis.FromScale(new Vector3(r * 2, 1, r * 2)), no, new Color(0.95f, 0.62f, 0.22f, 0.65f));
+        }
         foreach (var z in sim.Webs)
         {
             if (!VisibleToPlayer(z.Pos)) continue;
@@ -534,7 +562,7 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
         foreach (var cargo in _pieceCargo) cargo.End();
-        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End();
+        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End(); _drops.End(); _collectRing.End(); _queuedRing.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }

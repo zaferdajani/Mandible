@@ -75,10 +75,11 @@ public struct Ant
     public byte FrenzyRank;
     public float HasteT, HasteMul, GuardArmor; // Trail Blaze
     public float SlowT, SlowMul;      // Caustic Cloud
+    public bool AutoEat;              // eats what it kills (and remains it idles by); off: leaves them for the workers to haul home
 }
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
-    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive }
+    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect }
 
 public struct SimEvent
 {
@@ -130,6 +131,7 @@ public sealed class Squad
     public AntType Type;
     public float Xp, RecruitT;
     public bool Recalled;                     // ordered home to reinforce
+    public bool AutoEat;                      // the squad's auto-eat order: new recruits take it too
     public readonly List<int> Members = new();
     public int Count => Members.Count;
     public bool Alive => Members.Count > 0;
@@ -410,6 +412,7 @@ public sealed partial class Sim
         ref var a = ref Ants[id];
         a.SquadP1 = s.Id + 1;
         a.Forge = s.Forge;
+        a.AutoEat = s.AutoEat;
         if (a.Level != s.Level) { a.Level = s.Level; ApplyLevel(ref a); a.Hp = a.MaxHp; }
         s.Members.Add(id);
     }
@@ -535,6 +538,7 @@ public sealed partial class Sim
         ApplyLevel(ref Ants[id]);
         Ants[id].Hp = Ants[id].MaxHp;
         InitSkills(ref Ants[id]);
+        Ants[id].AutoEat = Config.IsHero(type); // generals eat to level; fighters leave their kills for the queen until told
         Ants[id].PrevPos = p; Ants[id].PrevHeading = heading; Ants[id].PrevAlt = Ants[id].Alt;
         if (team < 2) Col[team].Count[(int)type]++;
         else WildCount++;
@@ -664,7 +668,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage);
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.SkPts << 24)); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT));
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.SkPts << 24)); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(a.AutoEat ? 1u : 0u);
         }
         foreach (var c in Col)
         {
@@ -681,7 +685,7 @@ public sealed partial class Sim
             Mix(HerdHere ? 1u : 0u); Mix(F(HerdBar)); Mix((uint)HerdTeam); Mix(F(HerdNext)); Mix((uint)StagId); Mix((uint)StagTeam); Mix(F(StagNext));
         }
         Mix((uint)W.Food.Count);
-        foreach (var f in W.Food) if (f.Kind == FoodKind.Corpse) { Mix(F(f.Pos.X)); Mix(F(f.Pos.Y)); Mix(F(f.Amount)); }
+        foreach (var f in W.Food) if (f.Kind == FoodKind.Corpse) { Mix(F(f.Pos.X)); Mix(F(f.Pos.Y)); Mix(F(f.Amount)); Mix((uint)f.ClaimTeam); Mix((uint)f.Queued); }
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
     }
@@ -1457,7 +1461,7 @@ public sealed partial class Sim
             Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating Radius = t.Size * 0.45f,
             Team = t.Team, AntType = t.Type, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
         };
-        if (carcass.Alive) W.Food.Add(carcass);
+        if (carcass.Alive) { W.Food.Add(carcass); if (killer >= 0) ClaimKill(killer, carcass); }
         Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type, Who = id + 1, FoodP1 = carcass.Alive ? carcass.Id + 1 : 0,
             By = killer >= 0 ? Ants[killer].Type : t.Type, Amount = killer >= 0 ? _blow : 0, To = killer >= 0 ? Ants[killer].Pos : t.Pos });
         if (Mode == GameMode.Lanes) LaneDeath(id, killer);

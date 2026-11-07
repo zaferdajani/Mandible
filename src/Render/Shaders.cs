@@ -1212,6 +1212,49 @@ void fragment() {
 }
 ";
 
+    /// Over an ant on auto-eat: a small drop of hemolymph, glossy and dark-rimmed, so the player sees who will eat
+    /// its kills. Billboard; per instance x = opacity.
+    public const string Drop = @"
+shader_type spatial;
+render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled, blend_mix;
+varying float v_a;
+void vertex() {
+    v_a = INSTANCE_CUSTOM.x;
+    float s = length(MODEL_MATRIX[0].xyz);
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+}
+void fragment() {
+    vec2 p = (UV - vec2(0.5, 0.58)) * vec2(2.0, 2.0);
+    // a teardrop: a round belly drawn up to a point
+    float belly = length(p) - 0.42;
+    float tip = max(abs(p.x) - (0.42 * smoothstep(-0.95, 0.0, p.y)), -p.y - 0.95);
+    float d = p.y < 0.0 ? min(belly, tip) : belly;
+    float inner = 1.0 - smoothstep(0.0, 0.04, d);
+    float outer = 1.0 - smoothstep(0.0, 0.04, d - 0.08);
+    vec3 blood = mix(vec3(0.42, 0.06, 0.03), vec3(0.85, 0.28, 0.1), smoothstep(0.4, -0.3, p.y));
+    float shine = smoothstep(0.12, 0.0, length(p - vec2(-0.14, -0.12)));
+    ALBEDO = mix(vec3(0.06, 0.02, 0.01), blood + shine * 0.6, inner);
+    ALPHA = outer * v_a;
+}
+";
+
+    /// A thin circle on the ground (the collection radius, the ring on remains queued for collection).
+    /// Per instance: rgb colour, a opacity; uniform width = the line's width as a share of the radius.
+    public const string Circle = @"
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float width = 0.02;
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+void fragment() {
+    float r = length(UV - 0.5) * 2.0;
+    float line = smoothstep(1.0 - width * 2.0, 1.0 - width, r) * (1.0 - smoothstep(1.0 - width * 0.4, 1.0, r));
+    float dash = 0.6 + 0.4 * step(0.5, fract(atan(UV.y - 0.5, UV.x - 0.5) * 12.0 + TIME * 0.15));
+    ALBEDO = v_c.rgb;
+    ALPHA = line * dash * v_c.a;
+}
+";
+
     public const string Bar = @"
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled;

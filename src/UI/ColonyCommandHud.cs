@@ -466,6 +466,8 @@ public partial class ColonyCommandHud : Control
     }
     /// Opens a tab of the cards (tests).
     internal void ShowPage(int page) { _page = page; RebuildCards(); }
+    /// The Remains page is open: the world shows how far around the nest the workers collect remains on their own.
+    public bool RemainsPage => _page == 4 && Visible;
     /// The price of the next tier: the queen ascends on organic matter, the rest on food.
     static string Price(Sim sim, Upgrade u, int next, bool brief)
     {

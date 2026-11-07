@@ -81,7 +81,7 @@ public static class Config
     public const float MatronSplashR = 1.8f;
     public const float MatronArmor = 0.1f;
     public const float AcidPoolLife = 6f;           // the burst leaves a venom pool that keeps burning
-    public const float MarshalArmor = 0.15f;
+    public const float MarshalArmor = 0.18f;    // 0.15 -> 0.18 and 560 -> 620 hp: it lost every Lane War matchup with skills in
     public const float RallyBite = 1.15f;           // Dive Bomb rallies nearby warriors: bite and speed up
     public const float RallyTime = 6f;
     public const float BeetleArmor = 0.25f;
@@ -187,7 +187,7 @@ public static class Config
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Warlord", Hp = 760, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
-        new() { Name = "Sky Marshal", Hp = 560, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Sky Marshal", Hp = 620, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
     };
 
     public static UnitStats Of(AntType t) => Stats[(int)t];
@@ -380,6 +380,11 @@ public static class Config
         ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major => 1.5f,
         ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal => 8f, _ => 0f,
     };
+    /// The ground a colony watches for fresh remains without having to stumble on them: grows with its workforce.
+    public static float CollectRadius(int workers) => System.Math.Min(36f + 0.25f * workers, 80f);
+    public const float PredatorOrganic = 1.1f;  // the fire ants' taste for flesh: remains hauled home give 10% more organic matter (food from corpses keeps +25%)
+    public const float EatClaim = 25f;          // seconds an auto-eat fighter's kill is kept from the haulers
+    public const int CollectAtOnce = 1;         // new remains crewed per round (every 2 s), best first: most foragers stay on food
     public const float RecruitRange = 110f, RecruitSight = 12f; // how far out the colony sends carriers, and how close an ant must be to have found the prey
     public const float StartOrganic = 40f;     // carried by the founding queen and her workers
     public const float FoundFood = 30f, FoundOrganic = 10f; // what founding the nest consumes
@@ -391,7 +396,7 @@ public static class Config
     };
     public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";
     public static string RemainsDesc(RemainsOrder o) => o == RemainsOrder.Haul
-        ? "Workers drag and carry the remains of bugs and enemy ants home: organic matter for the queen and the brood."
+        ? "Workers fetch fresh remains inside the ring around the nest (it grows with the colony) or wherever an ant sees them: organic matter for the queen."
         : "Workers leave the remains where they fall, for your fighters and heroes to eat and evolve on.";
     /// The fire-ant Warlord's signature, for its hero card, the picker and the Field Guide.
     public const string DevourName = "Devour the Fallen";

@@ -290,6 +290,7 @@ public partial class PlayerInput : Node
         switch (HotKey(k))
         {
             case Godot.Key.Q: case Godot.Key.W: case Godot.Key.E: case Godot.Key.O: GeneralKey(HotKey(k)); return true;
+            case Godot.Key.J: Game.ToggleAutoEat(); return true;
             case Godot.Key.Space: case Godot.Key.F2: FocusHero(); return true;
             case Godot.Key.Z: case Godot.Key.X: case Godot.Key.C: case Godot.Key.V: case Godot.Key.F: case Godot.Key.B: case Godot.Key.D:
             case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.R: case Godot.Key.T:
@@ -321,6 +322,7 @@ public partial class PlayerInput : Node
                 return;
             case Godot.Key.F1: Game.Hud.ToggleHelp(); return;
             case Godot.Key.A: BeginAttackMove(); return;
+            case Godot.Key.J: Game.ToggleAutoEat(); return;
             case Godot.Key.S: Stop(false); return;
             case Godot.Key.H: Stop(true); return;
             case Godot.Key.G: BeginGather(); return;

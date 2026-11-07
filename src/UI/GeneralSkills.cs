@@ -14,7 +14,7 @@ public partial class GeneralSkills : Control
     readonly Button[] _btn = new Button[3];
     readonly Label[] _key = new Label[3], _name = new Label[3], _rank = new Label[3], _cd = new Label[3];
     readonly ColorRect[] _shade = new ColorRect[3];
-    Button _learn;
+    Button _learn, _eat;
     Label _treeTitle, _treeSub;
     readonly Label[] _colName = new Label[3], _colLore = new Label[3];
     readonly VBoxContainer[] _colRanks = new VBoxContainer[3];
@@ -38,7 +38,7 @@ public partial class GeneralSkills : Control
 
     void BuildBar()
     {
-        _bar = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(452, 104), Visible = false };
+        _bar = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(568, 104), Visible = false };
         AddChild(_bar);
         for (int s = 0; s < 3; s++)
         {
@@ -72,6 +72,15 @@ public partial class GeneralSkills : Control
         _learn.TooltipText = "The skill tree: spend skill points (one each level).";
         _learn.Pressed += () => { Game.Audio.Ui("ui_click"); ToggleTree(); };
         _bar.AddChild(_learn);
+        // auto-eat: a fighter's or general's standing order to eat what it kills (lit when on)
+        _eat = new Button { Position = new Vector2(456, 0), Size = new Vector2(112, 104), FocusMode = FocusModeEnum.None };
+        _eat.AddThemeFontOverride("font", UiTheme.Title);
+        _eat.AddThemeFontSizeOverride("font_size", 14);
+        _eat.AddThemeStyleboxOverride("hover", Frame(new Color(0.12f, 0.06f, 0.04f, 0.96f), Gold));
+        _eat.AddThemeStyleboxOverride("pressed", Frame(new Color(0.2f, 0.07f, 0.04f, 0.96f), Gold, 2));
+        _eat.TooltipText = "AUTO-EAT  (J)\nON: they eat whatever they kill and evolve (generals level up).\nOFF: they leave the carcass for the workers to haul home as organic matter for the queen and the brood.\nWorks for the whole squad. Generals start ON, fighters OFF.";
+        _eat.Pressed += () => { Game.Audio.Ui("ui_click"); Game.ToggleAutoEat(); };
+        _bar.AddChild(_eat);
     }
 
     static Label Lbl(Control parent, string text, float x, float y, float w, float h, int size, Font font, Color c)
@@ -208,13 +217,29 @@ public partial class GeneralSkills : Control
         _refresh = 0.1f;
         var vp = GetViewportRect().Size;
         int id = General();
-        _bar.Visible = id >= 0 && !Game.Hud.Blocking;
+        var eaters = Game.Eaters();
+        _bar.Visible = (id >= 0 || eaters.Count > 0) && !Game.Hud.Blocking;
+        for (int s = 0; s < 3; s++) _btn[s].Visible = id >= 0;
+        _learn.Visible = id >= 0;
+        _eat.Visible = eaters.Count > 0;
+        _eat.Position = new Vector2(id >= 0 ? 456 : 0, 0);
+        if (eaters.Count > 0)
+        {
+            int on = 0; foreach (int e in eaters) if (Game.Sim.Ants[e].AutoEat) on++;
+            bool all = on == eaters.Count;
+            _eat.Text = all ? "AUTO-EAT\nON" : on > 0 ? $"AUTO-EAT\n{on}/{eaters.Count} ON" : "AUTO-EAT\nOFF";
+            if (!Settings.Mobile) _eat.Text += "   J";
+            var lit = new Color(0.32f, 0.07f, 0.04f, 0.96f);
+            _eat.AddThemeStyleboxOverride("normal", Frame(on > 0 ? lit : Bg, on > 0 ? new Color(1f, 0.45f, 0.3f) : Edge, all ? 3 : on > 0 ? 2 : 1));
+            _eat.AddThemeColorOverride("font_color", on > 0 ? new Color(1f, 0.8f, 0.62f) : UiTheme.Dim);
+        }
         // above the bottom panels, centred; scaled with the rest of the interface
         float k = Mathf.Clamp(Mathf.Min(vp.X / 1672f, vp.Y / 941f), 0.6f, 1.4f);
         if (Settings.Mobile) k = Mathf.Max(k, 0.9f);
         float bottom = Game.Hud.CommandHud != null ? Game.Hud.CommandHud.BottomEdge : vp.Y - 34;
         _bar.Scale = Vector2.One * k;
-        _bar.Position = new Vector2((vp.X - 452 * k) / 2, bottom - 112 * k);
+        float width = id >= 0 ? (eaters.Count > 0 ? 568 : 452) : 112;
+        _bar.Position = new Vector2((vp.X - width * k) / 2, bottom - 112 * k);
         if (_tree.Visible)
         {
             var ts = _tree.GetCombinedMinimumSize();
