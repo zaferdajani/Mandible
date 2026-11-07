@@ -28,7 +28,8 @@ public static class NatureAssets
     public static Texture2D Texture(string name)
     {
         if (!_tex.TryGetValue(name, out var t))
-            _tex[name] = t = ResourceLoader.Exists($"res://assets/nature/{name}.png") ? GD.Load<Texture2D>($"res://assets/nature/{name}.png") : GD.Load<Texture2D>($"res://assets/nature/{name}.jpg");
+            _tex[name] = t = ResourceLoader.Exists($"res://assets/nature/{name}.png") ? GD.Load<Texture2D>($"res://assets/nature/{name}.png")
+                : ResourceLoader.Exists($"res://assets/nature/{name}.jpg") ? GD.Load<Texture2D>($"res://assets/nature/{name}.jpg") : null; // Blender pieces with their own shader have no scan
         return t;
     }
 

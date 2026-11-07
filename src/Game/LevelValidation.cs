@@ -165,7 +165,7 @@ public static class LevelValidation
                     case Expedition.Obj.KillQueen:
                         // gather a strike force, commit it, and regroup if it is spent before she falls
                         if (!marching && army.Count >= queenAt) { marching = true; strike = army.Count; }
-                        else if (marching && army.Count < Math.Max(3, strike / 4)) marching = false;
+                        else if (marching && army.Count < Math.Max(3, id == 10 ? strike / 2 : strike / 4)) marching = false;
                         if (marching) s.CmdMove(army, s.W.Nests[1].Pos, true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
