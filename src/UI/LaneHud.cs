@@ -63,7 +63,7 @@ public partial class Hud
         foreach (var (label, act) in new (string, System.Action)[]
         {
             ("Attack  A", () => Game.Input.BeginAttackMove()), ("Stop  S", () => Game.Input.Stop(false)),
-            ("Hold  H", () => Game.Input.Stop(true)), ("Hero  Space", () => Game.Input.FocusHero()),
+            ("Hold  H", () => Game.Input.Stop(true)), ("General  Space", () => Game.Input.FocusHero()),
         })
         {
             var b = new Button { Text = label, CustomMinimumSize = new Vector2(103, 38) };
@@ -86,7 +86,7 @@ public partial class Hud
         _root.AddChild(_score);
     }
 
-    const string LaneHint = "Right-click to move or attack  ·  Q ability  ·  1-4 shop  ·  Space find hero  ·  click anything to inspect it";
+    const string LaneHint = "Right-click to move or attack  ·  Q ability  ·  1-4 shop  ·  Space find general  ·  click anything to inspect it";
 
     void RefreshLanes()
     {
@@ -132,7 +132,7 @@ public partial class Hud
         string stag = sim.StagAwake
             ? sim.StagTeam < 0 ? "OLD STAG AWAKE" : $"Old Stag marches for {(sim.StagTeam == me ? "YOU" : "the enemy")}"
             : $"Old Stag in {Mathf.Ceil(sim.StagNext - sim.Time):0}s";
-        _score.Text = $"Guardians  {sim.GuardiansLeft(me)} : {sim.GuardiansLeft(foe)}    Hero kills  {sim.HeroKills[me]} : {sim.HeroKills[foe]}    Next wave {wave:0}s    {shield}    {herd}    {stag}";
+        _score.Text = $"Guardians  {sim.GuardiansLeft(me)} : {sim.GuardiansLeft(foe)}    General kills  {sim.HeroKills[me]} : {sim.HeroKills[foe]}    Next wave {wave:0}s    {shield}    {herd}    {stag}";
     }
 
     static string Roman(int n) => n switch { 1 => "I", 2 => "II", 3 => "III", _ => n.ToString() };

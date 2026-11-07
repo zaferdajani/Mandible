@@ -245,7 +245,7 @@ public partial class MainMenu : CanvasLayer
         _main = Column(items.Concat(new (string, System.Action)[] {
             ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
-            ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
+            ("Lane War  ·  generals", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", OpenGraphics),
@@ -686,7 +686,7 @@ public partial class Lobby : Control
         v.AddChild(fortRow);
 
         var heroRow = new HBoxContainer();
-        heroRow.AddChild(UiTheme.Text("Lane War hero", 16, UiTheme.Bold, UiTheme.Dim));
+        heroRow.AddChild(UiTheme.Text("Lane War general", 16, UiTheme.Bold, UiTheme.Dim));
         var heroButtons = new System.Collections.Generic.List<Button>();
         foreach (var t in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
         {
