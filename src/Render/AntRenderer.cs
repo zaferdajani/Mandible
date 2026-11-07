@@ -289,6 +289,10 @@ public sealed class AntRenderer
 
     /// How much larger than life an ant is drawn at this camera distance: 1 up close (the macro view and the cards),
     /// rising to 1.9 by the usual play zoom.
+    /// A general's mutation tier (target J): its thorns, spurs and horns grow in at
+    /// levels 4, 7 and 10. Heroes do not evolve by eating, so the tier travels in the instance's evolution-stage slot.
+    public static int MutationTier(int level) => level >= 10 ? 3 : level >= 7 ? 2 : level >= 4 ? 1 : 0;
+
     public static float PlayScale(float camDist) => 1f + 0.9f * Mathf.SmoothStep(18f, 45f, camDist);
 
     public static Basis Orient(Vector3 up, float heading, float scale)
@@ -689,7 +693,7 @@ public sealed class AntRenderer
         flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
         if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
         float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
-        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(a.Stage, 0, 3);
+        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(Config.IsHero(a.Type) ? MutationTier(a.Level) : a.Stage, 0, 3);
         if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }

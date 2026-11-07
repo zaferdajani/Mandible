@@ -96,6 +96,12 @@ public static class AntValidation
                 await app.ToSignal(app.GetTree().CreateTimer(0.3f), SceneTreeTimer.SignalName.Timeout);
                 float alt = g.Sim.Ants[a0].Alt + (Config.Flies(hero) ? 0.6f : 0f);
                 Frame(2.7f * sz, 50, -Mathf.Pi * 0.5f + 0.55f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-close");
+                // the same general at level 10: every growth in, the veins at their brightest
+                Clear();
+                a0 = g.Sim.Spawn(0, hero, stage + side * (0.75f * sz), heading, Config.MaxLevelOf(hero));
+                g.Sim.Spawn(1, hero, stage - side * (0.75f * sz), heading, Config.MaxLevelOf(hero));
+                await app.ToSignal(app.GetTree().CreateTimer(0.3f), SceneTreeTimer.SignalName.Timeout);
+                Frame(2.7f * sz, 50, -Mathf.Pi * 0.5f + 0.55f, 0.3f * sz + alt); await Shot($"g-{hero.ToString().ToLowerInvariant()}-l10-close");
             }
             // the compound eyes: a worker's head filling the frame, then a queen's (larger eyes, three ocelli). The ant faces
             // the sun and the lens looks at its face from just off the sun's side, so the head is lit, not a silhouette

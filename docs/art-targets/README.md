@@ -96,7 +96,7 @@ Status: **J1-J6 approved by the owner on 2026-11-07** ("Approve all six"). Renam
 The owner's brief (2026-11-07): "epic generals generated from the mesh of the 3D [ants] we already have ... more
 monstrous, more epic, stronger looking, even if a little bit alien-ish". Each image was generated with the game's own
 render of that hero (`--ant-capture` g-warlord/g-matron/g-marshal, round 4) as the reference image, pushed toward a
-mutated lab strain: armoured heads, serrated tusked jaws, thorns, plated spurred legs, scars, faint violet-green
-mutagen veins in the plate seams; the Matron's gaster a glass bladder with a glowing acid sac (spray only from the
+mutated lab strain: armoured heads, serrated tusked jaws, thorns, plated spurred legs, scars (the images also show
+faint violet-green mutagen veins; the owner rejected those in the game on 2026-11-07, so they are not built); the Matron's gaster a glass bladder with a glowing acid sac (spray only from the
 gaster tip); the Marshal with three wing pairs and chitin wing-cases. `REVIEW-generals.jpg` holds all six
 (`j-general-*.jpg`). Higgsfield `gpt_image_2_5`, quality high, 16:9, one round.

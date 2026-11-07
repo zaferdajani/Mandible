@@ -615,7 +615,8 @@ public static class AntMesh
         var pairs = wasp
              ? new[] { (0.09f, 0.48f, 0.12f, 0.35f), (0.03f, 0.34f, 0.09f, 0.55f) }
             : type == AntType.Marshal
-             ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f) }
+             // the mutant general (target J): a third, smaller pair behind the two an ant has
+             ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f), (-0.01f, 0.42f, 0.1f, 0.55f) }
             : new[] { (0.09f, 0.62f, 0.14f, 0.25f), (0.04f, 0.46f, 0.11f, 0.4f) };
         float hy = wasp ? 0.3f : type == AntType.Marshal ? 0.25f : 0.22f;
         foreach (var (hz, len, wid, sweep) in pairs)

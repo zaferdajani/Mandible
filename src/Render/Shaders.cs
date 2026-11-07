@@ -225,7 +225,7 @@ void vertex() {
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q *= 1.0 + 0.16 * stage; // each moult grows heavier jaws
+        q *= 1.0 + (hero > 0.0 ? 0.05 : 0.16) * stage; // each moult grows heavier jaws (a general's are already huge)
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
@@ -286,6 +286,8 @@ void vertex() {
     v_hov = hov;
     v_ao = COLOR.a; // occlusion baked by MeshKit.BakeAO: legs under the body, the neck, the waist
     v_cus = CUSTOM0;
+    // a general's growths (thorns, spurs, horns) appear with its mutation tier: hero levels 4, 7, 10
+    if (CUSTOM0.w > stage + 0.5) { p = vec3(0.0, 0.1, 0.0); n = vec3(0.0, 1.0, 0.0); }
     VERTEX = p;
     NORMAL = n;
 }
@@ -498,6 +500,11 @@ void fragment() {
         float mottle = vnoise(v_local * 38.0) * 0.6 + vnoise(v_local * 110.0) * 0.4;
         ALBEDO = mix(vec3(0.075, 0.03, 0.006), vec3(0.2, 0.09, 0.016), mottle) * (1.0 - dead * 0.35);
         EMISSION += vec3(0.16, 0.065, 0.01) * 0.05 * pulse * (1.0 - dead);
+        if (hero > 0.0) {
+            // a general Matron (target J): the acid sac and its coiled glands glow amber-green through the membrane
+            float coil = smoothstep(0.55, 0.85, vnoise(v_local * vec3(14.0, 14.0, 22.0) + vec3(0.0, 0.0, TIME * 0.15)));
+            EMISSION += mix(vec3(0.75, 0.5, 0.05), vec3(0.5, 0.95, 0.12), coil) * (0.55 + 0.9 * coil) * pulse * (1.0 - dead);
+        }
         BACKLIGHT = vec3(0.32, 0.15, 0.03) * (0.6 + 0.6 * mottle) * (1.0 - dead);
         CLEARCOAT = 1.0; CLEARCOAT_ROUGHNESS = 0.08; ROUGHNESS = 0.12; METALLIC = 0.0;
     }

@@ -328,3 +328,18 @@ scores by at most one point. The reviewers judge a real-time frame against a gen
 same gaps every time: no catchlit compound eye at a few pixels, legs without visible joints, no rim-lit setae. On
 the play view they ask for a light rim around each ant. What remains is a decision for the owner, not a modelling
 step: judge the frames directly (`docs/art-targets/ants-round4.jpg`), or change what the gate compares against.
+
+## The mutated generals (target J, 2026-11-07)
+
+`tools/blender/ant_models.py` `mutate()` grows thorns on the scanned hero bodies (thorax rows, a head crown for the
+Warlord, gaster spikes at the top tiers), spurs at the knees and, for the Sky Marshal, chitin wing-cases; the
+Marshal also gets a third wing pair (`AntMesh.Wings`). Each growth carries a tier in CUSTOM0.w; the Ant shader drops
+growths above the instance's tier, which `AntRenderer.MutationTier` derives from the hero's level (levels 4, 7, 10)
+and packs in the evolution-stage slot. The Warlord's head is 1.3x its specimen and its jaws 2.4x. The general
+Matron's acid sac glows through her membrane. The owner rejected glowing veins on insects: none are drawn.
+The hero cards and busts are baked from these models at the full tier by `--bake-heroes` (HeroStudio, now each
+colony's own model at the near detail, the Matron's acid from her real gaster tip).
+
+Gate on the generals at level 10 (art, out of 5: anatomy, primitives, eyes, material, light, palette), before the
+veins were removed: Warlord 2 2 1 2 3 2, Matron 2 1 1 2 3 2, Marshal 2 2 1 2 2 3; play readability 3. Not passed.
+12/12 self-tests and --savetest pass; High 35-49 fps, Low 60.
