@@ -5,7 +5,7 @@ namespace Mandible;
 
 public sealed partial class NestInterior
 {
-    static readonly StandardMaterial3D RipeBerry = new() { AlbedoColor = new Color("791b22"), Roughness = 0.25f, ClearcoatEnabled = true };
+    static readonly StandardMaterial3D RipeBerry = new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color("791b22") * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color("791b22"), Roughness = 0.25f, ClearcoatEnabled = true };
 
     void FillIdentity(Room room, float density)
     {

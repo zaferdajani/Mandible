@@ -73,8 +73,8 @@ public sealed class NestGeometry
 
     static float Union(float a, float b)
     {
-        float h = Mathf.Max(0.45f - Mathf.Abs(a - b), 0f) / 0.45f;
-        return Mathf.Min(a, b) - h * h * 0.1125f;
+        float h = Mathf.Max(0.22f - Mathf.Abs(a - b), 0f) / 0.22f; // a tight blend: galleries meet the hub and the rooms with a shoulder, not a flare
+        return Mathf.Min(a, b) - h * h * 0.055f;
     }
 
     // Keep these operations in sync with Shaders.NetworkFn. All coordinates are nest-local.

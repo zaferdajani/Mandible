@@ -507,8 +507,8 @@ uniform float net_ground_y = 0.0;
 uniform float net[224];
 uniform int net_count = 0;
 float nest_union(float a, float b) {
-    float h = max(0.45 - abs(a - b), 0.0) / 0.45;
-    return min(a, b) - h * h * 0.1125;
+    float h = max(0.22 - abs(a - b), 0.0) / 0.22;
+    return min(a, b) - h * h * 0.055;
 }
 float nest_field(vec2 p) {
     float best = 100000.0;
@@ -593,9 +593,9 @@ void fragment() {
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
     // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
-    float lip = 0.9;
+    float lip = 0.45;
     if (xray_on > 0.5 && nd < lip) discard;
-    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.3, nd));
+    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.2, nd));
     float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
@@ -1519,15 +1519,15 @@ void fragment() {
         // the rock scan's own colour underneath; the floor is the surface's sand, trodden and a little darker
         vec3 layer = mix(mix(vec3(0.62, 0.50, 0.40), vec3(1.0, 0.86, 0.68), t1), vec3(1.0, 0.95, 0.85), t2);
         rock *= layer * vec3(0.78, 0.66, 0.56); // the walls frame the room: darker and cooler than the floor
-        sand *= vec3(1.45, 1.32, 1.12); // the floor is where the eye should land: the brightest, warmest surface below
+        sand *= vec3(1.25, 1.14, 0.98); // the floor is where the eye should land: warm trodden sand, brighter than the walls
         col = mix(sand, rock, wallness);
         col *= 0.9 + 0.2 * g;
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
         col *= 1.0 - 0.3 * crevice;
         // the flat skirt beyond the lip lies under the surface's hole and sees neither sun nor lamps: give it the surface
         // sand's own warm colour and fill, so no grey edge ever shows along a cut
-        float skirt = smoothstep(0.55, 0.85, UV.x);
-        col = mix(col, vec3(0.50, 0.38, 0.26) * (0.85 + 0.3 * g), skirt);
+        float skirt = smoothstep(0.2, 0.45, UV.x);
+        col = mix(col, vec3(0.40, 0.30, 0.20) * (0.78 + 0.34 * g), skirt); // the surface's own dry soil: the lip reads as one ground with the yard
         mine_nrm = mix(sandN, rockN, wallness);
         mine_rough = mix(0.95, 0.8 + 0.2 * armv.g, wallness);
         if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
@@ -1573,7 +1573,6 @@ void fragment() {
         NORMAL_MAP_DEPTH = 0.8;
     }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
-    if (cavity_surface && mine) EMISSION += col * smoothstep(0.55, 0.85, UV.x) * 0.1; // the skirt reads as shaded sand, not a halo
     if (cavity_surface) {
         // the sky ambient is off down here: a faint warm fill keeps the blacks readable
         EMISSION += col * vec3(1.0, 0.78, 0.55) * ambient_scale * 0.6;
@@ -1597,6 +1596,7 @@ void fragment() {
     /// (the near wall, which the Earth shader folds flat) are hidden with it.
     public const string Shoring = @"
 shader_type spatial;
+render_mode ambient_light_disabled;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D arm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
@@ -1617,7 +1617,7 @@ void fragment() {
     ROUGHNESS = arm.g;
     AO = arm.r;
     NORMAL_MAP = texture(normal_tex, UV).rgb;
-    EMISSION = c * vec3(0.55, 0.4, 0.26) * fill;
+    EMISSION = c * vec3(0.55, 0.4, 0.26) * max(fill, 0.42);
 }
 ";
 

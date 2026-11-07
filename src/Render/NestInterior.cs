@@ -333,16 +333,16 @@ public sealed partial class NestInterior
 
     // prop materials, shared
     static StandardMaterial3D _mEgg, _mLarva, _mCocoon, _mSeed, _mDrop, _mGrit, _mQuartz, _mThread, _mHusk, _mJelly;
-    static StandardMaterial3D MEgg => _mEgg ??= new() { AlbedoColor = new Color(0.82f, 0.73f, 0.57f), Roughness = 0.28f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.18f };
-    static StandardMaterial3D MLarva => _mLarva ??= new() { AlbedoColor = new Color(0.8f, 0.68f, 0.48f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.25f };
-    static StandardMaterial3D MCocoon => _mCocoon ??= new() { AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
-    static StandardMaterial3D MSeed => _mSeed ??= new() { AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
-    static StandardMaterial3D MDrop => _mDrop ??= new() { AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
-    static StandardMaterial3D MGrit => _mGrit ??= new() { AlbedoColor = new Color(0.16f, 0.13f, 0.11f), Roughness = 0.75f, Metallic = 0.25f };
-    static StandardMaterial3D MQuartz => _mQuartz ??= new() { AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
-    static StandardMaterial3D MThread => _mThread ??= new() { AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
-    static StandardMaterial3D MHusk => _mHusk ??= new() { AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
-    static StandardMaterial3D MJelly => _mJelly ??= new() { AlbedoColor = new Color(0.69f, 0.37f, 0.055f), Roughness = 0.12f, ClearcoatEnabled = true };
+    static StandardMaterial3D MEgg => _mEgg ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.82f, 0.73f, 0.57f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.82f, 0.73f, 0.57f), Roughness = 0.28f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.18f };
+    static StandardMaterial3D MLarva => _mLarva ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.8f, 0.68f, 0.48f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.8f, 0.68f, 0.48f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.25f };
+    static StandardMaterial3D MCocoon => _mCocoon ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.86f, 0.76f, 0.56f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
+    static StandardMaterial3D MSeed => _mSeed ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.36f, 0.24f, 0.13f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
+    static StandardMaterial3D MDrop => _mDrop ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
+    static StandardMaterial3D MGrit => _mGrit ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.16f, 0.13f, 0.11f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.16f, 0.13f, 0.11f), Roughness = 0.75f, Metallic = 0.25f };
+    static StandardMaterial3D MQuartz => _mQuartz ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
+    static StandardMaterial3D MThread => _mThread ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
+    static StandardMaterial3D MHusk => _mHusk ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.85f, 0.68f, 0.4f, 0.55f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
+    static StandardMaterial3D MJelly => _mJelly ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.69f, 0.37f, 0.055f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.69f, 0.37f, 0.055f), Roughness = 0.12f, ClearcoatEnabled = true };
 
     static (float w, float h, float d) RoomSize(NestChamber ch) => NestGeometry.RoomSize(ch);
 
