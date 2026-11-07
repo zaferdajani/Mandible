@@ -1423,6 +1423,7 @@ uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand abo
 uniform bool cavity_surface = false;
 uniform bool flat_lighting = false; // Low tier: stable directional light without screen-space buffers
 uniform float ambient_scale = 0.1;  // cavity walls: share of the sky's fill that reaches underground (the sky ambient is switched off there)
+uniform float cutaway = 0.0;        // build mode: the banks facing away from the camera (the near walls) are cut away, like a diorama, so the eye looks onto the floors
 uniform vec4 lamps[8];              // Low tier: nearest lamps (xyz world, w range) painted as pools, as there are no real shaded lights
 
 uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
@@ -1443,6 +1444,14 @@ float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
 }
 void fragment() {
+    if (cavity_surface && cutaway > 0.001) {
+        // a bank between the camera and the room: its slope faces away from the eye. Cut it from the lip down to the floor,
+        // leaving the floor and the far wall; the cut follows the camera as it turns.
+        float bank = smoothstep(-0.5, -0.3, UV.x);
+        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wpos.xz);
+        float away = -dot(normalize(wnrm.xz + vec2(1e-4)), toEye);
+        if (bank > 0.5 && away > 0.18 - 0.4 * (1.0 - cutaway)) discard;
+    }
     vec3 an = abs(wnrm);
     an /= an.x + an.y + an.z;
     float depth = ground_y - wpos.y;

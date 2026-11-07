@@ -124,7 +124,7 @@ public partial class RtsCamera : Node3D
     public void Apply()
     {
         float t = Mathf.Clamp((Distance - MinDist) / (MaxDist - MinDist), 0, 1);
-        float pitch = PitchOverride > 0 ? Mathf.DegToRad(PitchOverride) : Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(50), _nestTilt);
+        float pitch = PitchOverride > 0 ? Mathf.DegToRad(PitchOverride) : Mathf.Lerp(Mathf.Lerp(Mathf.DegToRad(30), Mathf.DegToRad(60), Mathf.Pow(t, 0.6f)), Mathf.DegToRad(76), _nestTilt); // build mode looks down into the rooms, onto their floors
         var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(Yaw) * Mathf.Cos(pitch)) * Distance;
         var pos = Focus + offset;
         if (HF != null) pos.Y = Mathf.Max(pos.Y, HF.Sample(pos.X, pos.Z) + 3);

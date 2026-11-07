@@ -189,7 +189,7 @@ public sealed partial class NestInterior
         // with the earth opened for building, the chambers must read through the roof: a warm fill rises in the cavities
         // (the lamps still pool on top of it), so the cut never shows as dark blotches under the soil
         foreach (var m in _soils)
-            if (m.GetShaderParameter("cavity_surface").AsBool()) m.SetShaderParameter("ambient_scale", 0.1f + 0.5f * strength);
+            if (m.GetShaderParameter("cavity_surface").AsBool()) { m.SetShaderParameter("ambient_scale", 0.1f + 0.5f * strength); m.SetShaderParameter("cutaway", strength); }
         float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength * 0.15f : 0f;
         foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
     }
