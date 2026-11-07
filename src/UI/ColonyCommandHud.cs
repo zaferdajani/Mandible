@@ -285,7 +285,7 @@ public partial class ColonyCommandHud : Control
         _evo = Bar(_selectionBlock, 182, 57, 213, 4);
         _evo.AddThemeStyleboxOverride("fill", UiTheme.Box(OrganicColor, OrganicColor, 0, 2, 0));
         _feedReserve = Button(_selectionBlock, "Feed from the reserve", 184, 190, 212, _touch ? 30 : 24, () => Game.Input.FeedFromReserve());
-        _feedReserve.TooltipText = "Fighters and heroes at the nest eat organic matter from the colony's reserve and evolve. What they eat, the queen cannot.";
+        _feedReserve.TooltipText = "Fighters and generals at the nest eat organic matter from the colony's reserve and evolve. What they eat, the queen cannot.";
         _counts = Text(_selectionBlock, "", 184, 74, 214, 30, _touch ? 14 : 13);
         _detail = Text(_selectionBlock, "", 185, 119, 212, _touch ? 90 : 84, _touch ? 14 : 12);
         _detail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -295,7 +295,7 @@ public partial class ColonyCommandHud : Control
         _cardsBlock = Block(682, 689, _cardsSize.X, _cardsSize.Y);
         // on a computer the selection panel runs on under the cards; standing alone they need their own
         _cardsPanel = Panel(_cardsBlock, -8, cardsY - 6, _cardsSize.X + 16, _cardsSize.Y - cardsY + 6);
-        string[] names = { "Chambers", "Ants", "Research", "Heroes", "Remains" };
+        string[] names = { "Chambers", "Ants", "Research", "Generals", "Remains" };
         for (int i = 0; i < names.Length; i++)
         {
             int page = i;

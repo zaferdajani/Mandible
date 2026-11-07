@@ -146,6 +146,8 @@ public partial class GameSession : Node3D
             if (Campaign)
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
+                Telepathy = new Telepathy { Game = this };
+                Hud.AddPanel(Telepathy);
                 Hud.Alert(TutorialMode ? Settings.Mobile ? "Level 1: tap Army to select the attackers" : "Level 1: select the attackers with F2" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
                 var beat = Comic.For(Episode);
                 if (beat != null && (ForceStory || !CampaignProgress.StorySeen(Episode) && !App.TestRun))
@@ -174,6 +176,7 @@ public partial class GameSession : Node3D
     public string RosterAtStart;         // the campaign colony as it entered the level
     public int PerksAtStart;
     public bool Restoring { get; private set; }
+    public Telepathy Telepathy { get; private set; } // the Glass Queen's voice in campaign levels
     float _autosaveCd;
     int _milestoneMark = -1;
 
@@ -628,11 +631,11 @@ public partial class GameSession : Node3D
     {
         int team = Local.Me;
         if (item < 3 && Sim.Items[team, item] >= Lane.MaxItemTier) { Hud.Alert($"{Lane.ItemNames[item]} is fully upgraded", UiTheme.Dim); Audio.Ui("ui_error"); return; }
-        if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your hero is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your general is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (item == 3 && Sim.JellyCd[team] > 0) { Hud.Alert($"The last dose of Royal Jelly is still settling ({Mathf.Ceil(Sim.JellyCd[team]):0}s)", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (!Sim.CanBuy(team, item))
         {
-            Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your hero is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
+            Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your general is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
             Audio.Ui("ui_error");
             return;
         }
@@ -918,6 +921,7 @@ public partial class GameSession : Node3D
             var wp = World.HF.Point(e.Pos, 0.3f);
             bool seen = Demo || e.Team == Local.Me || Fog == null || Fog.Visible(e.Pos);
             Gore.Event(e, Sim, seen);
+            Telepathy?.OnEvent(e);
             switch (e.Kind)
             {
                 case EvKind.Bite:
@@ -1090,11 +1094,11 @@ public partial class GameSession : Node3D
                     if (seen) { Effects.Burst(wp, 8, 0, 2f, 0.8f, 1f); if (Audible(e.Pos)) Audio.At("spawn", wp, -8, 0.2f); }
                     break;
                 case EvKind.HerdArrives:
-                    if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone hero among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
+                    if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone general among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
                     break;
                 case EvKind.HerdMilked:
                     if (!Demo && Campaign) Hud.Alert($"The aphid herd is yours: +{Expedition.HerdFood:0} food. Leave two ants with it for honeydew.", new Color(0.6f, 1f, 0.55f));
-                    else if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your hero milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy hero milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
+                    else if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your general milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy general milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
                     if (!Demo && e.Team == Local.Me) Audio.Ui("research", -4);
                     break;
                 case EvKind.StagWakes:

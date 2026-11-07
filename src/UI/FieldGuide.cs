@@ -377,10 +377,10 @@ public partial class HeroPicker : ColorRect
         v.AddThemeConstantOverride("separation", 14);
         UiTheme.Place(v, 0.06f, 0.06f, 0.94f, 0.94f, 0, 0, 0, 0);
         AddChild(v);
-        var t = UiTheme.Text("CHOOSE YOUR HERO", 34, UiTheme.Title, UiTheme.Gold);
+        var t = UiTheme.Text("CHOOSE YOUR GENERAL", 34, UiTheme.Title, UiTheme.Gold);
         t.HorizontalAlignment = HorizontalAlignment.Center;
         v.AddChild(t);
-        var sub = UiTheme.Text("Lane War: three lanes, waves of soldiers on both sides, guardians as towers. You steer one hero; it levels up to 10 and buys upgrades with food.", 15, null, UiTheme.Dim);
+        var sub = UiTheme.Text("Lane War: three lanes, waves of soldiers on both sides, guardians as towers. You steer one general; it levels up to 10 and buys upgrades with food.", 15, null, UiTheme.Dim);
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         sub.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         v.AddChild(sub);
@@ -510,7 +510,7 @@ public partial class FieldGuide : ColorRect
         (AntType.Gunner, "Ants of the formicine subfamily, like garden and wood ants, spray formic acid from a gland at the tip of the abdomen. Fire ants have no such gland."),
         (AntType.Flyer, "Winged ants are the young queens and males. They leave the nest together on warm days for the mating flight."),
         (AntType.Queen, "The only egg-layer. She needs protein to lay; a garden-ant queen can live almost 30 years. If she dies, the colony dies with her."),
-        (AntType.Warlord, "Heroes are colony legends rather than real castes: one exceptional giant who leads the charge."),
+        (AntType.Warlord, "Generals are the colony's legends rather than ordinary castes: one exceptional giant who leads the charge."),
         (AntType.Matron, "Inspired by the acid-spraying matriarchs of wood-ant colonies."),
         (AntType.Marshal, "Inspired by the winged queens, the largest and strongest flyers an ant colony produces."),
     };
@@ -542,7 +542,7 @@ public partial class FieldGuide : ColorRect
     static string CasteText(AntType t, int team)
     {
         var st = Config.Of(t);
-        if (t == AntType.Queen) return $"HP {st.Hp}.  Lays all brood. Feed her royal jelly (research) to unlock new castes and stronger heroes.";
+        if (t == AntType.Queen) return $"HP {st.Hp}.  Lays all brood. Feed her royal jelly (research) to unlock new castes and stronger generals.";
         var k = t switch
         {
             AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
@@ -652,7 +652,7 @@ public partial class FieldGuide : ColorRect
             "[b]Victory alone makes no one stronger.[/b]  In the wild an ant grows on what it eats, and so it is here: [b]killing teaches nothing; eating the remains does.[/b] " +
             "Every creature that dies leaves remains on the ground. They are [color=#dc8a2a][b]organic matter[/b][/color], the evolving material, and there are only two things to do with them.\n\n" +
             "[color=#e8c27a]Eat them.[/color]  Select the ant you want to grow and [b]right-click the remains[/b] (on a phone: tap them). It stands over them and eats, a mouthful a second, healing as it goes. " +
-            "A soldier, major, flyer or gunner fills its [color=#dc8a2a]evolution bar[/color], the second line under its health, and moults into the next stage; a hero turns what it eats into experience and levels up. " +
+            "A soldier, major, flyer or gunner fills its [color=#dc8a2a]evolution bar[/color], the second line under its health, and moults into the next stage; a general turns what it eats into experience and levels up. " +
             "An ant that is eating is not fighting: guard it, or eat after the battle.\n\n" +
             "[color=#e8c27a]Haul them home.[/color]  Workers drag big carcasses home in teams and cut small ones up, filling the colony's [color=#dc8a2a]organic reserve[/color] (the amber figure beside food). " +
             "The queen ascends only on organic matter, larvae need a little of it besides food, and fighters brought home can be [b]fed from the reserve[/b] (the button under the evolution bar). " +
@@ -672,13 +672,13 @@ public partial class FieldGuide : ColorRect
         for (int s = 1; s <= Config.MaxStage; s++)
             Row($"STAGE {new string('I', s)}  {Config.StageNames[s].ToUpper()}", $"{Config.StageCost(s):0} organic matter eaten.  {Config.StageGain(s)} (each stage adds to the last); darker, scarred chitin.");
         Row("QUEEN", $"Ascends on organic matter alone: {Config.QueenOrganic(2):0}, {Config.QueenOrganic(3):0}, {Config.QueenOrganic(4):0}, {Config.QueenOrganic(5):0} for each title in turn.");
-        Row("HEROES", $"{Config.HeroXpPerOrganic:0.#} experience for each unit of organic matter eaten; kills give none.");
+        Row("GENERALS", $"{Config.HeroXpPerOrganic:0.#} experience for each unit of organic matter eaten; kills give none.");
         v.AddChild(grid);
         // what each prey is worth
         var prey = new GridContainer { Columns = 3 };
         prey.AddThemeConstantOverride("h_separation", 24);
         prey.AddChild(UiTheme.Text("REMAINS", 14, UiTheme.Title, UiTheme.Dim)); prey.AddChild(UiTheme.Text("ORGANIC MATTER", 14, UiTheme.Title, UiTheme.Dim)); prey.AddChild(UiTheme.Text("WHERE", 14, UiTheme.Title, UiTheme.Dim));
-        foreach (var (t, where) in new[] { (AntType.StagBeetle, "the Old Stag's log"), (AntType.Warlord, "a fallen rival hero"), (AntType.Wasp, "wasp lairs"), (AntType.Beetle, "beetle lairs"), (AntType.Spider, "spider lairs"), (AntType.Major, "the enemy's majors"), (AntType.Soldier, "the enemy's soldiers"), (AntType.Worker, "the enemy's foragers (a crumb)") })
+        foreach (var (t, where) in new[] { (AntType.StagBeetle, "the Old Stag's log"), (AntType.Warlord, "a fallen rival general"), (AntType.Wasp, "wasp lairs"), (AntType.Beetle, "beetle lairs"), (AntType.Spider, "spider lairs"), (AntType.Major, "the enemy's majors"), (AntType.Soldier, "the enemy's soldiers"), (AntType.Worker, "the enemy's foragers (a crumb)") })
         {
             prey.AddChild(UiTheme.Text(Config.Of(t).Name, 15, UiTheme.Bold, UiTheme.Ink));
             prey.AddChild(UiTheme.Text($"{Config.Of(t).CorpseFood * Config.OrganicPerLoad(t):0}", 15, UiTheme.Bold, ColonyCommandHud.OrganicColor));

@@ -401,7 +401,7 @@ public partial class Hud : CanvasLayer
         UiTheme.Place(hp, 1, 1, 1, 1, -452, -566, -12, -450);
         var hv = new VBoxContainer();
         hv.AddThemeConstantOverride("separation", 5);
-        hv.AddChild(UiTheme.Text("ROYAL CHAMBER  ·  HEROES", 13, UiTheme.Bold, UiTheme.Dim));
+        hv.AddChild(UiTheme.Text("ROYAL CHAMBER  ·  GENERALS", 13, UiTheme.Bold, UiTheme.Dim));
         var hrow = new HBoxContainer();
         hrow.AddThemeConstantOverride("separation", 6);
         (ProdKind kind, string key)[] heroes = { (ProdKind.Warlord, "Y"), (ProdKind.Matron, "U"), (ProdKind.Marshal, "I") };
@@ -636,7 +636,7 @@ public partial class Hud : CanvasLayer
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
             ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F flying ant"), (ProdKind.Gunner, "D acid gunner")),
             ResearchLine(),
-            ManualLine("Heroes:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
+            ManualLine("Generals:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
             BugLine(),
             "Click the nest, then right-click the ground to set a rally point.",
             "Arrows / screen edge pan   ·   Mouse wheel zoom   ·   Middle-drag rotate   ·   Space jump to last alert",

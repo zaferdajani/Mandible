@@ -74,7 +74,7 @@ public static class Reveal
         (4, "Escort", "Vetch, the tube's Acid Matron, walks home when the road is clear."),
         (5, "Queen kill", "Go down a rival's shaft and end its queen."),
         (6, "Research", "Royal jelly, the Mandible Forge and the Chitin Armory."),
-        (7, "Heroes", "Raise old Burr as the Warlord (Y): a hero levels fast and fights with special moves."),
+        (7, "Generals", "Raise old Burr as the Warlord (Y): a general levels fast and fights with special moves."),
         (7, "Wasps", "Flyers that sting, climb away and come back."),
         (8, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
         (8, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),

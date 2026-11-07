@@ -213,9 +213,9 @@ public static class Config
         ProdKind.Major => "Huge-headed crusher. Slow, tough and devastating.\nRequires a Matriarch queen.",
         ProdKind.Flyer => "Winged alate. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires the Wing Chamber.",
         ProdKind.Gunner => "Sprays formic acid from range. Fragile; keep it behind the soldiers.\nRequires an Empress queen.",
-        ProdKind.Warlord => "HERO. The plated brawler: cleaving bites, 30% armour, War Cry.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
-        ProdKind.Matron => "HERO. The ranged acid spitter: splashing spray, Acid Burst and venom pools.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
-        ProdKind.Marshal => "HERO. The winged commander: swoops from the air, Dive Bomb rallies the army.\nLevels up to 10. Requires an Ancient Empress and the Wing Chamber.",
+        ProdKind.Warlord => "GENERAL. The plated brawler: cleaving bites, 30% armour, War Cry.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
+        ProdKind.Matron => "GENERAL. The ranged acid spitter: splashing spray, Acid Burst and venom pools.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
+        ProdKind.Marshal => "GENERAL. The winged commander: swoops from the air, Dive Bomb rallies the army.\nLevels up to 10. Requires an Ancient Empress and the Wing Chamber.",
         _ => "",
     };
 
@@ -277,7 +277,7 @@ public static class Config
 
     public static string ResearchDesc(Upgrade u) => u switch
     {
-        Upgrade.Queen => "Feed the queen royal jelly. She grows mightier, unlocks new castes, and hatches stronger heroes.\nMatriarch: majors, Wing Chamber, Silk Cutters, tier II forges, the Warlord hero.\nEmpress: Acid Gunners, tier III forges, the Acid Matron hero, brood 25% faster.\nAncient Empress: the Sky Marshal hero.\nEternal Mother: brood 50% faster, mightiest heroes.",
+        Upgrade.Queen => "Feed the queen royal jelly. She grows mightier, unlocks new castes, and hatches stronger generals.\nMatriarch: majors, Wing Chamber, Silk Cutters, tier II forges, the Warlord general.\nEmpress: Acid Gunners, tier III forges, the Acid Matron general, brood 25% faster.\nAncient Empress: the Sky Marshal general.\nEternal Mother: brood 50% faster, mightiest generals.",
         Upgrade.Wings => "Raise winged alates: flying ants that cross rocks and fight wasps in the air.",
         Upgrade.SilkCutters => "Sharpened tarsal claws: webbed ants break free in half the time.",
         Upgrade.Mandibles => "New warriors hatch larger: per tier +22% bite, +12% health, +10% size, but 8% slower.",
@@ -328,7 +328,7 @@ public static class Config
     public static string RaceMotto(Race r) => r == Race.BlackGarden ? "The Garden Legion: numbers, trails and honeydew" : "The Fire Swarm: venom, fury and flesh";
     public static string[] RaceStrengths(Race r) => r == Race.BlackGarden
         ? new[] { "Huge colonies: workers hatch 40% faster, fighting squads 12% faster", "Trail masters: 35% stronger pheromone trails recruit foragers faster", "Honeydew farmers: sugar, fruit and crumbs worth 20% more", "Formic acid: gunners spit 30% harder" }
-        : new[] { "Venom sting: soldiers, majors and heroes poison what they bite", "Mound fury: warriors deal 10% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
+        : new[] { "Venom sting: soldiers, majors and generals poison what they bite", "Mound fury: warriors deal 10% more damage near their nest", "Predators: insect corpses and seeds worth 25% more", "Many queens: all brood hatches 12% faster" };
     public static string[] RaceWeaknesses(Race r) => r == Race.BlackGarden
         ? new[] { "Stingless: warriors have no venom, only their bite", "Protein (corpses, seeds) gives no bonus" }
         : new[] { "No acid gland: gunners deal 25% less damage", "Fainter trails (15% weaker): slower to find food", "Sugar, fruit and crumbs give no bonus" };
@@ -397,7 +397,7 @@ public static class Config
     public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";
     public static string RemainsDesc(RemainsOrder o) => o == RemainsOrder.Haul
         ? "Workers fetch fresh remains inside the ring around the nest (it grows with the colony) or wherever an ant sees them: organic matter for the queen."
-        : "Workers leave the remains where they fall, for your fighters and heroes to eat and evolve on.";
+        : "Workers leave the remains where they fall, for your fighters and generals to eat and evolve on.";
     /// The fire-ant Warlord's signature, for its hero card, the picker and the Field Guide.
     public const string DevourName = "Devour the Fallen";
     /// The race-bound line for a hero card: empty unless this hero has a signature for this race.
