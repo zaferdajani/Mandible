@@ -132,13 +132,13 @@ public sealed class NestGeometry
                 // the rock face's own relief, pressed into the bank so its ledges and cracks catch the sun
                 if (WallRelief != null) y -= bank * ReliefDepth * (WallRelief(p) - 0.5f);
                 y = Mathf.Clamp(y, -Depth, -0.03f); // the bumps and relief never break the floor or the surface
-                mesh.Add(new Vector3(p.X, y, p.Y), Vector3.Up, Colors.White, new Vector2(d, 0), Vector2.Zero);
+                mesh.Add(new Vector3(p.X, y, p.Y), Vector3.Up, Colors.White, new Vector2(d, -FloorDepth(p)), Vector2.Zero);
             }
         for (int z = 0; z < nz; z++)
             for (int x = 0; x < nx; x++)
             {
                 int a = z * (nx + 1) + x, b = a + 1, c = a + nx + 2, d = a + nx + 1;
-                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > Lip + 0.6f) continue;
+                if (Mathf.Min(Mathf.Min(distances[a], distances[b]), Mathf.Min(distances[c], distances[d])) > Lip + 2.0f) continue; // the skirt reaches well under the terrain's translucent fringe, so no sky shows through it
                 mesh.Quad(a, b, c, d);
             }
         mesh.RecalcNormals();

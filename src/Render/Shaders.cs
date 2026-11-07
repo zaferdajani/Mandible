@@ -532,7 +532,10 @@ float net_dist(vec3 p, vec3 cam) {
     vec2 shift = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
     float sl = length(shift);
     if (sl > 6.0) shift *= 6.0 / sl;
-    vec2 q = p.xz + shift * (p.y - net_ground_y) - xray_center; // the cut is at the surface: the pit's walls below are real geometry
+    // the cut is at the surface: the pit's walls below are real geometry. The surface itself is not projected (its own
+    // relief sits a little above or below the entrance datum), so the hole stays exactly over the excavation's footprint
+    float dy = p.y - net_ground_y;
+    vec2 q = p.xz + shift * (abs(dy) < 2.0 ? 0.0 : dy) - xray_center;
     return nest_field(q);
 }
 float glass_at(vec3 p, vec3 cam) {
@@ -592,7 +595,7 @@ void fragment() {
     // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
     float lip = 0.9;
     if (xray_on > 0.5 && nd < lip) discard;
-    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.55, nd));
+    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.3, nd));
     float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
@@ -1431,9 +1434,26 @@ uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roo
 varying vec3 wpos;
 varying vec3 wnrm;
 void vertex() {
+    if (cavity_surface && cutaway > 0.001) {
+        // build mode: a bank between the camera and the room (its slope faces away from the eye) is laid flat at
+        // the floor's level, so the eye looks onto the floor as in a cutaway diorama. The floor and the far wall stay;
+        // the fold follows the camera as it turns. UV.y carries the floor height for this column of the mesh.
+        float bank = smoothstep(-0.5, -0.3, UV.x);
+        vec3 wp0 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        vec3 wn0 = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wp0.xz);
+        // only a standing wall folds; the flat lip and skirt keep their place (a flat face has no sideways normal to
+        // judge by: normalising it gave a random answer, which punched holes in the skirt and showed the sky as grey)
+        float steep = smoothstep(0.8, 0.5, wn0.y);
+        float nl = length(wn0.xz);
+        float away = nl > 1e-3 ? -dot(wn0.xz / nl, toEye) : -1.0;
+        float fold = bank * steep * smoothstep(0.0, 0.3, away) * cutaway;
+        VERTEX.y = mix(VERTEX.y, UV.y + 0.02, fold);
+        NORMAL = normalize(mix(NORMAL, vec3(0.0, 1.0, 0.0), fold));
+    }
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-    // Excavation UV.x stores a distance and UV.y is constant; it is not a valid
+    // Excavation UV.x stores a distance and UV.y is the floor height; neither is a valid
     // tangent parameterization. Supply a stable basis for the triplanar normal map.
     vec3 tangent_axis = abs(NORMAL.x) > 0.95 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     TANGENT = normalize(tangent_axis - NORMAL * dot(NORMAL, tangent_axis));
@@ -1444,14 +1464,6 @@ float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
 }
 void fragment() {
-    if (cavity_surface && cutaway > 0.001) {
-        // a bank between the camera and the room: its slope faces away from the eye. Cut it from the lip down to the floor,
-        // leaving the floor and the far wall; the cut follows the camera as it turns.
-        float bank = smoothstep(-0.5, -0.3, UV.x);
-        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wpos.xz);
-        float away = -dot(normalize(wnrm.xz + vec2(1e-4)), toEye);
-        if (bank > 0.5 && away > 0.18 - 0.4 * (1.0 - cutaway)) discard;
-    }
     vec3 an = abs(wnrm);
     an /= an.x + an.y + an.z;
     float depth = ground_y - wpos.y;
@@ -1506,12 +1518,16 @@ void fragment() {
         // the walls carry the soil's layers faintly (dark topsoil at the lip, ochre loam, pale sand low down),
         // the rock scan's own colour underneath; the floor is the surface's sand, trodden and a little darker
         vec3 layer = mix(mix(vec3(0.62, 0.50, 0.40), vec3(1.0, 0.86, 0.68), t1), vec3(1.0, 0.95, 0.85), t2);
-        rock *= layer * vec3(1.25, 1.12, 1.0);
-        sand *= vec3(1.15, 1.08, 0.98); // the lamps are few and warm: the scans are lifted so the floor reads
+        rock *= layer * vec3(0.78, 0.66, 0.56); // the walls frame the room: darker and cooler than the floor
+        sand *= vec3(1.45, 1.32, 1.12); // the floor is where the eye should land: the brightest, warmest surface below
         col = mix(sand, rock, wallness);
         col *= 0.9 + 0.2 * g;
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
         col *= 1.0 - 0.3 * crevice;
+        // the flat skirt beyond the lip lies under the surface's hole and sees neither sun nor lamps: give it the surface
+        // sand's own warm colour and fill, so no grey edge ever shows along a cut
+        float skirt = smoothstep(0.55, 0.85, UV.x);
+        col = mix(col, vec3(0.50, 0.38, 0.26) * (0.85 + 0.3 * g), skirt);
         mine_nrm = mix(sandN, rockN, wallness);
         mine_rough = mix(0.95, 0.8 + 0.2 * armv.g, wallness);
         if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
@@ -1557,6 +1573,7 @@ void fragment() {
         NORMAL_MAP_DEPTH = 0.8;
     }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
+    if (cavity_surface && mine) EMISSION += col * smoothstep(0.55, 0.85, UV.x) * 0.1; // the skirt reads as shaded sand, not a halo
     if (cavity_surface) {
         // the sky ambient is off down here: a faint warm fill keeps the blacks readable
         EMISSION += col * vec3(1.0, 0.78, 0.55) * ambient_scale * 0.6;
@@ -1575,6 +1592,35 @@ void fragment() {
 
     /// A shaft of sunlight falling into the opened earth: a cone of warm haze, strongest along its edges where
     /// the eye looks through the most of it, fading toward the floor. Drawn only while the glass is up.
+    /// The mine's shoring and the stones in its banks: a scanned piece whose instance carries the outward direction
+    /// of the bank it stands in (INSTANCE_CUSTOM.xy). In build mode the pieces on the bank facing away from the eye
+    /// (the near wall, which the Earth shader folds flat) are hidden with it.
+    public const string Shoring = @"
+shader_type spatial;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D arm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform vec3 tint : source_color = vec3(1.0);
+uniform float cutaway = 0.0;
+uniform float fill = 0.14;
+varying vec2 v_side;
+varying vec3 wpos;
+void vertex() { v_side = INSTANCE_CUSTOM.xy; wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+    if (cutaway > 0.001 && dot(v_side, v_side) > 0.1) {
+        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wpos.xz);
+        if (dot(normalize(v_side), toEye) > 0.0) discard; // its bank faces the eye from the near side: folded away
+    }
+    vec3 c = texture(albedo_tex, UV).rgb * tint;
+    vec3 arm = texture(arm_tex, UV).rgb;
+    ALBEDO = c;
+    ROUGHNESS = arm.g;
+    AO = arm.r;
+    NORMAL_MAP = texture(normal_tex, UV).rgb;
+    EMISSION = c * vec3(0.55, 0.4, 0.26) * fill;
+}
+";
+
     public const string Shaft = @"
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;

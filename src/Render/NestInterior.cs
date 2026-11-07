@@ -20,7 +20,7 @@ public sealed partial class NestInterior
     readonly NestGeometry[] _geometry = { new(), new() };
     readonly MeshInstance3D[] _excavation = new MeshInstance3D[2];
     readonly Node3D[] _timber = new Node3D[2];
-    static readonly Dictionary<string, Material> _mineMats = new(); // shoring, stones and roots in the banks, rebuilt with the excavation
+    static readonly Dictionary<string, ShaderMaterial> _mineMats = new(); // shoring, stones and roots in the banks, rebuilt with the excavation
     readonly int[] _meshRevision = { -1, -1 };
     readonly List<ShaderMaterial> _soils = new(), _shafts = new();
     float _refresh;
@@ -190,6 +190,7 @@ public sealed partial class NestInterior
         // (the lamps still pool on top of it), so the cut never shows as dark blotches under the soil
         foreach (var m in _soils)
             if (m.GetShaderParameter("cavity_surface").AsBool()) { m.SetShaderParameter("ambient_scale", 0.1f + 0.5f * strength); m.SetShaderParameter("cutaway", strength); }
+        foreach (var m in _mineMats.Values) m.SetShaderParameter("cutaway", strength);
         float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength * 0.15f : 0f;
         foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
     }
@@ -366,7 +367,7 @@ public sealed partial class NestInterior
     {
         var ch = room.Ch;
         room.Node.Position = new Vector3(ch.Offset.X, -NestGeometry.Depth + 0.025f, ch.Offset.Y);
-        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch);
+        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch) * 1.3f; // what a room holds is its meaning: shown large
         room.Label.Position = new Vector3(0, 1.1f, 0);
     }
 
@@ -505,12 +506,13 @@ public sealed partial class NestInterior
         var roots = NatureAssets.Kind("root").FindAll(p => p.Src == "single_root");
         if (twigs.Count == 0 || stones.Count == 0) return;
         var rng = new Rng((uint)(0x7133u + (uint)team * 977u));
-        var batches = new Dictionary<NatureAssets.Piece, List<Transform3D>>();
-        void Add(NatureAssets.Piece p, Transform3D t) { if (!batches.TryGetValue(p, out var l)) batches[p] = l = new(); l.Add(t); }
+        var batches = new Dictionary<NatureAssets.Piece, List<(Transform3D t, Vector2 side)>>();
+        // `side`: the outward direction of the bank the piece stands in (zero for a lintel, which spans both)
+        void Add(NatureAssets.Piece p, Transform3D t, Vector2 side = default) { if (!batches.TryGetValue(p, out var l)) batches[p] = l = new(); l.Add((t, side)); }
         float Y(Vector2 p) => NestGeometry.Height(geometry.Distance(p), NestGeometry.FloorDepth(p));
         bool full = Settings.Gfx >= Settings.Quality.High;
         // a twig laid along `dir` from `at`, its length `len`, lying on the surface at `at` (or standing when `up` is set)
-        void Twig(Vector2 at, float y, Vector3 axis, float len, float thick)
+        void Twig(Vector2 at, float y, Vector3 axis, float len, float thick, Vector2 side = default)
         {
             var p = twigs[rng.I(0, twigs.Count)];
             var laid = (p.Lie * p.Size).Abs();
@@ -518,7 +520,7 @@ public sealed partial class NestInterior
             float st = thick / Mathf.Max(0.01f, Mathf.Max(laid.X, laid.Y));
             var up = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.98f ? Vector3.Right : Vector3.Up;
             var basis = Basis.LookingAt(axis, up) * new Basis(Vector3.Forward, rng.R(0, Mathf.Tau)) * Basis.FromScale(new Vector3(st, st, s)) * p.Lie;
-            Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)));
+            Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)), side);
         }
         for (int i = 1; i < geometry.Count; i++)
         {
@@ -546,8 +548,8 @@ public sealed partial class NestInterior
                 Vector2 l = c + side * (w + wobble), r = c - side * (w - wobble);
                 float h = NestGeometry.FloorDepth(c) * rng.R(0.86f, 0.98f);
                 var lean = new Vector3(side.X, 0, side.Y) * rng.R(0.06f, 0.16f);
-                Twig(l, floorY + 0.05f, (Vector3.Up + lean).Normalized(), h, 0.55f);
-                Twig(r, floorY + 0.05f, (Vector3.Up - lean).Normalized(), h, 0.55f);
+                Twig(l, floorY + 0.05f, (Vector3.Up + lean).Normalized(), h, 0.55f, side);
+                Twig(r, floorY + 0.05f, (Vector3.Up - lean).Normalized(), h, 0.55f, -side);
                 var top = (l + r) * 0.5f;
                 Twig(top, floorY + h - 0.2f, new Vector3(side.X, rng.R(-0.04f, 0.04f), side.Y).Normalized(), l.DistanceTo(r) + 0.7f, 0.5f);
             }
@@ -565,31 +567,34 @@ public sealed partial class NestInterior
                     float sz = rng.R(0.5f, 1.3f);
                     float s = sz / Mathf.Max(0.01f, p.Footprint);
                     var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * Basis.FromScale(Vector3.One * s);
-                    Add(p, new Transform3D(basis, new Vector3(at.X, y - p.Size.Y * s * rng.R(0.3f, 0.55f), at.Y)));
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y - p.Size.Y * s * rng.R(0.3f, 0.55f), at.Y)), side * sgn);
                 }
                 if (roots.Count > 0 && rng.F() < 0.14f)
                 {
                     var p = roots[rng.I(0, roots.Count)];
-                    var at = a + dir * d + side * (rng.F() < 0.5f ? -1 : 1) * (half + 0.9f);
+                    int rs = rng.F() < 0.5f ? -1 : 1;
+                    var at = a + dir * d + side * rs * (half + 0.9f);
                     float y = Y(at) - 0.1f;
                     float s = rng.R(1.6f, 2.6f) / Mathf.Max(0.01f, p.Longest);
                     var basis = new Basis(Vector3.Up, dir.Angle() + rng.R(-0.4f, 0.4f)) * new Basis(Vector3.Right, rng.R(-0.3f, -0.05f)) * Basis.FromScale(Vector3.One * s) * p.Lie;
-                    Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)));
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)), side * rs);
                 }
             }
         }
         foreach (var (piece, list) in batches)
         {
-            // the shoring stands above the lamps' reach: its own copy of the scan's material carries a warm fill, like the walls
+            // the shoring's own shader: the scan's maps, a warm fill (it stands above the lamps), and the build-mode fold
             if (!_mineMats.TryGetValue(piece.Src, out var mat))
             {
-                var m = (StandardMaterial3D)((StandardMaterial3D)piece.Material).Duplicate();
-                m.VertexColorUseAsAlbedo = false;
-                m.EmissionEnabled = true; m.EmissionTexture = m.AlbedoTexture; m.Emission = new Color(0.55f, 0.4f, 0.26f); m.EmissionEnergyMultiplier = 0.14f;
+                var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Shoring) };
+                m.SetShaderParameter("albedo_tex", NatureAssets.Texture($"tex/{piece.Src}_diff"));
+                m.SetShaderParameter("normal_tex", NatureAssets.Texture($"tex/{piece.Src}_nor"));
+                m.SetShaderParameter("arm_tex", NatureAssets.Texture($"tex/{piece.Src}_arm"));
+                m.SetShaderParameter("tint", ((StandardMaterial3D)piece.Material).AlbedoColor);
                 _mineMats[piece.Src] = mat = m;
             }
-            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = piece.Mesh, InstanceCount = list.Count };
-            for (int i = 0; i < list.Count; i++) mm.SetInstanceTransform(i, list[i]);
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = piece.Mesh, InstanceCount = list.Count };
+            for (int i = 0; i < list.Count; i++) { mm.SetInstanceTransform(i, list[i].t); mm.SetInstanceCustomData(i, new Color(list[i].side.X, list[i].side.Y, 0, 0)); }
             root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, CastShadow = full ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off });
         }
         MoveToUnderground(root); // lit by the nest's lamps, like everything else dug
