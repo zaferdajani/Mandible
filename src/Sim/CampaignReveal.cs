@@ -18,6 +18,8 @@ public static class Reveal
     /// battle (its levels and veterans are built on it); eating evolves them on top, and the rival does not evolve.
     public const int Evolution = 10;
     public const int SilkTrapId = 13, RoyalLarvaId = 14; // the two mutation chapters' level ids
+    /// The silk spitter, in the Hornet Mother's chapter: the wasps arrive, then the colony earns the answer to them.
+    public const int WebThrowing = 9;
 
     public static int Prod(ProdKind k) => k switch
     {
@@ -87,7 +89,8 @@ public static class Reveal
         (7, "Heroes", "A hero breaks out of the royal cocoon. In the campaign every hero is born this way (the Heroes tab lays the larva)."),
         (7, "Mutation cards", "Every queen killed from now on yields mutagen: choose one of three mutations, one of them her own trait. Each makes the woods more unstable."),
         (8, "Research", "Royal jelly, the Mandible Forge and the Chitin Armory."),
-        (9, "Wasps", "Flyers that sting, climb away and come back."),
+        (9, "Wasps", "Flying predators. In the air no ground ant can reach them, not even an acid gunner: only flying ants, or a ground ant in the moment a wasp comes down to sting. Ground ants duck away from them."),
+        (9, "Web Throwing", "The silk spitter in the far corner holds a fragment of mutagen. Fed to the queen, it lets soldiers fling silk that pins a flying enemy to the ground for every ant to bite."),
         (10, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
         (10, "Evolution by eating", "Fighters that eat remains evolve through three stages: right-click a carcass with them, or feed them from the reserve at the nest."),
         (10, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),

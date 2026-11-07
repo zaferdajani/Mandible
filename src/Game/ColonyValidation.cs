@@ -42,6 +42,7 @@ public static class ColonyValidation
                 foreach (var part in only.Split(','))
                     if (part == "ep2") Episode2(app); else if (part == "ep3") Episode3(app); else if (part == "ep4") Episode4(app);
                     else if (part == "mutation") LevelValidation.Mutations(app);
+                    else if (part == "flight") FlightValidation.Run(app);
                     else LevelValidation.Play(app, int.Parse(part), out _);
                 GD.Print("[campaign-test] ALL PASS (selected levels)");
                 app.GetTree().Quit();
@@ -134,6 +135,7 @@ public static class ColonyValidation
             Defeat(app);
             for (int id = 5; id <= Levels.Count; id++) if (id is not (Reveal.SilkTrapId or Reveal.RoyalLarvaId)) times[id] = LevelValidation.Play(app, id, out _);
             LevelValidation.Mutations(app); // plays the Silk Trap and the Royal Larva with the mutation checks
+            FlightValidation.Run(app); // the owner's flight rules and start areas
             times[Reveal.SilkTrapId] = LevelValidation.MutationTimes.silk; times[Reveal.RoyalLarvaId] = LevelValidation.MutationTimes.larva;
             LevelValidation.Losses(app);
             LevelValidation.Gates(app);

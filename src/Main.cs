@@ -131,7 +131,7 @@ public partial class Main : Node
         Local.Me = team;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified });
+        Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified, Seed = TestRun ? 20261031u : (uint)GD.Randi() });
     }
 
     /// Episode 1, the guided colony founding.
@@ -152,7 +152,7 @@ public partial class Main : Node
         Local.Me = team;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { App = this, Diff = Difficulty.Normal, Skirmish = true });
+        Swap(new GameSession { App = this, Diff = Difficulty.Normal, Skirmish = true, Seed = TestRun ? 20261031u : (uint)GD.Randi() });
     }
 
     /// Starts a Lane War match against the AI: you steer one hero; creeps and guardians fight the lanes.

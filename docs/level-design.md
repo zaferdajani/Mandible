@@ -265,6 +265,7 @@ Two tracks grow the colony, and they never mix:
 | Hungry Gut | the Dry Spell's starving queen | fighters evolve on 60% more from every mouthful |
 | Acid Blood | the queen behind the watch posts | a fallen fighter leaves a pool of acid |
 | Swift Brood | the nuptial flight's mother | the queen lays 20% faster |
+| Web Throwing | the silk spitter's spinneret (fixed, Chapter 9; later cards raise its rank) | soldiers fling silk that pins flying enemies to the ground for every ant to bite. Rank 1: one flyer pinned for 3 s within 8 units; rank 2: two, 4.5 s, 10 units; rank 3: three, 6 s, 12 units; a 9 s cooldown |
 
 From the Royal Larva on, every queen kill yields one mutagen, and the result card offers **one of three cards**: the dead queen's own trait first, then two others the colony lacks, in an order seeded by the chapter (a replay offers the same three). The choice goes into the colony that walks into the next chapter (`CampaignProgress.ChooseMutation`); skipping it banks the mutagen for the next card. Mutations, mutagen, level and instability live in the persistent roster (a fifth part of `[colony] enterN`; older saves load as level 1 with no mutations), so a lost chapter retries with exactly the mutations it began with.
 
@@ -293,6 +294,32 @@ Ashling's body is the mutagen. Feeding it to the queen gives the hero mutation, 
 Stars: under 21:00, no raider ever wounds the larva.
 
 From then on, **heroes in the campaign come only this way**: the Heroes tab lays a royal larva (its food cost now, 60 organic matter through the nurses, a 40 s cocoon). Skirmish and Lane War keep their own hero rules. A chapter played without a save behind it gets the story's mutations and a dug nursery, so every chapter stays playable on its own; the Hornet Mother and the Long March muster the hero the story has given the colony.
+
+### Flyers and the ground (the owner's rule)
+
+"A normal ant should not be able to attack a wasp... It shouldn't be able to fight those predators until we have the flying ants."
+
+- A flying predator (a wasp, the Hornet Mother) in the air is out of every ground ant's reach: ground ants cannot target it, are not sent onto it by an attack order (the click is refused with "It's in the air: only flying ants can reach it"), and duck away from one that is hunting them. Acid gunners are ground ants too: they cannot reach it either, which keeps the rule clean (`Config.Predator`, `Sim.Airborne`, `Sim.CanReach`, used by `FindEnemy` and every engage path, so the AI follows the same rule).
+- Flying ants reach it. A ground ant reaches it only in the moment a wasp comes down to sting (it hangs at `Config.HoverAlt` above its prey and drops for the bite), or while thrown silk pins it to the ground (`Ant.PinT`).
+- Other flyers (the colonies' flying ants, the Sky Marshal) keep the old rule: they swoop low to bite and can be bitten back.
+
+### Chapter 9, the silk spitter (Web Throwing)
+
+The wasps arrive in Chapter 9 (the Hornet Mother). Her paper nest hums with them and the briefing makes the threat plain, but her raids hold off until the colony has earned its answer:
+
+1. **Hunt the silk spitter** in the free corner of the yard: a level-4 spitting spider and two young spiders in a hollow strung with permanent webs that pin ants. The corridor to it is cleared of wasp lairs.
+2. **Cut out its spinneret** and **carry it home** (the mutagen haul).
+3. **Feed the queen the fragment**: Web Throwing, rank 1.
+4. **Break the hornet raid**: now the raids begin, and the soldiers' silk brings the wasps down.
+5. **Slay the Hornet Mother**, then **kill the red queen**.
+
+From Chapter 10 on, a chapter played without a save starts with Web Throwing at rank 1. Later mutation cards can raise it to rank 3.
+
+### Start areas
+
+- No wasp lair lies within `Config.WaspFloor` (115) of a starting nest in any mode. Lairs nearer the nests that used to hold wasps hold spiders or beetles instead, so the first prey is never a flyer.
+- The campaign already hides wasps before Chapter 9 (the gradual reveal) and keeps level scripts' wasps far from home. `--campaign-test` checks that no wasp starts within 100 of the nest in any chapter.
+- The middle prize is no longer the same raspberry in every game. Its kind (a raspberry, a sugar drop or a pile of seeds) and its place along the line of points equally far from both nests come from the map seed, on a sequence of their own, so the rest of every tuned campaign yard is unchanged. Colony War and Skirmish against the AI now use a new seed each game; test runs keep the fixed seed, and multiplayer already shares the host's seed.
 
 ### Cinematic slots
 

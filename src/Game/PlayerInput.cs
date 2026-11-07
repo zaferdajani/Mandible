@@ -621,6 +621,13 @@ public partial class PlayerInput : Node
         if (attack) AttackMoves++; else Moves++;
         // enemy under the cursor?
         int enemy = screen.HasValue ? Pick(screen.Value, false, 26) : -1;
+        if (enemy >= 0 && Config.Predator(Sim.Ants[enemy].Type) && Sim.Airborne(Sim.Ants[enemy]) && !Selection.Exists(i => Config.Flies(Sim.Ants[i].Type)))
+        {
+            // the owner's rule: a wasp in the air is out of every ground ant's reach
+            Game.Hud.Alert("It's in the air: only flying ants can reach it", new Color(1f, 0.6f, 0.4f));
+            Game.Audio.Ui("ui_error");
+            return;
+        }
         if (enemy >= 0)
         {
             var ac = Cmd.Units(CmdKind.Attack, Local.Me, Selection, Sim);

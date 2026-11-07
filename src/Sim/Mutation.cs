@@ -20,6 +20,7 @@ public enum Mutation
     HungryGut = 64,    // fighters evolve on less (the starving queen of the Dry Spell)
     AcidBlood = 128,   // a fallen fighter bursts into acid (the queen behind the watch posts)
     SwiftBrood = 256,  // the queen lays faster (the princesses' mother)
+    WebThrowing = 512, // soldiers fling silk that pins a flying enemy to the ground (the silk spitter's spinneret; 3 ranks)
 }
 
 public static class Mutations
@@ -27,7 +28,7 @@ public static class Mutations
     public static readonly Mutation[] All =
     {
         Mutation.Stinger, Mutation.RoyalLarva, Mutation.FireBlood, Mutation.HornetWings, Mutation.IronChitin,
-        Mutation.Regrowth, Mutation.HungryGut, Mutation.AcidBlood, Mutation.SwiftBrood,
+        Mutation.Regrowth, Mutation.HungryGut, Mutation.AcidBlood, Mutation.SwiftBrood, Mutation.WebThrowing,
     };
 
     public static string Name(Mutation m) => m switch
@@ -41,6 +42,7 @@ public static class Mutations
         Mutation.HungryGut => "Hungry Gut",
         Mutation.AcidBlood => "Acid Blood",
         Mutation.SwiftBrood => "Swift Brood",
+        Mutation.WebThrowing => "Web Throwing",
         _ => "",
     };
 
@@ -55,6 +57,7 @@ public static class Mutations
         Mutation.HungryGut => "Fighters evolve on 60% more from every mouthful of remains.",
         Mutation.AcidBlood => "A fallen fighter bursts, leaving a pool of acid that burns its killers.",
         Mutation.SwiftBrood => "The queen lays 20% faster.",
+        Mutation.WebThrowing => "Soldiers fling silk that pins a flying enemy to the ground, where any ant can bite it. Ranks: longer pins, longer reach, more flyers pinned at once.",
         _ => "",
     };
 
@@ -68,6 +71,7 @@ public static class Mutations
         Mutation.HungryGut => "a queen who starved",
         Mutation.AcidBlood => "the gunners' acid glands",
         Mutation.SwiftBrood => "the princesses' mother",
+        Mutation.WebThrowing => "the silk spitter's spinneret",
         _ => "strain M-7",
     };
 
@@ -86,13 +90,18 @@ public static class Mutations
 
     /// The three cards a chapter's mutagen offers (fixed for the chapter, so a replay offers the same): the defeated
     /// queen's trait first, then the next two the colony does not have, in a chapter-seeded order.
-    public static List<Mutation> Offer(int levelId, int owned)
+    public static List<Mutation> Offer(int levelId, int owned, int webRank = 0)
     {
         var cards = new List<Mutation>();
         var trait = TraitOf(levelId);
         if ((owned & (int)trait) == 0) cards.Add(trait);
         var pool = new List<Mutation>();
-        foreach (var m in All) if (m is not (Mutation.Stinger or Mutation.RoyalLarva) && (owned & (int)m) == 0 && !cards.Contains(m)) pool.Add(m);
+        foreach (var m in All)
+        {
+            if (m is Mutation.Stinger or Mutation.RoyalLarva || cards.Contains(m)) continue;
+            // Web Throwing is earned from the silk spitter; once the colony has it, cards can raise its rank (to 3)
+            if (m == Mutation.WebThrowing ? (owned & (int)m) != 0 && webRank < 3 : (owned & (int)m) == 0) pool.Add(m);
+        }
         var rng = new Rng((uint)(levelId * 7919 + 13));
         while (cards.Count < 3 && pool.Count > 0)
         {
@@ -124,6 +133,10 @@ public static class Mutations
     public const float LarvaBite = 0.014f;     // share of the larva each enemy in the nursery eats per second
     public const float NurseryWork = 70f;
     public const float WildPerInstability = 0.04f, RedPerInstability = 0.015f; // health only: the woods grow harder to kill, not deadlier
+    public static float PinTime(int rank) => 1.5f + 1.5f * rank;      // 3, 4.5, 6 s
+    public static float WebRange(int rank) => 6f + 2f * rank;         // 8, 10, 12
+    public static int PinCount(int rank) => rank;                     // flyers pinned by one throw
+    public const float WebCooldown = 9f;
     public const int SlotsPerLevel = 4;        // population room each colony level adds
     public const float LevelHp = 0.03f;        // and a little toughness for every caste
 }
@@ -214,11 +227,70 @@ public sealed partial class Sim
         c.Mutagen--;
         c.Mutations |= (int)mu;
         c.Instability++;
+        if (mu == Mutation.WebThrowing) c.WebRank = System.Math.Max(c.WebRank, 1);
         m.Mutated++;
         Reapply();
         if (mu == Mutation.RoyalLarva) LayRoyalLarva(team, AntType.Warlord, Mutations.LarvaNeed, Mutations.CocoonTime);
         Events.Add(new SimEvent { Kind = EvKind.Mutate, Pos = ChamberPos(team, Royal(team)), Team = team, Tier = (int)mu });
         return true;
+    }
+
+    // ------------------------------------------------------------------ flight: what the ground can reach
+    /// A flyer in the air (not pinned, not down at its prey).
+    public bool Airborne(in Ant b) => Config.Flies(b.Type) && b.PinT <= 0 && b.Alt > Config.ReachAlt;
+
+    /// Whether `a` can fight `b` where it is: flying predators in the air are out of reach of every ground ant, acid
+    /// gunners included; other flyers keep the old rule (ground ants reach anything below the cruise band).
+    public bool CanReach(in Ant a, in Ant b)
+    {
+        if (Config.Flies(a.Type)) return true;
+        if (Config.Predator(b.Type)) return !Airborne(b);
+        return Config.Ranged(a.Type) || b.Alt <= 2.2f;
+    }
+
+    /// A flying predator in the air within striking distance of a ground ant of `team` (the ant ducks away).
+    int Hunter(Vector2 p, int team)
+    {
+        int best = -1; float bd = 36f;
+        int cx = (int)(p.X / SpatialHash.Cell), cz = (int)(p.Y / SpatialHash.Cell);
+        for (int z = cz - 1; z <= cz + 1; z++)
+        {
+            if (z < 0 || z >= Hash.N) continue;
+            for (int x = cx - 1; x <= cx + 1; x++)
+            {
+                if (x < 0 || x >= Hash.N) continue;
+                for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
+                {
+                    ref var b = ref Ants[j];
+                    if (!b.Alive || b.Team == team || !Config.Predator(b.Type) || !Airborne(b) || b.State != AntState.Engage) continue;
+                    float d = p.DistanceSquaredTo(b.Pos);
+                    if (d < bd) { bd = d; best = j; }
+                }
+            }
+        }
+        return best;
+    }
+
+    /// Web Throwing: a soldier flings silk at the flying enemies in reach and pins them to the ground.
+    void ThrowWeb(int i, ref Ant a)
+    {
+        int rank = Col[a.Team].WebRank;
+        if (rank <= 0) return;
+        float range = Mutations.WebRange(rank);
+        int pinned = 0;
+        for (int j = 0; j < High && pinned < Mutations.PinCount(rank); j++)
+        {
+            ref var b = ref Ants[j];
+            if (!b.Alive || b.Team == a.Team || b.Layer != 0 || !Config.Flies(b.Type) || !Airborne(b)) continue;
+            if (a.Pos.DistanceSquaredTo(b.Pos) > range * range) continue;
+            b.PinT = Mutations.PinTime(rank);
+            b.Root = 0;
+            pinned++;
+            Events.Add(new SimEvent { Kind = EvKind.WebShot, Pos = a.Pos, To = b.Pos, Team = a.Team, Type = a.Type });
+        }
+        if (pinned == 0) return;
+        a.SpecialCd = Mutations.WebCooldown;
+        a.AttackAnim = 1;
     }
 
     /// Mutations and instability change every ant on the board at once.
@@ -271,6 +343,12 @@ public sealed partial class Sim
         if (t.Team == 0 && Config.IsWarrior(t.Type) && Has(0, Mutation.AcidBlood))
             Pools.Add(new AcidPool { Pos = t.Pos, R = 2f, Life = 4f, Max = 4f, Dps = 6f, Team = 0, Src = killer >= 0 ? -1 : -1 });
         var m = Mission;
+        if (m != null && m.FragmentGroup >= 0 && t.Team == Config.Wild && t.Type == AntType.Spider && t.Level >= 4 && m.Gland == null)
+        {
+            int sr = t.Serial;
+            if (m.Groups[m.FragmentGroup].Exists(g => g.id == id && g.serial == sr))
+                m.Gland = AddMutagen(t.Pos, "the silk spitter's spinneret", AntType.Spider, Mutations.ExtractWork * 0.7f);
+        }
         if (m == null || m.MasterGroup < 0 || t.Team != Config.Wild || t.Level < 4) return; // the master, not its brood
         int serial = t.Serial;
         if (m.Groups[m.MasterGroup].Exists(g => g.id == id && g.serial == serial)) m.MastersSlain++;
@@ -479,6 +557,8 @@ public sealed partial class Sim
         var c = Col[0];
         int story = (chapter > Reveal.Mutagen ? (int)Mutation.Stinger : 0) | (chapter > Reveal.RoyalLarva ? (int)Mutation.RoyalLarva : 0);
         c.Mutations = (roster?.Mutations ?? 0) | story;
+        c.WebRank = roster?.WebRank ?? (chapter > Reveal.WebThrowing ? 1 : 0);
+        if (chapter > Reveal.WebThrowing) { c.Mutations |= (int)Mutation.WebThrowing; c.WebRank = System.Math.Max(c.WebRank, 1); }
         c.Instability = roster != null ? System.Math.Max(roster.Instability, Mutations.Count(story)) : Mutations.Count(story);
         c.Level = roster?.Level ?? Levels.StoryLevel(chapter);
         c.Mutagen = roster?.Mutagen ?? 0;
@@ -495,6 +575,7 @@ public sealed partial class Expedition
 {
     public int Mutated, Stings, HeroesBorn, MastersSlain;
     public int MasterGroup = -1;          // the nest master whose death raises the colony's level (the web spider)
+    public int FragmentGroup = -1;        // the silk spitter's hollow: its body holds the Web Throwing fragment
     public float LarvaLow = 1;
     public Mutation Fixed;                // the mutation this chapter's story gives (the first two)
 

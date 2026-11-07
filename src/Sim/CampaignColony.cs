@@ -25,7 +25,7 @@ public sealed class ColonyRoster
     public readonly int[] Plain = new int[13];          // unnamed rank-1 ants by type
     public readonly List<Veteran> Veterans = new();     // veterans, heroes and named ants
     // the mutation track: mutations taken (Mutation bits), mutagen in the reserve, the colony's level and instability
-    public int Mutations, Mutagen, Level = 1, Instability;
+    public int Mutations, Mutagen, Level = 1, Instability, WebRank;
     public int Total { get { int n = Veterans.Count; foreach (int p in Plain) n += p; return n; } }
 
     public string Save()
@@ -37,7 +37,7 @@ public sealed class ColonyRoster
         for (int t = 0; t < Plain.Length; t++) sb.Append(Plain[t]).Append(',');
         sb.Append('|');
         foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(';');
-        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability);
+        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability).Append(',').Append(WebRank);
         return sb.ToString();
     }
 
@@ -60,6 +60,7 @@ public sealed class ColonyRoster
             // saves from before the mutation track have no fifth part: no mutations, level 1
             var mu = parts[4].Split(',');
             if (mu.Length >= 4) { r.Mutations = int.Parse(mu[0]); r.Mutagen = int.Parse(mu[1]); r.Level = int.Parse(mu[2]); r.Instability = int.Parse(mu[3]); }
+            if (mu.Length >= 5) r.WebRank = int.Parse(mu[4]);
         }
         return r;
     }
@@ -67,10 +68,12 @@ public sealed class ColonyRoster
     /// The colony takes a mutation between chapters (the result card's choice): the queen consumes one mutagen.
     public bool Take(Mutation m)
     {
-        if (Mutagen < 1 || (Mutations & (int)m) != 0) return false;
+        bool rankUp = m == Mutation.WebThrowing && (Mutations & (int)m) != 0 && WebRank < 3;
+        if (Mutagen < 1 || (Mutations & (int)m) != 0 && !rankUp) return false;
         Mutagen--;
         Mutations |= (int)m;
         Instability++;
+        if (m == Mutation.WebThrowing) WebRank = System.Math.Max(1, WebRank + (rankUp ? 1 : 0));
         return true;
     }
 }
@@ -234,7 +237,7 @@ public sealed partial class Sim
     {
         var m = Mission;
         var c0 = Col[0];
-        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability };
+        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability, WebRank = c0.WebRank };
         // a dead queen's body holds mutagen, and every queen or nest master the colony defeats raises its level
         if (m != null && Winner == Config.Player && !Col[1].Alive && m.EndsWithQueen && chapter >= Reveal.FirstQueenKill) { r.Mutagen++; r.Level++; }
         if (m != null) r.Level += m.MastersSlain;

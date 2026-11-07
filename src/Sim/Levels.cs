@@ -157,7 +157,7 @@ public static class Levels
         10 => new[]
         {
             "Something with wings has found you. From a paper nest in the woods the Hornet Mother sends her daughters at every colony she can smell, and yours is the closest.",
-            "Survive her first raid, then send Hemlock, the hero from the royal cocoon, at her nest. With the Hornet Mother gone, the red colony across the clearing stands alone.",
+            "In the air her daughters are out of reach: no ground ant can bite a wasp until it comes down to sting, and her paper nest hums with them. Before her raids come, find the answer: in the far corner lives a silk spitter, a spider whose body holds a fragment of mutagen: with it, the colony could learn to pull wasps out of the sky. Then send Hemlock at the paper nest. With the Hornet Mother gone, the red colony stands alone.",
         },
         8 => new[]
         {
@@ -544,9 +544,38 @@ public sealed partial class Sim
                     m.WaveFrom = nest; m.StopGroup = g; m.WaveRepeat = true;
                     m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Wasp, 2, 3), (AntType.Spider, 1, 2) } });
                     m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Wasp, 2, 4), (AntType.Spider, 2, 2) } });
-                    m.WaveAt = 120; m.WaveGap = 160;
+                    m.WaveAt = -1; m.WaveGap = 160; // the raids come once the colony has its answer (WaveStep)
                 }
-                Add(Expedition.Obj.Waves, "Beat the first hornet raid", "The Hornet Mother sends her daughters at your mound. Keep the army home and break the raid. Raiders left: {0}.", b: 1);
+                {
+                    // the silk spitter: a rare spitting spider in the free corner of the yard, its hollow strung with its own webs.
+                    // Its body holds a fragment of mutagen: the colony's answer to the wasps.
+                    var mid = home.Lerp(foe, 0.5f);
+                    var corner = OpenGround(ClampMap(mid - side * home.DistanceTo(foe) * 0.42f));
+                    ClearAround(corner, 16);
+                    ClearCorridor(home, corner, -1);
+                    // no wasp lair on the way: the colony meets the wasps' answer before it meets the wasps
+                    for (int i = 0; i < High; i++)
+                    {
+                        ref var b = ref Ants[i];
+                        if (!b.Alive || b.Team != Config.Wild || !Config.Predator(b.Type)) continue;
+                        float along = Mathf.Clamp((b.Home - home).Dot(corner - home) / (corner - home).LengthSquared(), 0, 1);
+                        if (b.Home.DistanceTo(home.Lerp(corner, along)) < 45f) { b.Alive = false; WildCount--; _free.Push(i); }
+                    }
+                    int sg = AddGroup("Silk spitter", corner);
+                    m.FragmentGroup = sg;
+                    GroupBug(sg, AntType.Spider, corner, 4);
+                    GroupBug(sg, AntType.Spider, corner + side * 4, 1);
+                    GroupBug(sg, AntType.Spider, corner - side * 4, 1);
+                    foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
+                    for (int k = 0; k < 4; k++) Webs.Add(new WebZone { Pos = corner + MathX.Dir(k * 1.57f + 0.4f) * 6.5f, R = 2.4f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
+                    m.Fixed = Mutation.WebThrowing;
+                }
+                Add(Expedition.Obj.Group, "Hunt the silk spitter", "The colony feels mutagen in the far corner: a spitting spider whose silk could bring wasps down. Its hollow is strung with webs that pin ants; send the army in force (the gold ring). Spiders left: {0}.", b: 1);
+                Add(Expedition.Obj.Extract, "Cut out its spinneret", "Select workers and right-click the glowing spinneret in the spitter's body. Carved: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry it home", "The fragment is heavy and the wasps smell it. Keep soldiers beside the carrier. Distance: {0}.");
+                Add(Expedition.Obj.Mutate, "Feed the queen the fragment", "Open the mutation card (beside the objectives): Web Throwing. Soldiers will fling silk that pins a wasp to the ground, where every ant can bite it.", a: (int)Mutation.WebThrowing);
+                Add(Expedition.Obj.Waves, "Break the hornet raid", "The Hornet Mother has smelled the change and sends her daughters at your mound. Keep soldiers close: their silk pins a wasp to the ground, and then every ant can bite it. Raiders left: {0}.", b: 1);
+                m.WaveStep = 4;
                 Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Take the army to the paper nest (gold ring) and kill her. While she lives the raids keep coming. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
@@ -774,7 +803,8 @@ public sealed partial class Sim
     {
         var m = Mission;
         // waves
-        bool stopped = m.StopGroup >= 0 && Living(m.Groups[m.StopGroup]) == 0;
+        bool stopped = m.StopGroup >= 0 && Living(m.Groups[m.StopGroup]) == 0
+                       || m.Fixed == Mutation.RoyalLarva && m.HeroesBorn > 0; // the larva's glow drew the hunters: once the hero is out, they stop coming
         if (m.WaveAt >= 0 && Time >= m.WaveAt && !stopped && (m.WaveNext < m.Waves.Count || m.WaveRepeat) && m.Waves.Count > 0)
         {
             var w = m.Waves[Mathf.Min(m.WaveNext, m.Waves.Count - 1)];
