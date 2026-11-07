@@ -60,7 +60,7 @@ public sealed partial class Sim
     /// Waypoints of the three lanes, from the black nest (team 0) to the red nest (team 1).
     public readonly Vector2[][] Lanes = new Vector2[3][];
     public readonly AntType[] HeroType = { AntType.Warlord, AntType.Warlord };
-    public readonly int[] HeroId = { -1, -1 }, HeroSerial = new int[2], HeroLevel = { 1, 1 };
+    public readonly int[] HeroId = { -1, -1 }, HeroSerial = new int[2], HeroLevel = { 1, 1 }, HeroSkills = new int[2];
     public readonly float[] HeroXp = new float[2], HeroRespawn = new float[2];
     public readonly int[,] Items = new int[2, 4];
     public readonly int[] HeroKills = new int[2];
@@ -242,6 +242,7 @@ public sealed partial class Sim
         if (id < 0) return;
         ref var a = ref Ants[id];
         a.Xp = HeroXp[team];
+        RestoreSkills(ref a, HeroSkills[team]); // the skills it learnt come back with it
         a.Manual = true;
         a.State = AntState.Idle;
         HeroId[team] = id;
@@ -450,6 +451,7 @@ public sealed partial class Sim
         {
             HeroLevel[t.Team] = t.Level;
             HeroXp[t.Team] = t.Xp;
+            HeroSkills[t.Team] = PackSkills(t);
             HeroRespawn[t.Team] = Lane.Respawn(t.Level);
             HeroId[t.Team] = -1;
             if (killer >= 0 && Ants[killer].Team < 2) HeroKills[Ants[killer].Team]++;
@@ -520,6 +522,6 @@ public sealed partial class Sim
     public void CmdAbility(int team)
     {
         int id = HeroId[team];
-        if (id >= 0 && Ants[id].Alive) Ants[id].CastReq = 2f;
+        if (id >= 0 && Ants[id].Alive) CmdCast(id, 0, -1, 0, Vector2.Zero);
     }
 }

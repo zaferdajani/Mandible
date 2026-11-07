@@ -29,6 +29,7 @@ public partial class Hud : CanvasLayer
     float _alertT;
     float _refresh;
     public ColonyCommandHud CommandHud;
+    public GeneralSkills SkillBar;
 
     public override void _Ready()
     {
@@ -51,6 +52,8 @@ public partial class Hud : CanvasLayer
             _alert.MouseFilter = Control.MouseFilterEnum.Ignore;
             UiTheme.Place(_alert, 0.5f, 0, 0.5f, 0, -460, 52, 460, 85);
             _root.AddChild(_alert);
+            SkillBar = new GeneralSkills { Game = Game };
+            _root.AddChild(SkillBar);
             BuildHelp();
             return;
         }
@@ -83,6 +86,8 @@ public partial class Hud : CanvasLayer
         if (Game.Lanes) _hint.Text = LaneHint;
         _root.AddChild(_hint);
 
+        SkillBar = new GeneralSkills { Game = Game };
+        _root.AddChild(SkillBar);
         BuildHelp();
         if (!Game.Lanes) BuildBuildPanel();
 

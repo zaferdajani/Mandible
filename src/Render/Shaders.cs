@@ -1166,6 +1166,111 @@ void fragment() {
 }
 ";
 
+    /// A general's royal insignia: an engraved metal seal (assets/insignia, one texture per rank of tiers) lying on the
+    /// soil under it. Lit as real metal, with a relief normal from the engraving. Per instance: x = richness within its
+    /// tier 0..1, y = selected, z = cast flare 0..1, w = opacity.
+    public const string Insignia = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap, repeat_disable;
+uniform float gems = 0.0; // the top tier's amber cabochons glow a little
+uniform float lift = 1.0; // the dark bronze of the first tier is brightened so it reads on brown soil
+uniform vec3 tint = vec3(1.0); // ...and pulled back toward a deep aged bronze
+uniform float relief = 6.0; // engraving depth (the bronze's thin spokes need more to show)
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+float lum(vec2 uv) { vec4 t = texture(tex, uv); return dot(t.rgb, vec3(0.3, 0.5, 0.2)) * t.a; }
+void fragment() {
+    vec2 uv = vec2(UV.x, 1.0 - UV.y); // the crown points the way the general faces
+    vec4 t = texture(tex, uv);
+    t.rgb = min(t.rgb * lift, vec3(1.0)) * tint;
+    float rich = v_c.x, sel = v_c.y, flare = v_c.z;
+    // richer within the tier: from a dull, dusty patina to a polished, warmer gold
+    vec3 col = mix(t.rgb * vec3(0.78, 0.72, 0.62), t.rgb * vec3(1.08, 1.0, 0.86), rich);
+    float e = 1.0 / 512.0;
+    float hx = lum(uv + vec2(e, 0.0)) - lum(uv - vec2(e, 0.0));
+    float hy = lum(uv + vec2(0.0, e)) - lum(uv - vec2(0.0, e));
+    NORMAL = normalize(NORMAL + (TANGENT * hx - BINORMAL * hy) * relief);
+    ALBEDO = col;
+    METALLIC = 0.85;
+    ROUGHNESS = mix(0.55, 0.3, rich);
+    SPECULAR = 0.6;
+    // no glow of its own: sun and shade act on it like metal. A faint warmth only while selected, a flare when casting.
+    float amber = gems * smoothstep(0.25, 0.6, t.r - t.b) * smoothstep(0.35, 0.8, t.r);
+    EMISSION = col * (0.03 + 0.06 * sel + 0.6 * flare) + vec3(1.0, 0.5, 0.1) * amber * 0.25;
+    // solid metal and enamel; outside it, a soft contact shadow where the seal presses into the soil
+    float r = length(UV - 0.5) * 2.0;
+    float shadow = smoothstep(0.88, 0.96, r) * smoothstep(1.0, 0.97, r) * (1.0 - t.a) * 0.5; // a thin band at the outer rim only
+    float body = t.a * v_c.w;
+    ALBEDO = mix(vec3(0.0), col, body / max(body + shadow * (1.0 - body), 0.001));
+    METALLIC = 0.85 * body;
+    SPECULAR = 0.6 * body * (1.0 - 0.4 * gems); // the red-gold rim must not blow out to white
+    ROUGHNESS = mix(1.0, mix(0.55, 0.3, rich), body);
+    ALPHA = clamp(body + shadow * (1.0 - body), 0.0, 1.0);
+}
+";
+
+    /// A pheromone haze under an ant whose mind a Queen's Pheromone has taken: a faint, slowly breathing honey-coloured
+    /// film, brightest at its rim. Per instance: rgb colour, a strength.
+    public const string Haze = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+void fragment() {
+    vec2 p = UV - 0.5;
+    float r = length(p) * 2.0;
+    float a = atan(p.y, p.x);
+    float wisps = 0.6 + 0.4 * sin(a * 5.0 + TIME * 1.3 + r * 9.0);
+    float film = smoothstep(1.0, 0.55, r) * smoothstep(0.1, 0.6, r) * wisps;
+    ALBEDO = v_c.rgb;
+    ALPHA = clamp(film * v_c.a * (0.75 + 0.25 * sin(TIME * 3.0)), 0.0, 1.0);
+}
+";
+
+    /// Over an ant on auto-eat: a small drop of hemolymph, glossy and dark-rimmed, so the player sees who will eat
+    /// its kills. Billboard; per instance x = opacity.
+    public const string Drop = @"
+shader_type spatial;
+render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled, blend_mix;
+varying float v_a;
+void vertex() {
+    v_a = INSTANCE_CUSTOM.x;
+    float s = length(MODEL_MATRIX[0].xyz);
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+}
+void fragment() {
+    vec2 p = (UV - vec2(0.5, 0.58)) * vec2(2.0, 2.0);
+    // a teardrop: a round belly drawn up to a point
+    float belly = length(p) - 0.42;
+    float tip = max(abs(p.x) - (0.42 * smoothstep(-0.95, 0.0, p.y)), -p.y - 0.95);
+    float d = p.y < 0.0 ? min(belly, tip) : belly;
+    float inner = 1.0 - smoothstep(0.0, 0.04, d);
+    float outer = 1.0 - smoothstep(0.0, 0.04, d - 0.08);
+    vec3 blood = mix(vec3(0.42, 0.06, 0.03), vec3(0.85, 0.28, 0.1), smoothstep(0.4, -0.3, p.y));
+    float shine = smoothstep(0.12, 0.0, length(p - vec2(-0.14, -0.12)));
+    ALBEDO = mix(vec3(0.06, 0.02, 0.01), blood + shine * 0.6, inner);
+    ALPHA = outer * v_a;
+}
+";
+
+    /// A thin circle on the ground (the collection radius, the ring on remains queued for collection).
+    /// Per instance: rgb colour, a opacity; uniform width = the line's width as a share of the radius.
+    public const string Circle = @"
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float width = 0.02;
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+void fragment() {
+    float r = length(UV - 0.5) * 2.0;
+    float line = smoothstep(1.0 - width * 2.0, 1.0 - width, r) * (1.0 - smoothstep(1.0 - width * 0.4, 1.0, r));
+    float dash = 0.6 + 0.4 * step(0.5, fract(atan(UV.y - 0.5, UV.x - 0.5) * 12.0 + TIME * 0.15));
+    ALBEDO = v_c.rgb;
+    ALPHA = line * dash * v_c.a;
+}
+";
+
     public const string Bar = @"
 shader_type spatial;
 render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled;

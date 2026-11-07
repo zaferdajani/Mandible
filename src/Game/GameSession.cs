@@ -46,7 +46,7 @@ public partial class GameSession : Node3D
     byte[] _pherPx;
     float _pherAcc, _trailView = 0.18f, _trailTarget = 0.18f;
     bool _paused, _ended;
-    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd;
+    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd, _collectAlertCd;
     float _demoT;
     DirectionalLight3D _sun;
     /// The one light in the world: a mid-morning sun. Everything, above and below ground, is lit and shadowed by it.
@@ -640,6 +640,73 @@ public partial class GameSession : Node3D
         Audio.Ui("research", -4);
     }
 
+    /// Q / W / E or a skill button: the selected general (Lane War: your hero) uses that skill. Self skills fire at once;
+    /// aimed ones wait for a click on an enemy or a spot (pressing the key again fires on the best target in reach).
+    public void TrySkill(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        var sk = Skills.At(a, slot);
+        if (Sim.Rank(a, slot) == 0)
+        {
+            Hud.Alert(a.Level < Skills.ReqLevel(a, slot, 1) ? $"{Skills.Name(sk)} opens at level {Skills.ReqLevel(a, slot, 1)}" : $"{Skills.Name(sk)} is not learnt yet: press O to spend a skill point", UiTheme.Dim);
+            Audio.Ui("ui_error");
+            return;
+        }
+        float cd = Sim.SkillCd(a, slot);
+        if (cd > 0) { Hud.Alert($"{Skills.Name(sk)} ready in {Mathf.Ceil(cd):0}s", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (Skills.Aim(sk) == SkillAim.Passive) { Hud.Alert($"{Skills.Name(sk)} is always on: it works in every bite", UiTheme.Dim); return; }
+        if (Skills.Aim(sk) == SkillAim.Self || Input.Casting(id, slot)) { CastSkill(id, slot, -1, Vector2.Zero); return; }
+        Input.BeginCast(id, slot);
+    }
+
+    /// Sends the cast order: at an ant, at a spot, or (neither) at the best target the general can find.
+    public void CastSkill(int id, int slot, int target, Vector2 at)
+    {
+        var c = new Cmd { Kind = CmdKind.Cast, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { Sim.Ants[id].Serial }, Arg = (byte)slot, P = at };
+        if (target >= 0) { c.Target = target; c.TargetSerial = Sim.Ants[target].Serial; }
+        Issue(c);
+        Audio.Ui("ui_click", -4);
+    }
+
+    /// The fighters and generals among the selection (Lane War: your hero) that can eat remains.
+    public List<int> Eaters()
+    {
+        var ids = new List<int>();
+        if (Lanes) { int h = Sim.HeroId[Local.Me]; if (h >= 0 && Sim.Ants[h].Alive) ids.Add(h); return ids; }
+        foreach (int id in Input.Selection)
+            if (id >= 0 && id < Sim.High && Sim.Ants[id].Alive && Sim.Ants[id].Team == Local.Me && Sim.Eats(Sim.Ants[id])) ids.Add(id);
+        return ids;
+    }
+
+    /// J or the Auto-eat button: the selected fighters (and their squads) eat what they kill, or leave it for the workers.
+    /// Mixed selections all switch on first.
+    public void ToggleAutoEat()
+    {
+        var ids = Eaters();
+        if (ids.Count == 0) { Hud.Alert("Select fighters or a general to set auto-eat", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        bool allOn = ids.TrueForAll(i => Sim.Ants[i].AutoEat);
+        var c = Cmd.Units(CmdKind.AutoEat, Local.Me, ids, Sim);
+        c.Arg = (byte)(allOn ? 0 : 1);
+        Issue(c);
+        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home to the queen"
+                        : "Auto-eat ON: they eat what they kill and evolve", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
+        Audio.Ui("ui_click", -4);
+    }
+
+    /// Right-click (long press) on a skill button: autocast on or off for the selected general's skill.
+    public void ToggleAutocast(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0 || Sim.Ants[id].Manual) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        bool on = (a.AutoMask & (1 << slot)) != 0;
+        Issue(new Cmd { Kind = CmdKind.SkillAuto, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { a.Serial }, Arg = (byte)slot });
+        Hud.Alert($"{Skills.Name(Skills.At(a, slot))}: autocast {(on ? "off: it fires only when you order it" : "on")}", UiTheme.Dim);
+        Audio.Ui("ui_click", -4);
+    }
+
     /// Lane War: ask the hero to use its ability (it fires on the best target in reach).
     public void TryAbility()
     {
@@ -763,6 +830,7 @@ public partial class GameSession : Node3D
         Interior.Update(Fog, NestView, _alpha);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
+        Ants.ShowCollect = Hud?.CommandHud?.RemainsPage == true && Sim.Col[Local.Me].Remains == RemainsOrder.Haul;
         Ants.Update(Sim, Camera.Cam, _alpha);
         if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
         Effects.Update(_paused ? 0 : dt);
@@ -1042,7 +1110,107 @@ public partial class GameSession : Node3D
                         Audio.Ui("ui_ready", -4);
                     }
                     break;
+                case EvKind.Collect:
+                    if (!Demo && e.Team == Local.Me && _collectAlertCd <= 0)
+                    {
+                        string what = Config.IsBug(e.Type) ? $"a {Config.Of(e.Type).Name.ToLowerInvariant()} carcass" : $"the remains of an enemy {Config.Of(e.Type).Name.ToLowerInvariant()}";
+                        Hud.Alert($"Workers are bringing home {what}", new Color(0.95f, 0.72f, 0.4f));
+                        _collectAlertCd = 8;
+                    }
+                    break;
+                case EvKind.RallyScent:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos) || e.Team == Local.Me)
+                    {
+                        var rp = World.HF.Point(e.Pos, 0.3f);
+                        Effects.Marker(rp, new Color(1f, 0.6f, 0.25f), e.Radius * 0.8f);
+                        Effects.Burst(rp + Vector3.Up * 0.3f, 16, 2, 1.8f, 0.2f, 1.2f);
+                        if (Audible(e.Pos)) Audio.At("alert", rp, -6, 0.2f, 0.03f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("RALLY SCENT! Nestmates rush to the mark.", new Color(1f, 0.8f, 0.45f));
+                    }
+                    break;
+                case EvKind.Bridge:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("LIVING BRIDGE! Workers lock into a span over the rocks.", new Color(1f, 0.8f, 0.45f));
+                    if (seen && Audible(e.Pos)) Audio.At("swarm", wp, -6, 0.2f, 0.05f, 1.0f);
+                    break;
+                case EvKind.Scout:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("SCOUT SWARM! The fog lifts and the enemy there is marked.", new Color(1f, 0.8f, 0.45f));
+                    break;
+                case EvKind.Thrall:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert($"THRALL RAID! {e.Tier} stolen brood will serve us as {Config.Of(e.Type).Name.ToLowerInvariant()}s.", new Color(1f, 0.8f, 0.45f));
+                    else if (!Demo) Hud.Alert("Their general has raided our brood!", new Color(1f, 0.5f, 0.35f));
+                    if (seen) Effects.Burst(wp, 24, 0, 3f, 0.4f, 1.0f);
+                    break;
+                case EvKind.SkillLearned:
+                    if (seen) Effects.Burst(wp + Vector3.Up * 0.6f, 20, 2, 3.5f, 0.3f, 1.2f);
+                    break;
+                case EvKind.Pheromone:
+                {
+                    var to = World.HF.Point(e.To, 0.4f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(1f, 0.74f, 0.32f), e.Radius * 0.7f);
+                        Effects.Burst(to + Vector3.Up * 0.4f, 12, 2, 1.6f, 0.18f, 1.0f); // a faint drift of scent, not a cloud
+                        if (Audible(e.To)) Audio.At("research", to, -4, 0.1f, 0.03f, 0.7f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert($"QUEEN'S PHEROMONE! {e.Tier} {(e.Tier == 1 ? "enemy fights" : "enemies fight")} for us.", new Color(1f, 0.8f, 0.4f));
+                        else if (!Demo) Hud.Alert($"Their general's pheromone has turned {e.Tier} of ours!", new Color(1f, 0.5f, 0.35f));
+                    }
+                    break;
+                }
+                case EvKind.Frenzy:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.32f, 0.1f), 2.4f);
+                        Effects.Burst(wp + Vector3.Up * 0.8f, 26, 7, 4f, 0.3f, 1.0f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -2, 0.3f, 0.02f, 0.85f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("MANDIBLE FRENZY! The Warlord drinks what it bites.", new Color(1f, 0.6f, 0.3f));
+                    }
+                    break;
+                case EvKind.Summon:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(0.95f, 0.85f, 0.6f), 3.2f);
+                        Effects.Burst(wp, 40, 0, 3.5f, 0.6f, 1.1f); // soil thrown up as the callows pour out
+                        if (Audible(e.Pos)) Audio.At("swarm", wp, -2, 0.2f, 0.05f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("BROOD CALL! Callows pour out to fight; they harden as they fight.", new Color(1f, 0.85f, 0.5f));
+                    }
+                    break;
+                case EvKind.Fade:
+                    if (seen) Effects.Burst(wp, 10, 0, 1.6f, 0.4f, 0.8f);
+                    break;
+                case EvKind.Cloud:
+                {
+                    var to = World.HF.Point(e.To, 0.5f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(0.85f, 0.9f, 0.3f), e.Radius * 0.8f);
+                        Effects.Burst(to + Vector3.Up * 0.6f, 60, 4, 3f, 0.6f, 2.2f);
+                        if (Audible(e.To)) Audio.At("web_land", to, 2, 0.15f, 0.05f, 0.55f);
+                    }
+                    break;
+                }
+                case EvKind.TrailBlaze:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.8f, 0.4f), e.Radius * 0.6f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -4, 0.2f, 0.02f, 1.2f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("TRAIL BLAZE! The army marches faster and holds its line.", new Color(1f, 0.85f, 0.45f));
+                    }
+                    break;
+                case EvKind.TalonDive:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.9f, 0.65f), 2f);
+                        Effects.Burst(wp, 30, 0, 6f, 0.9f, 1.0f);
+                        Effects.Burst(wp + Vector3.Up * 0.5f, 18, 7, 4f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 6, 0.2f, 0.05f, 0.9f);
+                    }
+                    break;
                 case EvKind.LevelUp:
+                    if (!Demo && e.Team == Local.Me && Config.IsHero(e.Type) && e.Who > 0 && Sim.Ants[e.Who - 1].Alive && Sim.AnyLearnable(Sim.Ants[e.Who - 1]))
+                    {
+                        Hud.Banner($"{Config.Of(e.Type).Name.ToUpperInvariant()}  ·  LEVEL {Sim.Ants[e.Who - 1].Level}", "A new skill point: choose a skill (O)", 3f);
+                        Hud.SkillBar?.OnLevelUp(e.Who - 1);
+                    }
                     if (seen)
                     {
                         Effects.Burst(wp + Vector3.Up * 0.8f, 16, 2, 4.5f, 0.28f, 1.1f);
@@ -1094,7 +1262,7 @@ public partial class GameSession : Node3D
                     break;
             }
         }
-        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60;
+        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60; _collectAlertCd -= 1f / 60;
     }
 
     void UpdateAudio(float dt)

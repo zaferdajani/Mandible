@@ -10,6 +10,7 @@ public sealed class Veteran
 {
     public AntType Type;
     public int Level = 1, Kills, Joined, Stage;  // Stage: evolution by eating (from Reveal.Evolution)
+    public int Skills;                           // a general's learnt skill ranks, one per byte (Q, W, E); 0: none recorded
     public string Name = "";
     public string Title => Name != "" ? Name : $"a {Config.Of(Type).Name.ToLowerInvariant()}";
     public string Line => $"{(Name != "" ? Name : Config.Of(Type).Name)} · {Config.Of(Type).Name} Lv {Level} · {Kills} kills";
@@ -34,7 +35,7 @@ public sealed class ColonyRoster
         sb.Append('|');
         for (int t = 0; t < Plain.Length; t++) sb.Append(Plain[t]).Append(',');
         sb.Append('|');
-        foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(';');
+        foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(':').Append(v.Skills).Append(';');
         return sb.ToString();
     }
 
@@ -50,7 +51,7 @@ public sealed class ColonyRoster
         foreach (var v in parts[3].Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var f = v.Split(':');
-            r.Veterans.Add(new Veteran { Type = (AntType)int.Parse(f[0]), Level = int.Parse(f[1]), Kills = int.Parse(f[2]), Joined = int.Parse(f[3]), Name = f.Length > 4 ? f[4] : "", Stage = f.Length > 5 ? int.Parse(f[5]) : 0 });
+            r.Veterans.Add(new Veteran { Type = (AntType)int.Parse(f[0]), Level = int.Parse(f[1]), Kills = int.Parse(f[2]), Joined = int.Parse(f[3]), Name = f.Length > 4 ? f[4] : "", Stage = f.Length > 5 ? int.Parse(f[5]) : 0, Skills = f.Length > 6 ? int.Parse(f[6]) : 0 });
         }
         return r;
     }
@@ -130,6 +131,7 @@ public sealed partial class Sim
             if (Config.IsHero(v.Type) && c.Count[t] > 0) continue;
             int id = Spawn(0, v.Type, Muster(v.Type), toCentre.AngleD(), v.Level);
             if (id < 0) continue;
+            if (v.Skills != 0 && Config.IsHero(v.Type)) RestoreSkills(ref Ants[id], v.Skills); // the skills it learnt come with it
             if (v.Stage > 0) { Ants[id].Stage = Math.Min(v.Stage, Config.MaxStage); ApplyLevel(ref Ants[id]); Ants[id].Hp = Ants[id].MaxHp; }
             Ants[id].State = v.Type == AntType.Worker ? AntState.Forage : AntState.Idle;
             m.Tracked[id] = (Ants[id].Serial, v);
@@ -221,10 +223,10 @@ public sealed partial class Sim
         for (int i = 0; i < High; i++)
         {
             ref var a = ref Ants[i];
-            if (!a.Alive || a.Team != 0 || a.Type == AntType.Queen || a.Guardian) continue;
+            if (!a.Alive || a.Team != 0 || a.Type == AntType.Queen || a.Guardian || a.Summoned || a.CharmP1 > 0) continue; // callows and borrowed minds stay behind
             if (m != null && m.Tracked.TryGetValue(i, out var t) && t.serial == a.Serial)
             {
-                t.vet.Level = a.Level; t.vet.Type = a.Type; t.vet.Stage = a.Stage;
+                t.vet.Level = a.Level; t.vet.Type = a.Type; t.vet.Stage = a.Stage; t.vet.Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0;
                 if (t.vet.Name == "Burr") burr = t.vet;
                 r.Veterans.Add(t.vet);
                 continue;
@@ -233,7 +235,7 @@ public sealed partial class Sim
             if (a.Level >= 2 || a.Stage >= 1 || hero)
             {
                 string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "" } : a.Level >= 3 || a.Stage >= 2 ? VeteranNames[named++ % VeteranNames.Length] : "";
-                var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Stage = a.Stage };
+                var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Stage = a.Stage, Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0 };
                 // the colony's Warlord is old Burr, grown into the role, if he lived to see it
                 if (a.Type == AntType.Warlord) { v.Name = "Burr"; }
                 r.Veterans.Add(v);
