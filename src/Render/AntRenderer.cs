@@ -520,6 +520,40 @@ public sealed class AntRenderer
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
             _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
+        // Living Bridge: workers of the colony lying head to tail across the span, legs locked
+        foreach (var br in sim.Bridges)
+        {
+            if (br.Team > 1 || (!VisibleToPlayer(br.A) && !VisibleToPlayer(br.B) && br.Team != Local.Me)) continue;
+            var ab = br.B - br.A;
+            float len = ab.Length(), yaw = ab.Angle();
+            int n = Mathf.Max(2, (int)(len / 0.95f));
+            float fade = Mathf.Clamp(br.Life / 1.0f, 0, 1) * Mathf.Clamp((br.Max - br.Life) * 3f, 0, 1);
+            for (int k = 0; k < n && k < n * fade + 1; k++)
+            {
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    var p = br.A + ab * ((k + 0.5f) / n) + MathX.Dir(yaw + DMath.Pi * 0.5f) * (side * 0.35f);
+                    float h = hf.Sample(p.X, p.Y);
+                    foreach (var o in sim.W.ObstaclesNear(p)) if (o.R > 0 && p.DistanceTo(o.P) < o.R) h = Mathf.Max(h, hf.Sample(o.P.X, o.P.Y) + o.R * 0.6f * (1 - p.DistanceTo(o.P) / o.R));
+                    var bb = Orient(Vector3.Up, yaw + (k % 2 == 0 ? 0.08f : -0.08f), 1.0f);
+                    AddWorker(br.Team, bb, new Vector3(p.X, h + 0.12f, p.Y), Pack(k * 7 + side, 0, 0, 0, 0, 0.2f, false, 0), 0);
+                }
+            }
+        }
+        // Scout Swarm: winged scouts circling the marked ground
+        foreach (var z in sim.Scouts)
+        {
+            if (z.Team > 1 || _live[z.Team, (int)AntType.Flyer] == null) continue;
+            for (int k = 0; k < z.Flyers; k++)
+            {
+                float ang = sim.Time * 0.7f + k * DMath.Tau / z.Flyers;
+                var p = z.Pos + MathX.Dir(ang) * (z.R * 0.6f);
+                var fo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 5f + 0.4f * Mathf.Sin(sim.Time * 2f + k), p.Y);
+                var fb = Orient(Vector3.Up, ang + DMath.Pi * 0.5f, Config.Of(AntType.Flyer).Size);
+                _live[z.Team, (int)AntType.Flyer].Add(fb, fo, Pack(k, 0, sim.Time * 3f + k, 0, 0, 1f, false, 0));
+                if (_wings.TryGetValue((z.Team, AntType.Flyer), out var swb)) swb.Add(fb, fo, new Color(36f, 1f, 0, 0));
+            }
+        }
         // remains our workers have been sent to bring home: a slowly turning amber ring around each
         foreach (var f in sim.W.Food)
         {

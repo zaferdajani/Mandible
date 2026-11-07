@@ -103,7 +103,7 @@ public static class Config
     /// One line each: how it attacks, how it defends, its special. Shown in the Field Guide, hero picker and tooltips.
     public static string AttackDesc(AntType t) => t switch
     {
-        AntType.Warlord => $"Cleaving bite: every bite also deals {WarlordCleave * 100:0}% to all enemies around the victim.",
+        AntType.Warlord => "Heavy plated jaws; Cleaving Mandibles (in its skills) carries every bite into the enemies beside the victim.",
         AntType.Matron => $"Acid spray from range {Of(t).Reach:0}: the jet splashes {MatronSplash * 100:0}% onto enemies beside the target.",
         AntType.Marshal => "Swooping bite from the air: flies over rocks and strikes wasps and ground prey alike.",
         AntType.Beetle => "Crushing jaws, and a Mandible Sweep that hits and hurls back every ant around it when two or more crowd in.",
@@ -185,7 +185,7 @@ public static class Config
         new() { Name = "Hunting Wasp", Hp = 240, Armor = WaspArmor, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
         new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
-        new() { Name = "Warlord", Hp = 760, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Warlord", Hp = 820, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Sky Marshal", Hp = 620, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
     };

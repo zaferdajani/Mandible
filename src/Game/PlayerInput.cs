@@ -23,7 +23,7 @@ public partial class PlayerInput : Node
         _castId = id;
         _castSlot = slot;
         Input.SetDefaultCursorShape(Input.CursorShape.Cross);
-        var sk = Skills.At(Sim.Ants[id].Type, slot);
+        var sk = Skills.At(Sim.Ants[id], slot);
         string what = Skills.Aim(sk) == SkillAim.Unit ? "an enemy" : "a spot";
         Game.Hud.Alert(Settings.Mobile ? $"{Skills.Name(sk)}: tap {what} (tap the skill again for the nearest target)"
             : $"{Skills.Name(sk)}: click {what}  ·  {Skills.Keys[slot]} again: nearest target  ·  Esc cancels", UiTheme.Gold);
@@ -45,9 +45,10 @@ public partial class PlayerInput : Node
     /// Q W E and O belong to the general while one is selected (as on a Warcraft command card); otherwise to research.
     bool GeneralKey(Godot.Key key)
     {
-        int slot = key switch { Godot.Key.Q => 0, Godot.Key.W => 1, Godot.Key.E => 2, _ => -1 };
+        int slot = key switch { Godot.Key.Q => 0, Godot.Key.W => 1, Godot.Key.E => 2, Godot.Key.R => 3, _ => -1 };
         if (key == Godot.Key.O) { Game.Hud.SkillBar?.ToggleTree(); return true; }
-        if (slot < 0 || (Game.Hud.SkillBar?.General() ?? -1) < 0) return false;
+        int g = Game.Hud.SkillBar?.General() ?? -1;
+        if (slot < 0 || g < 0 || slot >= Skills.SlotCount(Sim.Ants[g])) return false; // a general with three skills leaves R to the Chitin Armory
         Game.TrySkill(slot);
         return true;
     }
@@ -289,11 +290,11 @@ public partial class PlayerInput : Node
         if (item >= 0) { Game.TryBuy(item); return true; }
         switch (HotKey(k))
         {
-            case Godot.Key.Q: case Godot.Key.W: case Godot.Key.E: case Godot.Key.O: GeneralKey(HotKey(k)); return true;
+            case Godot.Key.Q: case Godot.Key.W: case Godot.Key.E: case Godot.Key.R: case Godot.Key.O: GeneralKey(HotKey(k)); return true;
             case Godot.Key.J: Game.ToggleAutoEat(); return true;
             case Godot.Key.Space: case Godot.Key.F2: FocusHero(); return true;
             case Godot.Key.Z: case Godot.Key.X: case Godot.Key.C: case Godot.Key.V: case Godot.Key.F: case Godot.Key.B: case Godot.Key.D:
-            case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.R: case Godot.Key.T:
+            case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.T:
             case Godot.Key.F3: case Godot.Key.G:
                 return true;
         }
@@ -312,7 +313,7 @@ public partial class PlayerInput : Node
     void OnKey(InputEventKey k)
     {
         if (Game.Lanes && LaneKey(k)) return;
-        if (HotKey(k) is Godot.Key.Q or Godot.Key.W or Godot.Key.E or Godot.Key.O && GeneralKey(HotKey(k))) return;
+        if (HotKey(k) is Godot.Key.Q or Godot.Key.W or Godot.Key.E or Godot.Key.R or Godot.Key.O && GeneralKey(HotKey(k))) return;
         switch (HotKey(k))
         {
             case Godot.Key.Escape:

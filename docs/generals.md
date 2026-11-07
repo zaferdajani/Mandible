@@ -1,36 +1,75 @@
-# Generals: levels 1-10, three skills each, the royal insignia
+# Generals: levels 1-10, a shared skill pool, the royal insignia
 
 The heroes are called **generals** in player-facing text. Each general levels from 1 to 10 by **eating remains**
-(organic matter, never kills alone), and every level is a **skill point**. Each general has three skills; the
-ranks unlock Warcraft III style.
+(organic matter, never kills alone), and every level is a **skill point**. Which skills a general has is data
+(`data/loadouts.json`, see below); ranks unlock Warcraft III style.
 
-| Slot | Key | Ranks | Opens at levels | Role |
-|---|---|---|---|---|
-| Q | Q | 3 | 1, 3, 5 | the general's old signature special (rank 1 is learnt at hatching) |
-| W | W | 4 | 1, 3, 5, 7 | the basic skill the owner specified (Queen's Pheromone, Brood Call) |
-| E | E | 3 | 6, 8, 10 | the ultimate |
-
-3 + 4 + 3 = 10 ranks = the 10 points earned from level 1 to 10, so a level-10 general knows everything.
-The order in which points are spent is the player's choice.
-
-## The skills
-
-| General | Q | W | E (ultimate) |
+| Slot | Key | Ranks open at | Role |
 |---|---|---|---|
-| Warlord | **War Cry**: allies bite +30/40/50% and run faster; the roar staggers and hits | **Queen's Pheromone**: turns 1/2/3/5 enemies for 8/10/12/14 s | **Mandible Frenzy**: bite +35/50/70%, heals 20/30/40% of each bite, immune to silk and stun |
-| Acid Matron | **Acid Burst**: melts a cluster and leaves a venom pool | **Brood Call**: summons callows (r1 3 soldiers, r2 2 majors, r3 4 flying ants, r4 all four types) | **Caustic Cloud**: a 5/6/7-wide mist, 14/22/30 acid a second, 30/40/50% slow |
-| Sky Marshal | **Dive Bomb**: crash, stun and rally | **Trail Blaze**: allies within 12-15 run 25-55% faster and take 10-25% less damage | **Talon Dive**: 150/240/340 to one enemy, pinned 2-3 s; a kill refunds half the cooldown |
+| Q | Q | the skill's own levels (usually 1, 3, 5) | rank 1 is learnt at hatching |
+| W, E | W, E | the skill's own levels (1, 3, 5; four-rank skills 1, 3, 5, 7) | basic skills |
+| R | R | 6, 8, 10 | the ultimate, whatever skill sits in the last of four slots |
 
-**Queen's Pheromone** is grounded in real slave-maker ants (propaganda pheromones). Rank caps by tier and level:
-r1 soldiers, gunners and flying ants up to level 2; r2 adds majors, beetles and spiders up to level 3; r3 adds
-wasps and stag beetles up to level 5; r4 has no level cap and takes enemy generals for half the time. Workers,
-queens, the Old Stag and mound guardians are never taken. A turned ant fights for the caster and can be ordered by
-it; it keeps its own colony's body under a faint amber haze, and it dies as one of its own colony's (counts,
-carcass, roster).
+Four skills of three ranks are 12 ranks for 10 points: a level-10 general masters three and has the fourth at rank
+1 (the player chooses which; the computer follows the table's learn priority, ultimate first).
 
-**Brood Call** summons are **callows**: pale and soft when they come out, hardening one level every 6 s (up to
-level 3/3/4/5) and darkening as they do, the way a real callow's cuticle tans. They last 30-45 s, take no brood
-room, learn nothing and leave no carcass.
+## The skill pool and loadouts (the owner assigns skills as data)
+
+Skills are a **shared pool**, not hard-wired per general:
+
+- **`Skills.Pool`** (src/Sim/Skills.cs) is one table with an entry per skill: id, name, lore, the level each rank opens
+  at, aim (self, at an ant, at a spot, passive), range, cooldown per rank (and how much the caster's level shortens
+  it), **AI hints** (when to fire: crowd, prize, hurt, rally, target, with counts and radii; which to learn first),
+  and every number per rank (`V`). The behaviour code reads only the table.
+- **`data/loadouts.json`** says who has which skills, in slot order Q W E R (up to 4). Keys are unit types
+  (`Warlord`, `Matron`, `Marshal`, `Beetle`, `StagBeetle`, `Spider`, `Wasp`, ...); `Type@team` gives one colony its
+  own (`Warlord@1` = the red colony's). Changing who has what is a data edit, no code. The file ships with exports
+  (`include_filter = data/*.json`) and its hash is in the sim checksum, so peers with different files desync loudly.
+- Generals learn a skill point per level and the computer spends it by `LearnPriority`. Wild bugs and bosses know
+  every rank their level opens and fire through the same code path (`UnitSkills`, the same AI hints). Any skill can
+  go on any unit: a general can be given Shell Wall or Venom Sting, a bug boss Queen's Pheromone.
+- Pool today (20): see the list below.
+- To add a skill: an id, a table entry, its behaviour in `Sim.CastSkill` (or the bite, for a passive), a loadout.
+- `--generaltest` gives every skill in turn to a level-10 general and checks it is learnt to its top rank by the AI's
+  learn path and then fired by its hints alone at every rank.
+
+## The skills (default loadouts, until the owner assigns)
+
+| General | Q | W | E | R (ultimate) |
+|---|---|---|---|---|
+| Warlord | War Cry | Cleaving Mandibles (passive) | Shell Wall | Antler Charge |
+| Acid Matron | Acid Burst | Venom Sting (passive) | Formic Mist | Queen's Pheromone |
+| Sky Marshal | Dive Bomb | Scout Swarm | Rally Scent | Thrall Raid |
+
+Spawn Brood and Living Bridge wait for the future Brood Mother general; Mandible Frenzy, Trail Blaze and Talon Dive
+stay in the pool. Every skill's numbers per rank are in `Skills.Pool`; the tooltips and the skill tree read them.
+
+- **War Cry**: allies bite +30/40/50% and run faster; the roar staggers and hits.
+- **Queen's Pheromone** (real slave-maker ants' propaganda pheromones): turns 1/2/3/5 enemies for 8-14 s. r1
+  soldiers, gunners, flying ants up to level 2; r2 + majors, beetles, spiders up to level 3; r3 + wasps and stag
+  beetles up to level 5; r4 any level and enemy generals for half the time (as an ultimate in slot R it stops at r3).
+  Workers, queens, bosses and mound guardians never. A turned ant fights for the caster under a faint amber haze,
+  keeps its own body and dies as its own colony's.
+- **Mandible Frenzy**: bite +35/50/70%, heals 20/30/40% of each bite, immune to silk and stun.
+- **Acid Burst**: melts a cluster and leaves a venom pool.
+- **Spawn Brood** (Brood Call): callows, r1 3 soldiers, r2 2 majors, r3 4 flying ants, r4 all four types; pale at
+  first, they harden a level every 6 s, last 30-45 s, take no brood room and leave no carcass.
+- **Formic Mist** (Caustic Cloud): a 5/6/7-wide mist, 14/22/30 acid a second, 30/40/50% slow.
+- **Dive Bomb**: crash, stun and rally.
+- **Trail Blaze**: allies within 12-15 run 25-55% faster and take 10-25% less damage.
+- **Talon Dive**: 150/240/340 to one enemy, pinned 2-3 s; a kill refunds half the cooldown.
+- **Shell Wall**, **Mandible Sweep**, **Antler Charge**, **Web Snare**, **Lunge**, **Venom Sting** (passive): the
+  wild bugs' specials. Bugs use rank 1 and grow with their level (their old numbers); a general ranks them up.
+- **Cleaving Mandibles** (passive): each bite also hits 1/2/3 enemies beside the victim for 45/55/65% of it.
+- **Rally Scent**: alarm pheromone on a spot; nestmates within 8/10/12 run 20-40% faster and bite 15-35% harder for
+  5-8 s, idle ones come running; rank 3 also heals 10%.
+- **Living Bridge**: workers lock into a span of bodies up to 14/18/22 long for 10/14/18 s; the colony's ants on it
+  walk over rocks (the map has no impassable gaps yet, so it is a shortcut over obstacles); rank 3 lets them fight
+  on it. The computer builds one when its fight or march lies across a rock.
+- **Scout Swarm**: 3/4/5 winged scouts circle a spot 10/13/16 wide for 12-20 s: the fog lifts there and enemies in
+  it take 10/15/20% more damage; rank 3 picks off lone workers.
+- **Thrall Raid** (ultimate): near an enemy nest, carries off 2/3/4 brood that hatch as your workers / soldiers /
+  majors; the enemy loses brood in the making and some organic matter.
 
 ## Cooldown only (no mana)
 
@@ -40,9 +79,11 @@ levels draw on. Cooldowns are shown on the buttons, in seconds, with a dark swee
 
 ## Controls
 
-- **Q W E** cast the selected general's skills (Lane War: your hero's). While a general is selected these keys
-  belong to it, as on a Warcraft command card; with no general selected they keep their research meaning.
-- Aimed skills (Pheromone, Acid Burst, Talon Dive at an ant; Caustic Cloud, Dive Bomb at a spot) wait for a click;
+- **Q W E R** cast the selected general's skills (Lane War: your hero's). While a general is selected these keys
+  belong to it, as on a Warcraft command card; with no general selected (or a three-skill general and R) they keep
+  their research meaning. Passive skills show PASSIVE and need no key.
+- Aimed skills (at an ant: Pheromone, Acid Burst, Talon Dive, Antler Charge...; at a spot: Formic Mist, Dive Bomb,
+  Rally Scent, Living Bridge, Scout Swarm) wait for a click;
   pressing the key again casts at the best target in reach. Esc or right-click cancels.
 - **O** (or the Skills button) opens the skill tree. A level-up opens it on its own and the button glows until the
   point is spent.

@@ -647,15 +647,16 @@ public partial class GameSession : Node3D
         int id = Hud.SkillBar?.General() ?? -1;
         if (id < 0) { Audio.Ui("ui_error"); return; }
         ref var a = ref Sim.Ants[id];
-        var sk = Skills.At(a.Type, slot);
+        var sk = Skills.At(a, slot);
         if (Sim.Rank(a, slot) == 0)
         {
-            Hud.Alert(a.Level < Skills.ReqLevel(sk, 1) ? $"{Skills.Name(sk)} opens at level {Skills.ReqLevel(sk, 1)}" : $"{Skills.Name(sk)} is not learnt yet: press O to spend a skill point", UiTheme.Dim);
+            Hud.Alert(a.Level < Skills.ReqLevel(a, slot, 1) ? $"{Skills.Name(sk)} opens at level {Skills.ReqLevel(a, slot, 1)}" : $"{Skills.Name(sk)} is not learnt yet: press O to spend a skill point", UiTheme.Dim);
             Audio.Ui("ui_error");
             return;
         }
         float cd = Sim.SkillCd(a, slot);
         if (cd > 0) { Hud.Alert($"{Skills.Name(sk)} ready in {Mathf.Ceil(cd):0}s", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (Skills.Aim(sk) == SkillAim.Passive) { Hud.Alert($"{Skills.Name(sk)} is always on: it works in every bite", UiTheme.Dim); return; }
         if (Skills.Aim(sk) == SkillAim.Self || Input.Casting(id, slot)) { CastSkill(id, slot, -1, Vector2.Zero); return; }
         Input.BeginCast(id, slot);
     }
@@ -702,7 +703,7 @@ public partial class GameSession : Node3D
         ref var a = ref Sim.Ants[id];
         bool on = (a.AutoMask & (1 << slot)) != 0;
         Issue(new Cmd { Kind = CmdKind.SkillAuto, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { a.Serial }, Arg = (byte)slot });
-        Hud.Alert($"{Skills.Name(Skills.At(a.Type, slot))}: autocast {(on ? "off: it fires only when you order it" : "on")}", UiTheme.Dim);
+        Hud.Alert($"{Skills.Name(Skills.At(a, slot))}: autocast {(on ? "off: it fires only when you order it" : "on")}", UiTheme.Dim);
         Audio.Ui("ui_click", -4);
     }
 
@@ -1116,6 +1117,28 @@ public partial class GameSession : Node3D
                         Hud.Alert($"Workers are bringing home {what}", new Color(0.95f, 0.72f, 0.4f));
                         _collectAlertCd = 8;
                     }
+                    break;
+                case EvKind.RallyScent:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos) || e.Team == Local.Me)
+                    {
+                        var rp = World.HF.Point(e.Pos, 0.3f);
+                        Effects.Marker(rp, new Color(1f, 0.6f, 0.25f), e.Radius * 0.8f);
+                        Effects.Burst(rp + Vector3.Up * 0.3f, 16, 2, 1.8f, 0.2f, 1.2f);
+                        if (Audible(e.Pos)) Audio.At("alert", rp, -6, 0.2f, 0.03f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("RALLY SCENT! Nestmates rush to the mark.", new Color(1f, 0.8f, 0.45f));
+                    }
+                    break;
+                case EvKind.Bridge:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("LIVING BRIDGE! Workers lock into a span over the rocks.", new Color(1f, 0.8f, 0.45f));
+                    if (seen && Audible(e.Pos)) Audio.At("swarm", wp, -6, 0.2f, 0.05f, 1.0f);
+                    break;
+                case EvKind.Scout:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("SCOUT SWARM! The fog lifts and the enemy there is marked.", new Color(1f, 0.8f, 0.45f));
+                    break;
+                case EvKind.Thrall:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert($"THRALL RAID! {e.Tier} stolen brood will serve us as {Config.Of(e.Type).Name.ToLowerInvariant()}s.", new Color(1f, 0.8f, 0.45f));
+                    else if (!Demo) Hud.Alert("Their general has raided our brood!", new Color(1f, 0.5f, 0.35f));
+                    if (seen) Effects.Burst(wp, 24, 0, 3f, 0.4f, 1.0f);
                     break;
                 case EvKind.SkillLearned:
                     if (seen) Effects.Burst(wp + Vector3.Up * 0.6f, 20, 2, 3.5f, 0.3f, 1.2f);

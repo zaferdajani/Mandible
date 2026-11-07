@@ -72,6 +72,7 @@ public sealed class FogOfWar
                 if (!a.Alive || a.Team != Local.Me) continue;
                 Stamp(a.Pos, Config.Of(a.Type).Sight);
             }
+            foreach (var z in sim.Scouts) if (z.Team == Local.Me) Stamp(z.Pos, z.R + 3f); // Scout Swarm
             // level 1 starts with no nest: until the queen reaches the clearing only the trail is known
             if (sim.Mission is not { Episode: 1, Stage: <= ExpeditionStage.EscortQueen }) Stamp(sim.W.Nests[Local.Me].Pos, 34);
             // the opening's first target stays in sight so it can be seen, clicked and attacked from the start

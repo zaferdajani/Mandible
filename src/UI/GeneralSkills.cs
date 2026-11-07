@@ -11,14 +11,16 @@ public partial class GeneralSkills : Control
 {
     public GameSession Game;
     Control _bar, _tree;
-    readonly Button[] _btn = new Button[3];
-    readonly Label[] _key = new Label[3], _name = new Label[3], _rank = new Label[3], _cd = new Label[3];
-    readonly ColorRect[] _shade = new ColorRect[3];
+    const int N = Skills.MaxSlots;
+    readonly Button[] _btn = new Button[N];
+    readonly Label[] _key = new Label[N], _name = new Label[N], _rank = new Label[N], _cd = new Label[N];
+    readonly ColorRect[] _shade = new ColorRect[N];
     Button _learn, _eat;
     Label _treeTitle, _treeSub;
-    readonly Label[] _colName = new Label[3], _colLore = new Label[3];
-    readonly VBoxContainer[] _colRanks = new VBoxContainer[3];
-    readonly Button[] _colLearn = new Button[3];
+    readonly Label[] _colName = new Label[N], _colLore = new Label[N];
+    readonly VBoxContainer[] _colRanks = new VBoxContainer[N];
+    readonly Button[] _colLearn = new Button[N];
+    readonly Control[] _cols = new Control[N];
     int _shown = -1, _shownSerial;
     float _refresh, _pulse;
     readonly ulong[] _pressMs = new ulong[3];
@@ -38,9 +40,9 @@ public partial class GeneralSkills : Control
 
     void BuildBar()
     {
-        _bar = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(568, 104), Visible = false };
+        _bar = new Control { MouseFilter = MouseFilterEnum.Ignore, Size = new Vector2(680, 104), Visible = false };
         AddChild(_bar);
-        for (int s = 0; s < 3; s++)
+        for (int s = 0; s < N; s++)
         {
             int slot = s;
             var b = new Button { Position = new Vector2(s * 112, 0), Size = new Vector2(104, 104), FocusMode = FocusModeEnum.None, ClipContents = true };
@@ -114,7 +116,7 @@ public partial class GeneralSkills : Control
         var cols = new HBoxContainer();
         cols.AddThemeConstantOverride("separation", 12);
         v.AddChild(cols);
-        for (int s = 0; s < 3; s++)
+        for (int s = 0; s < N; s++)
         {
             int slot = s;
             var col = new PanelContainer { CustomMinimumSize = new Vector2(330, 0) };
@@ -136,6 +138,7 @@ public partial class GeneralSkills : Control
             _colLearn[s].Pressed += () => Learn(slot);
             cv.AddChild(_colLearn[s]);
             cols.AddChild(col);
+            _cols[s] = col;
         }
     }
 
@@ -192,7 +195,7 @@ public partial class GeneralSkills : Control
         if (!Sim.CanLearn(a, slot)) { Game.Audio.Ui("ui_error"); return; }
         Game.Issue(new Cmd { Kind = CmdKind.Learn, Team = (byte)Local.Me, Ids = new[] { _shown }, Serials = new[] { _shownSerial }, Arg = (byte)slot });
         Game.Audio.Ui("research", -2);
-        Game.Hud.Alert($"{Skills.Name(Skills.At(a.Type, slot)).ToUpperInvariant()}: rank {Sim.Rank(a, slot) + 1} learnt", Gold);
+        Game.Hud.Alert($"{Skills.Name(Skills.At(a, slot)).ToUpperInvariant()}: rank {Sim.Rank(a, slot) + 1} learnt", Gold);
         // the order lands this tick (or on the next lockstep turn); close when nothing more can be learnt
         if (a.SkPts <= 1) _tree.Visible = false;
     }
@@ -219,10 +222,12 @@ public partial class GeneralSkills : Control
         int id = General();
         var eaters = Game.Eaters();
         _bar.Visible = (id >= 0 || eaters.Count > 0) && !Game.Hud.Blocking;
-        for (int s = 0; s < 3; s++) _btn[s].Visible = id >= 0;
+        int n = id >= 0 ? Skills.SlotCount(Game.Sim.Ants[id]) : 0;
+        for (int s = 0; s < N; s++) { _btn[s].Visible = s < n; _btn[s].Position = new Vector2(s * 112, 0); }
         _learn.Visible = id >= 0;
+        _learn.Position = new Vector2(n * 112, 0);
         _eat.Visible = eaters.Count > 0;
-        _eat.Position = new Vector2(id >= 0 ? 456 : 0, 0);
+        _eat.Position = new Vector2(id >= 0 ? n * 112 + 120 : 0, 0);
         if (eaters.Count > 0)
         {
             int on = 0; foreach (int e in eaters) if (Game.Sim.Ants[e].AutoEat) on++;
@@ -238,7 +243,7 @@ public partial class GeneralSkills : Control
         if (Settings.Mobile) k = Mathf.Max(k, 0.9f);
         float bottom = Game.Hud.CommandHud != null ? Game.Hud.CommandHud.BottomEdge : vp.Y - 34;
         _bar.Scale = Vector2.One * k;
-        float width = id >= 0 ? (eaters.Count > 0 ? 568 : 452) : 112;
+        float width = id >= 0 ? n * 112 + 116 + (eaters.Count > 0 ? 116 : 0) : 112;
         _bar.Position = new Vector2((vp.X - width * k) / 2, bottom - 112 * k);
         if (_tree.Visible)
         {
@@ -250,16 +255,17 @@ public partial class GeneralSkills : Control
         }
         if (id < 0) return;
         ref var a = ref Game.Sim.Ants[id];
-        for (int s = 0; s < 3; s++)
+        for (int s = 0; s < n; s++)
         {
-            var sk = Skills.At(a.Type, s);
-            int r = Sim.Rank(a, s), max = Skills.MaxRank(sk);
+            var sk = Skills.At(a, s);
+            int r = Sim.Rank(a, s), max = Skills.MaxRank(a, s);
+            bool passive = Skills.Aim(sk) == SkillAim.Passive;
             float cd = Sim.SkillCd(a, s), full = Skills.Cooldown(sk, Mathf.Max(1, r), a.Level);
             _name[s].Text = Skills.Name(sk);
             _name[s].AddThemeColorOverride("font_color", r == 0 ? Locked : UiTheme.Ink);
             _rank[s].Text = r == 0 ? "" : new string('◆', r) + new string('◇', max - r);
             bool auto = (a.AutoMask & (1 << s)) != 0 && !a.Manual;
-            _cd[s].Text = r == 0 ? (Skills.ReqLevel(sk, 1) > a.Level ? $"Lv {Skills.ReqLevel(sk, 1)}" : "learn") : cd > 0 ? $"{Mathf.Ceil(cd):0}" : auto ? "AUTO" : "READY";
+            _cd[s].Text = r == 0 ? (Skills.ReqLevel(a, s, 1) > a.Level ? $"Lv {Skills.ReqLevel(a, s, 1)}" : "learn") : passive ? "PASSIVE" : cd > 0 ? $"{Mathf.Ceil(cd):0}" : auto ? "AUTO" : "READY";
             _cd[s].AddThemeColorOverride("font_color", r == 0 ? Locked : cd > 0 ? UiTheme.Ink : auto ? Spent : Ready);
             _shade[s].Size = new Vector2(104, r == 0 ? 104 : cd > 0 ? 104 * Mathf.Clamp(cd / full, 0, 1) : 0);
             var border = r > 0 && cd <= 0 ? (auto ? Spent : Ready) : Edge;
@@ -276,11 +282,11 @@ public partial class GeneralSkills : Control
     /// Tooltip for a skill button: what it does now and what the next rank adds.
     static string Tip(in Ant a, int s)
     {
-        var sk = Skills.At(a.Type, s);
-        int r = Sim.Rank(a, s), max = Skills.MaxRank(sk);
-        var t = $"{Skills.Name(sk).ToUpperInvariant()}  ({Skills.Keys[s]})   rank {r}/{max}{(Skills.Ultimate(sk) ? "  ·  ultimate" : "")}\n{Skills.Lore(sk)}\n";
+        var sk = Skills.At(a, s);
+        int r = Sim.Rank(a, s), max = Skills.MaxRank(a, s);
+        var t = $"{Skills.Name(sk).ToUpperInvariant()}  ({Skills.Keys[s]})   rank {r}/{max}{(Skills.IsUlt(a, s) ? "  ·  ultimate" : "")}\n{Skills.Lore(sk)}\n";
         if (r > 0) t += $"\nNow: {Skills.RankLine(sk, r)}\nCooldown {Skills.Cooldown(sk, r, a.Level):0}s.";
-        if (r < max) t += $"\nNext (level {Skills.ReqLevel(sk, r + 1)}): {Skills.RankLine(sk, r + 1)}";
+        if (r < max) t += $"\nNext (level {Skills.ReqLevel(a, s, r + 1)}): {Skills.RankLine(sk, r + 1)}";
         t += Settings.Mobile ? "\nLong-press: autocast on/off." : "\nRight-click: autocast on/off.";
         return t;
     }
@@ -292,13 +298,15 @@ public partial class GeneralSkills : Control
         ref var a = ref sim.Ants[_shown];
         _treeTitle.Text = $"{Config.Of(a.Type).Name.ToUpperInvariant()}  ·  LEVEL {a.Level}";
         _treeSub.Text = a.SkPts > 0
-            ? $"{a.SkPts} skill point{(a.SkPts == 1 ? "" : "s")} to spend. A new rank works at once.  Basic ranks open at levels 1, 3, 5, 7; the ultimate at 6, 8 and 10."
+            ? $"{a.SkPts} skill point{(a.SkPts == 1 ? "" : "s")} to spend. A new rank works at once.  Each rank opens at the level shown; ultimates at 6, 8 and 10."
             : a.Level >= Config.HeroMaxLevel ? "Every skill mastered." : "No skill point to spend: generals level up by eating remains. Each level brings one point.";
-        for (int s = 0; s < 3; s++)
+        int n = Skills.SlotCount(a);
+        for (int s = 0; s < N; s++) _cols[s].Visible = s < n;
+        for (int s = 0; s < n; s++)
         {
-            var sk = Skills.At(a.Type, s);
-            int r = Sim.Rank(a, s), max = Skills.MaxRank(sk);
-            _colName[s].Text = $"{Skills.Keys[s]}   {Skills.Name(sk)}{(Skills.Ultimate(sk) ? "   (ultimate)" : "")}";
+            var sk = Skills.At(a, s);
+            int r = Sim.Rank(a, s), max = Skills.MaxRank(a, s);
+            _colName[s].Text = $"{Skills.Keys[s]}   {Skills.Name(sk)}{(Skills.IsUlt(a, s) ? "   (ultimate)" : "")}";
             _colLore[s].Text = Skills.Lore(sk);
             var rows = _colRanks[s];
             while (rows.GetChildCount() < max)
@@ -312,13 +320,13 @@ public partial class GeneralSkills : Control
             {
                 var l = (Label)rows.GetChild(k - 1);
                 bool have = k <= r, next = k == r + 1;
-                int req = Skills.ReqLevel(sk, k);
+                int req = Skills.ReqLevel(a, s, k);
                 l.Text = $"{(have ? "◆" : "◇")}  Rank {k}  ·  level {req}\n      {Skills.RankLine(sk, k)}";
                 l.AddThemeColorOverride("font_color", have ? Spent : next && a.Level >= req ? UiTheme.Ink : Locked);
             }
             bool can = Sim.CanLearn(a, s);
             _colLearn[s].Disabled = !can;
-            _colLearn[s].Text = r >= max ? "MASTERED" : can ? $"LEARN RANK {r + 1}" : a.SkPts <= 0 ? "NO POINT" : $"AT LEVEL {Skills.ReqLevel(sk, r + 1)}";
+            _colLearn[s].Text = r >= max ? "MASTERED" : can ? $"LEARN RANK {r + 1}" : a.SkPts <= 0 ? "NO POINT" : $"AT LEVEL {Skills.ReqLevel(a, s, r + 1)}";
         }
     }
 }

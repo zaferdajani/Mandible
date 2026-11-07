@@ -22,7 +22,7 @@ public static class GeneralAI
         if (id < 0 || !fight) return;
         ref var a = ref sim.Ants[id];
         if (!a.Alive || a.CastReq > 0) return;
-        for (int s = 0; s < Skills.Slots; s++)
+        for (int s = 0; s < Skills.SlotCount(a); s++)
         {
             if (Sim.Rank(a, s) == 0 || Sim.SkillCd(a, s) > 0) continue;
             orders.Issue(new Cmd { Kind = CmdKind.Cast, Team = (byte)team, Ids = new[] { id }, Serials = new[] { a.Serial }, Arg = (byte)s });

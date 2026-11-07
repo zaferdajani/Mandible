@@ -61,6 +61,10 @@ public static class GeneralValidation
                 return ids;
             }
 
+            // the detailed checks below were written for the first three-skill loadouts; they run on those
+            Loadouts.TestSet("Warlord", SkillId.WarCry, SkillId.QueensPheromone, SkillId.MandibleFrenzy);
+            Loadouts.TestSet("Matron", SkillId.AcidBurst, SkillId.SpawnBrood, SkillId.FormicMist);
+            Loadouts.TestSet("Marshal", SkillId.DiveBomb, SkillId.TrailBlaze, SkillId.TalonDive);
             foreach (var type in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
             {
                 string tag = Config.Of(type).Name;
@@ -114,11 +118,11 @@ public static class GeneralValidation
                             {
                                 // a crowd of every tier at the level cap, and one soldier a level above it
                                 var pool = new List<int>();
-                                pool.AddRange(Spawn(1, AntType.Soldier, 6, Skills.CharmLevel[r], front));
+                                pool.AddRange(Spawn(1, AntType.Soldier, 6, (int)Skills.CharmLevel[r], front));
                                 pool.AddRange(Spawn(1, AntType.Major, 2, 1, front + perp * 1.5f));
                                 pool.AddRange(Spawn(Config.Wild, AntType.Wasp, 1, 1, front - perp * 1.5f));
                                 pool.AddRange(Spawn(1, AntType.Warlord, 1, 3, front + outv * 1.5f));
-                                var over = Spawn(1, AntType.Soldier, 1, Math.Min(10, Skills.CharmLevel[r] + 1), front + outv * 0.5f);
+                                var over = Spawn(1, AntType.Soldier, 1, Math.Min(10, (int)Skills.CharmLevel[r] + 1), front + outv * 0.5f);
                                 if (Skills.CharmLevel[r] >= 10) { pool.AddRange(over); over.Clear(); } // the top rank has no level cap
                                 foreach (int j in pool) sim.Ants[j].Alt = 0;
                                 Apply(Order(CmdKind.Cast, g, slot, pool[0]));
@@ -141,7 +145,7 @@ public static class GeneralValidation
                                 foreach (int j in pool) if (sim.Ants[j].Alive) Check(sim.Ants[j].CharmP1 == 0 && sim.Ants[j].Team != 0, $"Queen's Pheromone r{rank}: the scent must wear off after {Skills.CharmTime[r]}s");
                                 break;
                             }
-                            case SkillId.BroodCall:
+                            case SkillId.SpawnBrood:
                             {
                                 Spawn(1, AntType.Soldier, 3, 1, front + outv * 8);
                                 int Brood() => sim.Col[0].Count[(int)AntType.Soldier] + sim.Col[0].Count[(int)AntType.Major] + sim.Col[0].Count[(int)AntType.Flyer] + sim.Col[0].Count[(int)AntType.Gunner];
@@ -179,7 +183,7 @@ public static class GeneralValidation
                                 var kind = sk switch
                                 {
                                     SkillId.WarCry => EvKind.WarCry, SkillId.MandibleFrenzy => EvKind.Frenzy, SkillId.AcidBurst => EvKind.AcidBurst,
-                                    SkillId.CausticCloud => EvKind.Cloud, SkillId.DiveBomb => EvKind.DiveBomb, SkillId.TrailBlaze => EvKind.TrailBlaze, _ => EvKind.TalonDive,
+                                    SkillId.FormicMist => EvKind.Cloud, SkillId.DiveBomb => EvKind.DiveBomb, SkillId.TrailBlaze => EvKind.TrailBlaze, _ => EvKind.TalonDive,
                                 };
                                 bool fired = false;
                                 for (int k = 0; k < 30 && !fired; k++) { sim.Tick(dt); foreach (var e in sim.Events) if (e.Kind == kind && e.Team == 0) fired = true; }
@@ -189,14 +193,14 @@ public static class GeneralValidation
                                 {
                                     SkillId.MandibleFrenzy => $"frenzy {a.FrenzyT:0.0}s",
                                     SkillId.TrailBlaze => $"mates hasted {mates.FindAll(j => sim.Ants[j].HasteT > 0).Count}/6",
-                                    SkillId.CausticCloud => $"cloud slow {(sim.Pools.Count > 0 ? sim.Pools[^1].Slow : 0):0.0}",
+                                    SkillId.FormicMist => $"cloud slow {(sim.Pools.Count > 0 ? sim.Pools[^1].Slow : 0):0.0}",
                                     SkillId.WarCry => $"mates buffed {mates.FindAll(j => sim.Ants[j].BuffT > 0).Count}/6",
                                     _ => $"major hp {hp0:0} -> {(sim.Ants[big[0]].Alive ? sim.Ants[big[0]].Hp : 0):0}",
                                 };
                                 GD.Print($"[general-test] {tag} {Skills.Name(sk)} r{rank}: fired, cd {Sim.SkillCd(a, slot):0.0}s, {fx}");
                                 if (sk == SkillId.MandibleFrenzy) Check(Mathf.Abs(a.FrenzyT - Skills.FrenzyTime[r]) < 1.2f, "frenzy time");
                                 if (sk == SkillId.TrailBlaze) Check(mates.FindAll(j => sim.Ants[j].HasteT > 0).Count == 6, "trail blaze must reach the nearby squad");
-                                if (sk == SkillId.CausticCloud) Check(sim.Pools.Count > 0 && Mathf.IsEqualApprox(sim.Pools[^1].Slow, Skills.CloudSlow[r]), "caustic cloud slow");
+                                if (sk == SkillId.FormicMist) Check(sim.Pools.Count > 0 && Mathf.IsEqualApprox(sim.Pools[^1].Slow, Skills.CloudSlow[r]), "caustic cloud slow");
                                 if (sk == SkillId.TalonDive) Check(!sim.Ants[big[0]].Alive || sim.Ants[big[0]].Hp < hp0, "talon dive must strike the major");
                                 break;
                             }
@@ -205,6 +209,102 @@ public static class GeneralValidation
                 }
                 sim.Slay(g);
             }
+
+            foreach (var key in new[] { "Warlord", "Matron", "Marshal" }) Loadouts.TestClear(key);
+            // the shipped default loadouts: four skills, the last an ultimate opening at level 6
+            foreach (var type in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
+            {
+                Sweep(-1);
+                int g = sim.Spawn(0, type, field, 0, 10);
+                ref var a = ref sim.Ants[g];
+                Check(Skills.SlotCount(a) == 4 && Skills.IsUlt(a, 3) && Skills.ReqLevel(a, 3, 1) == 6, $"{Config.Of(type).Name}: the default loadout needs four skills with the ultimate last");
+                for (int s = Sim.BestLearn(a); s >= 0; s = Sim.BestLearn(a)) Apply(Order(CmdKind.Learn, g, s));
+                var names = new System.Collections.Generic.List<string>();
+                for (int s = 0; s < 4; s++) names.Add($"{Skills.KeyOf(s)} {Skills.Name(Skills.At(a, s))} {Sim.Rank(a, s)}/{Skills.MaxRank(a, s)}");
+                GD.Print($"[general-test] default {Config.Of(type).Name}: {string.Join(", ", names)}");
+                Check(Sim.Rank(a, 3) >= 1 && a.SkPts == 0, $"{Config.Of(type).Name}: the AI did not spend its points or skipped the ultimate");
+                sim.Slay(g);
+            }
+            // the pool: every skill, given alone to a general through a loadout override, is learnt to its top rank by the
+            // computer's learn path and then fired by the table's AI hints alone (passives change the bite)
+            GD.Print($"[general-test] loadouts from {Loadouts.Source}, hash {Loadouts.Hash:X8}");
+            foreach (SkillId id in Enum.GetValues<SkillId>())
+            {
+                var def = Skills.Def(id);
+                Loadouts.TestSet("Warlord@0", id);
+                Sweep(-1);
+                int g = sim.Spawn(0, AntType.Warlord, field, outv.AngleD(), 10);
+                ref var a = ref sim.Ants[g];
+                Check(Skills.SlotCount(a) == 1 && Skills.At(a, 0) == id, $"{def.Name}: the loadout override did not apply");
+                for (int s = Sim.BestLearn(a); s >= 0; s = Sim.BestLearn(a)) Apply(Order(CmdKind.Learn, g, s));
+                Check(Sim.Rank(a, 0) == def.MaxRank, $"{def.Name}: the AI learn path reached rank {Sim.Rank(a, 0)} of {def.MaxRank}");
+                // a fight that suits every hint: hurt, nestmates around, a crowd at the jaws, a rooted major a few lengths off
+                var mates = new List<int>(); var crowd = new List<int>(); int major = -1;
+                void Stage()
+                {
+                    foreach (int j in mates) sim.Slay(j);
+                    foreach (int j in crowd) sim.Slay(j);
+                    if (major >= 0) sim.Slay(major);
+                    ref var w = ref sim.Ants[g];
+                    var at = id == SkillId.ThrallRaid ? sim.NestEntrance(1) + (home - sim.NestEntrance(1)).Normalized() * 6f : field;
+                    w.Pos = w.PrevPos = at; w.Hp = w.MaxHp * 0.4f; w.BlockT = 0; w.ChargeT = 0; w.FrenzyT = 0; w.Target = -1;
+                    sim.Bridges.Clear(); sim.Scouts.Clear(); sim.Pools.Clear();
+                    var spot = sim.Ants[g].Pos;
+                    mates = Spawn(0, AntType.Soldier, 6, 1, spot - outv * 3);
+                    crowd = Spawn(1, AntType.Soldier, 6, 1, spot + outv * 1.2f);
+                    major = Spawn(1, AntType.Major, 1, 1, spot + outv * 6.5f)[0];
+                    foreach (int j in crowd) { sim.Ants[j].Alt = 0; sim.Ants[j].State = AntState.Idle; }
+                    sim.Ants[major].Root = 3f;
+                }
+                bool fired = false, bitten2 = false;
+                Stage();
+                for (int rank = 1; rank <= def.MaxRank && def.Aim != SkillAim.Passive; rank++)
+                {
+                    if (rank > 1) Stage();
+                    sim.TestSetRank(g, 0, rank);
+                    a.AutoMask = 15; a.Manual = false;
+                    fired = false;
+                    for (int k = 0; k < 4 * 30 && !fired; k++)
+                    {
+                        if (!sim.Valid(a.Target, a.TargetSerial) && sim.Ants[major].Alive) { a.Target = major; a.TargetSerial = sim.Ants[major].Serial; a.State = AntState.Engage; }
+                        if (sim.Ants[major].Alive) sim.Ants[major].Root = Mathf.Max(sim.Ants[major].Root, 1f);
+                        sim.Tick(dt);
+                        fired = Sim.SkillCd(a, 0) > 0.5f || a.BlockT > 0 || a.ChargeT > 0 || a.FrenzyT > 0;
+                    }
+                    if (!fired && def.Ai == AiUse.Bridge)
+                    {
+                        // no rock between this test fight and its target: the bridge is ordered by hand instead
+                        Apply(Order(CmdKind.Cast, g, 0, -1, sim.Ants[g].Pos + outv * 10f));
+                        for (int k = 0; k < 30 && !fired; k++) { sim.Tick(dt); fired = Sim.SkillCd(a, 0) > 0.5f; }
+                        Check(sim.Bridges.Count > 0 && sim.OnBridge(a) == rank, $"Living Bridge rank {rank}: no bridge under the general");
+                    }
+                    Check(fired, $"{def.Name} rank {rank}: the AI never fired it from its hints ({def.Ai})");
+                }
+                if (def.Aim == SkillAim.Passive)
+                {
+                    var hp = new Dictionary<int, float>();
+                    foreach (int j in crowd) hp[j] = sim.Ants[j].Hp;
+                    a.Target = crowd[0]; a.TargetSerial = sim.Ants[crowd[0]].Serial; a.State = AntState.Engage;
+                    for (int k = 0; k < 4 * 30; k++) sim.Tick(dt);
+                    int hurt = 0; foreach (int j in crowd) if (!sim.Ants[j].Alive || sim.Ants[j].Hp < hp[j]) hurt++;
+                    bitten2 = id == SkillId.VenomSting ? Sim.SkillCd(a, 0) > 0 || hurt > 0 : hurt >= 2;
+                    Check(bitten2, $"{def.Name}: the passive changed nothing in the bite (hurt {hurt})");
+                    fired = true;
+                }
+                GD.Print($"[general-test] pool: {def.Name} ({def.Aim}, AI {def.Ai}) learnt to rank {def.MaxRank} and {(def.Aim == SkillAim.Passive ? "works in the bite" : def.Ai == AiUse.Bridge ? "built at every rank (no rock on the test ground, so ordered by hand)" : "fired by its hints at every rank")}");
+                sim.Slay(g); if (major >= 0) sim.Slay(major);
+                foreach (int j in mates) sim.Slay(j);
+                foreach (int j in crowd) sim.Slay(j);
+            }
+            Loadouts.TestClear("Warlord@0");
+            // one colony's own generals: the red colony's Warlord takes its own loadout, the black one keeps the default
+            Loadouts.TestSet("Warlord@1", SkillId.TalonDive, SkillId.ShellWall);
+            Sweep(-1);
+            int black = sim.Spawn(0, AntType.Warlord, field, 0), red = sim.Spawn(1, AntType.Warlord, field + perp * 30, 0);
+            Check(Skills.At(sim.Ants[black], 0) == SkillId.WarCry && Skills.SlotCount(sim.Ants[red]) == 2 && Skills.At(sim.Ants[red], 0) == SkillId.TalonDive, "per-colony loadouts");
+            sim.Slay(black); sim.Slay(red);
+            Loadouts.TestClear("Warlord@1");
+            GD.Print("[general-test] per-colony loadout: Warlord@1 overrides only the red colony");
 
             // auto-eat: a squad with it ON eats its kill and keeps the haulers off it; with it OFF the kill is left whole
             Sweep(-1);
@@ -346,6 +446,9 @@ public static class GeneralValidation
                 for (int i = 0; i < sim.High; i++)
                     if (sim.Ants[i].Alive && i != keep && sim.Ants[i].Type != AntType.Queen && sim.Ants[i].Pos.DistanceTo(around) < r && sim.Ants[i].Type != AntType.Worker) sim.Slay(i);
             }
+            Loadouts.TestSet("Warlord", SkillId.WarCry, SkillId.QueensPheromone, SkillId.MandibleFrenzy);
+            Loadouts.TestSet("Matron", SkillId.AcidBurst, SkillId.SpawnBrood, SkillId.FormicMist);
+            Loadouts.TestSet("Marshal", SkillId.DiveBomb, SkillId.TrailBlaze, SkillId.TalonDive);
             await Run(3f); // the first frames compile shaders
 
             // 01-03: the insignia, one general per tier, close, then the three side by side at play zoom
@@ -443,6 +546,51 @@ public static class GeneralValidation
             await Run(4f);
             await Shot("18-collection-radius", home + outv * 14, 60f, true);
             await Shot("19-carcass-queued", drop, 14f);
+            game.Hud.CommandHud?.ShowPage(1);
+
+            // 20-23: the owner's new skills on the shipped default loadouts (the Sky Marshal's)
+            foreach (var key in new[] { "Warlord", "Matron", "Marshal" }) Loadouts.TestClear(key);
+            var post = Clear(home + outv * 20 + perp * 30, 8);
+            Clean(post, 30);
+            int scout = General(AntType.Marshal, post, 10);
+            Select(new List<int> { scout });
+            game.Fog.RevealAll = false;
+            var far = post + outv * 28;
+            new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { scout }, Serials = new[] { sim.Ants[scout].Serial }, Arg = 1, P = far }.Apply(sim);
+            await Run(1.5f);
+            await Shot("20-scout-swarm-lifts-fog", post + outv * 14, 45f, true);
+            game.Fog.RevealAll = true;
+            var rallied = Spawn(0, AntType.Soldier, 12, post - perp * 8);
+            foreach (int id in rallied) sim.Ants[id].State = AntState.Idle;
+            new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { scout }, Serials = new[] { sim.Ants[scout].Serial }, Arg = 2, P = post + outv * 4 }.Apply(sim);
+            await Run(1.2f);
+            await Shot("21-rally-scent", post + outv * 2, 20f);
+            Clean(post, 30, scout);
+            // a living bridge over the nearest real rock
+            Vector2 rock = post; float rockR = 0;
+            for (int r = 4; r < 80 && rockR <= 0; r += 4)
+                for (int k = 0; k < 12 && rockR <= 0; k++)
+                    foreach (var o in sim.W.ObstaclesNear(post + MathX.Dir(k * 0.52f) * r)) if (o.R > 1.5f && o.R < 5f) { rock = o.P; rockR = o.R; break; }
+            if (rockR > 0)
+            {
+                Loadouts.TestSet("Warlord@0", SkillId.LivingBridge);
+                var dir = (rock - post).Normalized();
+                int builder = General(AntType.Warlord, rock - dir * (rockR + 5f), 10);
+                Spawn(0, AntType.Worker, 6, rock - dir * (rockR + 7f));
+                new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { builder }, Serials = new[] { sim.Ants[builder].Serial }, Arg = 0, P = rock + dir * (rockR + 5f) }.Apply(sim);
+                var crossing = Spawn(0, AntType.Soldier, 6, rock - dir * (rockR + 4f));
+                foreach (int id in crossing) { sim.Ants[id].Goal = rock + dir * (rockR + 6f); sim.Ants[id].State = AntState.Move; }
+                await Run(2.5f);
+                await Shot("22-living-bridge", rock, 16f);
+                Loadouts.TestClear("Warlord@0");
+            }
+            // the raid on the red nest
+            var foeNest = sim.NestEntrance(1);
+            Clean(foeNest, 15);
+            sim.Ants[scout].Pos = sim.Ants[scout].PrevPos = foeNest + (home - foeNest).Normalized() * 6f;
+            new Cmd { Kind = CmdKind.Cast, Team = 0, Ids = new[] { scout }, Serials = new[] { sim.Ants[scout].Serial }, Arg = 3 }.Apply(sim);
+            await Run(1.0f);
+            await Shot("23-thrall-raid", sim.Ants[scout].Pos, 14f);
             GD.Print("[general-capture] done");
             app.GetTree().Quit();
         }

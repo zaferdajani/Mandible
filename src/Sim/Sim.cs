@@ -61,8 +61,12 @@ public struct Ant
     public int Stage;                 // 0 as hatched, up to Config.MaxStage
     public bool FeastOrder;           // sent to eat the remains in FoodTarget
     // general skills (Skills.cs): ranks of Q W E, unspent points, autocast bits, the W and E cooldowns (Q uses AbilityCd)
-    public byte Sk0, Sk1, Sk2, SkPts, AutoMask;
-    public float CdW, CdE;
+    public byte Sk0, Sk1, Sk2, Sk3, SkPts, AutoMask; // ranks of the loadout's slots Q W E R
+    public float CdW, CdE, CdR;                       // cooldowns of W E R (Q: AbilityCd)
+    public byte ChargeKind;                           // a charge under way: 1 Antler Charge, 2 Lunge
+    public float BlockArmor;                          // Shell Wall: the armour its rank adds while BlockT runs
+    public byte ChargeRank;                           // Antler Charge: the rank of the charge under way
+    public float MarkT, MarkMul;                      // Scout Swarm: marked, takes more damage
     public byte CastSlot;             // pending cast: slot + 1 (with CastReq seconds left to find its moment)
     public int CastTarget, CastSerial;
     public Vector2 CastAt;
@@ -79,7 +83,7 @@ public struct Ant
 }
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
-    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect }
+    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall }
 
 public struct SimEvent
 {
@@ -104,6 +108,22 @@ public sealed class WebZone
 {
     public Vector2 Pos;
     public float R, Life, Max, Root;
+}
+
+/// Living Bridge: a chain of bodies between A and B; the colony's ants on it walk over rocks.
+public sealed class BridgeZone
+{
+    public Vector2 A, B;
+    public float Life, Max, Width;
+    public int Team, Rank;
+}
+
+/// Scout Swarm: winged scouts circling a spot; the fog lifts there for their colony and enemies inside are marked.
+public sealed class ScoutZone
+{
+    public Vector2 Pos;
+    public float R, Life, Max, Mark, Pick, PickT;
+    public int Team, Rank, Flyers, Src;
 }
 
 /// Venom left on the ground by an Acid Burst: poisons every enemy of its colony standing in it.
@@ -668,7 +688,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage);
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.SkPts << 24)); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(a.AutoEat ? 1u : 0u);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u);
         }
         foreach (var c in Col)
         {
@@ -678,6 +698,7 @@ public sealed partial class Sim
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
         }
         Mix(Fortified ? 1u : 0u);
+        Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
         {
             for (int t = 0; t < 2; t++) { Mix((uint)HeroId[t]); Mix(F(HeroRespawn[t])); for (int k = 0; k < 4; k++) Mix((uint)Items[t, k]); }
@@ -721,6 +742,7 @@ public sealed partial class Sim
         TickShowers();
         TickWebs(dt);
         TickPools(dt);
+        TickZones(dt);
         TickSquads(dt);
         TickNest(dt);
         if (Mode == GameMode.Lanes) TickLanes(dt);
@@ -973,8 +995,8 @@ public sealed partial class Sim
             return;
         }
 
-        if ((a.Team == Config.Wild || a.Boss) && a.State == AntState.Engage) WildAbility(i, ref a, st);
-        if (Config.IsHero(a.Type) && think) HeroAbility(i, ref a, st);
+        // skills: generals when they think; the wild bugs (and a roused boss) while they fight; anyone else with a loadout too
+        if (Config.IsHero(a.Type) ? think : (a.Team == Config.Wild || a.Boss || a.CharmP1 > 0) && a.State == AntState.Engage) UnitSkills(i, ref a, st);
         a.CastReq -= dt;
         if (a.CastReq <= 0) a.CastSlot = 0;
         a.AbilityCd -= dt;
@@ -1129,32 +1151,34 @@ public sealed partial class Sim
         a.AttackAnim = 1;
         a.Cooldown = st.Cooldown;
         float lv = a.Level - 1;
-        if (a.Type == AntType.StagBeetle)
+        byte kind = a.ChargeKind;
+        a.ChargeKind = 0;
+        if (kind == 1)
         {
             var fwd = MathX.Dir(a.Heading);
             var jaws = a.Pos + fwd * (a.Size * 0.5f);
             float r = a.Size * 0.6f + 1.4f + 0.2f * lv;
-            float dmg = st.Damage * a.DmgMul * Config.TossDamage;
+            float dmg = st.Damage * a.DmgMul * Skills.Def(SkillId.AntlerCharge).N("bites", System.Math.Max(1, (int)a.ChargeRank));
             var victims = AntsNear(jaws, r).ToArray();
             Events.Add(new SimEvent { Kind = EvKind.Toss, Pos = jaws, To = jaws + fwd * Config.TossThrow, Team = a.Team, Type = a.Type, Radius = r });
             foreach (int j in victims)
             {
                 ref var b = ref Ants[j];
+                if (b.Team == a.Team && j != i) continue; // a general's charge spares its nestmates
+                if (j == i) continue;
                 if (b.Type == AntType.Queen) { Damage(j, dmg, i); continue; }
                 var dir = (fwd * 0.7f + (b.Pos - a.Pos).Normalized() * 0.3f).Normalized();
-                b.Pos = ClampMap(b.Pos + dir * (Config.TossThrow + 0.3f * lv));
-                b.Root = Mathf.Max(b.Root, Config.TossStun); // on its back, legs kicking
+                b.Pos = ClampMap(b.Pos + dir * (Config.TossThrow + 0.3f * (Config.IsHero(a.Type) ? a.ChargeRank - 1 : lv)));
+                b.Root = Mathf.Max(b.Root, Skills.Def(SkillId.AntlerCharge).N("stun", System.Math.Max(1, (int)a.ChargeRank))); // on its back, legs kicking
                 Damage(j, dmg, i);
             }
-            a.SpecialCd = 9f - 0.5f * lv;
         }
-        else
+        else if (kind == 2 && Valid(target, Ants[target].Serial))
         {
             // the lunge: a wolf spider lands on its prey jaws first
-            float dmg = st.Damage * a.DmgMul * Config.LungeDamage;
+            float dmg = st.Damage * a.DmgMul * Skills.Def(SkillId.Lunge).N("bites", 1);
             Events.Add(new SimEvent { Kind = EvKind.Lunge, Pos = Ants[target].Pos, Team = a.Team, Type = a.Type });
             Damage(target, dmg, i);
-            a.SpecialCd = 7f - 0.4f * lv;
         }
     }
 
@@ -1166,17 +1190,20 @@ public sealed partial class Sim
         if (a.Pos.DistanceTo(t.Pos) > reach) return;
         if (!Config.Ranged(a.Type) && Mathf.Abs(a.Alt - t.Alt) > reach + 0.6f) return;
         if (a.Cooldown > 0) return;
+        int bridged = Bridges.Count > 0 ? OnBridge(a) : 0;
+        if (bridged is > 0 and < 3) return; // locked into the bridge: no biting until it is rank 3
         a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f);
         a.AttackAnim = 1;
         float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * MoraleMul(a.Team) * Rng.R(0.85f, 1.15f);
         if (a.FrenzyT > 0) dmg *= Skills.FrenzyBite[System.Math.Clamp((int)a.FrenzyRank, 1, 3) - 1];
         bool sting = false;
-        if (a.Type == AntType.Wasp && a.AbilityCd <= 0)
+        if (Loadouts.Has(a, SkillId.VenomSting, out int stingSlot) && Rank(a, stingSlot) > 0 && SkillCd(a, stingSlot) <= 0)
         {
-            // venomous sting: a heavy blow that keeps burning, then the wasp climbs away before the swarm can answer
-            dmg *= Config.StingDamage + 0.3f * (a.Level - 1);
-            a.AbilityCd = 5f - 0.4f * (a.Level - 1);
-            a.RetreatT = Config.WaspRetreat;
+            // venomous sting: a heavy blow that keeps burning, then the stinger climbs away (if it flies) before the swarm can answer
+            float venomBites = Skills.Def(SkillId.VenomSting).N("bites", Rank(a, stingSlot));
+            dmg *= Config.IsHero(a.Type) ? 1f + (venomBites - 1f) * 0.5f : venomBites + 0.3f * (a.Level - 1); // a general carries half the wasp's venom bonus (its bite is already big, and may splash)
+            SetCd(ref a, stingSlot, Skills.Cooldown(SkillId.VenomSting, Rank(a, stingSlot), a.Level));
+            if (Config.Flies(a.Type)) a.RetreatT = Config.WaspRetreat;
             sting = true;
             Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
         }
@@ -1195,12 +1222,17 @@ public sealed partial class Sim
         if (Config.Ranged(a.Type)) Events.Add(new SimEvent { Kind = EvKind.Spit, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
         else Events.Add(new SimEvent { Kind = EvKind.Bite, Pos = t.Pos, Team = a.Team, Type = a.Type });
         var tp = t.Pos;
-        if (a.Type == AntType.Warlord)
+        if (Loadouts.Has(a, SkillId.CleavingMandibles, out int cleaveSlot) && Rank(a, cleaveSlot) > 0)
         {
-            // cleave: every bite also catches the enemies crowding the warlord
-            foreach (int j in EnemiesNear(tp, 2.6f, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * Config.WarlordCleave, i);
+            // Cleaving Mandibles: the bite also catches the nearest enemies beside the victim
+            var cd = Skills.Def(SkillId.CleavingMandibles);
+            int rk = Rank(a, cleaveSlot), extra = (int)cd.N("targets", rk);
+            float share = cd.N("share", rk);
+            var beside = EnemiesNear(tp, 2.6f, a.Team, false, a.Layer).ToArray();
+            System.Array.Sort(beside, (x, y) => { int c = Ants[x].Pos.DistanceSquaredTo(tp).CompareTo(Ants[y].Pos.DistanceSquaredTo(tp)); return c != 0 ? c : x.CompareTo(y); });
+            foreach (int j in beside) { if (extra <= 0) break; if (j == target) continue; Damage(j, dmg * share, i); extra--; }
         }
-        else if (a.Type == AntType.Matron)
+        if (a.Type == AntType.Matron)
         {
             // the acid jet splashes over whoever stands beside the target
             foreach (int j in EnemiesNear(tp, Config.MatronSplashR, a.Team, false, a.Layer).ToArray()) if (j != target) Damage(j, dmg * Config.MatronSplash, i);
@@ -1243,72 +1275,6 @@ public sealed partial class Sim
             }
         }
         return _near;
-    }
-
-    void WildAbility(int i, ref Ant a, UnitStats st)
-    {
-        float lv = a.Level - 1;
-        if (a.Type == AntType.Beetle)
-        {
-            // shell wall: swarmed or hurt, it locks its wing cases down and weathers the storm
-            if (a.SpecialCd <= 0 && a.BlockT <= 0 && (a.Hp < a.MaxHp * 0.6f || AntsNear(a.Pos, a.Size * 0.6f + 1.6f).Count >= 3))
-            {
-                a.BlockT = Config.ShellWallTime + 0.3f * lv;
-                a.SpecialCd = 13f - 0.6f * lv;
-                Events.Add(new SimEvent { Kind = EvKind.ShellWall, Pos = a.Pos, Team = a.Team, Type = a.Type, Radius = a.Size * 0.6f });
-            }
-            if (a.AbilityCd > 0) return;
-            // mandible sweep: crush every ant around the jaws and hurl them back
-            float r = a.Size * 0.75f + 1.2f + 0.25f * lv;
-            var hits = AntsNear(a.Pos, r);
-            if (hits.Count < 2) return;
-            float dmg = st.Damage * a.DmgMul * 1.5f;
-            var victims = hits.ToArray();
-            a.AttackAnim = 1;
-            a.AbilityCd = 7f - 0.4f * lv;
-            Events.Add(new SimEvent { Kind = EvKind.Sweep, Pos = a.Pos, Team = a.Team, Type = a.Type, Radius = r });
-            foreach (int j in victims)
-            {
-                ref var b = ref Ants[j];
-                if (j == i || b.Team == a.Team) continue; // a roused stag sweeps only the enemy
-                var push = (b.Pos - a.Pos).Normalized();
-                b.Pos = ClampMap(b.Pos + push * (1.2f + 0.2f * lv));
-                Damage(j, dmg, i);
-            }
-        }
-        else if (a.Type == AntType.StagBeetle)
-        {
-            // antler toss: it lowers its head and charges; whatever its jaws meet goes flying (ChargeImpact)
-            if (a.SpecialCd > 0 || a.ChargeT > 0 || !Valid(a.Target, a.TargetSerial)) return;
-            ref var t = ref Ants[a.Target];
-            float d = a.Pos.DistanceTo(t.Pos);
-            if (t.Alt > 1.5f || d < 3.5f || d > 12f + lv) return;
-            a.ChargeT = 1.6f;
-            Events.Add(new SimEvent { Kind = EvKind.Charge, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
-        }
-        else if (a.Type == AntType.Spider && Valid(a.Target, a.TargetSerial))
-        {
-            ref var t = ref Ants[a.Target];
-            float d = a.Pos.DistanceTo(t.Pos);
-            // the lunge: prey wrapped in silk a few lengths away is pounced on
-            if (a.SpecialCd <= 0 && a.ChargeT <= 0 && t.Root > 0.3f && d > 2.5f && d < 10f)
-            {
-                a.ChargeT = 0.9f;
-                Events.Add(new SimEvent { Kind = EvKind.Charge, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
-                return;
-            }
-            if (a.AbilityCd > 0) return;
-            // web snare: a sticky blob that roots every ant it lands on
-            var to = t.Pos;
-            if (d > 16) return;
-            _shots.Add(new WebShotFx
-            {
-                From = a.Pos, To = to, Dur = 0.15f + d / 35f, R = 2.2f + 0.35f * lv, Life = 3.5f + 0.6f * lv, Root = 1.8f + 0.45f * lv,
-            });
-            a.AttackAnim = 1;
-            a.AbilityCd = 6.5f - 0.5f * lv;
-            Events.Add(new SimEvent { Kind = EvKind.WebShot, Pos = a.Pos, To = to, Team = a.Team, Type = a.Type });
-        }
     }
 
     /// Enemies of `team` (colonies and wild bugs) within r of p.
@@ -1357,6 +1323,8 @@ public sealed partial class Sim
     }
 
     public readonly List<AcidPool> Pools = new();
+    public readonly List<BridgeZone> Bridges = new();
+    public readonly List<ScoutZone> Scouts = new();
 
     void TickPools(float dt)
     {
@@ -1390,8 +1358,9 @@ public sealed partial class Sim
         if (!t.Alive) return;
         if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
         // chitin: heroes and wild bugs shrug off a share of every blow; a beetle behind its shell wall most of it
-        float armor = Config.Of(t.Type).Armor + (t.BlockT > 0 ? Config.ShellWallArmor : 0f);
+        float armor = Config.Of(t.Type).Armor + (t.BlockT > 0 ? (t.BlockArmor > 0 ? t.BlockArmor : Config.ShellWallArmor) : 0f);
         if (t.HasteT > 0) armor += t.GuardArmor; // Trail Blaze: the line holds
+        if (t.MarkT > 0) dmg *= t.MarkMul; // Scout Swarm: marked
         if (armor > 0) dmg *= 1f - Mathf.Min(armor, 0.75f);
         if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;
@@ -1630,7 +1599,7 @@ public sealed partial class Sim
         if (a.Guardian) { a.Speed = 0; return; } // rooted in its mound
         float radius = a.Size * 0.3f;
         float targetSpeed = 0;
-        bool fly = Config.Flies(a.Type);
+        bool fly = Config.Flies(a.Type) || OnBridge(a) > 0; // on a living bridge, rocks are no obstacle
         if (desired.LengthSquared() > 1e-6f)
         {
             float want = desired.AngleD();
