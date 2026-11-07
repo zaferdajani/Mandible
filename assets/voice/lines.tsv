@@ -1,0 +1,46 @@
+id	speaker	profile	text
+l1_wake	queen	queen1	Be still, my chosen. The glass is broken, and we are free. Feel them? Every ant in this sand moves when you think it.
+l1_beetle	queen	queen1	A ground beetle holds our road. Its shell is hard. Send Burr's soldiers together, and do not let it reach my workers.
+l1_beetle_dead	queen	queen1	It falls. Good. Now lead us on to the clearing, and keep the trail between us and the grass.
+l1_clearing	queen	queen1	Here. I cannot found a nest on empty ground. Bring me seeds, and bring me what is left of the beetle. We waste nothing.
+l1_remains	queen	queen1	The beetle's remains are still lying in the alley. Send workers to carry them to me.
+l1_stocked	queen	queen1	It is enough. Give the word, and my daughters will dig.
+l1_digging	queen	queen1	They are opening the earth for me. Guard them while they work. I go below when the chamber is ready.
+l1_royal	queen	queen1	I am home. Dark and close and safe. Now I can lay, but eggs need warmth. Build me an incubator beside my chamber.
+l1_incubator	queen	queen1	Warm. The eggs will hatch now. Next we need a store, so the harvest has somewhere to wait.
+l1_store	queen	queen1	The store is ready. Now give me workers. Four more pairs of jaws, and the colony will start to feed itself.
+l1_workers	queen	queen1	They hatch hungry and go straight to work. Now the colony needs a squad that answers only to you.
+l1_done	queen	queen1	Listen to them. Hundreds of heartbeats, and every one of them is ours. You did well, my chosen.
+open_5	queen	queen1	Rain has passed, and the grass is full of sweet things. Burr wants a squad of his own. Fill the galleries before the sky breaks again.
+close_5	queen	queen1	The larder is full. But a dead ant lies in the wet grass. She is red, and she has a sting. Remember that scent.
+open_6	queen	queen1	The rotting log is full of hunters, and they smell my brood. Raise majors. Their jaws can break what soldiers cannot.
+close_6	queen	queen1	The log is quiet. But red ants were watching from it. They counted our dead, and then they walked away along our trails.
+open_7	queen	queen1	Vetch lives. My old Matron was thrown clear when the glass broke. Her road home crosses red ground. Bring her to me.
+close_7	queen	queen1	She sleeps beside me now, healed. But the young red queen is still breathing across the clearing.
+open_2	queen	queen2	Her name is Ashling. Her foragers strip our trails. For the first time, we go for a queen. Find her shaft and end her.
+close_2	queen	queen2	Ashling is dead. Her mother will hear of it. Good. Let her come.
+open_3	queen	queen2	Cinder has come for her daughter's killers. Scout her mound, hold our nest, and grow strong. Then go down her shaft.
+close_3	queen	queen2	Cinder is gone. Her guards wore a mark we have not seen: the Empress's mark. Her mother's.
+open_10	queen	queen2	Wings in the woods. The Hornet Mother sends her daughters at every colony she can smell, and ours is the closest. Raise me a general.
+close_10	queen	queen2	Her paper nest is torn open. Somewhere in her body is a gift for us. I can taste it already.
+open_8	queen	queen2	No rain. The seeds are gone, and the only food left in the woods is the bugs themselves. Hunt them, and outlast the red colony.
+close_8	queen	queen2	The red queen starved. When the rain comes back, it will find only us.
+open_9	queen	queen2	I can grow wings now. Three watch posts shield the red queen. Burn them, and she has nothing left to hide behind.
+close_9	queen	queen2	The posts are ash. Our flyers have seen the Empress's mound beyond the trees.
+open_4	queen	queen3	Tonight her princesses fly. If they do, red queens will take root in every corner of the woods. Wake the Old Stag. End her line before dark.
+close_4	queen	queen3	The princesses never flew. Only her own mounds are left.
+open_11	queen	queen3	She is sealing her mound for winter. You have eight minutes and one army. Do not stop.
+close_11	queen	queen3	We were inside before the seal. Only her chamber is left, under the last hill.
+open_12	queen	queen3	The Empress is awake, and she is hungry. Everything we have become since the glass broke, use it now. End her.
+close_12	queen	queen3	It is over. The woods are ours. I will lay my eggs beside the shard of glass that carried us here.
+bark_attack	queen	queen1	They are in our tunnels. Defend the nest.
+bark_attack_far	queen	queen1	Our workers are under attack. Send help.
+bark_queen_hurt	queen	queen1	I am hurt. Bring the soldiers home.
+bark_queen_low	queen	queen1	I am dying, my chosen. If I fall, everything falls.
+bark_queen_kill	queen	queen1	Their queen is dead. Her colony will wither without her.
+bark_mutation	queen	queen2	I can feel it changing me. When I lay, my daughters will carry it.
+bark_general	queen	queen2	A general is born. It will lead the army in my name. Listen to it.
+bark_low_food	queen	queen1	The stores are empty. My daughters are hungry.
+gen_warlord_born	warlord	warlord	I am awake, Mother. Point me at something.
+gen_matron_born	matron	matron	Vetch, at your service. Bring me something that burns.
+gen_marshal_born	marshal	marshal	The sky is ours. Show me where to strike.
