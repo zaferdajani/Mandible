@@ -28,7 +28,7 @@ public static class Lane
         "+18% bite damage per tier",
         "+20% health per tier",
         "+10% speed per tier",
-        "Heals your hero 60% at once (45 s between doses)",
+        "Heals your general 60% at once (45 s between doses)",
     };
 
     /// Next tier's price; Royal Jelly is a consumable with a fixed price.

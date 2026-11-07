@@ -55,7 +55,7 @@ public static class Levels
             Blurb = "Scout Queen Cinder's mound, hold your own, break her outpost and end her.",
             Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
         new() { Id = 4, Season = 3, Name = "The Nuptial Flight", Novelty = "The Old Stag and a deadline", Rival = RivalKind.Grown,
-            Blurb = "Raise a hero, win over the Old Stag and end the red line before the flight.",
+            Blurb = "Raise a general, win over the Old Stag and end the red line before the flight.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Stag, 0f, "The Old Stag survives to the end") } },
         new() { Id = 5, Season = 0, Name = "Sweet Rain", Novelty = "Soldiers, food effects and a storm", Rival = RivalKind.None, Seed = 20261105,
             Blurb = "Raise Burr a squad, taste honeydew, haul protein and fill the galleries before the storm.",
@@ -72,7 +72,7 @@ public static class Levels
         new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Flying ants, acid gunners, watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
             Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
-        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Heroes, wasps and a boss who raids", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
+        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Generals, wasps and a boss who raids", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
             Blurb = "The Hornet Mother raids from her paper nest. Raise Burr as a Warlord and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
         new() { Id = 11, Season = 3, Name = "The Long March", Novelty = "Time pressure: eight minutes, one army", Rival = RivalKind.Awake, Seed = 20261111,
@@ -124,7 +124,7 @@ public static class Levels
         10 => new[]
         {
             "Something with wings has found you. From a paper nest in the woods the Hornet Mother sends her daughters at every colony she can smell, and yours is the closest.",
-            "Survive her first raid, then raise old Burr as a Warlord to lead the army: the colony's first hero. Take the fight to her nest; with her gone, the red colony across the clearing stands alone.",
+            "Survive her first raid, then raise old Burr as a Warlord to lead the army: the colony's first general. Take the fight to her nest; with her gone, the red colony across the clearing stands alone.",
         },
         8 => new[]
         {
@@ -139,7 +139,7 @@ public static class Levels
         4 => new[]
         {
             "The evening air is warm and still. Tonight the Ember Empress's winged princesses take their nuptial flight: if they fly, red queens will seed every corner of the woods.",
-            "Raise a hero, wake the Old Stag that sleeps by the great raspberry and turn its fury on the red mound. Break the guardians that shield its queen and end her line before the flight.",
+            "Raise a general, wake the Old Stag that sleeps by the great raspberry and turn its fury on the red mound. Break the guardians that shield its queen and end her line before the flight.",
         },
         11 => new[]
         {
@@ -149,7 +149,7 @@ public static class Levels
         12 => new[]
         {
             "The Ember Empress herself is awake, fortified and hungry, and her raids will come whether you are ready or not.",
-            "Everything the colony has learned since the glass broke is yours: Burr and the heroes, wings, acid and the Old Stag sleeping by the raspberry. End her, and the woods are yours.",
+            "Everything the colony has learned since the glass broke is yours: Burr and the generals, wings, acid and the Old Stag sleeping by the raspberry. End her, and the woods are yours.",
         },
         _ => System.Array.Empty<string>(),
     };
@@ -186,11 +186,11 @@ public static class Levels
     {
         new() { Stars = 3, Name = "Clover emblem", Kind = "Emblem", Text = "A four-leaf clover for your colony's banner.", Emblem = 1 },
         new() { Stars = 6, Name = "Ember colony colour", Kind = "Colour", Text = "Your ants' crests and your banner glow ember red.", Colour = 1 },
-        new() { Stars = 9, Name = "Acid Matron", Kind = "Hero", Text = "Raise the Acid Matron from Level 7 on, beside Burr.", Perk = Perk.Matron },
+        new() { Stars = 9, Name = "Acid Matron", Kind = "General", Text = "Raise the Acid Matron from Level 7 on, beside Burr.", Perk = Perk.Matron },
         new() { Stars = 12, Name = "Raspberry emblem", Kind = "Emblem", Text = "The great raspberry, for the colony that took it.", Emblem = 2 },
         new() { Stars = 15, Name = "Early acid gunners", Kind = "Caste", Text = "Acid gunners (and the Empress research they need) from Level 7 on.", Perk = Perk.Gunner },
         new() { Stars = 18, Name = "Saffron colony colour", Kind = "Colour", Text = "Crests and banner in warm saffron.", Colour = 2 },
-        new() { Stars = 21, Name = "Sky Marshal", Kind = "Hero", Text = "Raise the Sky Marshal from Level 7 on, beside Burr.", Perk = Perk.Marshal },
+        new() { Stars = 21, Name = "Sky Marshal", Kind = "General", Text = "Raise the Sky Marshal from Level 7 on, beside Burr.", Perk = Perk.Marshal },
         new() { Stars = 24, Name = "Early flying ants", Kind = "Caste", Text = "Flying ants (and the wings research) from Level 7 on.", Perk = Perk.Flyer },
         new() { Stars = 27, Name = "Stag Crest emblem", Kind = "Emblem", Text = "The Old Stag's antlers, borne by the colony it fights for.", Emblem = 3 },
         new() { Stars = 30, Name = "Rosewood colony colour", Kind = "Colour", Text = "Crests and banner in deep rosewood.", Colour = 3 },
@@ -506,7 +506,7 @@ public sealed partial class Sim
                     m.WaveAt = 120; m.WaveGap = 160;
                 }
                 Add(Expedition.Obj.Waves, "Beat the first hornet raid", "The Hornet Mother sends her daughters at your mound. Keep the army home and break the raid. Raiders left: {0}.", b: 1);
-                Add(Expedition.Obj.Hero, "Raise Burr as a Warlord", "Open the Heroes tab and raise the Warlord (Y): old Burr, grown into a hero. A hero levels fast and fights with special moves.");
+                Add(Expedition.Obj.Hero, "Raise Burr as a Warlord", "Open the Generals tab and raise the Warlord (Y): old Burr, grown into a general. A general levels fast and fights with special moves.");
                 Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Take the army to the paper nest (gold ring) and kill her. While she lives the raids keep coming. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
@@ -555,7 +555,7 @@ public sealed partial class Sim
                 SpawnNestGuardians(1);
                 WakeOldStag(centre);
                 ClearCorridor(home, foe, StagId);
-                Add(Expedition.Obj.Hero, "Raise a hero", "Open the Heroes tab and raise a hero. The Empress's raids will come on their own: keep soldiers home.");
+                Add(Expedition.Obj.Hero, "Raise a general", "Open the Generals tab and raise a general. The Empress's raids will come on their own: keep soldiers home.");
                 Add(Expedition.Obj.Group, "Rouse the Old Stag", "Beat the Old Stag by the great raspberry with your whole army and it joins you. Its bite shatters mound guards. Its strength: {0}%.", b: -4);
                 Add(Expedition.Obj.Group, "Break the guardians", "While her mound guardians stand the Empress cannot be harmed. Lead the Old Stag at them. Guardians left: {0}.", b: -3);
                 Add(Expedition.Obj.KillQueen, "Kill the Ember Empress", "The way is open. Send everything down the red shaft and end her.");

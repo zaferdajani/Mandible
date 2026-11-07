@@ -142,7 +142,7 @@ public partial class Tutorial : Control
             begin: () => _startCount = Sim.ChamberCount(Local.Me, ChamberKind.Brood, false));
         Add("Raise your queen",
             "Press Q to feed the queen royal jelly. Workers enlarge the royal chamber and she becomes a Matriarch.",
-            "Queen levels unlock new castes (majors, gunners, flyers) and heroes. Every upgrade is a room the workers dig or enlarge: look for it with N.",
+            "Queen levels unlock new castes (majors, gunners, flyers) and generals. Every upgrade is a room the workers dig or enlarge: look for it with N.",
             () => Me.Researching || Me.T(Upgrade.Queen) >= 2, () => nest);
         Add("Clear a wild lair",
             "Press F2 to select your whole army, then press A and click the marked lair. Your ants attack everything on the way.",
@@ -154,7 +154,7 @@ public partial class Tutorial : Control
             "Veteran squads keep their rank when refilled, so bring them home instead of throwing them away.",
             () => Sim.Squads.Exists(s => s.Team == Local.Me && s.Recalled) || Sim.Time - _stepStart > 40);
         Add("Win the war",
-            "You know the basics. Build up, raise your queen, hatch heroes, and destroy the enemy queen across the yard. The red colony now starts its attacks.",
+            "You know the basics. Build up, raise your queen, hatch generals, and destroy the enemy queen across the yard. The red colony now starts its attacks.",
             "Press F1 any time for help. The main menu's Field Guide explains every caste, bug and food.",
             () => false);
     }
