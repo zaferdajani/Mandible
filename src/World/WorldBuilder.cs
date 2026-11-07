@@ -15,7 +15,7 @@ public static partial class WorldBuilder
     /// Lane War uses it so the lanes run along a phone held sideways.
     public static World Build(Node3D parent, uint seed, bool horizontal = false, bool firstNest = false)
     {
-        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest };
+        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest, Seed = seed };
         FoodArt.Reset();
         parent.AddChild(w.Root);
         var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
@@ -784,8 +784,16 @@ public static partial class WorldBuilder
             }
         }
         Pair(FoodKind.Berry, Find(home, 110, 150, 5), 420, 4.2f);
-        // contested prize in the middle
-        Spawn(w, rng, FoodKind.Berry, Center, 1100, 6.5f);
+        // contested prize in the middle: not the same pile every game. Its kind and its place along the line of points
+        // equally far from both nests (x = y) change with the map's seed, so neither colony is favoured
+        var pick = new Rng(w.Seed ^ 0xC0FFEEu); // its own sequence: the rest of the yard (and every tuned campaign map) stays as it was
+        var prize = Center + new Vector2(1, 1).Normalized() * pick.R(-26f, 26f);
+        switch ((int)pick.R(0, 2.999f))
+        {
+            case 0: Spawn(w, rng, FoodKind.Berry, prize, 1100, 6.5f); break;
+            case 1: Spawn(w, rng, FoodKind.Sugar, prize, 900, 5.5f); break;
+            default: for (int i = 0; i < 6; i++) Spawn(w, rng, FoodKind.Seed, prize + new Vector2(1, -1).Normalized() * (i - 2.5f) * 3.4f, 180, 2.6f); break;
+        }
     }
 
     /// Wild bug lairs beside the richest food. Rules depend only on distance to the nearest nest,
@@ -803,15 +811,19 @@ public static partial class WorldBuilder
         }
         // the great raspberry in the middle: a stag beetle lord and his beetles, each equidistant from both nests
         var mid = Center;
+        foreach (var f in w.Food) if (f.Max >= 900 || f.Kind == FoodKind.Seed && f.Max >= 180 && f.Pos.DistanceTo(Center) < 40) { mid = f.Pos; break; } // the prize, wherever it fell
         var bisector = new Vector2(1, 1).Normalized(); // points with x = y are equally far from both nests
         w.Camps.Add(new Camp { Pos = mid + bisector * 11, Facing = bisector.AngleD(), Bugs = new[] { (AntType.StagBeetle, 5) } });
-        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).AngleD(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Wasp, 4) } });
+        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).AngleD(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Spider, 4) } }); // no wings in the middle every army crosses
         foreach (var f in w.Food.ToArray())
         {
             float d = Mathf.Min(f.Pos.DistanceTo(w.Nests[0].Pos), f.Pos.DistanceTo(w.Nests[1].Pos));
+            // flying predators keep far from the starting nests (Config.WaspFloor): nothing with wings at the first prey
+            bool wasps = d >= Config.WaspFloor;
+            if (f.Max >= 900 || f.Kind == FoodKind.Seed && f.Max >= 180 && f.Pos.DistanceTo(Center) < 40) continue; // the prize has its own camps
             if (f.Kind == FoodKind.Berry && f.Max < 1000) Add(f.Pos, f.Radius, (AntType.Spider, 3), (AntType.Beetle, 2));
-            else if (f.Kind == FoodKind.Sugar) Add(f.Pos, f.Radius, (AntType.Beetle, 2), (AntType.Wasp, 1));
-            else if (f.Kind == FoodKind.Seed && d > 75) Add(f.Pos, f.Radius, (AntType.Wasp, 2));
+            else if (f.Kind == FoodKind.Sugar) Add(f.Pos, f.Radius, (AntType.Beetle, 2), wasps ? (AntType.Wasp, 1) : (AntType.Spider, 1));
+            else if (f.Kind == FoodKind.Seed && d > 75) Add(f.Pos, f.Radius, wasps ? (AntType.Wasp, 2) : (AntType.Beetle, 2));
             else if (f.Kind == FoodKind.Crumb && d > 110) Add(f.Pos, f.Radius, (AntType.Spider, 2));
             else if (f.Kind == FoodKind.Crumb && d > 80) Add(f.Pos, f.Radius, (AntType.Beetle, 1));
         }
@@ -839,6 +851,7 @@ public static partial class WorldBuilder
                 (AntType, int)[] bugs;
                 var a = lone[(int)rng.R(0, 2.999f)];
                 var b = lone[(int)rng.R(0, 2.999f)];
+                if (d < Config.WaspFloor) { if (a == AntType.Wasp) a = AntType.Spider; if (b == AntType.Wasp) b = AntType.Beetle; } // no wings near a start
                 if (d < 95) bugs = new[] { (a, rng.F() < 0.5f ? 1 : 2) };
                 else if (d < 140) bugs = new[] { (a, 2), (b, 3) };
                 else bugs = new[] { (a, 3), (b, 3), (AntType.Beetle, 4) };

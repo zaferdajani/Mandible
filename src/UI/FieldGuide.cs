@@ -459,9 +459,10 @@ public partial class FieldGuide : ColorRect
 
         var tabs = new HBoxContainer();
         tabs.AddThemeConstantOverride("separation", 6);
-        foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Feeding", "Colony Needs" })
+        foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Feeding", "Mutation", "Colony Needs" })
         {
             if (name == "Feeding" && !CampaignProgress.MetEvolution) continue; // eating to evolve is a later chapter's lesson
+            if (name == "Mutation" && !CampaignProgress.MetMutation) continue; // the campaign's own track, from the Silk Trap
             var b = new Button { Text = name, ToggleMode = true, CustomMinimumSize = new Vector2(130, 38) };
             b.Pressed += () => Show(name);
             tabs.AddChild(b);
@@ -489,6 +490,7 @@ public partial class FieldGuide : ColorRect
             "Foraging" => Foraging(),
             "Food" => Food(),
             "Feeding" => Feeding(),
+            "Mutation" => MutationPage(),
             _ => Needs(),
         });
     }
@@ -549,6 +551,8 @@ public partial class FieldGuide : ColorRect
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
         };
         string squad = Config.SquadSize(t) > 1 ? $"Hatches as a squad of {Config.SquadSize(t)}.  " : "";
+        if (t == AntType.Flyer && team == 0 && CampaignProgress.MetMutation) squad += $"MUTATION  {Mutations.Name(Mutation.Stinger)}: {Mutations.Text(Mutation.Stinger)}  ";
+        if (Config.IsHero(t) && team == 0 && CampaignProgress.MetMutation) squad += "In the campaign every hero is born from a royal larva.  ";
         string race = "";
         var r = Config.RaceOf(team);
         if (t == AntType.Gunner) race = r == Race.BlackGarden ? "  Black garden ants: +30% (formic acid)." : "  Red fire ants: −25% (no acid gland).";
@@ -639,6 +643,23 @@ public partial class FieldGuide : ColorRect
             h.AddChild(col);
             p.AddChild(h);
             v.AddChild(p);
+        }
+        return v;
+    }
+
+    /// The mutation track: strain M-7, mutagen, the sixth sense and every mutation the colony can take.
+    static Control MutationPage()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 10);
+        var intro = UiTheme.Text("The tube's label read: Lasius niger, strain M-7. Do not release. The colony is a lab strain bred to take up mutagen without limit, and the batch that broke with it spilled into the woods. Creatures that fed on the spill carry it: queens, nest masters, rare bosses. Their bodies glow faintly and pulse, and every ant of the colony feels that pulse through the fog (the sixth sense).\n\nTwo tracks grow the colony. EVOLUTION: remains eaten make single ants and the queen stronger. MUTATION: mutagen, carved out of a glowing body and carried home (heavy, slow, and hunters smell it), is consumed by the queen and changes the whole colony with things real ants do not have. Every queen or nest master defeated also raises the colony's level (more room, tougher fighters). Every mutation adds instability: the woods' predators and rival strains grow tougher with it.", 15);
+        intro.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        v.AddChild(intro);
+        foreach (var m in Mutations.All)
+        {
+            var row = UiTheme.Text($"{Mutations.Name(m).ToUpperInvariant()}  ·  {Mutations.Source(m)}\n{Mutations.Text(m)}", 14, UiTheme.Bold, new Color(0.88f, 0.82f, 1f));
+            row.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            v.AddChild(row);
         }
         return v;
     }

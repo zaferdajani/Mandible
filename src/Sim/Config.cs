@@ -46,6 +46,12 @@ public static class Config
     public static bool IsWarrior(AntType t) => t == AntType.Soldier || t == AntType.Major || t == AntType.Flyer || t == AntType.Gunner || IsHero(t);
     public static bool Flies(AntType t) => t == AntType.Wasp || t == AntType.Flyer || t == AntType.Marshal;
     public static bool Ranged(AntType t) => t == AntType.Gunner || t == AntType.Matron;
+    /// Flying predators (wasps, the Hornet Mother): in the air no ground ant can reach them, acid gunners included;
+    /// only flying ants, or a ground ant in the moment one comes down to sting, or one pinned to the ground by silk.
+    public static bool Predator(AntType t) => t == AntType.Wasp;
+    public const float ReachAlt = 1.3f;     // a flyer below this height can be bitten from the ground
+    public const float HoverAlt = 2.8f;     // a wasp at its prey hangs here between stings, out of reach
+    public const float WaspFloor = 115f;    // no wasp lair this close to a starting nest (the owner's rule: no predators at the start)
     public static float CruiseAlt(AntType t) => t == AntType.Wasp ? 5f : t == AntType.Flyer ? 3.6f : t == AntType.Marshal ? 4.4f : 0f;
 
     /// Per-level growth: warriors +16% hp / +14% bite per level, heroes +12% per level, wild bugs grow faster.

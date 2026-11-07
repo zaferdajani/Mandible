@@ -663,6 +663,13 @@ public partial class PlayerInput : Node
         if (attack) AttackMoves++; else Moves++;
         // enemy under the cursor?
         int enemy = screen.HasValue ? Pick(screen.Value, false, 26) : -1;
+        if (enemy >= 0 && Config.Predator(Sim.Ants[enemy].Type) && Sim.Airborne(Sim.Ants[enemy]) && !Selection.Exists(i => Config.Flies(Sim.Ants[i].Type)))
+        {
+            // the owner's rule: a wasp in the air is out of every ground ant's reach
+            Game.Hud.Alert("It's in the air: only flying ants can reach it", new Color(1f, 0.6f, 0.4f));
+            Game.Audio.Ui("ui_error");
+            return;
+        }
         if (enemy >= 0)
         {
             var ac = Cmd.Units(CmdKind.Attack, Local.Me, Selection, Sim);
@@ -672,6 +679,21 @@ public partial class PlayerInput : Node
             Game.Effects.Marker(Game.World.HF.Point(Sim.Ants[enemy].Pos), new Color(1, 0.3f, 0.2f));
             Game.Audio.Ui("ui_click");
             return;
+        }
+        if (!attack && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
+        {
+            // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
+            foreach (var mg in Sim.Mutagens)
+            {
+                if (mg.Home || mg.Pos.DistanceTo(world) > 2.4f || !(Sim.Senses(Local.Me, mg) || Game.Fog == null || Game.Fog.Visible(mg.Pos))) continue;
+                var xc = Cmd.Units(CmdKind.Extract, Local.Me, Selection, Sim);
+                xc.FoodId = mg.Id;
+                Game.Issue(xc);
+                Game.Ants.Ack(Selection, mg.Pos);
+                Game.Effects.Marker(Game.World.HF.Point(mg.Pos), new Color(0.78f, 0.6f, 1f));
+                Game.Audio.Ui("ui_click");
+                return;
+            }
         }
         if (!attack)
         {

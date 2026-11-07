@@ -80,10 +80,18 @@ public struct Ant
     public float HasteT, HasteMul, GuardArmor; // Trail Blaze
     public float SlowT, SlowMul;      // Caustic Cloud
     public bool AutoEat;              // eats what it kills (and remains it idles by); off: leaves them for the workers to haul home
+    // mutation (Mutation.cs)
+    public int MutaP1;                // mutagen source id + 1 this worker carves, carries or guards (0 = none)
+    public bool MutaCarry;            // has the gland in its jaws
+    public bool Nurse;                // lives in the nursery, feeding the royal larva
+    // flight (the owner's rule: ground ants cannot fight a flyer in the air)
+    public float PinT;                // seconds pinned to the ground by thrown silk (Mutation.WebThrowing)
+    public float CoverT;              // a ground ant ducking away from a wasp it cannot reach
 }
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
-    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall }
+    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
+    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost }
 
 public struct SimEvent
 {
@@ -193,6 +201,12 @@ public sealed class Colony
     public float MournT;
     // organic matter: the evolving material, only from other creatures' remains (Carrion.cs)
     public float Organic = Config.StartOrganic, OrganicGathered, OrganicEaten;
+    // mutation (Mutation.cs): the campaign colony only; zero everywhere else
+    public int Mutagen, Mutations, Instability, Level = 1, WebRank;
+    public float MutagenGathered;
+    public int LarvaStage;            // 0 none, 1 laid (waiting for the nursery), 2 a larva the nurses feed, 3 a cocoon
+    public AntType LarvaHero = AntType.Warlord;
+    public float LarvaFed, LarvaNeed, LarvaHp = 1, CocoonT, CocoonTime;
     public int Buried;
     public Vector2 MiddenPos;
     public bool HasMidden;
@@ -304,6 +318,7 @@ public sealed partial class Sim
             a.DmgMul *= 1 + 0.25f * q;
             a.Size *= 1 + 0.12f * q;
         }
+        MutationStats(ref a);
         if (a.Guardian) ApplyGuardianStats(ref a);
         if (a.Boss) { a.MaxHp *= Mode == GameMode.Lanes ? Lane.BossHp : Expedition.StagHp; a.DmgMul *= Lane.BossDmg; a.Size *= 1.35f; }
         if (Mode == GameMode.Lanes && a.Team < 2) ApplyLaneStats(ref a);
@@ -583,6 +598,8 @@ public sealed partial class Sim
             a.Goal = ClampMap(p + off);
             a.GoalLayer = (byte)layer;
             if (a.DigP1 > 0) a.DigP1 = 0; // an ordered worker drops its shovel
+            if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.Nurse = false;
             if (a.FeastOrder) { a.FeastOrder = false; a.FoodTarget = null; }
             a.State = attack ? AntState.AttackMove : AntState.Move;
             a.Forced = false;
@@ -597,7 +614,7 @@ public sealed partial class Sim
         foreach (int id in ids)
         {
             ref var a = ref Ants[id];
-            if (!a.Alive || a.Type == AntType.Queen) continue;
+            if (!a.Alive || a.Type == AntType.Queen || !CanReach(a, Ants[target])) continue; // a wasp in the air: only flyers
             a.State = AntState.Engage;
             a.Prev = AntState.Idle;
             a.FeastOrder = false;
@@ -616,6 +633,8 @@ public sealed partial class Sim
             ref var a = ref Ants[id];
             if (!a.Alive) continue;
             if (a.Type != AntType.Worker) { others.Add(id); continue; }
+            if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.Nurse = false;
             a.Assigned = f;
             a.FoodTarget = f;
             a.State = a.Carrying ? AntState.Return : AntState.Gather;
@@ -629,6 +648,8 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[id];
             if (!a.Alive || a.Type == AntType.Queen) continue;
+            if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.Nurse = false;
             a.Assigned = null;
             a.Forced = false;
             a.Anchor = a.Pos;
@@ -644,6 +665,12 @@ public sealed partial class Sim
         float cost = Config.ProdCost(kind);
         c.Food -= cost;
         c.Spent += cost;
+        if (Mission != null && team == 0 && Config.IsHeroKind(kind))
+        {
+            // the campaign's heroes come only from a royal larva (Mutation.RoyalLarva)
+            LayRoyalLarva(team, Config.UnitOf(kind), Mutations.LarvaNeedLater, Mutations.CocoonTimeLater);
+            return QueueResult.Ok;
+        }
         c.Organic -= OrganicCost(kind);
         c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind) });
         return QueueResult.Ok;
@@ -658,6 +685,7 @@ public sealed partial class Sim
         if (Mode == GameMode.Lanes) return QueueResult.Locked; // the mound sends its waves on its own
         if (!c.Founded || kind == ProdKind.Chamber) return QueueResult.Locked; // no brood before the nest; chambers are dug, not laid
         if (ChamberCount(team, ChamberKind.Brood, true) == 0) return QueueResult.Locked;
+        if (Mission != null && team == 0 && Config.IsHeroKind(kind)) return CanLayHero(c, kind);
         if (!Config.Unlocked(kind, c.Tier)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
@@ -687,7 +715,7 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage);
+            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
             Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u);
         }
         foreach (var c in Col)
@@ -696,7 +724,9 @@ public sealed partial class Sim
             Mix(c.Founded ? 1u : 0u); Mix(F(c.FoodCap));
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
+            Mix((uint)c.Mutagen); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
         }
+        foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -745,6 +775,8 @@ public sealed partial class Sim
         TickZones(dt);
         TickSquads(dt);
         TickNest(dt);
+        TickMutagen();
+        foreach (var c in Col) TickLarva(c, dt);
         if (Mode == GameMode.Lanes) TickLanes(dt);
         for (int i = 0; i < High; i++)
             if (Ants[i].Alive) TickAnt(i, dt);
@@ -778,6 +810,7 @@ public sealed partial class Sim
         // greater queens lay faster; protein feeds the larvae; each race has its own brood rhythm
         float brood = Config.BroodSpeed(c.T(Upgrade.Queen)) * (c.ProteinT > 0 ? 1.3f : 1f);
         if (c.Race == Race.RedFire) brood *= Config.RedBrood;
+        if (c.Team == 0 && Has(0, Mutation.SwiftBrood)) brood *= Mutations.BroodMul;
         else brood *= item.Kind == ProdKind.Worker ? Config.BlackWorkerBrood : Config.BlackSquadBrood;
         item.Progress += dt * brood;
         if (item.Progress < item.Time) return;
@@ -874,7 +907,7 @@ public sealed partial class Sim
 
     // ------------------------------------------------------------------ queries
     /// Nearest enemy; ground units cannot reach targets flying high above them.
-    public int FindEnemy(Vector2 p, int team, float radius, bool air = false, int layer = 0)
+    public int FindEnemy(Vector2 p, int team, float radius, bool air = false, int layer = 0, bool flier = false)
     {
         int best = -1;
         float bestD = radius * radius;
@@ -890,7 +923,7 @@ public sealed partial class Sim
                 {
                     ref var b = ref Ants[j];
                     if (!b.Alive || b.Team == team || b.Layer != layer) continue;
-                    if (!air && b.Alt > 2.2f) continue;
+                    if (Config.Predator(b.Type) ? !flier && Airborne(b) : !air && b.Alt > 2.2f) continue;
                     float d = p.DistanceSquaredTo(b.Pos);
                     // prefer fighters over workers, workers over the queen when at equal range
                     if (b.Type == AntType.Worker)
@@ -944,6 +977,7 @@ public sealed partial class Sim
             if (a.Hp <= 0) { Kill(i, a.PoisonSrc >= 0 && Ants[a.PoisonSrc].Alive ? a.PoisonSrc : -1); return; }
         }
         // fruit water: the whole colony slowly mends while it keeps coming in
+        if (a.Team == 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp && a.Type != AntType.Queen && Has(0, Mutation.Regrowth)) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Mutations.RegrowRate * dt);
         if (a.Team < 2 && Col[a.Team].JuiceT > 0 && a.DamagedT <= 0 && a.Hp < a.MaxHp && a.Type != AntType.Queen && !a.Guardian) a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.015f * dt);
         if (a.Guardian) TickGuardian(ref a, dt);
         a.AttackAnim = Mathf.Max(0, a.AttackAnim - dt * 3.5f);
@@ -954,7 +988,7 @@ public sealed partial class Sim
 
         if (a.Type == AntType.Queen)
         {
-            if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+            if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
             if (a.Target >= 0 && Ants[a.Target].Alive) TryBite(i, a.Target, st);
             if (Mode != GameMode.Lanes) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f); // in Lane War her guardians are her only protection
             var walk = a.Team < 2 ? QueenWalk(ref a) : Vector2.Zero;
@@ -972,15 +1006,25 @@ public sealed partial class Sim
         a.BlockT -= dt;
         a.RetreatT -= dt;
         a.SpecialCd -= dt;
+        if (a.PinT > 0)
+        {
+            // pinned to the ground by thrown silk: it struggles where it fell, and ground ants can reach it
+            a.PinT -= dt;
+            a.Alt = Mathf.MoveToward(a.Alt, 0.25f, dt * 12f);
+            a.Speed = 0;
+            a.Gait += dt * 0.8f;
+            return;
+        }
         if (Config.Flies(a.Type))
         {
-            // flyers cruise high; wasps dive onto their prey, flying ants swoop to bite ground targets
+            // flyers cruise high; wasps hang above their prey and drop only to sting; flying ants swoop to bite
             float want = Config.CruiseAlt(a.Type);
             if (a.RetreatT > 0) want += 1.8f; // a wasp that has just stung climbs out of reach
             else if (a.State == AntState.Engage && Valid(a.Target, a.TargetSerial))
             {
                 ref var tt = ref Ants[a.Target];
-                if (a.Pos.DistanceTo(tt.Pos) < 5f) want = a.Type == AntType.Wasp ? tt.Alt + 0.9f : Mathf.Max(tt.Alt, 1.4f);
+                bool diving = a.Cooldown <= 0.3f || a.AttackAnim > 0.55f; // the moment of the sting: the one window a ground ant has
+                if (a.Pos.DistanceTo(tt.Pos) < 5f) want = a.Type == AntType.Wasp ? (diving || Config.Flies(tt.Type) ? tt.Alt + 0.9f : tt.Alt + Config.HoverAlt) : Mathf.Max(tt.Alt, 1.4f);
             }
             a.Alt = Mathf.MoveToward(a.Alt, want, dt * 7f);
         }
@@ -1001,6 +1045,33 @@ public sealed partial class Sim
         if (a.CastReq <= 0) a.CastSlot = 0;
         a.AbilityCd -= dt;
         a.BuffT -= dt;
+
+        if (think && a.Team < 2 && a.Layer == 0 && !Config.Flies(a.Type) && !a.Guardian && a.Type != AntType.Queen)
+        {
+            if (a.Type == AntType.Soldier && a.Team == 0 && Has(0, Mutation.WebThrowing) && a.SpecialCd <= 0) ThrowWeb(i, ref a);
+            if (a.CoverT <= 0 && a.State is AntState.Idle or AntState.Forage or AntState.Gather && a.MutaP1 == 0 && !a.Nurse && !(Valid(a.Target, a.TargetSerial) && CanReach(a, Ants[a.Target])))
+            {
+                int h = Hunter(a.Pos, a.Team);
+                if (h >= 0) { a.CoverT = 1.2f; a.Anchor = ClampMap(a.Pos + (a.Pos - Ants[h].Pos).Normalized() * 5f); }
+            }
+        }
+        if (a.CoverT > 0)
+        {
+            a.CoverT -= dt;
+            desired = a.Anchor - a.Pos;
+            if (desired.LengthSquared() < 0.5f) a.CoverT = 0;
+            if (a.Team < 2) desired = Layering(ref a, desired);
+            Move(i, ref a, st, desired, 1f, dt);
+            return;
+        }
+        if (a.MutaP1 > 0 || a.Nurse)
+        {
+            // the gland and the royal larva come before everything else a worker does
+            desired = a.Nurse ? NurseLogic(ref a) : MutagenLogic(i, ref a, dt, ref speedMul);
+            desired = Layering(ref a, desired);
+            Move(i, ref a, st, desired, speedMul, dt);
+            return;
+        }
 
         switch (a.State)
         {
@@ -1028,7 +1099,7 @@ public sealed partial class Sim
                 if (think && a.Lane > 0 && a.LaneStep == 4 && LaneSiege(ref a)) break;
                 if (think)
                 {
-                    int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+                    int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
                     if (e >= 0) { Engage(ref a, e, AntState.AttackMove); break; }
                     if ((a.Team < 2 || a.Raider) && a.Layer == 0 && RaidNest(ref a)) break;
                 }
@@ -1059,7 +1130,7 @@ public sealed partial class Sim
                 {
                     float r = a.State == AntState.Hold ? st.Reach + a.Size * 0.5f + 1f : st.Aggro;
                     if (a.Type == AntType.Worker) r = st.Aggro;
-                    int e = FindEnemy(a.Pos, a.Team, r, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+                    int e = FindEnemy(a.Pos, a.Team, r, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
                     if (e >= 0)
                     {
                         if (a.State == AntState.Hold) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
@@ -1109,7 +1180,7 @@ public sealed partial class Sim
     {
         if (!Valid(a.Target, a.TargetSerial))
         {
-            int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+            int e = FindEnemy(a.Pos, a.Team, st.Aggro, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
             if (e >= 0 && !a.Forced) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
             else
             {
@@ -1120,7 +1191,7 @@ public sealed partial class Sim
             }
         }
         ref var t = ref Ants[a.Target];
-        if (!Config.Flies(a.Type) && !Config.Ranged(a.Type) && t.Alt > 2.2f) { a.Target = -1; return Vector2.Zero; } // it flew out of reach
+        if (!CanReach(a, t)) { a.Target = -1; return Vector2.Zero; } // it flew out of reach
         // leash for idle defenders and wild bugs guarding their lair
         if (a.Team == Config.Wild ? a.Pos.DistanceTo(a.Home) > 30f : !a.Forced && a.Prev == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > st.Aggro * 2.2f)
         {
@@ -1130,7 +1201,7 @@ public sealed partial class Sim
         // switch to a closer threat now and then
         if (think && !a.Forced)
         {
-            int e = FindEnemy(a.Pos, a.Team, st.Reach + 2f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+            int e = FindEnemy(a.Pos, a.Team, st.Reach + 2f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
             if (e >= 0 && e != a.Target && Ants[e].Type != AntType.Queen) { a.Target = e; a.TargetSerial = Ants[e].Serial; }
         }
         float reach = st.Reach + t.Size * 0.38f + a.Size * 0.3f;
@@ -1219,6 +1290,7 @@ public sealed partial class Sim
             t.PoisonT = 3f;
             t.PoisonSrc = i;
         }
+        MutantBite(i, ref a, ref t, dmg);
         if (Config.Ranged(a.Type)) Events.Add(new SimEvent { Kind = EvKind.Spit, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
         else Events.Add(new SimEvent { Kind = EvKind.Bite, Pos = t.Pos, Team = a.Team, Type = a.Type });
         var tp = t.Pos;
@@ -1398,6 +1470,7 @@ public sealed partial class Sim
         if (t.CharmP1 > 0) { t.Team = t.CharmP1 - 1; t.CharmP1 = 0; } // it dies one of its own colony's
         if (Mission != null && !t.Summoned) RosterKill(id, killer);
         if (t.Boss && t.Team == Config.Wild && killer >= 0 && Ants[killer].Team < 2) { Rouse(id, Ants[killer].Team, killer); return; }
+        MutationDeath(id, ref t, killer);
         t.Alive = false;
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);
@@ -1461,7 +1534,7 @@ public sealed partial class Sim
         // the colony swarms to defend its queen, down the shaft if the fight is below
         if (think && Col[a.Team].QueenAlarm > 0 && a.Pos.DistanceTo(nest) < 26)
         {
-            int e = FindEnemy(a.Pos, a.Team, 12, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer);
+            int e = FindEnemy(a.Pos, a.Team, 12, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
             if (e < 0 && a.Layer == 0 && Col[a.Team].Founded) e = FindEnemy(nest, a.Team, NestReach(a.Team), true, NestLayer(a.Team));
             if (e >= 0) { a.Prev = AntState.Forage; a.State = AntState.Engage; a.Target = e; a.TargetSerial = Ants[e].Serial; a.Forced = false; return Vector2.Zero; }
         }

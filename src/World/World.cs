@@ -60,6 +60,7 @@ public enum Scatter { Grass, Pebbles, Straw }
 
 public sealed class World
 {
+    public uint Seed;                 // the map seed (the middle prize draws its own sequence from it)
     public bool FirstNest;
     public Heightfield HF;
     public readonly List<Obstacle> Obstacles = new();

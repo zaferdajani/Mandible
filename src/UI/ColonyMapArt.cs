@@ -16,6 +16,7 @@ public partial class ColonyMapArt : Control
     {
         new(0.309f, 0.127f, 0.036f, 0.046f),   // I    just under the entrance
         new(0.488f, 0.216f, 0.088f, 0.057f),
+        new(0.381f, 0.293f, 0.035f, 0.035f),   //      the small store by the shaft
         new(0.209f, 0.332f, 0.078f, 0.050f),
         new(0.722f, 0.332f, 0.076f, 0.050f),
         new(0.347f, 0.398f, 0.069f, 0.050f),
@@ -23,16 +24,14 @@ public partial class ColonyMapArt : Control
         new(0.838f, 0.492f, 0.069f, 0.044f),
         new(0.172f, 0.532f, 0.100f, 0.064f),
         new(0.400f, 0.570f, 0.053f, 0.040f),
+        new(0.584f, 0.625f, 0.075f, 0.055f),
         new(0.281f, 0.697f, 0.106f, 0.061f),
         new(0.731f, 0.719f, 0.063f, 0.050f),
-        new(0.500f, 0.852f, 0.150f, 0.105f),   // XII  the royal chamber at the bottom
+        new(0.500f, 0.852f, 0.150f, 0.105f),   // XIV  the royal chamber at the bottom
     };
 
-    /// Every painted chamber, including two that are not levels (a small store by the shaft and an empty one).
-    static readonly Vector4[] AllChambers = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(Anchors, new[]
-    {
-        new Vector4(0.381f, 0.293f, 0.035f, 0.035f), new Vector4(0.584f, 0.625f, 0.075f, 0.055f),
-    }));
+    /// Every painted chamber on the picture: one per level.
+    static readonly Vector4[] AllChambers = Anchors;
 
     ShaderMaterial _mat;
     float _t;
@@ -102,10 +101,10 @@ public partial class ColonyMapArt : Control
 
     const string Code = @"
 shader_type canvas_item;
-uniform vec4 ch[12];
-uniform vec2 fill[12];
-uniform float st[12];
-uniform int count = 12;
+uniform vec4 ch[14];
+uniform vec2 fill[14];
+uniform float st[14];
+uniform int count = 14;
 uniform int selected = -1;
 uniform int next = -1;
 uniform float t = 0.0;

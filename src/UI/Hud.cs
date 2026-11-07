@@ -867,6 +867,7 @@ public partial class Hud : CanvasLayer
             var fallen = new System.Collections.Generic.List<string>();
             foreach (var v in Game.Sim.Mission.Fallen) if (v.Name != "") fallen.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
             if (fallen.Count > 0) { var l = UiTheme.Text("Fallen: " + string.Join(",  ", fallen), 14, UiTheme.Bold, new Color(1f, 0.6f, 0.45f)); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
+            at = AddMutationChoice(body, r, id, at);
         }
         // the stars come second: bragging rights, under the colony
         var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars, CustomMinimumSize = new Vector2(0, 70) };
@@ -886,6 +887,40 @@ public partial class Hud : CanvasLayer
         body.AddChild(line); body.MoveChild(line, body.GetChildCount() - 3);
         Grow(end, 340);
         Game.Audio.Ui("research");
+    }
+
+    /// After a queen kill (from the Royal Larva on) her body's mutagen lets the queen choose one of three mutations,
+    /// the dead queen's own trait first. The choice goes into the colony that walks into the next chapter; skipping it
+    /// keeps the mutagen in the reserve for the next card.
+    int AddMutationChoice(VBoxContainer body, ColonyRoster r, int id, int at)
+    {
+        if (Levels.NumberOf(id) < Reveal.Mutagen) return at;
+        var line = UiTheme.Text($"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}", 15, UiTheme.Bold, new Color(0.86f, 0.78f, 1f));
+        line.HorizontalAlignment = HorizontalAlignment.Center;
+        body.AddChild(line); body.MoveChild(line, at++);
+        if (r.Mutagen < 1 || Levels.NumberOf(id) < Reveal.RoyalLarva || Levels.IdAt(Levels.NumberOf(id) + 1) <= 0) return at;
+        var head = UiTheme.Text("The queen's body glows. Choose what the colony becomes:", 15, UiTheme.Title, UiTheme.Gold);
+        head.HorizontalAlignment = HorizontalAlignment.Center;
+        body.AddChild(head); body.MoveChild(head, at++);
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        row.AddThemeConstantOverride("separation", 10);
+        var buttons = new System.Collections.Generic.List<Button>();
+        foreach (var m in Mutations.Offer(id, r.Mutations))
+        {
+            var b = new Button { Text = $"{Mutations.Name(m)}\n{Mutations.Source(m)}", TooltipText = Mutations.Text(m), CustomMinimumSize = new Vector2(220, Settings.Mobile ? 72 : 58) };
+            b.Pressed += () =>
+            {
+                if (!CampaignProgress.ChooseMutation(id, r, m)) return;
+                foreach (var o in buttons) o.Disabled = true;
+                b.Text = $"{Mutations.Name(m)}\ntaken";
+                line.Text = $"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}";
+                Game.Audio.Ui("research");
+            };
+            buttons.Add(b); row.AddChild(b);
+        }
+        body.AddChild(row); body.MoveChild(row, at++);
+        Grow((Control)body.GetParent().GetParent(), 50);
+        return at;
     }
 
     public void Alert(string text, Color? c = null)
@@ -954,13 +989,13 @@ public partial class Hud : CanvasLayer
             if (Config.IsHeroKind(k))
             {
                 var ht = Config.UnitOf(k);
-                bool alive = c.Count[(int)ht] > 0, queued = c.Queue.Exists(q => q.Kind == k);
+                bool alive = c.Count[(int)ht] > 0, queued = c.Queue.Exists(q => q.Kind == k) || c.LarvaStage > 0 && c.LarvaHero == ht; // a campaign hero grows as a royal larva
                 if (alive || queued) ok = false;
                 string st = "";
                 if (alive)
                     for (int j = 0; j < sim.High; j++)
                         if (sim.Ants[j].Alive && sim.Ants[j].Team == Local.Me && sim.Ants[j].Type == ht) { st = $"Lv {sim.Ants[j].Level}"; break; }
-                _heroStatus[i].Text = alive ? st : queued ? "hatching" : unlocked ? $"x{Config.HeroTierMul(ht, c.T(Upgrade.Queen)):0.00}" : "";
+                _heroStatus[i].Text = alive ? st : queued ? (c.LarvaStage > 0 ? "royal larva" : "hatching") : unlocked ? $"x{Config.HeroTierMul(ht, c.T(Upgrade.Queen)):0.00}" : "";
                 _heroStatus[i].AddThemeColorOverride("font_color", alive ? new Color(0.6f, 1f, 0.5f) : UiTheme.Ink);
             }
             _prod[i].Modulate = ok ? Colors.White : new Color(1, 1, 1, unlocked ? 0.45f : 0.3f);

@@ -36,6 +36,7 @@ public partial class ExpeditionGuide : PanelContainer
         // the optional goals, live: lit while they still hold
         _stars = new StarList { Size_ = 8, FontSize = 13 };
         column.AddChild(_stars);
+        if (steps) column.AddChild(new MutationStrip { Game = Game }); // shows itself from the Silk Trap on
         var row = new HBoxContainer(); column.AddChild(row);
         var finger = new Vector2(0, Settings.Mobile ? 46 : 0);
         var show = new Button { Text = "Show objective", CustomMinimumSize = finger }; row.AddChild(show);
@@ -109,6 +110,8 @@ public partial class ExpeditionGuide : PanelContainer
                 StarGoal.Escort => (m.EscortId >= 0 && sim.Valid(m.EscortId, m.EscortSerial), ""),
                 StarGoal.Stag => (sim.StagTeam == 0 && sim.Valid(sim.StagId, sim.StagSerial), sim.StagTeam == 0 ? "with you" : "not yet roused"),
                 StarGoal.AllSteps => (true, $"{Mathf.Min(m.Step, m.Steps - 1)} of {m.Steps - 1}"),
+                StarGoal.Master => (true, m.MastersSlain > 0 ? "slain" : "still at the hub"),
+                StarGoal.LarvaSafe => (m.LarvaLow >= 0.99f, $"larva at {m.LarvaLow * 100:0}%"),
                 _ => (true, ""),
             };
             rows.Add((on, live == "" ? text : $"{text}  ·  {live}"));
