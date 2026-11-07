@@ -66,7 +66,7 @@ public static class MutationCapture
             Run(gs, 30);
             gs.SetPaused(true);
             var at = sim.ChamberPos(0, room);
-            gs.Camera.JumpTo(at + new Vector2(0, 1.2f), 11); await Shot("nursery-close", 3f);
+            gs.Camera.JumpTo(at + new Vector2(0, 2.4f), 11); await Shot("nursery-close", 3f);
             gs.Camera.JumpTo(at, 40); await Shot("nursery", 1.5f);
 
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_mutcap.cfg"));

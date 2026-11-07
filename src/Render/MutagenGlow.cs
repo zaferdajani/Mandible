@@ -56,7 +56,7 @@ void fragment() {
             if (!_sources.TryGetValue(m.Id, out var s))
             {
                 var node = new Node3D();
-                var light = new OmniLight3D { OmniRange = 3.2f, LightEnergy = 0.8f, ShadowEnabled = false, LightColor = Glow };
+                var light = new OmniLight3D { OmniRange = 3.2f, LightEnergy = 0.8f, ShadowEnabled = false, LightColor = Glow, LightCullMask = ~MutagenProps.SkinLayer };
                 node.AddChild(light);
                 MeshInstance3D body = null;
                 if (m.From is AntType.Wasp && !ResourceLoader.Exists("res://assets/mutation/queen_wasp/queen_wasp.gltf")) // the modelled wasp: MutagenProps
@@ -77,17 +77,20 @@ void fragment() {
             // a subtle radiance, never a lamp: it breathes slowly between violet and green
             s.light.LightColor = Glow.Lerp(Green, 0.5f + 0.5f * Mathf.Sin(_t * 0.9f));
             // in the web it lights the silk around her; in a carrier's jaws only the ants' heads and the soil beside it
-            s.light.OmniRange = m.Free ? 2.4f : 2.6f;
-            s.light.LightEnergy = (m.Free ? 0.3f : 0.3f) + (m.Free ? 0.4f : 0.4f) * pulse; // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
+            // from play zoom the sun drowns a small light: the pool on the soil grows as the camera pulls back
+            float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
+            s.light.OmniRange = (m.Free ? 2.4f : 2.6f) * (1 + 0.9f * zoom);
+            s.light.LightEnergy = (0.3f + 0.4f * pulse) * (1 + 2.5f * zoom); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
             // the sixth sense: a faint ring of disturbed air spreads from a source the colony feels, even through the fog
-            bool sensed = !m.Carried && sim.Senses(Local.Me, m);
+            // from play zoom a carried gland keeps a faint, slow ripple under it, so the player can follow it across the yard
+            bool sensed = (!m.Carried || zoom > 0.5f) && sim.Senses(Local.Me, m);
             var ring = Ring(m.Id);
             ring.Visible = sensed;
             if (sensed)
             {
                 float k = (_t % 2.6f) / 2.6f;
                 ring.Position = _g.World.HF.Point(m.Pos, 0.15f);
-                ring.Scale = Vector3.One * (2f + 16f * k);
+                ring.Scale = Vector3.One * (m.Carried ? 1.5f + 5f * k : 2f + 16f * k);
                 ((ShaderMaterial)ring.MaterialOverride).SetShaderParameter("t", k);
             }
         }

@@ -19,6 +19,8 @@ public sealed class MutagenProps
     float _t;
 
     public MutagenProps(GameSession g) { _g = g; g.AddChild(_root); }
+    readonly Dictionary<int, StandardMaterial3D> _cores = new();
+    public const uint SkinLayer = 1u << 10;
 
     /// Where a gland is drawn (its light follows it: up in the web, then in the carrier's jaws).
     public Vector3? GlandPoint(int id) => _sites.TryGetValue(id, out var s) && s.gland != null ? s.gland.GlobalPosition : null;
@@ -110,11 +112,19 @@ void fragment() {
         var glow = new StandardMaterial3D
         {
             VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 0.18f, Metallic = 0f, MetallicSpecular = 0.7f,
-            AlbedoColor = new Color(1f, 0.72f, 0.38f), SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.35f, SubsurfScatterTransmittanceEnabled = true,
-            SubsurfScatterTransmittanceColor = new Color(1f, 0.62f, 0.25f), SubsurfScatterTransmittanceDepth = 0.4f,
-            BacklightEnabled = true, Backlight = new Color(0.7f, 0.4f, 0.15f), EmissionEnabled = true, Emission = new Color(0.62f, 0.42f, 1f), EmissionEnergyMultiplier = 0.1f,
+            BacklightEnabled = true, Backlight = new Color(0.7f, 0.4f, 0.15f),
         };
-        Dress(gland, _ => glow);
+        var core = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(0.62f, 0.42f, 1f),
+            EmissionEnabled = true, Emission = new Color(0.62f, 0.42f, 1f), EmissionEnergyMultiplier = 1f,
+        };
+        glow.AlbedoColor = new Color(1f, 0.78f, 0.45f); // wet amber skin; the light inside shows only through its veins
+        Dress(gland, n => n.Contains("core") ? core : glow);
+        // the skin lives on its own render layer, which the gland's own light skips: the light falls on the jaws and
+        // the soil around it, never tinting the amber violet
+        foreach (var c in gland.FindChildren("*", "MeshInstance3D", true, false)) if (!c.Name.ToString().Contains("core")) ((MeshInstance3D)c).Layers = SkinLayer;
+        _cores[m.Id] = core;
         silk.RenderPriority = dew.RenderPriority = 10; // after the terrain, which draws in the transparent pass
         // the web faces the colony's nest, so the player sees it square on; the wasp hangs head-down in the tear
         var home = _g.Sim.NestEntrance(Local.Me);
@@ -144,8 +154,10 @@ void fragment() {
             s.gland.Visible = !m.Home && seen;
             // a radiance inside the amber, never a lamp; from play zoom the sun would drown it, so it carries a little further there
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
-            s.glow.EmissionEnergyMultiplier = (0.12f + 0.22f * pulse) * (1 + 4f * zoom);
-            s.glow.Emission = new Color(0.62f, 0.42f, 1f).Lerp(new Color(0.55f, 1f, 0.62f), 0.5f + 0.5f * Mathf.Sin(_t * 0.9f));
+            
+            // mostly violet, breathing toward green: nothing else in the woods is that colour, so it never reads as food
+            var hue = new Color(0.62f, 0.42f, 1f).Lerp(new Color(0.55f, 1f, 0.62f), 0.25f + 0.25f * Mathf.Sin(_t * 0.9f));
+            if (_cores.TryGetValue(m.Id, out var coreMat)) { coreMat.AlbedoColor = hue * (0.55f + 0.45f * pulse); coreMat.Emission = hue; coreMat.EmissionEnergyMultiplier = (0.25f + 0.35f * pulse) * (1 + 2.5f * zoom); } // never so bright it blooms to white
             // in her gaster until it is cut free; then in its carrier's jaws, or on the ground where it fell
             if (!m.Free)
             {
@@ -174,9 +186,11 @@ void fragment() {
             var fibre = Matter(0.85f, true);
             var remains = Matter(0.45f);
             var clay = Matter(0.9f);
-            Dress(dressing, n => n.StartsWith("nursery_bed") ? fibre : n.StartsWith("nursery_ledge") ? clay : remains);
+            var scrap = Mat(WingShader);
+            if (ResourceLoader.Exists(Root + "queen_wasp/wing_veins.png")) scrap.SetShaderParameter("veins", GD.Load<Texture2D>(Root + "queen_wasp/wing_veins.png"));
+            Dress(dressing, n => n.StartsWith("nursery_bed") ? fibre : n.StartsWith("nursery_ledge") ? clay : n.EndsWith("_wing") ? scrap : remains);
             // warm light falling from above into the nursery, as in the target
-            dressing.AddChild(new OmniLight3D { Position = new Vector3(0, 2.8f, 0.4f), OmniRange = 5.5f, LightEnergy = 1.1f, LightColor = new Color(1f, 0.76f, 0.46f), ShadowEnabled = false });
+            dressing.AddChild(new OmniLight3D { Position = new Vector3(0, 2.8f, 0.4f), OmniRange = 6f, LightEnergy = 1.8f, LightColor = new Color(1f, 0.66f, 0.36f), ShadowEnabled = false });
             dressing.Scale = Vector3.One * 0.9f; // the nest view draws ants large; the bed and the heap match them
             node.AddChild(dressing);
             _nurseryDressing = dressing;

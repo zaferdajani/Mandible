@@ -120,8 +120,8 @@ def blob(bm, centre, radii, subdiv=3, rough=0.06, seed=0.0, rot=Matrix.Identity(
     return verts
 
 
-def tube(bm, pts, radii, sides=6, cap=True, twist=0.0):
-    """A swept tube along a polyline (legs, antennae, threads, fibres, stems)."""
+def tube(bm, pts, radii, sides=6, cap=True, twist=0.0, ridges=0, ridge_depth=0.0):
+    """A swept tube along a polyline (legs, antennae, threads, fibres, stems); `ridges` flutes it lengthwise."""
     rings = []
     prev_n = None
     for i, p in enumerate(pts):
@@ -134,7 +134,8 @@ def tube(bm, pts, radii, sides=6, cap=True, twist=0.0):
         ring = []
         for k in range(sides):
             a = 2 * math.pi * k / sides + twist * i
-            ring.append(bm.verts.new(p + (n * math.cos(a) + b * math.sin(a)) * radii[i]))
+            rr = radii[i] * (1 + ridge_depth * math.cos(ridges * a)) if ridges else radii[i]
+            ring.append(bm.verts.new(p + (n * math.cos(a) + b * math.sin(a)) * rr))
         rings.append(ring)
     for i in range(len(rings) - 1):
         for k in range(sides):
@@ -153,7 +154,7 @@ def bezier(a, b, c, n):
 def gland():
     reset()
     bm = bmesh.new()
-    verts = blob(bm, (0, 0, 0), (0.42, 0.29, 0.26), subdiv=4, rough=0.09, seed=3.1)
+    verts = blob(bm, (0, 0, 0), (0.42, 0.29, 0.26), subdiv=5, rough=0.09, seed=3.1)
     # a pear: the stalk end narrows, the far end sags under its own weight
     for v in verts:
         x = v.co.x
@@ -168,14 +169,45 @@ def gland():
 
     def col(p, n):
         # amber flesh, veins as dark branching ridges, a paler skin where it bulges
-        vein = abs(noise.noise(p * 9 + Vector((1.3, 0, 0))))
-        vein2 = abs(noise.noise(p * 17 + Vector((0, 4.2, 0))))
-        base = mix((0.86, 0.55, 0.16), (0.98, 0.82, 0.48), 0.5 + 0.5 * n.z)
-        c = mix(base, (0.42, 0.14, 0.08), 1 - min(vein, vein2 * 1.4) * 9)
+        vein = abs(noise.noise(p * 7 + Vector((1.3, 0, 0))))
+        vein2 = abs(noise.noise(p * 14 + Vector((0, 4.2, 0))))
+        base = mix((0.86, 0.55, 0.16), (0.98, 0.8, 0.44), 0.5 + 0.5 * n.z)
+        c = mix(base, (0.36, 0.1, 0.06), max(0.0, 1 - min(vein, vein2 * 1.3) * 6))
         if p.x < -0.42:
             c = mix((0.55, 0.22, 0.12), (0.8, 0.45, 0.3), noise.noise(p * 30) * 0.5 + 0.5)
         return c
     paint(ob, col)
+    # the light inside shows through the veins: branching filaments laid on the skin, which Godot lights from within
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromObject(ob, bpy.context.evaluated_depsgraph_get())
+    core = bmesh.new()
+    rnd = random.Random(21)
+    def on_skin(d):
+        hit = tree.ray_cast(Vector((0, 0, 0)), d.normalized())
+        return hit[0] + hit[1] * 0.004 if hit[0] is not None else None
+    for k in range(9):
+        d = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-0.6, 1))).normalized()
+        step = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-1, 1))).normalized() * 0.16
+        pts = []
+        for j in range(9):
+            q = on_skin(d)
+            if q is None:
+                break
+            pts.append(q)
+            d = (d + step + Vector((rnd.uniform(-0.12, 0.12), rnd.uniform(-0.12, 0.12), rnd.uniform(-0.12, 0.12)))).normalized()
+            if j == 4 and len(pts) > 2:  # a branch
+                b = d.copy(); bstep = step.cross(d).normalized() * 0.16; bp = []
+                for jj in range(4):
+                    qb = on_skin(b)
+                    if qb is None:
+                        break
+                    bp.append(qb); b = (b + bstep).normalized()
+                if len(bp) > 1:
+                    tube(core, bp, [0.012 * (1 - 0.5 * t / len(bp)) for t in range(len(bp))], sides=4, cap=False)
+        if len(pts) > 1:
+            tube(core, pts, [0.018 * (1 - 0.6 * t / len(pts)) for t in range(len(pts))], sides=4, cap=False)
+    co = obj("gland_core", core)
+    paint(co, lambda p, n: (0.75, 0.55, 1.0))
     export("gland")
 
 
@@ -357,10 +389,37 @@ def web():
     silk, dew, stems, leaves, wrap = bmesh.new(), bmesh.new(), bmesh.new(), bmesh.new(), bmesh.new()
     hub = Vector((0, 0, 9.0))
     # anchors: two stems left and right, the bramble above-left, the ground below
-    left = [Vector((-8.5 + 0.02 * t * t - 0.004 * t ** 3 * 0.1, 0.05 * t, t * 1.0)) for t in (i * 0.8 for i in range(25))]
-    right = [Vector((7.8 - 0.06 * t - 0.012 * t * t, -0.4 + 0.12 * t, t * 0.93)) for t in (i * 0.8 for i in range(21))]
-    tube(stems, left, [0.26 * (1 - 0.7 * i / len(left)) for i in range(len(left))], sides=7)
-    tube(stems, right, [0.22 * (1 - 0.75 * i / len(right)) for i in range(len(right))], sides=7)
+    # culms kink a little at each joint and lean; thin, as dry grass is
+    def culm(x0, lean, n, kinks):
+        pts, x, y = [], x0, 0.0
+        for i in range(n):
+            t = i * 0.8
+            x += lean * 0.8 + sum(k for z, k in kinks if abs(t - z) < 0.4)
+            y += 0.04 * math.sin(t * 0.7)
+            pts.append(Vector((x, y, t)))
+        return pts
+    left = culm(-8.5, 0.016, 25, ((6, 0.18), (13, -0.12)))
+    right = culm(7.8, -0.16, 21, ((8, -0.3), (12, -0.45)))
+    tube(stems, left, [0.18 * (1 - 0.6 * i / len(left)) for i in range(len(left))], sides=12, ridges=6, ridge_depth=0.12)
+    tube(stems, right, [0.16 * (1 - 0.6 * i / len(right)) for i in range(len(right))], sides=12, ridges=6, ridge_depth=0.12)
+    # each culm ends in a dry seed head: a nodding spray of spikelets
+    for st in (left, right):
+        top = st[-1]
+        for j in range(14):
+            a = j * 2.4
+            d = Vector((math.cos(a) * 0.5, math.sin(a) * 0.5, 1.0)).normalized()
+            base = top + Vector((0, 0, -0.15 * j))
+            tip = base + d * R.uniform(0.6, 1.2) + Vector((0.3, 0, -0.25))
+            tube(stems, [base, (base + tip) / 2 + Vector((0, 0, 0.1)), tip], [0.025, 0.02, 0.01], sides=3, cap=False)
+            blob(stems, tip, (0.16, 0.06, 0.06), subdiv=1, rough=0.1, seed=j, rot=Matrix.Rotation(a, 3, "Z"))
+    # leaf sheaths clasp the culm above each joint, split open down one side and frayed at the top
+    for st, zs in ((left, (2.5, 6, 13)), (right, (3, 8))):
+        for z in zs:
+            k = min(len(st) - 2, int(z / 0.8))
+            for j in range(9):
+                a0 = 0.5 + j * 0.62
+                pts = [st[k] + Vector((math.cos(a0) * 0.3, math.sin(a0) * 0.3, 0)), st[k + 2] + Vector((math.cos(a0) * 0.27, math.sin(a0) * 0.27, 0.2 * R.random()))]
+                tube(stems, pts, [0.06, 0.03], sides=3, cap=False)
     # culm joints, slight swellings only
     for st, zs in ((left, (6, 13)), (right, (8,))):
         for z in zs:
@@ -381,7 +440,7 @@ def web():
                 stems.faces.new((prev[0], prev[1], b, a))
             prev = (a, b)
     # the bramble: a woody twig across the top with hooked thorns and three serrated leaves
-    twig = bezier((-11, 1.5, 15.5), (-3, 0.5, 17.8), (5.5, -0.3, 16.0), 14)
+    twig = bezier((-11, 1.5, 17.8), (-3, 0.5, 16.2), (5.5, -0.3, 12.0), 14)
     tube(stems, twig, [0.32 - 0.012 * i for i in range(14)], sides=7)
     for i in range(2, 13):
         p = twig[i]
@@ -410,7 +469,7 @@ def web():
         for a in range(cols):
             for b in range(rows):
                 leaves.faces.new((grid[a][b], grid[a + 1][b], grid[a + 1][b + 1], grid[a][b + 1]))
-    anchors = [Vector((-8.4, 0.2, 13.5)), Vector((-3.8, 0.5, 17.3)), Vector((4.2, -0.2, 16.4)), Vector((7.0, 0.1, 10.5)),
+    anchors = [Vector((-8.2, 0.2, 13.5)), Vector((-3.8, 0.5, 15.9)), Vector((3.6, -0.2, 13.0)), Vector((6.1, 0.1, 10.0)),
                Vector((5.5, 0.0, 0.0)), Vector((-2.0, 0.0, 0.0)), Vector((-8.2, 0.1, 4.5))]
     # frame threads between the anchors, then radials from the hub to the frame
     frame = []
@@ -473,11 +532,11 @@ def web():
         b = a + Vector((R.uniform(-1.5, 1.5), R.uniform(-0.3, 0.3), -R.uniform(1.0, 3.0)))
         tube(silk, catenary(a, b, R.uniform(0.2, 0.6), 7), [0.006] * 7, sides=3, cap=False)
     # the hub's tangle and the silk that wraps the wasp: loose loops thrown round her
-    for k in range(10):
-        c = torn_c + Vector((R.uniform(-0.9, 0.9), 0, R.uniform(-0.5, 0.5)))
+    for k in range(20):
+        c = torn_c + Vector((R.uniform(-2.2, 2.2), 0, R.uniform(-1.6, 1.6)))
         axis = Vector((R.uniform(-0.3, 0.3), R.uniform(-1, 1), R.uniform(-0.3, 0.3))).normalized()
         perp = axis.orthogonal().normalized()
-        rad = R.uniform(0.45, 0.8)
+        rad = R.uniform(0.6, 1.2)
         pts = []
         for j in range(10):
             a = 2 * math.pi * j / 9 * R.uniform(0.8, 1.0)
@@ -488,6 +547,9 @@ def web():
     for k in range(7):
         q = hub + Vector((R.uniform(-0.5, 0.5), R.uniform(-0.1, 0.1), R.uniform(-0.5, 0.5)))
         tube(silk, [hub, (hub + q) / 2 + Vector((0, 0.1, 0)), q], [0.008] * 3, sides=3, cap=False)
+    for k in range(7):  # seed husks and leaf crumbs the wind left in the silk
+        q = hub + Vector((R.uniform(-6, 6), R.uniform(-0.05, 0.05), R.uniform(-6, 5)))
+        blob(stems, q, (R.uniform(0.12, 0.25), 0.05, R.uniform(0.08, 0.15)), subdiv=1, rough=0.25, seed=40 + k, rot=Matrix.Rotation(R.uniform(0, 3), 3, "Y"))
     ob = obj("web_silk", silk); paint(ob, lambda p, n: (0.98, 0.9, 0.76))
     ob = obj("web_wrap", wrap); paint(ob, lambda p, n: (0.96, 0.9, 0.78))
     ob = obj("web_dew", dew); paint(ob, lambda p, n: (0.9, 0.95, 1.0))
@@ -522,18 +584,24 @@ def nursery():
         for b in range(rows):
             ledge.faces.new((grid[a][b], grid[a + 1][b], grid[a + 1][b + 1], grid[a][b + 1]))
     lo = obj("nursery_ledge", ledge)
-    paint(lo, lambda p, n: mix((0.5, 0.3, 0.14), (0.68, 0.44, 0.22), 0.5 + 0.5 * noise.noise(p * 4)))
+    paint(lo, lambda p, n: mix((0.4, 0.18, 0.08), (0.58, 0.3, 0.14), 0.5 + 0.5 * noise.noise(p * 4)))
     bed = bmesh.new()
     for k in range(1150):
         layer = k % 3
         a = R.uniform(0, 2 * math.pi)
         rr = math.sqrt(R.random())
         c = Vector((math.cos(a) * rr * 1.25, math.sin(a) * rr * 0.85, 0.03 + 0.3 * (1 - rr * rr) + 0.07 * layer + 0.04 * R.random()))
-        d = Vector((R.uniform(-1, 1), R.uniform(-1, 1), R.uniform(-0.15, 0.15))).normalized()
-        L = R.uniform(0.45, 1.4)
-        bend = Vector((-d.y, d.x, 0)) * R.uniform(-0.5, 0.5) + Vector((0, 0, R.uniform(-0.04, 0.16)))
-        L *= R.choice((0.6, 1.0, 1.0, 1.5))
-        tube(bed, bezier(c - d * L / 2, c + bend, c + d * L / 2, 5), [R.uniform(0.01, 0.045)] * 5, sides=3, cap=False)
+        # a chewed strand wanders: a short random walk that curls, mostly lying flat in the mat
+        hair = R.random() < 0.45
+        pts, q = [], c.copy()
+        heading = R.uniform(0, 2 * math.pi)
+        curl = R.uniform(-0.9, 0.9)
+        for j in range(7):
+            pts.append(q.copy())
+            heading += curl * R.uniform(0.5, 1.5)
+            q += Vector((math.cos(heading), math.sin(heading), R.uniform(-0.25, 0.3))) * R.uniform(0.12, 0.24)
+        w = R.uniform(0.006, 0.014) if hair else R.uniform(0.018, 0.04)
+        tube(bed, pts, [w * (1 - 0.3 * j / 6) for j in range(7)], sides=3, cap=False)
     ob = obj("nursery_bed", bed)
     shades = [(0.5, 0.36, 0.18), (0.36, 0.24, 0.12), (0.66, 0.52, 0.3), (0.28, 0.18, 0.09), (0.74, 0.62, 0.4), (0.45, 0.4, 0.22)]
     paint(ob, lambda p, n: mix(shades[int(abs(noise.noise(p * 5.3)) * 60) % 6], (0.9, 0.82, 0.6), 0.1 * (noise.noise(p * 9) + 0.5)))
@@ -552,26 +620,57 @@ def nursery():
         bm = bmesh.new()
         kind = R.random()
         rot = Matrix.Rotation(R.uniform(0, 6.3), 3, "Z") @ Matrix.Rotation(R.uniform(-0.6, 0.6), 3, "X")
-        if kind < 0.3:      # sunflower seed: a flattened teardrop with dark stripes
-            blob(bm, base, (0.32 * R.uniform(0.8, 1.15), 0.16, 0.08), subdiv=3, rough=0.04, seed=i, rot=rot)
-            col = lambda p, n, b=base, r=rot: mix((0.12, 0.1, 0.08), (0.85, 0.82, 0.72), 1.0 if math.sin(((r.inverted() @ (p - b)).y) * 60) > 0.55 else 0.0)
+        if kind < 0.28:     # sunflower seed: a teardrop, pointed at one end, ridged, grey stripes on near-black
+            L = 0.34 * R.uniform(0.85, 1.15)
+            vs = blob(bm, Vector(), (L, 0.15, 0.07), subdiv=3, rough=0.03, seed=i)
+            for v in vs:
+                t = v.co.x / L
+                v.co.y *= 0.55 + 0.45 * max(0.0, 1 - max(0.0, t)) ** 0.5 if t > 0 else 1
+                v.co.z *= 1 + 0.15 * math.cos(v.co.y * 40)
+                v.co = rot @ v.co + base
+            col = lambda p, n, b=base, r=rot: mix((0.13, 0.11, 0.09), (0.76, 0.73, 0.66), 1.0 if math.sin(((r.inverted() @ (p - b)).y) * 48) > 0.6 else 0.0)
         elif kind < 0.5:    # grass seed
             blob(bm, base, (0.22, 0.1, 0.08), subdiv=2, rough=0.06, seed=i, rot=rot)
-            col = lambda p, n: mix((0.72, 0.6, 0.32), (0.86, 0.74, 0.44), noise.noise(p * 20) + 0.5)
-        elif kind < 0.72:   # a beetle's wing case, a curved shell fragment
-            vs = blob(bm, base, (0.4 * R.uniform(0.7, 1.2), 0.21, 0.13), subdiv=3, rough=0.08, seed=i, rot=rot)
+            col = lambda p, n: mix((0.8, 0.66, 0.34), (0.92, 0.8, 0.5), noise.noise(p * 20) + 0.5)
+        elif kind < 0.58:   # a beetle's wing case: a curved shell, its rows of pits catching the light
+            L = 0.42 * R.uniform(0.8, 1.2)
+            vs = blob(bm, Vector(), (L, 0.18, 0.12), subdiv=3, rough=0.02, seed=i)
             for v in vs:
-                if (v.co - base).z < 0:
-                    v.co.z = base.z + (v.co.z - base.z) * 0.15
-            col = lambda p, n: mix((0.06, 0.05, 0.04), (0.22, 0.12, 0.05), 0.4 + 0.4 * noise.noise(p * 16))
-        elif kind < 0.94:   # a jointed insect leg
+                if v.co.z < 0:
+                    v.co.z *= 0.12
+                v.co = rot @ v.co + base
+            col = lambda p, n, b=base, r=rot: mix((0.05, 0.04, 0.035), (0.3, 0.16, 0.06), 0.35 + 0.3 * math.sin(((r.inverted() @ (p - b)).y) * 70) * math.sin(((r.inverted() @ (p - b)).x) * 70))
+        elif kind < 0.72:   # a split seed husk: an empty half shell
+            vs = blob(bm, Vector(), (0.24, 0.13, 0.1), subdiv=3, rough=0.05, seed=i)
+            for v in vs:
+                if v.co.z > 0.02:
+                    v.co.z = 0.02 - (v.co.z - 0.02) * 0.6
+                v.co = rot @ v.co + base
+            col = lambda p, n: mix((0.72, 0.6, 0.38), (0.88, 0.78, 0.55), noise.noise(p * 18) * 0.5 + 0.5)
+        elif kind < 0.86:   # a jointed insect leg: femur, tibia, a hooked tarsus
             d = rot @ Vector((1, 0, 0))
-            tube(bm, [base, base + d * 0.45 + Vector((0, 0, 0.1)), base + d * 0.95], [0.065, 0.055, 0.025], sides=5)
-            col = lambda p, n: mix((0.2, 0.1, 0.04), (0.45, 0.25, 0.08), noise.noise(p * 10) + 0.5)
-        else:               # a torn scrap of wasp: yellow and black
-            blob(bm, base, (0.22, 0.16, 0.05), subdiv=2, rough=0.18, seed=i, rot=rot)
-            col = lambda p, n: STRIPE_Y if math.sin(p.x * 12) > 0 else BLACK
-        ob = obj(f"heap_{i:03d}", bm)
+            knee = base + d * 0.4 + Vector((0, 0, 0.12))
+            ankle = knee + (rot @ Vector((0.7, 0.4, 0))).normalized() * 0.38 - Vector((0, 0, 0.1))
+            tube(bm, [base, (base + knee) / 2 + Vector((0, 0, 0.03)), knee], [0.06, 0.07, 0.05], sides=6)
+            tube(bm, [knee, (knee + ankle) / 2, ankle], [0.045, 0.04, 0.035], sides=6)
+            tube(bm, bezier(ankle, ankle + d * 0.12, ankle + d * 0.2 - Vector((0, 0, 0.06)), 4), [0.03, 0.025, 0.02, 0.008], sides=5)
+            col = lambda p, n: mix((0.16, 0.08, 0.03), (0.42, 0.22, 0.07), noise.noise(p * 10) + 0.5)
+        else:               # a scrap of veined wing membrane
+            uv = bm.loops.layers.uv.new("UV")
+            g = [[None] * 4 for _ in range(5)]
+            for a in range(5):
+                for b in range(4):
+                    q = Vector(((a / 4 - 0.5) * 0.7, (b / 3 - 0.5) * 0.35, 0.04 * math.sin(a + b)))
+                    g[a][b] = bm.verts.new(rot @ q + base + Vector((0, 0, 0.05)))
+            for a in range(4):
+                for b in range(3):
+                    f = bm.faces.new((g[a][b], g[a + 1][b], g[a + 1][b + 1], g[a][b + 1]))
+                    for loop, (ai, bi) in zip(f.loops, ((a, b), (a + 1, b), (a + 1, b + 1), (a, b + 1))):
+                        loop[uv].uv = (0.3 + ai / 4 * 0.5, bi / 3)
+            col = lambda p, n: (0.8, 0.62, 0.3)
+        for v in bm.verts:  # pieces large enough to read from the nest view
+            v.co = base + (v.co - base) * 1.35
+        ob = obj(f"heap_{i:03d}" + ("_wing" if kind >= 0.86 else ""), bm)
         paint(ob, col)
     export("nursery")
 
