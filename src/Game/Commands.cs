@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -16,7 +16,7 @@ public sealed class Cmd
     public int[] Serials = System.Array.Empty<int>();
     public Vector2 P;
     public int Target = -1, TargetSerial, FoodId = -1;
-    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind or RemainsOrder
+    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind, RemainsOrder or a general's skill slot
     public byte Layer; // Move / AttackMove: 0 the surface, 1 + team inside that nest (garrison or raid)
 
     public static Cmd Units(CmdKind k, int team, List<int> ids, Sim sim)
@@ -85,6 +85,9 @@ public sealed class Cmd
                 break;
             }
             case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;
+            case CmdKind.Learn: if (ids.Count > 0) sim.LearnSkill(ids[0], Arg); break;     // spend a general's skill point
+            case CmdKind.Cast: if (ids.Count > 0) sim.CmdCast(ids[0], Arg, Target, TargetSerial, P); break;
+            case CmdKind.SkillAuto: if (ids.Count > 0) sim.ToggleAuto(ids[0], Arg); break;
             case CmdKind.Entrance: sim.OrderEntrance(Team, ids); break; // the opening: the founders dig the first nest
             case CmdKind.Rally:
                 sim.Col[Team].Rally = P;

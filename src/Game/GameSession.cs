@@ -640,6 +640,47 @@ public partial class GameSession : Node3D
         Audio.Ui("research", -4);
     }
 
+    /// Q / W / E or a skill button: the selected general (Lane War: your hero) uses that skill. Self skills fire at once;
+    /// aimed ones wait for a click on an enemy or a spot (pressing the key again fires on the best target in reach).
+    public void TrySkill(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        var sk = Skills.At(a.Type, slot);
+        if (Sim.Rank(a, slot) == 0)
+        {
+            Hud.Alert(a.Level < Skills.ReqLevel(sk, 1) ? $"{Skills.Name(sk)} opens at level {Skills.ReqLevel(sk, 1)}" : $"{Skills.Name(sk)} is not learnt yet: press O to spend a skill point", UiTheme.Dim);
+            Audio.Ui("ui_error");
+            return;
+        }
+        float cd = Sim.SkillCd(a, slot);
+        if (cd > 0) { Hud.Alert($"{Skills.Name(sk)} ready in {Mathf.Ceil(cd):0}s", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (Skills.Aim(sk) == SkillAim.Self || Input.Casting(id, slot)) { CastSkill(id, slot, -1, Vector2.Zero); return; }
+        Input.BeginCast(id, slot);
+    }
+
+    /// Sends the cast order: at an ant, at a spot, or (neither) at the best target the general can find.
+    public void CastSkill(int id, int slot, int target, Vector2 at)
+    {
+        var c = new Cmd { Kind = CmdKind.Cast, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { Sim.Ants[id].Serial }, Arg = (byte)slot, P = at };
+        if (target >= 0) { c.Target = target; c.TargetSerial = Sim.Ants[target].Serial; }
+        Issue(c);
+        Audio.Ui("ui_click", -4);
+    }
+
+    /// Right-click (long press) on a skill button: autocast on or off for the selected general's skill.
+    public void ToggleAutocast(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0 || Sim.Ants[id].Manual) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        bool on = (a.AutoMask & (1 << slot)) != 0;
+        Issue(new Cmd { Kind = CmdKind.SkillAuto, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { a.Serial }, Arg = (byte)slot });
+        Hud.Alert($"{Skills.Name(Skills.At(a.Type, slot))}: autocast {(on ? "off: it fires only when you order it" : "on")}", UiTheme.Dim);
+        Audio.Ui("ui_click", -4);
+    }
+
     /// Lane War: ask the hero to use its ability (it fires on the best target in reach).
     public void TryAbility()
     {
@@ -1042,7 +1083,77 @@ public partial class GameSession : Node3D
                         Audio.Ui("ui_ready", -4);
                     }
                     break;
+                case EvKind.SkillLearned:
+                    if (seen) Effects.Burst(wp + Vector3.Up * 0.6f, 20, 2, 3.5f, 0.3f, 1.2f);
+                    break;
+                case EvKind.Pheromone:
+                {
+                    var to = World.HF.Point(e.To, 0.4f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(1f, 0.74f, 0.32f), e.Radius * 0.7f);
+                        Effects.Burst(to + Vector3.Up * 0.4f, 12, 2, 1.6f, 0.18f, 1.0f); // a faint drift of scent, not a cloud
+                        if (Audible(e.To)) Audio.At("research", to, -4, 0.1f, 0.03f, 0.7f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert($"QUEEN'S PHEROMONE! {e.Tier} {(e.Tier == 1 ? "enemy fights" : "enemies fight")} for us.", new Color(1f, 0.8f, 0.4f));
+                        else if (!Demo) Hud.Alert($"Their general's pheromone has turned {e.Tier} of ours!", new Color(1f, 0.5f, 0.35f));
+                    }
+                    break;
+                }
+                case EvKind.Frenzy:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.32f, 0.1f), 2.4f);
+                        Effects.Burst(wp + Vector3.Up * 0.8f, 26, 7, 4f, 0.3f, 1.0f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -2, 0.3f, 0.02f, 0.85f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("MANDIBLE FRENZY! The Warlord drinks what it bites.", new Color(1f, 0.6f, 0.3f));
+                    }
+                    break;
+                case EvKind.Summon:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(0.95f, 0.85f, 0.6f), 3.2f);
+                        Effects.Burst(wp, 40, 0, 3.5f, 0.6f, 1.1f); // soil thrown up as the callows pour out
+                        if (Audible(e.Pos)) Audio.At("swarm", wp, -2, 0.2f, 0.05f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("BROOD CALL! Callows pour out to fight; they harden as they fight.", new Color(1f, 0.85f, 0.5f));
+                    }
+                    break;
+                case EvKind.Fade:
+                    if (seen) Effects.Burst(wp, 10, 0, 1.6f, 0.4f, 0.8f);
+                    break;
+                case EvKind.Cloud:
+                {
+                    var to = World.HF.Point(e.To, 0.5f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(0.85f, 0.9f, 0.3f), e.Radius * 0.8f);
+                        Effects.Burst(to + Vector3.Up * 0.6f, 60, 4, 3f, 0.6f, 2.2f);
+                        if (Audible(e.To)) Audio.At("web_land", to, 2, 0.15f, 0.05f, 0.55f);
+                    }
+                    break;
+                }
+                case EvKind.TrailBlaze:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.8f, 0.4f), e.Radius * 0.6f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -4, 0.2f, 0.02f, 1.2f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("TRAIL BLAZE! The army marches faster and holds its line.", new Color(1f, 0.85f, 0.45f));
+                    }
+                    break;
+                case EvKind.TalonDive:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.9f, 0.65f), 2f);
+                        Effects.Burst(wp, 30, 0, 6f, 0.9f, 1.0f);
+                        Effects.Burst(wp + Vector3.Up * 0.5f, 18, 7, 4f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 6, 0.2f, 0.05f, 0.9f);
+                    }
+                    break;
                 case EvKind.LevelUp:
+                    if (!Demo && e.Team == Local.Me && Config.IsHero(e.Type) && e.Who > 0 && Sim.Ants[e.Who - 1].Alive && Sim.AnyLearnable(Sim.Ants[e.Who - 1]))
+                    {
+                        Hud.Banner($"{Config.Of(e.Type).Name.ToUpperInvariant()}  ·  LEVEL {Sim.Ants[e.Who - 1].Level}", "A new skill point: choose a skill (O)", 3f);
+                        Hud.SkillBar?.OnLevelUp(e.Who - 1);
+                    }
                     if (seen)
                     {
                         Effects.Burst(wp + Vector3.Up * 0.8f, 16, 2, 4.5f, 0.28f, 1.1f);

@@ -86,7 +86,7 @@ public partial class Hud
         _root.AddChild(_score);
     }
 
-    const string LaneHint = "Right-click to move or attack  ·  Q ability  ·  1-4 shop  ·  Space find hero  ·  click anything to inspect it";
+    const string LaneHint = "Right-click to move or attack  ·  Q W E skills  ·  O skill tree  ·  1-4 shop  ·  Space find hero  ·  click anything to inspect it";
 
     void RefreshLanes()
     {

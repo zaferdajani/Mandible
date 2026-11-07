@@ -60,9 +60,25 @@ public struct Ant
     public float Evo;                 // organic matter eaten toward the next stage
     public int Stage;                 // 0 as hatched, up to Config.MaxStage
     public bool FeastOrder;           // sent to eat the remains in FoodTarget
+    // general skills (Skills.cs): ranks of Q W E, unspent points, autocast bits, the W and E cooldowns (Q uses AbilityCd)
+    public byte Sk0, Sk1, Sk2, SkPts, AutoMask;
+    public float CdW, CdE;
+    public byte CastSlot;             // pending cast: slot + 1 (with CastReq seconds left to find its moment)
+    public int CastTarget, CastSerial;
+    public Vector2 CastAt;
+    public byte CharmP1;              // under Queen's Pheromone: the ant's own colony + 1, and seconds left
+    public float CharmT;
+    public bool Summoned;             // a callow from Brood Call: lasts LifeT, hardens a level every few seconds up to SummonCap
+    public float LifeT, HardenT;
+    public byte SummonCap;
+    public float FrenzyT;             // Mandible Frenzy
+    public byte FrenzyRank;
+    public float HasteT, HasteMul, GuardArmor; // Trail Blaze
+    public float SlowT, SlowMul;      // Caustic Cloud
 }
 
-public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve }
+public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
+    SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive }
 
 public struct SimEvent
 {
@@ -95,6 +111,8 @@ public sealed class AcidPool
     public Vector2 Pos;
     public float R, Life, Max, Dps;
     public int Team, Src;
+    public float Slow;   // Caustic Cloud: enemies inside move this much slower
+    public bool Cloud;   // a cloud of mist rather than a pool on the soil (rendering)
 }
 
 sealed class WebShotFx
@@ -357,6 +375,7 @@ public sealed partial class Sim
         // outside the campaign only eating teaches; the campaign's squads still rank up in battle (eating evolves them on top)
         if (EatRules && !eaten && Mission == null) return;
         ref var a = ref Ants[id];
+        if (a.CharmP1 > 0 || a.Summoned) return; // a borrowed mind or a callow learns nothing
         // the campaign's rival heroes grow only so far, from kills or remains: its levels set the rival's strength
         if (Mission != null && a.Team == Config.Enemy && Config.IsHero(a.Type) && a.Level >= Config.RivalHeroCap) return;
         if (a.SquadP1 > 0) { SquadXp(Squads[a.SquadP1 - 1], xp); return; }
@@ -368,7 +387,13 @@ public sealed partial class Sim
             a.Level++;
             ApplyLevel(ref a);
             a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.35f); // promotion heals
-            Events.Add(new SimEvent { Kind = EvKind.LevelUp, Pos = a.Pos, Team = a.Team, Type = a.Type });
+            if (Config.IsHero(a.Type))
+            {
+                a.SkPts++; // a general's level-up is a skill point
+                // the campaign's scripted rival has no computer player to spend it: it learns on the spot
+                if (Mission != null && a.Team == Config.Enemy) for (int s = BestLearn(a); s >= 0 && a.SkPts > 0; s = BestLearn(a)) LearnSkill(id, s);
+            }
+            Events.Add(new SimEvent { Kind = EvKind.LevelUp, Pos = a.Pos, Team = a.Team, Type = a.Type, Who = id + 1 });
         }
     }
 
@@ -509,6 +534,7 @@ public sealed partial class Sim
         };
         ApplyLevel(ref Ants[id]);
         Ants[id].Hp = Ants[id].MaxHp;
+        InitSkills(ref Ants[id]);
         Ants[id].PrevPos = p; Ants[id].PrevHeading = heading; Ants[id].PrevAlt = Ants[id].Alt;
         if (team < 2) Col[team].Count[(int)type]++;
         else WildCount++;
@@ -638,6 +664,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.SkPts << 24)); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT));
         }
         foreach (var c in Col)
         {
@@ -914,6 +941,7 @@ public sealed partial class Sim
             return;
         }
 
+        if (!TickSkillState(i, ref a, dt)) return;
         a.ChargeT -= dt;
         a.BlockT -= dt;
         a.RetreatT -= dt;
@@ -942,12 +970,9 @@ public sealed partial class Sim
         }
 
         if ((a.Team == Config.Wild || a.Boss) && a.State == AntState.Engage) WildAbility(i, ref a, st);
-        if (Config.IsHero(a.Type) && think && (!a.Manual || a.CastReq > 0))
-        {
-            HeroAbility(i, ref a, st);
-            if (a.AbilityCd > 0) a.CastReq = 0;
-        }
+        if (Config.IsHero(a.Type) && think) HeroAbility(i, ref a, st);
         a.CastReq -= dt;
+        if (a.CastReq <= 0) a.CastSlot = 0;
         a.AbilityCd -= dt;
         a.BuffT -= dt;
 
@@ -1140,6 +1165,7 @@ public sealed partial class Sim
         a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f);
         a.AttackAnim = 1;
         float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * MoraleMul(a.Team) * Rng.R(0.85f, 1.15f);
+        if (a.FrenzyT > 0) dmg *= Skills.FrenzyBite[System.Math.Clamp((int)a.FrenzyRank, 1, 3) - 1];
         bool sting = false;
         if (a.Type == AntType.Wasp && a.AbilityCd <= 0)
         {
@@ -1182,6 +1208,7 @@ public sealed partial class Sim
             t.PoisonT = Config.StingVenomTime;
             t.PoisonSrc = i;
         }
+        if (a.FrenzyT > 0) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dmg * Skills.FrenzyLeech[System.Math.Clamp((int)a.FrenzyRank, 1, 3) - 1]); // it drinks what it bites
         Damage(target, dmg, i);
     }
 
@@ -1303,110 +1330,6 @@ public sealed partial class Sim
         return _near;
     }
 
-    /// Heroes cast their specials on their own when the fight calls for it; potency grows with level and queen tier.
-    void HeroAbility(int i, ref Ant a, UnitStats st)
-    {
-        if (a.AbilityCd > 0) return;
-        float lv = a.Level;
-        float tierMul = Config.HeroTierMul(a.Type, a.HeroTier);
-        switch (a.Type)
-        {
-            case AntType.Warlord:
-            {
-                if (EnemiesNear(a.Pos, 10, a.Team, false, a.Layer).Count < 3) return;
-                float mul = (Config.WarCryBite + 0.03f * lv) * (1 + 0.1f * (tierMul - 1));
-                // the roar itself: everyone within a few lengths is staggered back and bitten by the shock
-                float shock = st.Damage * a.DmgMul * Config.WarCryShock;
-                foreach (int j in EnemiesNear(a.Pos, Config.WarCryShockR, a.Team, false, a.Layer).ToArray())
-                {
-                    ref var b = ref Ants[j];
-                    if (b.Type != AntType.Queen) { b.Pos = ClampMap(b.Pos + (b.Pos - a.Pos).Normalized() * 1.5f); b.Root = Mathf.Max(b.Root, 0.5f); }
-                    Damage(j, shock, i);
-                }
-                int cr = 4;
-                int cx = (int)(a.Pos.X / SpatialHash.Cell), cz = (int)(a.Pos.Y / SpatialHash.Cell);
-                for (int z = cz - cr; z <= cz + cr; z++)
-                {
-                    if (z < 0 || z >= Hash.N) continue;
-                    for (int x = cx - cr; x <= cx + cr; x++)
-                    {
-                        if (x < 0 || x >= Hash.N) continue;
-                        for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
-                        {
-                            ref var b = ref Ants[j];
-                            if (b.Alive && b.Team == a.Team && Config.IsWarrior(b.Type) && b.Pos.DistanceTo(a.Pos) < 13) { b.BuffT = 8 + 0.3f * lv; b.BuffMul = mul; }
-                        }
-                    }
-                }
-                a.AbilityCd = 22 - 0.6f * lv;
-                a.AttackAnim = 1;
-                Events.Add(new SimEvent { Kind = EvKind.WarCry, Pos = a.Pos, Team = a.Team, Type = a.Type, Radius = 13 });
-                break;
-            }
-            case AntType.Matron:
-            {
-                if (!Valid(a.Target, a.TargetSerial) || a.State != AntState.Engage) return;
-                var to = Ants[a.Target].Pos;
-                if (a.Pos.DistanceTo(to) > 11) return;
-                float r = 3.5f + 0.15f * lv;
-                float dmg = (40 + 8 * lv) * a.DmgMul;
-                foreach (int j in EnemiesNear(to, r, a.Team, false, a.Layer).ToArray())
-                {
-                    ref var b = ref Ants[j];
-                    b.PoisonT = 4;
-                    b.PoisonDps = (5 + 1.5f * lv) * tierMul;
-                    b.PoisonSrc = i;
-                    Damage(j, dmg, i);
-                }
-                // the acid pools where it lands and keeps burning whoever wades through it
-                Pools.Add(new AcidPool { Pos = to, R = r, Life = Config.AcidPoolLife, Max = Config.AcidPoolLife, Dps = (4 + 1.2f * lv) * tierMul, Team = a.Team, Src = i });
-                a.AbilityCd = 9 - 0.3f * lv;
-                a.AttackAnim = 1;
-                Events.Add(new SimEvent { Kind = EvKind.AcidBurst, Pos = a.Pos, To = to, Team = a.Team, Type = a.Type, Radius = r });
-                break;
-            }
-            case AntType.Marshal:
-            {
-                var foes = EnemiesNear(a.Pos, 12, a.Team, true, a.Layer);
-                if (foes.Count < 2) return;
-                var to = Ants[foes[0]].Pos;
-                float r = 3.2f + 0.12f * lv;
-                float dmg = (35 + 7 * lv) * a.DmgMul;
-                a.Pos = ClampMap(to + (a.Pos - to).Normalized() * 1.5f);
-                a.Alt = 0.6f;
-                foreach (int j in EnemiesNear(to, r, a.Team, true, a.Layer).ToArray())
-                {
-                    Ants[j].Root = Mathf.Max(Ants[j].Root, 1.2f + 0.1f * lv);
-                    Damage(j, dmg, i);
-                }
-                // the rally: warriors who see the marshal strike press the attack
-                int rallied = 0;
-                int rc = 3;
-                int rx = (int)(to.X / SpatialHash.Cell), rz = (int)(to.Y / SpatialHash.Cell);
-                for (int z = rz - rc; z <= rz + rc; z++)
-                {
-                    if (z < 0 || z >= Hash.N) continue;
-                    for (int x = rx - rc; x <= rx + rc; x++)
-                    {
-                        if (x < 0 || x >= Hash.N) continue;
-                        for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
-                        {
-                            ref var b = ref Ants[j];
-                            if (!b.Alive || b.Team != a.Team || j == i || !Config.IsWarrior(b.Type) || b.Pos.DistanceTo(to) > 12) continue;
-                            if (b.BuffT <= 0 || b.BuffMul <= Config.RallyBite) { b.BuffT = Mathf.Max(b.BuffT, Config.RallyTime); b.BuffMul = Mathf.Max(b.BuffMul, Config.RallyBite); }
-                            rallied++;
-                        }
-                    }
-                }
-                a.AbilityCd = 11 - 0.4f * lv;
-                a.AttackAnim = 1;
-                Events.Add(new SimEvent { Kind = EvKind.DiveBomb, Pos = to, Team = a.Team, Type = a.Type, Radius = r });
-                if (rallied > 0) Events.Add(new SimEvent { Kind = EvKind.Rally, Pos = to, Team = a.Team, Type = a.Type, Radius = 12 });
-                break;
-            }
-        }
-    }
-
     void TickWebs(float dt)
     {
         for (int s = _shots.Count - 1; s >= 0; s--)
@@ -1446,6 +1369,7 @@ public sealed partial class Sim
                 b.PoisonDps = b.PoisonT > 0 ? Mathf.Max(b.PoisonDps, z.Dps) : z.Dps;
                 b.PoisonT = Mathf.Max(b.PoisonT, 1.0f);
                 if (z.Src >= 0 && Ants[z.Src].Alive) b.PoisonSrc = z.Src;
+                if (z.Slow > 0) { b.SlowMul = b.SlowT > 0 ? Mathf.Max(b.SlowMul, z.Slow) : z.Slow; b.SlowT = Mathf.Max(b.SlowT, 0.6f); }
             }
         }
     }
@@ -1463,7 +1387,8 @@ public sealed partial class Sim
         if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
         // chitin: heroes and wild bugs shrug off a share of every blow; a beetle behind its shell wall most of it
         float armor = Config.Of(t.Type).Armor + (t.BlockT > 0 ? Config.ShellWallArmor : 0f);
-        if (armor > 0) dmg *= 1f - armor;
+        if (t.HasteT > 0) armor += t.GuardArmor; // Trail Blaze: the line holds
+        if (armor > 0) dmg *= 1f - Mathf.Min(armor, 0.75f);
         if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;
         _blow = dmg / Mathf.Max(1f, t.MaxHp);
@@ -1497,13 +1422,14 @@ public sealed partial class Sim
     void Kill(int id, int killer)
     {
         ref var t = ref Ants[id];
-        if (Mission != null) RosterKill(id, killer);
+        if (t.CharmP1 > 0) { t.Team = t.CharmP1 - 1; t.CharmP1 = 0; } // it dies one of its own colony's
+        if (Mission != null && !t.Summoned) RosterKill(id, killer);
         if (t.Boss && t.Team == Config.Wild && killer >= 0 && Ants[killer].Team < 2) { Rouse(id, Ants[killer].Team, killer); return; }
         t.Alive = false;
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);
         var c = t.Team < 2 ? Col[t.Team] : null;
-        if (c != null) { if (!t.Guardian) c.Count[(int)t.Type]--; c.Lost++; }
+        if (c != null) { if (!t.Guardian && !t.Summoned) c.Count[(int)t.Type]--; if (!t.Summoned) c.Lost++; }
         else WildCount--;
         if (killer >= 0 && Ants[killer].Team < 2)
         {
@@ -1528,7 +1454,7 @@ public sealed partial class Sim
         // every death leaves a carcass where it fell, above ground or in the galleries
         var carcass = new FoodSource
         {
-            Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = st.CorpseFood, Max = st.CorpseFood, Radius = t.Size * 0.45f,
+            Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating Radius = t.Size * 0.45f,
             Team = t.Team, AntType = t.Type, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
         };
         if (carcass.Alive) W.Food.Add(carcass);
@@ -1725,7 +1651,7 @@ public sealed partial class Sim
             a.Heading += Mathf.Clamp(diff, -turn, turn);
             if (a.Type == AntType.Worker && a.Team < 2 && Col[a.Team].SugarT > 0) speedMul *= 1.15f; // sugar energy
             if (a.Type == AntType.Worker && a.Team < 2 && a.Layer == NestLayer(a.Team)) speedMul *= Config.GalleryPace;
-            targetSpeed = st.Speed * a.SpeedMul * (a.BuffT > 0 ? 1.2f : 1f) * speedMul * (Mathf.Abs(diff) > 1.3f ? 0.35f : 1f);
+            targetSpeed = st.Speed * a.SpeedMul * (a.BuffT > 0 ? 1.2f : 1f) * (a.HasteT > 0 ? a.HasteMul : 1f) * (a.SlowT > 0 ? 1f - a.SlowMul : 1f) * speedMul * (Mathf.Abs(diff) > 1.3f ? 0.35f : 1f);
         }
         a.Speed = Mathf.MoveToward(a.Speed, targetSpeed, st.Speed * dt * 6);
         var pos = a.Pos + MathX.Dir(a.Heading) * a.Speed * dt;

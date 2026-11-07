@@ -56,7 +56,8 @@ public sealed class LaneAI : IColonyAI
 
         // the ability: whenever enemies are bunched nearby, or the Old Stag is in reach
         bool stagClose = _sim.StagAwake && _sim.StagTeam != _team && _sim.Ants[_sim.StagId].Pos.DistanceTo(h.Pos) < 9;
-        if (h.AbilityCd <= 0 && h.CastReq <= 0 && (Enemies(h.Pos, 11) >= 2 || stagClose)) Orders.Issue(new Cmd { Kind = CmdKind.Ability, Team = (byte)_team });
+        GeneralAI.Learn(_sim, _team, Orders);
+        GeneralAI.CastReady(_sim, _team, id, Orders, Enemies(h.Pos, 11) >= 2 || stagClose);
 
         int foe = _sim.HeroId[1 - _team];
         bool foeAlive = foe >= 0 && _sim.Ants[foe].Alive;

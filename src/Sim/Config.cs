@@ -36,7 +36,8 @@ public static class Config
     public const int MaxLevel = 5;
     public const int HeroMaxLevel = 10;
     public static readonly int[] LevelXp = { 0, 0, 40, 110, 210, 350 }; // xp needed to reach level n
-    public static readonly int[] HeroXp = { 0, 0, 110, 270, 500, 800, 1180, 1650, 2200, 2850, 3600 };
+    // generals: early levels come quickly so the first skills arrive in the first fights; the ultimate ranks are earned
+    public static readonly int[] HeroXp = { 0, 0, 90, 210, 370, 580, 850, 1180, 1580, 2060, 2650 };
     public static int MaxLevelOf(AntType t) => IsHero(t) ? HeroMaxLevel : MaxLevel;
     public static int XpFor(AntType t, int level) => IsHero(t) ? HeroXp[level] : LevelXp[System.Math.Min(level, MaxLevel)];
 
@@ -366,7 +367,7 @@ public static class Config
     public static readonly string[] StageNames = { "Hatched", "Blooded", "Scarred", "Grizzled" };
     public static string StageGain(int stage) => $"+{StageHp * 100:0}% health, +{StageBite * 100:0}% bite, heavier mandibles";
     public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
-    public const float HeroXpPerOrganic = 12.5f; // a hero turns what it eats into experience: about 290 organic from level 1 to 10
+    public const float HeroXpPerOrganic = 12.5f; // a general turns what it eats into experience: about 210 organic from level 1 to 10
     public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
     public const float FeastHeal = 0.06f;      // share of its health each mouthful restores
     // Devour the Fallen: the fire-ant Warlord alone eats its own colony's dead, faster and healing more

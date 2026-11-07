@@ -125,6 +125,8 @@ public sealed class AntRenderer
     readonly Batch[,] _pieceCargo = new Batch[3, 3]; // carcass pieces in a worker's jaws: head, gaster, legs × black, red, bug chitin
     readonly Batch _rings, _bars, _evoBars;
     readonly Batch _auraGround, _auraHalo;
+    readonly Batch[] _insignia = new Batch[3]; // the generals' royal seals: bronze (levels 1-3), gold (4-7), red-gold (8-10)
+    readonly Batch _haze;                       // Queen's Pheromone: the scent film under a borrowed ant
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
     internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; foreach (var b in _pieceCargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
@@ -222,6 +224,18 @@ public sealed class AntRenderer
         var haloMat = new ShaderMaterial { Shader = auraShader };
         haloMat.SetShaderParameter("billboard", 1f);
         _auraHalo = new Batch(root, new QuadMesh { Size = Vector2.One }, haloMat, false, "HeroAuraHalo");
+        var insigniaShader = Shaders.Get(Shaders.Insignia);
+        for (int k = 0; k < 3; k++)
+        {
+            var m = new ShaderMaterial { Shader = insigniaShader, RenderPriority = 1 }; // after the soil (drawn in the transparent pass)
+            m.SetShaderParameter("tex", GD.Load<Texture2D>($"res://assets/insignia/insignia_{k + 1}.png"));
+            m.SetShaderParameter("gems", k == 2 ? 1f : 0f);
+            m.SetShaderParameter("lift", k == 0 ? 1.5f : 1f);
+            if (k == 0) { m.SetShaderParameter("tint", new Vector3(0.9f, 0.74f, 0.55f)); m.SetShaderParameter("relief", 11f); }
+            _insignia[k] = new Batch(root, new PlaneMesh { Size = Vector2.One }, m, false, $"Insignia{k + 1}");
+            _insignia[k].Node.SortingOffset = 2;
+        }
+        _haze = new Batch(root, new PlaneMesh { Size = Vector2.One }, new ShaderMaterial { Shader = Shaders.Get(Shaders.Haze), RenderPriority = 1 }, false, "PheromoneHaze");
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
@@ -304,7 +318,7 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.Begin();
         foreach (var cargo in _broodCargo) cargo.Begin();
         foreach (var cargo in _pieceCargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
+        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
@@ -364,12 +378,17 @@ public sealed class AntRenderer
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
             data.A += 4 * callow.Pale;
-            var farBatch = _far[a.Team, (int)a.Type];
-            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[a.Team, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
+            // a Brood Call summons is a callow: pale and soft at first, darkening as its cuticle hardens
+            if (a.Summoned && !callow.Active) data.A += 4 * Mathf.RoundToInt(15 * Mathf.Clamp(0.85f - 0.8f * (a.Level - 1 + a.HardenT / Skills.HardenEvery) / Mathf.Max(1, a.SummonCap - 1), 0.05f, 0.85f));
+            int look = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team; // a borrowed ant keeps its own colony's body
+            var farBatch = _far[look, (int)a.Type];
+            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[look, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
             if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
             else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
-            else _live[a.Team, (int)a.Type].Add(b, o, data);
-            if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
+            else _live[look, (int)a.Type].Add(b, o, data);
+            if (a.CharmP1 > 0)
+                _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
+            if (flies && _wings.TryGetValue((look, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
                 _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
@@ -392,8 +411,8 @@ public sealed class AntRenderer
                     // load clamped in its jaws on slopes, in tunnels and while turning.
                     _cargo[(int)a.CarryKind].Add(b, o, data);
             }
-            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, st.Size, camPos, rdt);
-            if (a.Selected)
+            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, ih, st.Size, camPos, rdt);
+            if (a.Selected && !Config.IsHero(a.Type)) // a general's insignia is its selection mark
                 _rings.Add(Basis.FromScale(Vector3.One * st.Size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
             bool wild = a.Team == Config.Wild;
             float barY = st.Size * 0.55f + 0.5f;
@@ -515,43 +534,56 @@ public sealed class AntRenderer
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
         foreach (var cargo in _pieceCargo) cargo.End();
-        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
+        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
 
-    /// Each level a hero gains shifts its aura one step along this ramp, from a pale gold recruit to a radiant legend.
+    /// Each level a general gains warms its seal and halo one step: aged bronze, brass, gold, red-gold, and at the top a
+    /// deep royal amber. Warm metals only: the owner's palette has no greys and no cold colours.
     public static readonly Color[] AuraLevel =
     {
-        new(0.95f, 0.84f, 0.55f), new(1f, 0.7f, 0.25f), new(1f, 0.5f, 0.14f), new(0.98f, 0.27f, 0.13f), new(0.92f, 0.16f, 0.42f),
-        new(0.74f, 0.22f, 0.9f), new(0.46f, 0.32f, 1f), new(0.22f, 0.56f, 1f), new(0.2f, 0.92f, 0.86f), new(1f, 0.96f, 0.82f),
+        new(0.72f, 0.52f, 0.3f), new(0.8f, 0.58f, 0.32f), new(0.88f, 0.65f, 0.34f), new(1f, 0.78f, 0.36f), new(1f, 0.82f, 0.4f),
+        new(1f, 0.85f, 0.45f), new(1f, 0.88f, 0.52f), new(1f, 0.62f, 0.34f), new(1f, 0.55f, 0.28f), new(1f, 0.5f, 0.2f),
     };
-    /// The colour of each hero's special, which the aura blends toward when it is cast.
+    /// The colour of each general's signature special, which the halo blends toward when it is cast.
     public static Color AuraAbility(AntType t) => t switch
     {
-        AntType.Warlord => new Color(1f, 0.34f, 0.08f), AntType.Matron => new Color(0.45f, 1f, 0.15f), _ => new Color(0.55f, 0.82f, 1f),
+        AntType.Warlord => new Color(1f, 0.34f, 0.08f), AntType.Matron => new Color(0.85f, 0.9f, 0.25f), _ => new Color(1f, 0.85f, 0.55f),
     };
 
-    /// A faint aura under and around a hero, in its level's colour. It breathes while the special is ready, and
-    /// flares toward the special's colour when the hero casts (the cooldown jumping back up).
-    void HeroAura(int i, in Ant a, Vector3 o, Vector3 ground, Vector3 up, float size, Vector3 camPos, float rdt)
+    /// Insignia tier for a general's level: 0 bronze (1-3), 1 gold (4-7), 2 red-gold with amber (8-10); and how rich within it.
+    public static int InsigniaTier(int level) => level >= 8 ? 2 : level >= 4 ? 1 : 0;
+    public static float InsigniaRich(int level) => level >= 8 ? (level - 8) / 2f : level >= 4 ? (level - 4) / 3f : (level - 1) / 2f;
+
+    /// Under a general: its royal insignia on the soil, crown forward, richer with every level; above, a faint warm halo
+    /// that breathes while a skill is ready and flares when one is cast (any cooldown jumping back up).
+    void HeroAura(int i, in Ant a, Vector3 o, Vector3 ground, Vector3 up, float heading, float size, Vector3 camPos, float rdt)
     {
         _aura.TryGetValue(i, out var s);
-        if (a.AbilityCd > s.cd + 1f) s.flare = 1f;
+        float cdSum = a.AbilityCd + a.CdW + a.CdE;
+        if (cdSum > s.cd + 1f) s.flare = 1f;
         s.flare = Mathf.Max(0, s.flare - rdt * 0.7f);
-        s.cd = a.AbilityCd;
+        s.cd = cdSum;
         _aura[i] = s;
         float flare = s.flare * s.flare * (3 - 2 * s.flare); // smooth fade out
-        float ready = a.AbilityCd <= 0 ? 0.5f + 0.5f * Mathf.Sin(_now * 2.6f + i) : 0f;
-        var col = AuraLevel[Mathf.Clamp(a.Level, 1, AuraLevel.Length) - 1].Lerp(AuraAbility(a.Type), flare * 0.75f);
-        float level01 = (Mathf.Clamp(a.Level, 1, Config.HeroMaxLevel) - 1f) / (Config.HeroMaxLevel - 1f);
-        float strength = 0.24f + 0.14f * level01 + 0.1f * ready + 0.85f * flare;
-        // the pool of light stays on the soil even under a flier
-        _auraGround.Add(Orient(up, 0, size * (1.55f + 0.3f * level01 + 1.2f * flare)), ground, new Color(col.R, col.G, col.B, strength * 0.8f));
+        int lv = Mathf.Clamp(a.Level, 1, Config.HeroMaxLevel);
+        bool ready = a.AbilityCd <= 0 || a.Sk1 > 0 && a.CdW <= 0 || a.Sk2 > 0 && a.CdE <= 0;
+        float breathe = ready ? 0.5f + 0.5f * Mathf.Sin(_now * 2.6f + i) : 0f;
+        float level01 = (lv - 1f) / (Config.HeroMaxLevel - 1f);
+        int tier = InsigniaTier(lv);
+        float seal = size * (1.15f + 0.1f * tier); // about the old selection ring: a seal under the general, not a stage
+        // the crown always points up the screen, like a coat of arms, whatever way the general turns
+        var look = new Vector2(o.X - camPos.X, o.Z - camPos.Z);
+        float upright = look.LengthSquared() > 0.01f ? look.Angle() : heading;
+        _insignia[tier].Add(Orient(up, upright, seal), ground + up * 0.01f,
+            new Color(InsigniaRich(lv), a.Selected ? 1f : 0f, flare, 1f));
+        var col = AuraLevel[lv - 1].Lerp(AuraAbility(a.Type), flare * 0.75f);
+        float strength = 0.08f + 0.08f * level01 + 0.05f * breathe + 0.6f * flare;
         // the halo sits just behind the body, so it rims the silhouette rather than washing over it
         var away = (o - camPos).Normalized();
-        _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.7f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
-            new Color(col.R, col.G, col.B, strength * 0.75f));
+        _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.6f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
+            new Color(col.R, col.G, col.B, strength));
     }
 
     /// A dead body or a piece of one (Carnage): the colony's or the bug's own dead material.

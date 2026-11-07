@@ -43,6 +43,7 @@ public partial class Main : Node
             if (a == "--campaign-test") { ColonyValidation.Campaign(this); return; }
             if (a == "--transport-test") { FoodTransportValidation.Run(this); return; }
             if (a == "--carrion-test") { CarrionValidation.Run(this); return; }
+            if (a == "--generaltest") { GeneralValidation.Run(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
@@ -89,6 +90,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--gore-capture=")) _ = GoreValidation.Capture(this, a["--gore-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--general-capture=")) _ = GeneralValidation.Capture(this, a["--general-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
