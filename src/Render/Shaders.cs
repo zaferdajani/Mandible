@@ -1519,11 +1519,14 @@ void fragment() {
         // the rock scan's own colour underneath; the floor is the surface's sand, trodden and a little darker
         vec3 layer = mix(mix(vec3(0.62, 0.50, 0.40), vec3(1.0, 0.86, 0.68), t1), vec3(1.0, 0.95, 0.85), t2);
         rock *= layer * vec3(0.78, 0.66, 0.56); // the walls frame the room: darker and cooler than the floor
-        sand *= vec3(1.25, 1.14, 0.98); // the floor is where the eye should land: warm trodden sand, brighter than the walls
+        sand *= vec3(0.78, 0.66, 0.52); // a sunken bowl: warm, but clearly darker and richer than the sunlit surface, so the rooms read at every zoom
         col = mix(sand, rock, wallness);
         col *= 0.9 + 0.2 * g;
         float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
         col *= 1.0 - 0.3 * crevice;
+        // the shadow ring under the lip: the floor darkens toward the foot of the wall, as in the close-up
+        float ring = smoothstep(-0.95, -0.35, UV.x) * (1.0 - wallness);
+        col *= 1.0 - 0.42 * ring;
         // the flat skirt beyond the lip lies under the surface's hole and sees neither sun nor lamps: give it the surface
         // sand's own warm colour and fill, so no grey edge ever shows along a cut
         float skirt = smoothstep(0.2, 0.45, UV.x);

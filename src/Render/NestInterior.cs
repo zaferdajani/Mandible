@@ -42,7 +42,7 @@ public sealed partial class NestInterior
         public Node3D Node, Contents;
         public Label3D Label;
         public int ContentCount = -1, Tier, TierStamp = -1;
-        public float ShownProgress = -1;
+        public float ShownProgress = -1, ShownScale = -1;
         public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
     }
 
@@ -363,11 +363,14 @@ public sealed partial class NestInterior
         return room;
     }
 
+    /// Room contents grow with the camera's distance in build mode so they stay readable from the tour spot (1.3x close, 2x far).
+    float ContentScale() => Mathf.Lerp(1.3f, 2.4f, Mathf.Clamp((_g.Camera.Distance - 20f) / 25f, 0, 1));
+
     void LayoutRoom(Room room)
     {
         var ch = room.Ch;
         room.Node.Position = new Vector3(ch.Offset.X, -NestGeometry.Depth + 0.025f, ch.Offset.Y);
-        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch) * 1.3f; // what a room holds is its meaning: shown large
+        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch) * ContentScale(); // what a room holds is its meaning: shown large
         room.Label.Position = new Vector3(0, 1.1f, 0);
     }
 
@@ -461,7 +464,7 @@ public sealed partial class NestInterior
                 if (!_rooms.TryGetValue((team, ch.Id), out var room)) _rooms[(team, ch.Id)] = room = MakeRoom(team, ch);
                 // the underground is hidden under plain ground until the player opens it; the enemy's never shows
                 room.Node.Visible = shown;
-                if (room.ShownProgress != ch.Progress || room.Tier != ch.Tier) { LayoutRoom(room); room.ShownProgress = ch.Progress; }
+                if (room.ShownProgress != ch.Progress || room.Tier != ch.Tier || Mathf.Abs(room.ShownScale - ContentScale()) > 0.02f) { LayoutRoom(room); room.ShownProgress = ch.Progress; room.ShownScale = ContentScale(); }
                 if (full)
                 {
                     FillRoom(team, room);

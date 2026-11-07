@@ -80,15 +80,15 @@ sealed class NestLights
         _signature = sig.ToString();
 
         var want = new Dictionary<int, (Vector3 pos, float energy, float range)>();
-        float y = ground - NestGeometry.Depth + 0.95f;
+        float y = ground - NestGeometry.Depth + 1.7f; // higher and softer: a lamp a hand above the floor bleached the whole room to white
         // the hub bowl under the hole: daylight spills into it, so it is the brightest spot below
-        if (chambers.Count > 0) want[-1] = (new Vector3(nest.X, ground - NestGeometry.HubDepth + 0.9f, nest.Y), 2.6f, 6f);
+        if (chambers.Count > 0) want[-1] = (new Vector3(nest.X, ground - NestGeometry.HubDepth + 1.2f, nest.Y), 1.8f, 6f);
         foreach (var ch in chambers)
         {
             bool built = ch.Built;
             if (!built && ch.Progress <= 0.4f) continue;
             var pos = nest + ch.Offset;
-            want[ch.Id * 8] = (new Vector3(pos.X, y, pos.Y), 3.2f, 6f);
+            want[ch.Id * 8] = (new Vector3(pos.X, y, pos.Y), 1.7f, 6f);
             if (!built) continue;
             // gallery lamps between the parent and this room, kept clear of both ends and of the entrance shaft
             var from = ch.Parent >= 0 && ch.Parent < chambers.Count ? chambers[ch.Parent].Offset : Vector2.Zero;
