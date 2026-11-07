@@ -88,3 +88,13 @@ faceted eyes with a small sun glint, no metal regalia, no green acid ball; the M
 tip). Generated with Higgsfield `gpt_image_2_5` from the target G prompts (cards 16:9 cropped to 640x320, busts 3:4
 cropped to 400x490); the red Matron's card was redone once because its first version showed the mist at the head.
 Sheet: `hero-cards-2026-11-06.jpg`.
+
+## I. Mutated generals (awaiting owner approval)
+
+The owner's brief (2026-11-07): "epic generals generated from the mesh of the 3D [ants] we already have ... more
+monstrous, more epic, stronger looking, even if a little bit alien-ish". Each image was generated with the game's own
+render of that hero (`--ant-capture` g-warlord/g-matron/g-marshal, round 4) as the reference image, pushed toward a
+mutated lab strain: armoured heads, serrated tusked jaws, thorns, plated spurred legs, scars, faint violet-green
+mutagen veins in the plate seams; the Matron's gaster a glass bladder with a glowing acid sac (spray only from the
+gaster tip); the Marshal with three wing pairs and chitin wing-cases. `REVIEW-generals.jpg` holds all six
+(`i-general-*.jpg`). Higgsfield `gpt_image_2_5`, quality high, 16:9, one round.
