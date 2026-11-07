@@ -100,7 +100,7 @@ public sealed partial class Sim
         {
             var offset = k switch
             {
-                ChamberKind.Royal => new Vector2(0, 8), ChamberKind.Brood => new Vector2(11, 8),
+                ChamberKind.Royal => new Vector2(0, 11), ChamberKind.Brood => new Vector2(11, 8), // the queen's room at the end of the longest spoke, undisturbed
                 ChamberKind.Storage => new Vector2(-4, -9), ChamberKind.Forge => new Vector2(7, -9),
                 ChamberKind.Armory => new Vector2(12, 0), ChamberKind.Wings => new Vector2(-11, -2),
                 _ => new Vector2(-10, 7),
@@ -134,8 +134,11 @@ public sealed partial class Sim
 
     int ConnectFrom(int team, Vector2 p, bool builtOnly)
     {
+        // like a Settlers village: galleries radiate from the entrance, and only a room beyond their reach hangs
+        // off the nearest room instead (the player links rooms by digging between them)
         int best = -1;
         float bestD = p.DistanceTo(W.Nests[team].Pos);
+        if (bestD <= MaxTunnel) return -1;
         foreach (var ch in Col[team].Chambers)
         {
             if (builtOnly && !ch.Built) continue;

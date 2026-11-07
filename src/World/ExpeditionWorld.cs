@@ -84,7 +84,8 @@ public static partial class WorldBuilder
         Spawn(w, rng, FoodKind.Seed, Expedition.Clearing + new Vector2(15, 5), 800, 1.8f);
         Spawn(w, rng, FoodKind.Berry, Expedition.Clearing + new Vector2(9, 14), 700, 2);
         Spawn(w, rng, FoodKind.Sugar, Expedition.Clearing + new Vector2(-10, -12), 500, 1.4f);
-        w.Food.Add(new FoodSource { Id = w.NextFoodId++, Kind = FoodKind.Corpse, Pos = Expedition.Clearing + new Vector2(16, -1), Amount = 900, Max = 900, Radius = 2.3f, Team = Config.Wild, AntType = AntType.Beetle, Heading = 0.7f });
+        // No ready-made carcass here: the only beetle is the live one in the alley, and its remains are the protein.
+        // A dead beetle lying in the clearing read as the enemy and could not be attacked (owner playtest).
     }
 
     /// A small fallen leaf draped on the ground, with the same shader (and decay tint) as the yard's big leaves.

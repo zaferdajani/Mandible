@@ -350,7 +350,7 @@ public sealed class AntRenderer
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
             // underground ants stand on the gallery floor at their depth below the mound
-            float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.Depth;
+            float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.FloorDepth(ip - sim.W.Nests[layer - 1].Pos);
             if (layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
             if (callow.Active)
             {

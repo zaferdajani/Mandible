@@ -9,7 +9,6 @@ public partial class ExpeditionGuide : PanelContainer
     public GameSession Game;
     Label _goal, _heading, _body, _list, _stake;
     StarList _stars;
-    Button _dig;
     int _shown = -1;
     public override void _Ready()
     {
@@ -41,12 +40,8 @@ public partial class ExpeditionGuide : PanelContainer
         var finger = new Vector2(0, Settings.Mobile ? 46 : 0);
         var show = new Button { Text = "Show objective", CustomMinimumSize = finger }; row.AddChild(show);
         show.Pressed += () => Game.Camera.PanTo(Game.Sim.Mission.Marker);
-        _dig = new Button { Text = "Dig entrance", CustomMinimumSize = finger }; row.AddChild(_dig);
-        _dig.Pressed += () =>
-        {
-            if (Game.Sim.OrderEntrance(Local.Me, Game.Input.Selection)) { Game.Audio.Ui("ui_queue"); Game.SetNestView(true); }
-            else Game.Hud.Alert("Select workers at the food clearing with F3 first.");
-        };
+        // the founding's numbers and its one button live in their own panel, top centre (FoundingPanel)
+        if (m.Episode == 1) Game.Hud.AddPanel(new FoundingPanel { Game = Game });
     }
     public override void _Process(double delta)
     {
@@ -55,11 +50,30 @@ public partial class ExpeditionGuide : PanelContainer
         _heading.Text = m.Title;
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
-        _dig.Visible = m.Episode == 1 && m.Stage == ExpeditionStage.DigEntrance;
-        bool stocking = m.Episode == 1 && m.Stage == ExpeditionStage.Provision && m.RemainsLeft;
-        if (stocking) Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
-        else if (_guiding) Game.Guide.Clear();
-        _guiding = stocking;
+        // the opening always points at what to do next: the live beetle, its remains, then the nest site
+        bool guiding = false;
+        if (m.Episode == 1)
+        {
+            int beetle = m.Guards.Count > 0 && Game.Sim.Ants[m.Guards[0]].Alive ? m.Guards[0] : -1;
+            if (m.Stage == ExpeditionStage.ClearTrail && beetle >= 0)
+            {
+                guiding = true;
+                Game.Guide.Show(Game.Sim.Ants[beetle].Pos, "GROUND BEETLE · ATTACK",
+                    Settings.Mobile ? "Tap Army, then tap the beetle. Workers wait behind the queen until it is dead" : "Soldiers (F2), then right-click it. Workers wait behind the queen until it is dead");
+            }
+            else if (m.Stage == ExpeditionStage.Provision && m.RemainsLeft)
+            {
+                guiding = true;
+                Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
+            }
+            else if (m.Stage == ExpeditionStage.DigEntrance)
+            {
+                guiding = true;
+                Game.Guide.Show(Expedition.Clearing, "NEST SITE", ""); // the panel at the top carries the button and the words
+            }
+        }
+        if (!guiding && _guiding) Game.Guide.Clear();
+        _guiding = guiding;
         if (_list != null)
         {
             var sb = new System.Text.StringBuilder();

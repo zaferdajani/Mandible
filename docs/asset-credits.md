@@ -43,6 +43,8 @@ are resized to 512-2048 px (`assets/nature/tex`, `assets/nature/ground`) and imp
 | Forest Leaves 04 | [forest_leaves_04](https://polyhaven.com/a/forest_leaves_04) | ground set | Rob Tuytel (All) |
 | Dry Decay Leaves | [dry_decay_leaves](https://polyhaven.com/a/dry_decay_leaves) | ground set | Amal Kumar (All) |
 | Red Mud Stones | [red_mud_stones](https://polyhaven.com/a/red_mud_stones) | ground set | Rob Tuytel (All) |
+| Rock Face 03 | [rock_face_03](https://polyhaven.com/a/rock_face_03) | nest walls (albedo, normal, ARM, displacement baked into the bank) | Dario Barresi (Photography), Rico Cilliers (Processing) |
+| Coast Sand 05 | [coast_sand_05](https://polyhaven.com/a/coast_sand_05) | nest floors | Rob Tuytel (Photography), Dario Barresi (Processing) |
 
 ## Generated art
 

@@ -681,8 +681,19 @@ public partial class Hud : CanvasLayer
         if (_end != null && _end.Visible || _brief != null && _brief.Visible) return;
         if (_pause == null)
         {
+            var items = new List<(string, System.Action)> { ("Resume", () => TogglePause()) };
+            // single player: three save slots of your own (the autosave keeps itself, at milestones)
+            if (Game.Recorder != null)
+                foreach (var slot in SaveGame.Manual)
+                {
+                    var s = slot;
+                    items.Add(($"Save to slot {s}", () => { if (Game.SaveTo(s)) TogglePause(); }));
+                }
+            items.Add(("Restart", () => Game.Restart()));
+            items.Add(("Main Menu", () => Game.QuitToMenu()));
+            items.Add(($"Graphics: {Settings.Gfx}", CycleGraphics));
             _pause = Overlay(Game.Net == null ? "PAUSED" : "MENU", new[] { Game.Net == null ? "The colony waits." : "The battle goes on: multiplayer games cannot pause." },
-                ("Resume", () => TogglePause()), ("Restart", () => Game.Restart()), ("Main Menu", () => Game.QuitToMenu()), ($"Graphics: {Settings.Gfx}", CycleGraphics));
+                items.ToArray());
         }
         _pause.Visible = !_pause.Visible;
         Game.SetPaused(_pause.Visible);
