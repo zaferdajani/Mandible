@@ -33,7 +33,7 @@ import bmesh
 from mathutils import Vector, noise
 from mathutils.bvhtree import BVHTree
 
-OUT = sys.argv[sys.argv.index("--") + 1]
+OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else ""
 
 BODY, HEAD, GASTER, EYE = 0, 12, 13, 11
 HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
@@ -49,6 +49,7 @@ class Part:
         self.m = membrane or [0.0] * len(verts)
         self.seta = seta
         self.uv = uv  # texture coordinates into the scanned body's normal map, or None
+        self.tier = 0  # a general's growth appears from this mutation tier (0 always; 1-3 at hero levels 4, 7, 10)
 
 
 # ---------------------------------------------------------------------------------------------------------- lofting
@@ -230,7 +231,7 @@ CASTES = {
     "Gunner": dict(H=1.05, M=0.85, G=1.4, T=1.0, L=1.0, eye=1.0),
     "Queen": dict(H=1.15, M=1.0, G=1.6, T=1.45, L=0.95, eye=1.3, ocelli=True, flight=True, scars=True),
     "Flyer": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True),
-    "Warlord": dict(H=1.8, M=1.9, G=1.1, T=1.25, L=1.05, eye=0.85, groove=1.0, spines=True, teeth=6, setae=1.6),
+    "Warlord": dict(H=1.8, M=2.4, G=1.1, T=1.25, L=1.05, eye=0.85, groove=1.0, spines=True, teeth=6, setae=1.6),
     "Matron": dict(H=1.15, M=1.0, G=1.0, T=1.15, L=1.0, eye=1.05, replete=True, setae=1.4),
     "Marshal": dict(H=1.2, M=1.3, G=1.1, T=1.55, L=0.98, eye=1.5, ocelli=True, flight=True, setae=1.4),
 }
@@ -251,6 +252,7 @@ def build(species, caste, lod):
     rnd = random.Random(hash((species, caste)) & 0xffff)
     parts = []
     roots = {}  # limb part id -> the point it hangs from (hip, antennal socket, mandible hinge)
+    build.knees_local = {}
 
     # ---- mesosoma: pronotum dome, mesonotum, the metanotal groove, then the propodeum's rounded declivity
     flight = cs.get("flight", False)
@@ -486,6 +488,7 @@ def build(species, caste, lod):
                 return Vector((p.x * s, p.y, p.z))
             hip = Vector((s * 0.034 * T, BODY_Y - 0.012, hips[i] * T))
             roots[pid] = hip.copy()
+            build.knees_local[pid] = None
             tro_off, knee, ankle, foot = targets[i]
             troch = hip + sx(tro_off)
             L2 = L * 1.25
@@ -493,6 +496,7 @@ def build(species, caste, lod):
             ankle = Vector((s * ankle.x * L2, ankle.y, hips[i] * T + (ankle.z - hips[i]) * L2))
             foot = Vector((s * foot.x * L2, foot.y, hips[i] * T + (foot.z - hips[i]) * L2))
             path = [hip, troch, knee, ankle, foot]
+            build.knees_local[pid] = knee.copy()
             # coxa to the trochanter: stout; the femur slightly flattened and thickest past its middle
             fe1 = troch.lerp(knee, 0.35) + Vector((0, 0.008, 0))
             fe2 = troch.lerp(knee, 0.7) + Vector((0, 0.006, 0))
@@ -565,7 +569,7 @@ SCANS = {
     ("lasius", "Gunner"): dict(body="lasius_worker", gaster=1.25),
     ("lasius", "Soldier"): dict(body="camponotus_minor"),
     ("lasius", "Major"): dict(body="camponotus_major"),
-    ("lasius", "Warlord"): dict(body="camponotus_major", head=1.08),
+    ("lasius", "Warlord"): dict(body="camponotus_major", head=1.3),
     ("lasius", "Matron"): dict(body="lasius_worker", replete=True),
     # (the black queen keeps her modelled body: the Lasius queen scans tried so far did not part cleanly at her
     # broad waist; see docs/art-pipeline.md)
@@ -575,7 +579,7 @@ SCANS = {
     ("solenopsis", "Gunner"): dict(body="solenopsis_minor", gaster=1.25),
     ("solenopsis", "Soldier"): dict(body="solenopsis_major", head=0.85),
     ("solenopsis", "Major"): dict(body="solenopsis_major"),
-    ("solenopsis", "Warlord"): dict(body="solenopsis_major", head=1.1),
+    ("solenopsis", "Warlord"): dict(body="solenopsis_major", head=1.3),
     ("solenopsis", "Matron"): dict(body="solenopsis_minor", replete=True),
     ("solenopsis", "Queen"): dict(body="solenopsis_queen"),
     ("solenopsis", "Flyer"): dict(body="solenopsis_queen"),
@@ -653,7 +657,13 @@ def build_scanned(species, caste, lod):
     meso = [p for p in parts if p.part == BODY]
     meso_bvh = BVHTree.FromPolygons([v for p in meso for v in p.v],
                                     [tuple(i + sum(len(q.v) for q in meso[:k]) for i in t) for k, p in enumerate(meso) for t in p.t]) if meso else None
+    knees = {}
+    for pid, kn in build.knees_local.items():
+        if kn is not None and pid in targets and pid in roots:
+            knees[pid] = kn + (targets[pid] - roots[pid])
     for p in proc:
+        if getattr(p, "spine", None) and (meso_bvh is None or caste in ("Warlord", "Matron", "Marshal")):
+            continue  # a general's thorns come from mutate()
         if getattr(p, "spine", None) and meso_bvh:
             kind, base = p.spine
             # the pronotal pair sits behind the neck, the propodeal pair in front of the waist
@@ -674,6 +684,8 @@ def build_scanned(species, caste, lod):
             p.v = [v + hang for v in p.v]
             parts.append(p)
     tip = proc_tip + hang if cfg.get("replete") else waist + (Vector(meta["gaster_tip"]) - waist) * gs
+    if caste in ("Warlord", "Matron", "Marshal"):
+        parts.extend(mutate(parts, species, caste, lod, meta, targets, knees))
     return parts, neck, tip, Vector(meta["gaster"]), waist
 
 
@@ -701,6 +713,106 @@ def tangents(part):
         t = t.normalized() if t.length > 1e-9 else n.orthogonal().normalized()
         w = -1.0 if n.cross(t).dot(bt) < 0 else 1.0
         out.append((t.x, t.y, t.z, w))
+    return out
+
+
+
+# ------------------------------------------------------------------------------------------- the mutated generals (J)
+
+# Target J (docs/art-targets/j-general-*.jpg): the heroes are a lab strain's mutants. Each growth carries a tier
+# (CUSTOM0.w): 0 always, 1, 2, 3 grow in at hero levels 4, 7 and 10; the Ant shader collapses a growth whose tier is
+# above the instance's (AntRenderer packs the tier where the evolution stage goes for the rank and file).
+
+def thorn(base, direction, length, radius, sides, part, region, tier, pivot=(0.0, 0.0), weight_path=None):
+    """A curved thorn: out along `direction`, bending back and up toward the tip."""
+    d = direction.normalized()
+    back = Vector((0, 0.35, -1)).normalized()
+    pts = [base - d * radius * 0.6, base + d * length * 0.35, base + (d * 0.85 + back * 0.25).normalized() * length * 0.7,
+           base + (d * 0.7 + back * 0.45).normalized() * length]
+    rs = [radius, radius * 0.7, radius * 0.38, radius * 0.06]
+    v, f = loft([(p, r, r) for p, r in zip(pts, rs)], sides, cap_start=True, cap_end=False)
+    pr = make(v, f, 0, part, region, pivot, weight_path=weight_path)
+    pr.tier = tier
+    return pr
+
+
+def mutate(parts, species, caste, lod, meta, targets, knees):
+    """Thorns, spurs and wing-cases on a scanned hero body. Returns the new parts."""
+    sides = 5 if lod == "near" else 3 if lod == "mid" else 3
+    body = [p for p in parts if p.uv is not None]  # the scanned masses
+    verts, tris = [], []
+    for p in body:
+        o = len(verts)
+        verts.extend(p.v)
+        tris.extend((a + o, b + o, c + o) for a, b, c in p.t)
+    bvh = BVHTree.FromPolygons(verts, tris)
+    neck, waist = Vector(meta["neck"]), Vector(meta["waist"])
+    gas = Vector(meta["gaster"])
+    out = []
+
+    def top(x, z):
+        """The body's surface straight down from above at (x, z), and its normal there."""
+        hit = bvh.ray_cast(Vector((x, 2.0, z)), Vector((0, -1, 0)), 4.0)
+        return (hit[0], hit[1]) if hit[0] is not None else (None, None)
+
+    def row(z0, z1, n, spread, length, radius, part, region, tier0, every=1):
+        for k in range(n):
+            t = (k + 0.5) / n
+            z = z0 + (z1 - z0) * t
+            for s in (-1, 1):
+                at, nrm = top(s * spread, z)
+                if at is None:
+                    continue
+                d = (nrm + Vector((s * 0.6, 0.4, 0))).normalized()
+                tier = tier0 if k % every == 0 else min(3, tier0 + 1)
+                out.append(thorn(at - nrm * 0.002, d, length, radius, sides, part, region, tier))
+
+    span = neck.z - waist.z
+    if caste == "Warlord":
+        # thorax: two rows of long thorns, a second row grows in with the levels
+        row(waist.z + 0.15 * span, neck.z - 0.1 * span, 3, 0.03, 0.11, 0.016, BODY, THORAX_R, 0)
+        row(waist.z + 0.25 * span, neck.z - 0.2 * span, 2, 0.05, 0.08, 0.012, BODY, THORAX_R, 1)
+        # a crown of horns along the back of the head
+        head = Vector(meta["head"])
+        hz = head.z - (head.z - neck.z) * 0.35
+        row(hz - 0.04, hz + 0.04, 2, 0.04, 0.09, 0.014, HEAD, HEAD_R, 0)
+        row(hz - 0.07, hz - 0.03, 1, 0.075, 0.13, 0.016, HEAD, HEAD_R, 3)
+        # the gaster's back bristles with short spikes at the top tiers
+        row(gas.z - 0.1, gas.z + 0.08, 3, 0.05, 0.06, 0.012, GASTER, GASTER_R, 2)
+    elif caste == "Matron":
+        # a crown of short thorns on the thorax
+        row(waist.z + 0.2 * span, neck.z - 0.15 * span, 2, 0.03, 0.06, 0.011, BODY, THORAX_R, 0)
+        row(waist.z + 0.1 * span, neck.z - 0.3 * span, 2, 0.045, 0.05, 0.01, BODY, THORAX_R, 2)
+    elif caste == "Marshal":
+        row(waist.z + 0.25 * span, neck.z - 0.25 * span, 2, 0.03, 0.07, 0.012, BODY, THORAX_R, 1)
+        row(gas.z - 0.08, gas.z + 0.04, 2, 0.045, 0.05, 0.01, GASTER, GASTER_R, 2)
+        # wing-cases: two hardened chitin plates over the forewings' bases, curving back over the waist
+        for s in (-1, 1):
+            root, nrm = top(s * 0.045, neck.z - 0.45 * span)
+            if root is None:
+                continue
+            secs = []
+            for k in range(6):
+                t = k / 5
+                c = root + Vector((s * (0.02 + 0.03 * t), 0.015 - 0.012 * t, -0.42 * t * span - 0.05 * t))
+                secs.append((c, 0.035 * (1 - 0.6 * t) + 0.004, 0.009 * (1 - 0.5 * t) + 0.002))
+            v, f = loft(secs, 6)
+            pr = make(v, f, 1 if lod != "far" else 0, BODY, THORAX_R)
+            pr.tier = 0
+            out.append(pr)
+    # spurs at every knee, for the Warlord from the start and the others at the top tier
+    if lod != "far":
+        for pid, knee in knees.items():
+            if pid not in targets:
+                continue
+            leg = next((p for p in parts if p.part == pid), None)
+            if leg is None:
+                continue
+            side = 1 if pid <= 3 else -1
+            d = Vector((side * 0.4, 1, 0.2)).normalized()
+            pr = thorn(knee, d, 0.04, 0.008, sides, pid, THORAX_R, 0 if caste == "Warlord" else 3, leg.pivot)
+            pr.w = [0.45] * len(pr.v)
+            out.append(pr)
     return out
 
 
@@ -784,7 +896,7 @@ def write_bin(path, parts, ao):
             uv = p.uv[k] if p.uv else (0.0, 0.0)
             tg = tan[k] if tan else (1.0, 0.0, 0.0, 1.0)
             vbuf.append((v.x, v.y, v.z, n.x, n.y, n.z, p.part / 255.0, p.w[k], p.region, a[k], uv[0], uv[1],
-                         p.pivot[0], p.pivot[1], p.m[k], p.seta, 1.0 if p.uv else 0.0, 0.0) + tuple(tg))
+                         p.pivot[0], p.pivot[1], p.m[k], p.seta, 1.0 if p.uv else 0.0, float(p.tier)) + tuple(tg))
         for t in p.t:
             ibuf.append((t[0] + nv, t[1] + nv, t[2] + nv))
         nv += len(p.v)
@@ -829,4 +941,5 @@ def main():
         json.dump(manifest, fh, indent=1)
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -78,6 +78,7 @@ uniform vec3 waist = vec3(0.0, 0.14, -0.105); // the gaster nods (and curls to s
 // a body made from a real specimen scan (Antscan micro-CT): its sutures, punctures and setae sockets, baked
 uniform sampler2D detail_normal : hint_normal, filter_linear_mipmap, repeat_disable;
 uniform float has_detail = 0.0;
+uniform float venom_bands = 0.0; // a venom flyer (mutation): faint amber bands over the last gaster segments
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
 varying float v_part;
 varying float v_flash;
@@ -224,7 +225,7 @@ void vertex() {
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q *= 1.0 + 0.16 * stage; // each moult grows heavier jaws
+        q *= 1.0 + (hero > 0.0 ? 0.05 : 0.16) * stage; // each moult grows heavier jaws (a general's are already huge)
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
@@ -285,6 +286,8 @@ void vertex() {
     v_hov = hov;
     v_ao = COLOR.a; // occlusion baked by MeshKit.BakeAO: legs under the body, the neck, the waist
     v_cus = CUSTOM0;
+    // a general's growths (thorns, spurs, horns) appear with its mutation tier: hero levels 4, 7, 10
+    if (CUSTOM0.w > stage + 0.5) { p = vec3(0.0, 0.1, 0.0); n = vec3(0.0, 1.0, 0.0); }
     VERTEX = p;
     NORMAL = n;
 }
@@ -400,6 +403,11 @@ void fragment() {
         c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
         rough = mix(rough, 0.18, mem); cc = mix(cc, 0.8, mem);
         BACKLIGHT = mix(BACKLIGHT, vec3(0.9, 0.5, 0.12), mem);
+        if (venom_bands > 0.0 && part == 13.0) {
+            float tipward = smoothstep(waist.z - 0.2, waist.z - 0.36, v_local.z);
+            float band = smoothstep(0.6, 0.8, fract(v_local.z * 14.0));
+            c = mix(c, vec3(0.3, 0.16, 0.04), band * tipward * venom_bands * 0.35);
+        }
         // setae: fine golden hairs that catch the sun
         if (v_cus.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
     }
@@ -492,6 +500,11 @@ void fragment() {
         float mottle = vnoise(v_local * 38.0) * 0.6 + vnoise(v_local * 110.0) * 0.4;
         ALBEDO = mix(vec3(0.075, 0.03, 0.006), vec3(0.2, 0.09, 0.016), mottle) * (1.0 - dead * 0.35);
         EMISSION += vec3(0.16, 0.065, 0.01) * 0.05 * pulse * (1.0 - dead);
+        if (hero > 0.0) {
+            // a general Matron (target J): the acid sac and its coiled glands glow amber-green through the membrane
+            float coil = smoothstep(0.55, 0.85, vnoise(v_local * vec3(14.0, 14.0, 22.0) + vec3(0.0, 0.0, TIME * 0.15)));
+            EMISSION += mix(vec3(0.75, 0.5, 0.05), vec3(0.5, 0.95, 0.12), coil) * (0.55 + 0.9 * coil) * pulse * (1.0 - dead);
+        }
         BACKLIGHT = vec3(0.32, 0.15, 0.03) * (0.6 + 0.6 * mottle) * (1.0 - dead);
         CLEARCOAT = 1.0; CLEARCOAT_ROUGHNESS = 0.08; ROUGHNESS = 0.12; METALLIC = 0.0;
     }
@@ -1252,6 +1265,73 @@ void fragment() {
     ROUGHNESS = 0.55;
     BACKLIGHT = vec3(0.6);
     ALPHA = v_a * (0.75 + 0.25 * strands);
+}
+";
+
+    /// The royal larva (target H3): a giant grub, pearly cream with a mother-of-pearl sheen, breathing slowly.
+    /// `breath` 0..1 scales the swell (set it to 0 for a larva that is failing).
+    public const string RoyalLarva = @"
+shader_type spatial;
+render_mode depth_draw_opaque;
+" + Under + @"
+uniform float breath = 1.0;
+varying vec3 v_local;
+varying float v_ao;
+void vertex() {
+    v_local = VERTEX;
+    v_ao = COLOR.a;
+    // a slow wave of breath along the body, segment by segment
+    VERTEX += NORMAL * sin(TIME * 1.3 - VERTEX.z * 9.0) * 0.006 * breath;
+}
+void fragment() {
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+    vec3 pearl = vec3(0.62, 0.56, 0.44);
+    // mother-of-pearl: the hue drifts with the viewing angle, strongest at the rim
+    vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 1.3 + v_local.z * 1.5 + vec3(0.0, 0.33, 0.67)));
+    ALBEDO = mix(pearl, pearl * rainbow * 1.25, 0.3 + 0.45 * fres) * mix(0.55, 1.0, v_ao);
+    ROUGHNESS = 0.3;
+    CLEARCOAT = 0.7;
+    CLEARCOAT_ROUGHNESS = 0.2;
+    BACKLIGHT = vec3(0.75, 0.6, 0.42);
+    AO = v_ao * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+    AO_LIGHT_AFFECT = 0.3;
+}
+";
+
+    /// The hero's womb cocoon (target H4): translucent tan silk lit from inside, bulging and throbbing.
+    /// `throb` 0..1 is how hard it pulses, `rate` its beats per second (faster as the hero nears hatching), `glow`
+    /// how bright the light inside is. The hero inside is drawn separately, darker, behind the silk.
+    public const string Womb = @"
+shader_type spatial;
+render_mode blend_mix, cull_back, depth_draw_opaque;
+uniform float throb = 0.6;
+uniform float rate = 0.8;
+uniform float glow = 1.0;
+varying vec3 lpos;
+float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void vertex() {
+    lpos = VERTEX;
+    // a heartbeat: a quick swell and a slow ease, rolling over the lumps as the hero presses against the silk
+    float beat = pow(max(0.0, sin(TIME * rate * 6.2831)), 3.0);
+    float press = 0.5 + 0.5 * sin(VERTEX.y * 9.0 + VERTEX.z * 7.0 + TIME * 1.7);
+    VERTEX += NORMAL * (0.012 + 0.03 * press) * beat * throb;
+}
+void fragment() {
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 1.5);
+    // wound silk: fine crossing strands and fuzz
+    float s1 = abs(sin(lpos.z * 70.0 + lpos.x * 45.0 + sin(lpos.y * 60.0) * 2.0));
+    float s2 = abs(sin(lpos.z * 55.0 - lpos.y * 50.0 + sin(lpos.x * 70.0) * 2.0));
+    float strands = max(s1, s2);
+    float fuzz = hash(floor(lpos * 260.0));
+    float beat = pow(max(0.0, sin(TIME * rate * 6.2831)), 3.0);
+    ALBEDO = vec3(0.5, 0.38, 0.22) * (0.6 + 0.4 * strands) * (0.85 + 0.15 * fuzz);
+    ROUGHNESS = 0.7;
+    BACKLIGHT = vec3(0.45, 0.3, 0.14);
+    // the light inside: amber through the thin middle, a violet core, thinner and brighter at the edges of the bulges
+    vec3 inner = mix(vec3(1.0, 0.55, 0.18), vec3(0.75, 0.35, 0.85), smoothstep(0.6, 0.0, length(lpos.xz)) * 0.35);
+    EMISSION = inner * glow * (0.16 + 0.16 * beat * throb) * (1.0 - 0.7 * fres) * (0.4 + 0.6 * strands);
+    // thin where the strands part, so the hero shows through; denser at the rim
+    ALPHA = clamp(0.12 + 0.4 * strands * strands * strands + 0.35 * fres, 0.0, 0.9);
 }
 ";
 

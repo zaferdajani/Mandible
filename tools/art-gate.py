@@ -42,6 +42,10 @@ VIEWS = {
     "g-marshal": ("g-ant-marshal.jpg", "the Sky Marshal hero of each colony, black left and red right", ""),
     "g-eyes": ("g-ant-eyes-worker.jpg", "a black garden ant worker's head, close", ""),
     "g-eyes-queen": ("g-ant-eyes-alate.jpg", "a black garden ant queen's head, close", ""),
+    # the mutated generals (target J) at level 10, every growth in
+    "g-warlord-l10": ("j-general-warlord-black.jpg", "the Warlord general of each colony at level 10, black left and red right", ""),
+    "g-matron-l10": ("j-general-matron-black.jpg", "the Acid Matron general of each colony at level 10, black left and red right", ""),
+    "g-marshal-l10": ("j-general-marshal-black.jpg", "the Sky Marshal general of each colony at level 10, black left and red right", ""),
     "g-play": ("", "a black foraging column meeting a red raiding party",
                "Each ant reads as an ant (head, body, legs) and not as a dot or a blob; the black and the red colonies "
                "are told apart at a glance; soldiers and majors read larger than workers; the ants stand out from the "
