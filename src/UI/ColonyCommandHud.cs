@@ -95,6 +95,7 @@ public partial class ColonyCommandHud : Control
             _selectionPanel.Size = new Vector2(1123, 221); // one panel runs on under the cards
             _mapFrame.Visible = true; _cardsPanel.Visible = false;
             TopEdge = _canvas.Position.Y + 42 * scale; GuideScale = 1;
+            BottomEdge = _canvas.Position.Y + 689 * scale; // the general's skill bar sits above the cards
             MapRect = new Rect2(_canvas.Position + new Vector2(14, 651) * scale, new Vector2(254, 267) * scale);
             return;
         }
@@ -465,6 +466,8 @@ public partial class ColonyCommandHud : Control
     }
     /// Opens a tab of the cards (tests).
     internal void ShowPage(int page) { _page = page; RebuildCards(); }
+    /// The Remains page is open: the world shows how far around the nest the workers collect remains on their own.
+    public bool RemainsPage => _page == 4 && Visible;
     /// The price of the next tier: the queen ascends on organic matter, the rest on food.
     static string Price(Sim sim, Upgrade u, int next, bool brief)
     {

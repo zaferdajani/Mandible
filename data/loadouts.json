@@ -1,0 +1,12 @@
+{
+  "_how": "Which skills each unit has, in slot order (keys Q W E R; up to 4). Keys are unit types: Warlord, Matron, Marshal (generals), Beetle, StagBeetle, Spider, Wasp (wild bugs and bosses), or any other unit type. 'Type@team' gives one colony its own: Warlord@0 is the black colony's, Warlord@1 the red colony's (later colonies: @2 and up). A general with four skills has its ultimate in the last slot (R, ranks at levels 6, 8, 10). A general learns its first skill at hatching and spends one point per level. Bugs use rank 1 and grow with their level.",
+  "_pool": "WarCry QueensPheromone MandibleFrenzy AcidBurst SpawnBrood FormicMist DiveBomb TrailBlaze TalonDive ShellWall MandibleSweep AntlerCharge WebSnare Lunge VenomSting CleavingMandibles RallyScent LivingBridge ScoutSwarm ThrallRaid",
+  "_unassigned": "SpawnBrood and LivingBridge wait for the Brood Mother general; MandibleFrenzy, TrailBlaze and TalonDive stay in the pool.",
+  "Warlord": ["WarCry", "CleavingMandibles", "ShellWall", "AntlerCharge"],
+  "Matron": ["AcidBurst", "VenomSting", "FormicMist", "QueensPheromone"],
+  "Marshal": ["DiveBomb", "ScoutSwarm", "RallyScent", "ThrallRaid"],
+  "Beetle": ["ShellWall", "MandibleSweep"],
+  "StagBeetle": ["AntlerCharge"],
+  "Spider": ["Lunge", "WebSnare"],
+  "Wasp": ["VenomSting"]
+}

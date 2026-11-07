@@ -33,6 +33,11 @@ public sealed class FoodSource
     public int HaulTeam;               // the colony whose workers have it in their jaws
     public bool Hauled;                // dragged all the way to its destination
     public int Feasted;                // loads a hero has eaten here
+    // collection (Carrion.cs: Recruit): an auto-eat fighter's kill is kept for its eaters a while; workers skip it and
+    // anything being eaten; Queued marks (one bit per colony) the remains its workers have been sent to bring home
+    public int ClaimTeam;              // colony + 1 whose eaters have claimed it (0: none), until ClaimUntil
+    public float ClaimUntil, LastFeast;
+    public int Queued;
     public bool Alive => Amount > 0.01f;
 }
 

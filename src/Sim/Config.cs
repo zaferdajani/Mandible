@@ -36,7 +36,8 @@ public static class Config
     public const int MaxLevel = 5;
     public const int HeroMaxLevel = 10;
     public static readonly int[] LevelXp = { 0, 0, 40, 110, 210, 350 }; // xp needed to reach level n
-    public static readonly int[] HeroXp = { 0, 0, 110, 270, 500, 800, 1180, 1650, 2200, 2850, 3600 };
+    // generals: early levels come quickly so the first skills arrive in the first fights; the ultimate ranks are earned
+    public static readonly int[] HeroXp = { 0, 0, 90, 210, 370, 580, 850, 1180, 1580, 2060, 2650 };
     public static int MaxLevelOf(AntType t) => IsHero(t) ? HeroMaxLevel : MaxLevel;
     public static int XpFor(AntType t, int level) => IsHero(t) ? HeroXp[level] : LevelXp[System.Math.Min(level, MaxLevel)];
 
@@ -80,7 +81,7 @@ public static class Config
     public const float MatronSplashR = 1.8f;
     public const float MatronArmor = 0.1f;
     public const float AcidPoolLife = 6f;           // the burst leaves a venom pool that keeps burning
-    public const float MarshalArmor = 0.15f;
+    public const float MarshalArmor = 0.18f;    // 0.15 -> 0.18 and 560 -> 620 hp: it lost every Lane War matchup with skills in
     public const float RallyBite = 1.15f;           // Dive Bomb rallies nearby warriors: bite and speed up
     public const float RallyTime = 6f;
     public const float BeetleArmor = 0.25f;
@@ -102,7 +103,7 @@ public static class Config
     /// One line each: how it attacks, how it defends, its special. Shown in the Field Guide, hero picker and tooltips.
     public static string AttackDesc(AntType t) => t switch
     {
-        AntType.Warlord => $"Cleaving bite: every bite also deals {WarlordCleave * 100:0}% to all enemies around the victim.",
+        AntType.Warlord => "Heavy plated jaws; Cleaving Mandibles (in its skills) carries every bite into the enemies beside the victim.",
         AntType.Matron => $"Acid spray from range {Of(t).Reach:0}: the jet splashes {MatronSplash * 100:0}% onto enemies beside the target.",
         AntType.Marshal => "Swooping bite from the air: flies over rocks and strikes wasps and ground prey alike.",
         AntType.Beetle => "Crushing jaws, and a Mandible Sweep that hits and hurls back every ant around it when two or more crowd in.",
@@ -184,9 +185,9 @@ public static class Config
         new() { Name = "Hunting Wasp", Hp = 240, Armor = WaspArmor, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
         new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
-        new() { Name = "Warlord", Hp = 760, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Warlord", Hp = 820, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
-        new() { Name = "Sky Marshal", Hp = 560, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Sky Marshal", Hp = 620, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
     };
 
     public static UnitStats Of(AntType t) => Stats[(int)t];
@@ -366,7 +367,7 @@ public static class Config
     public static readonly string[] StageNames = { "Hatched", "Blooded", "Scarred", "Grizzled" };
     public static string StageGain(int stage) => $"+{StageHp * 100:0}% health, +{StageBite * 100:0}% bite, heavier mandibles";
     public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
-    public const float HeroXpPerOrganic = 12.5f; // a hero turns what it eats into experience: about 290 organic from level 1 to 10
+    public const float HeroXpPerOrganic = 12.5f; // a general turns what it eats into experience: about 210 organic from level 1 to 10
     public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
     public const float FeastHeal = 0.06f;      // share of its health each mouthful restores
     // Devour the Fallen: the fire-ant Warlord alone eats its own colony's dead, faster and healing more
@@ -379,6 +380,11 @@ public static class Config
         ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major => 1.5f,
         ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal => 8f, _ => 0f,
     };
+    /// The ground a colony watches for fresh remains without having to stumble on them: grows with its workforce.
+    public static float CollectRadius(int workers) => System.Math.Min(36f + 0.25f * workers, 80f);
+    public const float PredatorOrganic = 1.1f;  // the fire ants' taste for flesh: remains hauled home give 10% more organic matter (food from corpses keeps +25%)
+    public const float EatClaim = 25f;          // seconds an auto-eat fighter's kill is kept from the haulers
+    public const int CollectAtOnce = 1;         // new remains crewed per round (every 2 s), best first: most foragers stay on food
     public const float RecruitRange = 110f, RecruitSight = 12f; // how far out the colony sends carriers, and how close an ant must be to have found the prey
     public const float StartOrganic = 40f;     // carried by the founding queen and her workers
     public const float FoundFood = 30f, FoundOrganic = 10f; // what founding the nest consumes
@@ -390,7 +396,7 @@ public static class Config
     };
     public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";
     public static string RemainsDesc(RemainsOrder o) => o == RemainsOrder.Haul
-        ? "Workers drag and carry the remains of bugs and enemy ants home: organic matter for the queen and the brood."
+        ? "Workers fetch fresh remains inside the ring around the nest (it grows with the colony) or wherever an ant sees them: organic matter for the queen."
         : "Workers leave the remains where they fall, for your fighters and heroes to eat and evolve on.";
     /// The fire-ant Warlord's signature, for its hero card, the picker and the Field Guide.
     public const string DevourName = "Devour the Fallen";
