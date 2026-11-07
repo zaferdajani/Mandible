@@ -56,7 +56,7 @@ public static class Reveal
         AntType.Major or AntType.Spider => 3,
         AntType.Matron => 4,             // Vetch, brought home in The Matron's Road
         AntType.Flyer => 5,              // the strain's first winged daughters, in The Silk Trap
-        AntType.Warlord => 7,            // Hemlock, out of the royal cocoon
+        AntType.Warlord => 7,            // old Burr, out of the royal cocoon
         AntType.Wasp => 9,               // the Hornet Mother's daughters (the Silk Trap's queen wasp is already dead)
         AntType.Gunner => 11,
         AntType.StagBeetle => 12,

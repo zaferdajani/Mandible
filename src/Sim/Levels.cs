@@ -89,7 +89,7 @@ public static class Levels
             Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
         new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Generals, wasps and a boss who raids", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
-            Blurb = "The Hornet Mother raids from her paper nest. Lead Hemlock against her and end her.",
+            Blurb = "The Hornet Mother raids from her paper nest. Lead old Burr, the Warlord, against her and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
         new() { Id = 11, Season = 3, Name = "The Long March", Novelty = "Time pressure: eight minutes, one army", Rival = RivalKind.Awake, Seed = 20261111,
             Blurb = "A strike army, an awake red colony and eight minutes before their mound seals.",
@@ -98,7 +98,7 @@ public static class Levels
             Blurb = "A dead queen wasp hangs in a spider's web, and something in her glows. Carve out the gland, haul it home and feed it to the Glass Queen.",
             Stars = new[] { (StarGoal.Time, 840f, Under(14)), (StarGoal.Master, 0f, "Slay the web spider") } },
         new() { Id = 14, Season = 1, Name = "The Royal Larva", Novelty = "The general mutation: a royal larva, a cocoon, the first general", Rival = RivalKind.Young, Seed = 20261114, RivalFood = 0.4f,
-            Blurb = "Ashling's body glows. Feed it to the queen, raise the royal larva on remains, guard the cocoon, and blood the hero on a red queen.",
+            Blurb = "Ashling's body glows. Feed it to the queen, raise the royal larva on remains, guard the cocoon that closes over old Burr, and blood the new Warlord on a red queen.",
             Stars = new[] { (StarGoal.Time, 1260f, Under(21)), (StarGoal.LarvaSafe, 0f, "No raider ever wounds the larva") } },
         new() { Id = 12, Season = 3, Name = "The Ember Empress", Novelty = "The finale: every tool against an awake Empress", Rival = RivalKind.Empress, Seed = 20261112,
             Blurb = "Both mounds fortified, the Old Stag awake and an Empress who raids. End her.",
@@ -142,7 +142,7 @@ public static class Levels
         14 => new[]
         {
             "Ashling's body glowed when the workers dragged it home. The Glass Queen has felt it all night.",
-            "Feed it to her and she will lay something no ant has laid: a royal larva. Dig its nursery, keep the remains coming and guard it, for its glow carries through the soil and every hunter in the woods will come for it. When the cocoon breaks, blood the newborn on the red scouts' queen.",
+            "Feed it to her and she will lay something no ant has laid: a royal larva. Dig its nursery, keep the remains coming and guard it, for its glow carries through the soil and every hunter in the woods will come for it. When it spins its cocoon, old Burr will lie down beside it and the silk will close over them both. When the cocoon breaks, blood the Warlord on the red scouts' queen.",
         },
         2 => new[]
         {
@@ -157,7 +157,7 @@ public static class Levels
         10 => new[]
         {
             "Something with wings has found you. From a paper nest in the woods the Hornet Mother sends her daughters at every colony she can smell, and yours is the closest.",
-            "In the air her daughters are out of reach: no ground ant can bite a wasp until it comes down to sting, and her paper nest hums with them. Before her raids come, find the answer: in the far corner lives a silk spitter, a spider whose body holds a fragment of mutagen: with it, the colony could learn to pull wasps out of the sky. Then send Hemlock at the paper nest. With the Hornet Mother gone, the red colony stands alone.",
+            "In the air her daughters are out of reach: no ground ant can bite a wasp until it comes down to sting, and her paper nest hums with them. Before her raids come, find the answer: in the far corner lives a silk spitter, a spider whose body holds a fragment of mutagen: with it, the colony could learn to pull wasps out of the sky. Then send Burr at the paper nest. With the Hornet Mother gone, the red colony stands alone.",
         },
         8 => new[]
         {
@@ -194,10 +194,10 @@ public static class Levels
         6 => "The wolf spider is dead and the log is quiet. On its far end, red ants stand in a silent line, watching the black colony count its dead. Then they turn and walk away, toward your trails.",
         7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed, and the red raid lies broken in the grass. But the raiders' young queen is still alive across the clearing.",
         13 => "The Glass Queen ate the gland, and by dawn the winged daughters had grown stings. Far off, other things that fed on the spill have started to stir.",
-        14 => "Hemlock broke out of the cocoon into a nursery full of light, and by nightfall the red scouts' queen was dead. Somewhere in the woods, Queen Cinder has heard of the black ants from the glass.",
+        14 => "Old Burr broke out of the cocoon a Warlord, into a nursery full of light, and by nightfall the red scouts' queen was dead. Somewhere in the woods, Queen Cinder has heard of the black ants from the glass.",
         2 => "Ashling is dead, and her body glows faintly as the workers carry it home. The Glass Queen will not stop looking at it.",
         3 => "Queen Cinder is dead. Among her guards your soldiers find a mark they do not know: the sign of the Ember Empress, Cinder's mother.",
-        10 => "The paper nest is torn open and the Hornet Mother is dead. Hemlock wears her sting scar with pride.",
+        10 => "The paper nest is torn open and the Hornet Mother is dead. Burr wears her sting scar with pride.",
         8 => "The red queen starved and fell. When the rain came back, it found only the Glass Queen's colony to feed.",
         9 => "The watch posts are ash and another red queen is dead. Your winged ants have seen the Empress's great mound beyond the woods.",
         4 => "The princesses never flew. Only the Ember Empress's own mounds are left in the woods.",
@@ -320,7 +320,7 @@ public sealed partial class Expedition
 
     string LevelGoal => Episode == 7 ? "Bring Vetch home and break the red raid."
         : Episode == Reveal.SilkTrapId ? "Bring the queen wasp's glowing gland home and mutate the colony."
-        : Episode == Reveal.RoyalLarvaId ? "Raise the royal larva into the colony's first hero, then kill the red queen."
+        : Episode == Reveal.RoyalLarvaId ? "Raise the royal larva into the colony's first general, then kill the red queen."
         : Info.Rival switch
     {
         RivalKind.None => Episode == 5 ? "Fill the galleries before the storm." : "Break every raid from the hollow log.",
@@ -530,7 +530,7 @@ public sealed partial class Sim
                 Muster(0, AntType.Worker, 14, home);
                 Muster(0, AntType.Soldier, 20, home + toFoe * 9);
                 Muster(0, AntType.Major, 4, home + toFoe * 12);
-                { int hero = Spawn(0, AntType.Warlord, OpenGround(home + toFoe * 12), toFoe.AngleD()); if (hero >= 0) Ants[hero].State = AntState.Idle; } // Hemlock, out of the royal cocoon
+                { int hero = Spawn(0, AntType.Warlord, OpenGround(home + toFoe * 12), toFoe.AngleD()); if (hero >= 0) Ants[hero].State = AntState.Idle; } // old Burr, out of the royal cocoon (the roster brings the real one)
                 GrownRival(foe, toFoe, workers: 10, soldiers: 8, majors: 1, queenTier: 2);
                 ClearCorridor(home, foe, -1);
                 {
@@ -675,14 +675,14 @@ public sealed partial class Sim
                 m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Beetle, 2, 2), (AntType.Spider, 1, 2) } });
                 m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 3), (AntType.Beetle, 1, 1) } });
                 m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Beetle, 2, 3), (AntType.Spider, 2, 2) } });
-                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 4), (AntType.Beetle, 2, 2) } });
-                m.WaveGap = 70;
+                m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 3), (AntType.Beetle, 2, 2) } });
+                m.WaveGap = 85; // a breath between raids: the army rebuilds before the next (70 wiped it out again and again)
                 m.WaveStep = 2;
                 Add(Expedition.Obj.Mutate, "Feed the queen Ashling's mutagen", "The gland from Ashling's body is in the reserve. Open the mutation card (beside the objectives) and let the queen consume it: The Royal Larva.", a: (int)Mutation.RoyalLarva);
                 Add(Expedition.Obj.Dig, "Dig the royal nursery", "The queen holds the royal larva until it has a chamber of its own. Workers dig the nursery by themselves: keep a few at home. Dug: {0}/{1}.", a: (int)ChamberKind.Nursery, b: 1);
                 Add(Expedition.Obj.Larva, "Feed the royal larva", "Three nurses feed it from the organic reserve. Hunt the lairs (gold rings) and haul the remains home, and keep the army at the mound: its glow brings raiders down the shaft for the nursery. Fed: {0}/{1}.");
                 Add(Expedition.Obj.Cocoon, "Guard the cocoon", "The larva has spun its cocoon: it throbs with light, and the raids grow desperate. Hold the nursery until it bursts. Hatching in {0}s.");
-                Add(Expedition.Obj.KillQueen, "Blood the hero", "Hemlock is born: a Warlord who cleaves through crowds. Lead the hero and the army down the red scouts' shaft and end their queen.");
+                Add(Expedition.Obj.KillQueen, "Blood the Warlord", "Old Burr is reborn: a Warlord who cleaves through crowds. Lead him and the army down the red scouts' shaft and end their queen.");
                 break;
             }
             default: // 12: Empress of the Garden

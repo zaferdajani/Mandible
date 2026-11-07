@@ -523,6 +523,7 @@ public static class LevelValidation
         // ---- Ashling's body: the chapter before the Royal Larva gives its mutagen
         CampaignProgress.Record(Levels.IdAt(Reveal.FirstQueenKill), 1, 900);
         var afterAshling = new ColonyRoster { QueenTier = 2, Mutations = LastHarvest.Mutations, Instability = LastHarvest.Instability, Level = LastHarvest.Level, Mutagen = 1 };
+        afterAshling.Veterans.Add(new Veteran { Type = AntType.Soldier, Level = 3, Kills = 7, Joined = 1, Name = "Burr" }); // old Burr, who goes into the silk
         afterAshling.Plain[(int)AntType.Worker] = 14; afterAshling.Plain[(int)AntType.Soldier] = 18; afterAshling.Plain[(int)AntType.Flyer] = 6;
         CampaignProgress.CarryRoster(Levels.IdAt(Reveal.FirstQueenKill), afterAshling);
         // ---- the Royal Larva: the loss first (the larva devoured), then the retry from the same colony, won
@@ -548,6 +549,28 @@ public static class LevelValidation
             GD.Print($"[campaign-test] PASS loss path: {t.Mission.LossReason}");
             Close();
         }
+        // old Burr goes into the silk: when the larva spins its cocoon he leaves the field, and the Warlord that breaks out is him
+        {
+            Carry = entering;
+            var t = Open(app, Reveal.RoyalLarvaId, out _);
+            var tc = t.Col[0];
+            Check(t.Mutate(0, Mutation.RoyalLarva), "The queen did not take the royal larva");
+            var room = t.ChamberOf(0, ChamberKind.Nursery); room.Done = room.Work; room.Built = true;
+            for (int k = 0; k < 30; k++) t.Tick(1f / 30);
+            int burrId = Find(t, "Burr");
+            Check(burrId >= 0 && t.Ants[burrId].Type == AntType.Soldier, "Old Burr was not on the field as a soldier");
+            tc.LarvaFed = tc.LarvaNeed; tc.Organic += 10;
+            for (int k = 0; k < 90 && tc.LarvaStage != 3; k++) t.Tick(1f / 30);
+            Check(tc.LarvaStage == 3 && t.Mission.InCocoon?.Name == "Burr" && !t.Ants[burrId].Alive && Find(t, "Burr") < 0, "Old Burr did not go into the cocoon");
+            tc.CocoonT = 0;
+            for (int k = 0; k < 5 && t.Mission.HeroesBorn == 0; k++) t.Tick(1f / 30);
+            int warlord = Find(t, "Burr");
+            Check(t.Mission.InCocoon == null && warlord >= 0 && t.Ants[warlord].Type == AntType.Warlord, "The Warlord that broke out is not old Burr");
+            var vet = t.Mission.Tracked[warlord].vet;
+            Check(vet.Joined == 1 && vet.Kills == 7, $"Burr lost his history in the silk (joined {vet.Joined}, kills {vet.Kills})");
+            GD.Print("[campaign-test] PASS old Burr went into the cocoon a soldier and broke out the Warlord, with his kills and the chapter he joined");
+            Close();
+        }
         CampaignProgress.Load();
         var retry = CampaignProgress.RosterFor(Reveal.RoyalLarvaId);
         Check(retry != null && retry.Save() == entering.Save() && !CampaignProgress.Completed(Reveal.RoyalLarvaId), "The lost Royal Larva changed the saved colony");
@@ -558,10 +581,16 @@ public static class LevelValidation
         Check(m.HeroesBorn == 1, "No hero broke out of the cocoon");
         Check(s.Has(0, Mutation.RoyalLarva) && c.LarvaFed >= 0 && c.Instability == 2, "The royal larva mutation was not kept");
         var hemlock = LastHarvest.Veterans.Find(v => v.Type == AntType.Warlord);
-        Check(hemlock == null ? c.Count[(int)AntType.Warlord] == 0 : hemlock.Name == "Hemlock", "The hero from the cocoon was not remembered as Hemlock"); // the hero may fall in the assault on the queen
+        bool burrFell = m.Fallen.Exists(v => v.Name == "Burr");
+        // old Burr goes into the silk a soldier and breaks out the Warlord, with his kills and the chapter he joined;
+        // he may fall in the assault on the queen, and only a Warlord nobody went into the silk for is Hemlock
+        Check(LastHarvest.Veterans.Exists(v => v.Name == "Burr" && v.Type == AntType.Warlord) || m.Fallen.Exists(v => v.Name == "Burr"), "Old Burr neither came out of the cocoon as the Warlord nor fell before it");
+        Check(m.InCocoon == null && !LastHarvest.Veterans.Exists(v => v.Name == "Burr" && v.Type == AntType.Soldier), "Old Burr was left in the silk, or walked out twice");
+        Check(hemlock == null ? c.Count[(int)AntType.Warlord] == 0 || burrFell : hemlock.Name == "Burr" ? hemlock.Joined == 1 && hemlock.Kills >= 7 : hemlock.Name == "Hemlock" && burrFell,
+            $"The Warlord from the cocoon is not old Burr ({hemlock?.Name}, joined {hemlock?.Joined}, kills {hemlock?.Kills}, Burr fell {burrFell})");
         Check(LastHarvest.Mutagen == 1 && LastHarvest.Level == retry.Level + 1, $"The red queen's body gave no mutagen or level (mutagen {LastHarvest.Mutagen}, level {LastHarvest.Level})");
         Check(LastHarvest.Chambers.Contains(ChamberKind.Nursery), "The royal nursery was not carried");
-        GD.Print($"[campaign-test] PASS Royal Larva: larva fed {c.LarvaNeed:0} organic, cocoon hatched, Hemlock born and {(hemlock != null ? "walks on" : "fell in the assault")}; queen's mutagen and colony level {LastHarvest.Level}");
+        GD.Print($"[campaign-test] PASS Royal Larva: larva fed {c.LarvaNeed:0} organic, cocoon hatched, {(hemlock?.Name ?? (m.Fallen.Exists(v => v.Name == "Burr" && v.Type == AntType.Warlord) ? "old Burr" : "Hemlock (Burr fell before the cocoon)"))} broke out as the Warlord and {(hemlock != null ? "walks on" : "fell in the assault")}; queen's mutagen and colony level {LastHarvest.Level}");
         // ---- the result card's choice: three cards, the queen's trait first, carried into Queen Cinder
         CampaignProgress.Record(Reveal.RoyalLarvaId, stars14, m.EndTime);
         CampaignProgress.CarryRoster(Reveal.RoyalLarvaId, LastHarvest);
@@ -575,7 +604,7 @@ public static class LevelValidation
         Check(intoCinder != null && (intoCinder.Mutations & (int)offer[0]) != 0 && intoCinder.Instability == 3 && intoCinder.Mutagen == 0, "The chosen mutation did not reach the next chapter");
         Carry = intoCinder;
         var q = Open(app, cinder, out _);
-        Check(q.Has(0, offer[0]) && q.Col[0].Instability == 3 && (hemlock == null || q.Col[0].Count[(int)AntType.Warlord] > 0), "Queen Cinder did not begin with the mutation, the instability and Hemlock");
+        Check(q.Has(0, offer[0]) && q.Col[0].Instability == 3 && (hemlock == null || q.Col[0].Count[(int)AntType.Warlord] > 0), "Queen Cinder did not begin with the mutation, the instability and the Warlord");
         int wild = -1; for (int i = 0; i < q.High; i++) if (q.Ants[i].Alive && q.Ants[i].Team == Config.Wild) { wild = i; break; }
         if (wild >= 0) Check(q.Ants[wild].MaxHp > Config.Of(q.Ants[wild].Type).Hp * Config.HpMul(q.Ants[wild].Type, q.Ants[wild].Level) * 1.1f, "Instability did not toughen the woods");
         Check(q.Col[0].PopCap >= Config.StartPopCap + Global.Slots(intoCinder.Level), "The colony's level added no room");

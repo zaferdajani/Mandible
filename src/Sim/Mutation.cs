@@ -496,6 +496,7 @@ public sealed partial class Sim
         if (c.LarvaHp <= 0)
         {
             c.LarvaStage = 0; c.LarvaFed = 0;
+            if (Mission is { InCocoon: { } lost } && c.Team == 0) { Mission.Fallen.Add(lost); Mission.InCocoon = null; } // Burr dies in the torn silk
             Events.Add(new SimEvent { Kind = EvKind.LarvaLost, Pos = at, Team = c.Team });
             if (Mission is { } m && c.Team == 0 && m.Objectives.Exists(o => o.Kind is Expedition.Obj.Larva or Expedition.Obj.Cocoon) && !m.Complete && m.HeroesBorn == 0)
             {
@@ -511,6 +512,7 @@ public sealed partial class Sim
             if (c.LarvaFed >= c.LarvaNeed - 1e-3f)
             {
                 c.LarvaStage = 3; c.CocoonT = c.CocoonTime;
+                TakeBurrIntoCocoon(c);
                 Events.Add(new SimEvent { Kind = EvKind.Cocoon, Pos = at, Team = c.Team, Type = c.LarvaHero });
             }
             return;
@@ -524,10 +526,33 @@ public sealed partial class Sim
         {
             ref var h = ref Ants[hero];
             h.Layer = (byte)layer; h.Anchor = at; h.State = AntState.Idle;
-            if (Mission != null && c.Team == 0) Mission.HeroesBorn++;
+            if (Mission != null && c.Team == 0)
+            {
+                Mission.HeroesBorn++;
+                // old Burr went into the silk a soldier and breaks out the colony's Warlord: same name, same kills
+                if (Mission.InCocoon is { } burr) { burr.Type = c.LarvaHero; Mission.Tracked[hero] = (h.Serial, burr); Mission.InCocoon = null; }
+            }
             Events.Add(new SimEvent { Kind = EvKind.HeroBorn, Pos = at, Team = c.Team, Type = c.LarvaHero, HatchP1 = hero + 1, To = at });
         }
         ReleaseNurses(c);
+    }
+
+    /// The campaign's first Warlord is old Burr, the tube's eldest soldier: when the royal larva spins its cocoon he
+    /// lies down beside it and the silk closes over them both. He leaves the field (no death, no corpse) and his
+    /// record waits in Mission.InCocoon for the Warlord that breaks out. If Burr has already fallen, the cocoon
+    /// hatches a stranger (the roster names it Hemlock).
+    void TakeBurrIntoCocoon(Colony c)
+    {
+        if (Mission is not { } m || c.Team != 0 || c.LarvaHero != AntType.Warlord || m.InCocoon != null) return;
+        foreach (var (id, (serial, vet)) in m.Tracked)
+        {
+            if (vet.Name != "Burr" || Config.IsHero(vet.Type) || !Valid(id, serial)) continue;
+            if (Ants[id].SquadP1 > 0) Squads[Ants[id].SquadP1 - 1].Members.Remove(id);
+            Remove(id);
+            m.Tracked.Remove(id);
+            m.InCocoon = vet;
+            return;
+        }
     }
 
     void ReleaseNurses(Colony c)

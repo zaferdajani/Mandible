@@ -987,10 +987,10 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.Cocoon:
-                    if (e.Team == Local.Me && !Demo) Hud.Banner("The royal larva spins its cocoon", "It throbs with light, and the raids will grow desperate. Hold the nursery until it bursts.", 5f);
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The royal larva spins its cocoon", Sim.Mission?.InCocoon != null ? "Old Burr lay down beside it, and the silk closed over them both. The raids will grow desperate: hold the nursery until it bursts." : "It throbs with light, and the raids will grow desperate. Hold the nursery until it bursts.", 5f);
                     break;
                 case EvKind.HeroBorn:
-                    if (e.Team == Local.Me && !Demo) { Hud.Banner($"A hero breaks out: {Config.Of(e.Type).Name}", "Born from the royal larva. Heroes fight with special moves and grow by eating remains.", 6f); Audio.Ui("levelup"); }
+                    if (e.Team == Local.Me && !Demo) { bool burr = Sim.Mission != null && e.HatchP1 > 0 && Sim.Mission.Tracked.TryGetValue(e.HatchP1 - 1, out var v) && v.vet.Name == "Burr"; Hud.Banner(burr ? "Old Burr breaks out: the Warlord" : $"A general breaks out: {Config.Of(e.Type).Name}", burr ? "He went into the silk a soldier. He comes out with his old scars, his kills and a body no ant has worn." : "Born from the royal larva. Generals fight with special moves and grow by eating remains.", 6f); Audio.Ui("levelup"); }
                     break;
                 case EvKind.LarvaLost:
                     if (e.Team == Local.Me && !Demo) Hud.Alert("The royal larva has been devoured.", new Color(1f, 0.45f, 0.35f));

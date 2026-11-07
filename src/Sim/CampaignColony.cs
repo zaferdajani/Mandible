@@ -10,6 +10,7 @@ public sealed class Veteran
 {
     public AntType Type;
     public int Level = 1, Kills, Joined, Stage;  // Stage: evolution by eating (from Reveal.Evolution)
+    public Veteran Copy() => (Veteran)MemberwiseClone();
     public int Skills;                           // a general's learnt skill ranks, one per byte (Q, W, E); 0: none recorded
     public string Name = "";
     public string Title => Name != "" ? Name : $"a {Config.Of(Type).Name.ToLowerInvariant()}";
@@ -86,6 +87,8 @@ public sealed partial class Expedition
     public readonly Dictionary<int, (int serial, Veteran vet)> Tracked = new();
     public readonly List<Veteran> Fallen = new();
     public int Reinforcements;
+    /// Old Burr while the royal cocoon holds him (Mutation.TakeBurrIntoCocoon); he walks out as the Warlord.
+    public Veteran InCocoon;
 }
 
 public sealed partial class Sim
@@ -138,7 +141,7 @@ public sealed partial class Sim
         foreach (var v in roster.Veterans) have[(int)v.Type]++;
         for (int t = 0; t < 13; t++) have[t] += roster.Plain[t];
         var plainLeft = (int[])roster.Plain.Clone();
-        var vets = new List<Veteran>(roster.Veterans);
+        var vets = roster.Veterans.ConvertAll(v => v.Copy()); // the chapter edits its own copies: a retry starts from the saved colony untouched
         // heroes and veterans first, strongest first, so a ceiling trims the rank and file
         vets.Sort((x, y) => y.Level.CompareTo(x.Level));
         var placed = new int[13];
@@ -260,7 +263,8 @@ public sealed partial class Sim
             bool hero = Config.IsHero(a.Type);
             if (a.Level >= 2 || a.Stage >= 1 || hero)
             {
-                // generals come out of the royal cocoon: the first is Hemlock (old Burr stays the soldier he always was)
+                // generals come out of the royal cocoon: the Warlord is old Burr when he went into the silk (tracked above);
+                // a Warlord nobody went into the silk for is a stranger, Hemlock
                 string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "Hemlock" } : a.Level >= 3 || a.Stage >= 2 ? VeteranNames[named++ % VeteranNames.Length] : "";
                 if (hero && m != null && m.Fallen.Exists(f => f.Name == name)) name = ""; // the named general fell; this one is new
                 var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Stage = a.Stage, Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0 };
@@ -268,6 +272,7 @@ public sealed partial class Sim
             }
             else r.Plain[(int)a.Type]++;
         }
+        if (m?.InCocoon != null) r.Veterans.Add(m.InCocoon); // still in the silk when the chapter ended: he comes along
         return r;
     }
 }

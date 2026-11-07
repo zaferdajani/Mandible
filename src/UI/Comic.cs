@@ -47,7 +47,7 @@ public static class Comic
         },
         [14] = new[]
         {
-            new Panel { File = "b-cocoon", Caption = "The Glass Queen ate the light from Ashling's body, and laid something no ant had ever laid." },
+            new Panel { File = "b-cocoon", Caption = "The Glass Queen ate the light from Ashling's body and laid something no ant had ever laid. Old Burr lay down beside it, and the silk closed over them both." },
         },
         [3] = new[]
         {
