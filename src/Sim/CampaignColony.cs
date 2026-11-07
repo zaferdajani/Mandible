@@ -24,6 +24,8 @@ public sealed class ColonyRoster
     public readonly List<ChamberKind> Chambers = new();
     public readonly int[] Plain = new int[13];          // unnamed rank-1 ants by type
     public readonly List<Veteran> Veterans = new();     // veterans, heroes and named ants
+    // the mutation track: mutations taken (Mutation bits), mutagen in the reserve, the colony's level and instability
+    public int Mutations, Mutagen, Level = 1, Instability;
     public int Total { get { int n = Veterans.Count; foreach (int p in Plain) n += p; return n; } }
 
     public string Save()
@@ -35,6 +37,7 @@ public sealed class ColonyRoster
         for (int t = 0; t < Plain.Length; t++) sb.Append(Plain[t]).Append(',');
         sb.Append('|');
         foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(';');
+        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability);
         return sb.ToString();
     }
 
@@ -52,7 +55,23 @@ public sealed class ColonyRoster
             var f = v.Split(':');
             r.Veterans.Add(new Veteran { Type = (AntType)int.Parse(f[0]), Level = int.Parse(f[1]), Kills = int.Parse(f[2]), Joined = int.Parse(f[3]), Name = f.Length > 4 ? f[4] : "", Stage = f.Length > 5 ? int.Parse(f[5]) : 0 });
         }
+        if (parts.Length > 4)
+        {
+            // saves from before the mutation track have no fifth part: no mutations, level 1
+            var mu = parts[4].Split(',');
+            if (mu.Length >= 4) { r.Mutations = int.Parse(mu[0]); r.Mutagen = int.Parse(mu[1]); r.Level = int.Parse(mu[2]); r.Instability = int.Parse(mu[3]); }
+        }
         return r;
+    }
+
+    /// The colony takes a mutation between chapters (the result card's choice): the queen consumes one mutagen.
+    public bool Take(Mutation m)
+    {
+        if (Mutagen < 1 || (Mutations & (int)m) != 0) return false;
+        Mutagen--;
+        Mutations |= (int)m;
+        Instability++;
+        return true;
     }
 }
 
@@ -94,6 +113,7 @@ public sealed partial class Sim
                 if (burr >= 0) m.Tracked[burr] = (Ants[burr].Serial, new Veteran { Type = AntType.Soldier, Level = 1, Joined = 1, Name = "Burr" });
             }
             m.Roster = new ColonyRoster();
+            ApplyMutationState(null, chapter);
             return;
         }
         m.Roster = roster;
@@ -182,6 +202,7 @@ public sealed partial class Sim
             RecountCapacity(c);
         }
         c.PopUsed = 0; for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop;
+        ApplyMutationState(roster, chapter);
     }
 
     /// Quietly takes an ant off the board (no death event, no corpse): used only while setting up a chapter.
@@ -212,12 +233,15 @@ public sealed partial class Sim
     public ColonyRoster HarvestRoster(int chapter)
     {
         var m = Mission;
-        var r = new ColonyRoster { QueenTier = Col[0].T(Upgrade.Queen) };
+        var c0 = Col[0];
+        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability };
+        // a dead queen's body holds mutagen, and every queen or nest master the colony defeats raises its level
+        if (m != null && Winner == Config.Player && !Col[1].Alive && m.EndsWithQueen && chapter >= Reveal.FirstQueenKill) { r.Mutagen++; r.Level++; }
+        if (m != null) r.Level += m.MastersSlain;
         foreach (var ch in Col[0].Chambers) if (ch.Built) r.Chambers.Add(ch.Kind);
         int named = 0;
         if (m?.Roster != null) foreach (var v in m.Roster.Veterans) if (v.Name != "" && Array.IndexOf(VeteranNames, v.Name) >= 0) named++;
         foreach (var (_, (_, v)) in m?.Tracked ?? new()) if (v.Name != "" && Array.IndexOf(VeteranNames, v.Name) >= 0) named++;
-        Veteran burr = null;
         for (int i = 0; i < High; i++)
         {
             ref var a = ref Ants[i];
@@ -225,25 +249,20 @@ public sealed partial class Sim
             if (m != null && m.Tracked.TryGetValue(i, out var t) && t.serial == a.Serial)
             {
                 t.vet.Level = a.Level; t.vet.Type = a.Type; t.vet.Stage = a.Stage;
-                if (t.vet.Name == "Burr") burr = t.vet;
                 r.Veterans.Add(t.vet);
                 continue;
             }
             bool hero = Config.IsHero(a.Type);
             if (a.Level >= 2 || a.Stage >= 1 || hero)
             {
-                string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "" } : a.Level >= 3 || a.Stage >= 2 ? VeteranNames[named++ % VeteranNames.Length] : "";
+                // heroes come out of the royal cocoon: the first is Hemlock (old Burr stays the soldier he always was)
+                string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "Hemlock" } : a.Level >= 3 || a.Stage >= 2 ? VeteranNames[named++ % VeteranNames.Length] : "";
+                if (hero && m != null && m.Fallen.Exists(f => f.Name == name)) name = ""; // the named hero fell; this one is new
                 var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Stage = a.Stage };
-                // the colony's Warlord is old Burr, grown into the role, if he lived to see it
-                if (a.Type == AntType.Warlord) { v.Name = "Burr"; }
                 r.Veterans.Add(v);
             }
             else r.Plain[(int)a.Type]++;
         }
-        // Burr can only be one ant: once a Warlord walks, the soldier Burr has become him
-        var warlord = r.Veterans.Find(v => v.Type == AntType.Warlord && v.Name == "Burr");
-        if (warlord != null && burr != null && burr.Type == AntType.Soldier) { warlord.Kills += burr.Kills; warlord.Joined = burr.Joined; r.Veterans.Remove(burr); }
-        if (warlord != null && burr == null && m != null && m.Fallen.Exists(f => f.Name == "Burr")) warlord.Name = ""; // Burr fell; this Warlord is someone new
         return r;
     }
 }

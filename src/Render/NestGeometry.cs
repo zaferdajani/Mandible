@@ -23,6 +23,7 @@ public sealed class NestGeometry
         ChamberKind.Royal => (4.6f + 0.12f * ch.Tier, 1.7f + 0.12f * ch.Tier, 3.5f + 0.10f * ch.Tier),
         ChamberKind.Brood => (4.7f, 1.2f, 3.7f),
         ChamberKind.Storage => (4.0f, 1.4f, 3.2f),
+        ChamberKind.Nursery => (5.2f, 1.6f, 4.2f), // the royal larva, its bed and the heap of food the nurses pile
         _ => (3.6f + 0.10f * ch.Tier, 1.3f, 2.9f + 0.08f * ch.Tier),
     };
 

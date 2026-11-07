@@ -16,7 +16,7 @@ public static class Comic
     public static Panel[] For(int id) => _beats.TryGetValue(id, out var p) ? p : null;
     public static Panel[] Ending => _beats[Epilogue];
 
-    public static IEnumerable<Panel> Panels { get { foreach (int id in new[] { 1, 5, 2, 6, 3, 7, 10, 8, 9, 4, 11, 12, Epilogue }) foreach (var p in _beats[id]) yield return p; } }
+    public static IEnumerable<Panel> Panels { get { foreach (int id in Levels.Order) if (_beats.ContainsKey(id)) foreach (var p in _beats[id]) yield return p; foreach (int id in new[] { Epilogue }) foreach (var p in _beats[id]) yield return p; } }
 
     // The art is cinematic, photoreal stills in the game's look, generated with Higgsfield from the game's own hero
     // renders and a gameplay frame as references (prompts and provenance: docs/story-art.md). Captions stay live text.
@@ -24,7 +24,7 @@ public static class Comic
     {
         [1] = new[]
         {
-            new Panel { File = "o1-tube", Caption = "The Glass Queen was carried in a collector's tube, with old Burr, his soldiers and a handful of workers." },
+            new Panel { File = "o1-tube", Caption = "The Glass Queen was carried in a lab tube marked strain M-7, do not release, with old Burr, his soldiers and a handful of workers." },
             new Panel { File = "o2-fall", Caption = "On a woodland path, the backpack pocket gaped open." },
             new Panel { File = "o3-break", Caption = "The glass burst on the stones." },
             new Panel { File = "o4-woods", Caption = "She led her colony out of the wreck and into the woods. The Giant walked on and never looked back." },
@@ -40,6 +40,14 @@ public static class Comic
         [6] = new[]
         {
             new Panel { File = "b-log", Caption = "In a rotting log at the clearing's edge, beetles and spiders had smelled the brood." },
+        },
+        [13] = new[]
+        {
+            new Panel { File = "b-web", Caption = "Something had spilled with the tubes. In a spider's web hung a dead queen wasp, and deep inside her, something glowed." },
+        },
+        [14] = new[]
+        {
+            new Panel { File = "b-cocoon", Caption = "The Glass Queen ate the light from Ashling's body, and laid something no ant had ever laid." },
         },
         [3] = new[]
         {

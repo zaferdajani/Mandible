@@ -34,6 +34,9 @@ public sealed partial class NestInterior
         public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
     }
 
+    /// A chamber's node in the interior (the mutation props hang the nursery's dressing on it), or null.
+    public Node3D RoomNode(int team, int id) => _rooms.TryGetValue((team, id), out var r) ? r.Node : null;
+
     public NestInterior(GameSession g)
     {
         _g = g;

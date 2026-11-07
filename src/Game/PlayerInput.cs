@@ -631,6 +631,21 @@ public partial class PlayerInput : Node
             Game.Audio.Ui("ui_click");
             return;
         }
+        if (!attack && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
+        {
+            // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
+            foreach (var mg in Sim.Mutagens)
+            {
+                if (mg.Home || mg.Pos.DistanceTo(world) > 2.4f || !(Sim.Senses(Local.Me, mg) || Game.Fog == null || Game.Fog.Visible(mg.Pos))) continue;
+                var xc = Cmd.Units(CmdKind.Extract, Local.Me, Selection, Sim);
+                xc.FoodId = mg.Id;
+                Game.Issue(xc);
+                Game.Ants.Ack(Selection, mg.Pos);
+                Game.Effects.Marker(Game.World.HF.Point(mg.Pos), new Color(0.78f, 0.6f, 1f));
+                Game.Audio.Ui("ui_click");
+                return;
+            }
+        }
         if (!attack)
         {
             FoodSource food = null;

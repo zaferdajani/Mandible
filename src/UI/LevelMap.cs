@@ -316,10 +316,14 @@ public partial class LevelMap : Control
     {
         var map = MapRect;
         float[] e = BandEdges();
-        int row = (number - 1) / 3, col = (number - 1) % 3;
-        if (row % 2 == 1) col = 2 - col;
-        float x = map.Position.X + map.Size.X * (0.22f + col * 0.31f + (row % 2 == 0 ? 0 : 0.04f));
-        float y = Mathf.Lerp(e[row], e[row + 1], row == 0 ? 0.52f : 0.44f) + (col == 1 ? 6 : 0);
+        // each act is one row: its chapters spread across it (Act II holds five, the others three)
+        int row = Levels.Info(Levels.IdAt(number)).Season, col = 0, cols = 0;
+        for (int n = 1; n <= Levels.Count; n++)
+            if (Levels.Info(Levels.IdAt(n)).Season == row) { if (n < number) col++; cols++; }
+        if (row % 2 == 1) col = cols - 1 - col;
+        float step = cols > 1 ? 0.62f / (cols - 1) : 0;
+        float x = map.Position.X + map.Size.X * (0.22f + col * step + (row % 2 == 0 ? 0 : 0.04f));
+        float y = Mathf.Lerp(e[row], e[row + 1], row == 0 ? 0.52f : 0.44f) + (col % 2 == 1 ? 6 : 0);
         return new Vector2(x, y);
     }
 
