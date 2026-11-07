@@ -13,7 +13,45 @@ public partial class PlayerInput : Node
     /// Build mode: the chamber (id) the player clicked under the floor, or -1.
     public int SelectedRoom = -1;
     MeshInstance3D _cue, _cueNode;
-    enum Mode { None, AttackMove, Gather, Dig }
+    enum Mode { None, AttackMove, Gather, Dig, Cast }
+    int _castId = -1, _castSlot;
+
+    /// Aiming a general's skill: the next click on an enemy (or a spot) is where it lands; right-click or Esc cancels.
+    public void BeginCast(int id, int slot)
+    {
+        _mode = Mode.Cast;
+        _castId = id;
+        _castSlot = slot;
+        Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+        var sk = Skills.At(Sim.Ants[id], slot);
+        string what = Skills.Aim(sk) == SkillAim.Unit ? "an enemy" : "a spot";
+        Game.Hud.Alert(Settings.Mobile ? $"{Skills.Name(sk)}: tap {what} (tap the skill again for the nearest target)"
+            : $"{Skills.Name(sk)}: click {what}  ·  {Skills.Keys[slot]} again: nearest target  ·  Esc cancels", UiTheme.Gold);
+    }
+
+    /// Is this skill already being aimed? (Pressing its key again casts it at the best target.)
+    public bool Casting(int id, int slot) => _mode == Mode.Cast && _castId == id && _castSlot == slot;
+
+    void CastAt(Vector2 screen)
+    {
+        _mode = Mode.None;
+        Input.SetDefaultCursorShape(Input.CursorShape.Arrow);
+        if (!Sim.Ants[_castId].Alive) return;
+        int foe = Pick(screen, false, 30);
+        if (foe >= 0 && Sim.Ants[foe].Team != Local.Me) { Game.CastSkill(_castId, _castSlot, foe, Vector2.Zero); return; }
+        if (Cam.ScreenToGround(screen, out var g)) Game.CastSkill(_castId, _castSlot, -1, new Vector2(g.X, g.Z));
+    }
+
+    /// Q W E and O belong to the general while one is selected (as on a Warcraft command card); otherwise to research.
+    bool GeneralKey(Godot.Key key)
+    {
+        int slot = key switch { Godot.Key.Q => 0, Godot.Key.W => 1, Godot.Key.E => 2, Godot.Key.R => 3, _ => -1 };
+        if (key == Godot.Key.O) { Game.Hud.SkillBar?.ToggleTree(); return true; }
+        int g = Game.Hud.SkillBar?.General() ?? -1;
+        if (slot < 0 || g < 0 || slot >= Skills.SlotCount(Sim.Ants[g])) return false; // a general with three skills leaves R to the Chitin Armory
+        Game.TrySkill(slot);
+        return true;
+    }
     ChamberKind _digKind;
     Upgrade? _digUpgrade;
 
@@ -182,6 +220,7 @@ public partial class PlayerInput : Node
             {
                 if (_mode != Mode.None)
                 {
+                    if (_mode == Mode.Cast) { CastAt(mb.Position); return; }
                     if (_mode == Mode.Dig)
                     {
                         if (Game.Interior.ScreenToColony(mb.Position, out var at)) PlaceAt(at);
@@ -251,10 +290,11 @@ public partial class PlayerInput : Node
         if (item >= 0) { Game.TryBuy(item); return true; }
         switch (HotKey(k))
         {
-            case Godot.Key.Q: Game.TryAbility(); return true;
+            case Godot.Key.Q: case Godot.Key.W: case Godot.Key.E: case Godot.Key.R: case Godot.Key.O: GeneralKey(HotKey(k)); return true;
+            case Godot.Key.J: Game.ToggleAutoEat(); return true;
             case Godot.Key.Space: case Godot.Key.F2: FocusHero(); return true;
             case Godot.Key.Z: case Godot.Key.X: case Godot.Key.C: case Godot.Key.V: case Godot.Key.F: case Godot.Key.B: case Godot.Key.D:
-            case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.W: case Godot.Key.E: case Godot.Key.R: case Godot.Key.T:
+            case Godot.Key.Y: case Godot.Key.U: case Godot.Key.I: case Godot.Key.T:
             case Godot.Key.F3: case Godot.Key.G:
                 return true;
         }
@@ -273,6 +313,7 @@ public partial class PlayerInput : Node
     void OnKey(InputEventKey k)
     {
         if (Game.Lanes && LaneKey(k)) return;
+        if (HotKey(k) is Godot.Key.Q or Godot.Key.W or Godot.Key.E or Godot.Key.R or Godot.Key.O && GeneralKey(HotKey(k))) return;
         switch (HotKey(k))
         {
             case Godot.Key.Escape:
@@ -282,6 +323,7 @@ public partial class PlayerInput : Node
                 return;
             case Godot.Key.F1: Game.Hud.ToggleHelp(); return;
             case Godot.Key.A: BeginAttackMove(); return;
+            case Godot.Key.J: Game.ToggleAutoEat(); return;
             case Godot.Key.S: Stop(false); return;
             case Godot.Key.H: Stop(true); return;
             case Godot.Key.G: BeginGather(); return;
@@ -433,7 +475,7 @@ public partial class PlayerInput : Node
         sp = Vector2.Zero;
         if (a.Layer > 0 && (!Game.NestView || a.Layer != Sim.NestLayer(Local.Me))) return false;
         var nest = a.Layer > 0 ? Game.World.Nests[a.Layer - 1].Pos : Vector2.Zero;
-        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.Depth : a.Height;
+        float height = a.Layer > 0 ? Game.World.HF.Sample(nest.X, nest.Y) - NestGeometry.FloorDepth(a.Pos - nest) : a.Height;
         var wp = new Vector3(a.Pos.X, height + 0.2f * Config.Of(a.Type).Size, a.Pos.Y);
         if (Cam.Cam.IsPositionBehind(wp)) return false;
         sp = Cam.Cam.UnprojectPosition(wp);
@@ -621,6 +663,13 @@ public partial class PlayerInput : Node
         if (attack) AttackMoves++; else Moves++;
         // enemy under the cursor?
         int enemy = screen.HasValue ? Pick(screen.Value, false, 26) : -1;
+        if (enemy >= 0 && Config.Predator(Sim.Ants[enemy].Type) && Sim.Airborne(Sim.Ants[enemy]) && !Selection.Exists(i => Config.Flies(Sim.Ants[i].Type)))
+        {
+            // the owner's rule: a wasp in the air is out of every ground ant's reach
+            Game.Hud.Alert("It's in the air: only flying ants can reach it", new Color(1f, 0.6f, 0.4f));
+            Game.Audio.Ui("ui_error");
+            return;
+        }
         if (enemy >= 0)
         {
             var ac = Cmd.Units(CmdKind.Attack, Local.Me, Selection, Sim);
@@ -630,6 +679,21 @@ public partial class PlayerInput : Node
             Game.Effects.Marker(Game.World.HF.Point(Sim.Ants[enemy].Pos), new Color(1, 0.3f, 0.2f));
             Game.Audio.Ui("ui_click");
             return;
+        }
+        if (!attack && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
+        {
+            // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
+            foreach (var mg in Sim.Mutagens)
+            {
+                if (mg.Home || mg.Pos.DistanceTo(world) > 2.4f || !(Sim.Senses(Local.Me, mg) || Game.Fog == null || Game.Fog.Visible(mg.Pos))) continue;
+                var xc = Cmd.Units(CmdKind.Extract, Local.Me, Selection, Sim);
+                xc.FoodId = mg.Id;
+                Game.Issue(xc);
+                Game.Ants.Ack(Selection, mg.Pos);
+                Game.Effects.Marker(Game.World.HF.Point(mg.Pos), new Color(0.78f, 0.6f, 1f));
+                Game.Audio.Ui("ui_click");
+                return;
+            }
         }
         if (!attack)
         {

@@ -13,7 +13,8 @@ public sealed partial class NestInterior
     static readonly Dictionary<Surface, ArrayMesh> OrganicMeshes = new();
     const string OrganicShader = @"
 shader_type spatial;
-render_mode cull_disabled;
+render_mode cull_disabled, ambient_light_disabled; // lit by the nest's lamps and its own warm fill only: the sky's blue never reaches down here
+" + Shaders.Under + @"
 uniform vec4 tint : source_color = vec4(1.0);
 uniform int kind = 0;
 varying vec3 lp;
@@ -65,7 +66,8 @@ void fragment() {
         col=mix(col,col*1.5,rib*0.45+veins*0.17); rough=0.67; BACKLIGHT=col*0.2;
     } else { col*=0.66+0.5*n; rough=0.93; }
     ALBEDO=col; ROUGHNESS=rough;
-    AO=0.68+0.32*smoothstep(-0.2,0.16,lp.y); AO_LIGHT_AFFECT=0.4;
+    EMISSION+=col*vec3(1.0,0.8,0.58)*0.26; // the warm bounce of the lamps' light off sand: what the sky's blue fill was standing in for
+    AO=(0.68+0.32*smoothstep(-0.2,0.16,lp.y))*under_ambient((INV_VIEW_MATRIX*vec4(VERTEX,1.0)).xyz); AO_LIGHT_AFFECT=0.4;
 }
 ";
     static ShaderMaterial OrganicMat(Surface type)
@@ -75,7 +77,7 @@ void fragment() {
         {
             Surface.Egg => "e7cfaa", Surface.Larva => "dcc093", Surface.Cocoon => "bb996b",
             Surface.Seed => "b99345", Surface.Resin => "bb7511", Surface.Jaw => "252023",
-            Surface.Shell => "172731", Surface.Root => "8c643b", Surface.Leaf => "536a27",
+            Surface.Shell => "8a5a2a", Surface.Root => "8c643b", Surface.Leaf => "9c7a3a", // shed plates: amber-brown chitin; a dry leaf, not a green one
             Surface.Stone => "a58d6f", _ => "ddd0ad",
         };
         material = new ShaderMaterial { Shader = Shaders.Get(OrganicShader) };

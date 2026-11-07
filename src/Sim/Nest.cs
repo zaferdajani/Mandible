@@ -6,7 +6,7 @@ namespace Mandible;
 /// The rooms of an ant nest. Real colonies keep brood shallow where the soil is warm, stores at
 /// mid depth and the queen deepest; every room is dug by workers, not conjured, and every room
 /// hangs off the tunnel network that starts at the entrance.
-public enum ChamberKind : byte { Royal, Brood, Storage, Forge, Armory, Wings, Silk }
+public enum ChamberKind : byte { Royal, Brood, Storage, Forge, Armory, Wings, Silk, Nursery }
 
 public sealed class NestChamber
 {
@@ -76,7 +76,7 @@ public sealed partial class Sim
     public static string ChamberName(ChamberKind k) => k switch
     {
         ChamberKind.Royal => "Royal Chamber", ChamberKind.Brood => "Brood Chamber", ChamberKind.Storage => "Storage",
-        ChamberKind.Forge => "Mandible Forge", ChamberKind.Armory => "Chitin Armory", ChamberKind.Wings => "Wing Chamber", _ => "Silk Cutters",
+        ChamberKind.Forge => "Mandible Forge", ChamberKind.Armory => "Chitin Armory", ChamberKind.Wings => "Wing Chamber", ChamberKind.Nursery => "Royal Nursery", _ => "Silk Cutters",
     };
 
     /// Each kind of room has its natural depth (brood shallowest and warm, the queen a little deeper). The nest
@@ -84,7 +84,7 @@ public sealed partial class Sim
     /// Rendering only: the sim walks the underground as a flat layer.
     public static float DepthOf(ChamberKind k) => k switch
     {
-        ChamberKind.Royal => 4.6f, ChamberKind.Brood => 2.4f, ChamberKind.Storage => 3.2f, ChamberKind.Wings => 3.2f, ChamberKind.Silk => 3.6f, _ => 4.0f,
+        ChamberKind.Royal => 4.6f, ChamberKind.Brood => 2.4f, ChamberKind.Storage => 3.2f, ChamberKind.Wings => 3.2f, ChamberKind.Silk => 3.6f, ChamberKind.Nursery => 4.2f, _ => 4.0f,
     };
 
     static float RadiusOf(ChamberKind k) => k switch { ChamberKind.Royal => 2.2f, ChamberKind.Storage => 1.7f, _ => 1.5f };
@@ -100,9 +100,9 @@ public sealed partial class Sim
         {
             var offset = k switch
             {
-                ChamberKind.Royal => new Vector2(0, 8), ChamberKind.Brood => new Vector2(11, 8),
+                ChamberKind.Royal => new Vector2(0, 11), ChamberKind.Brood => new Vector2(11, 8), // the queen's room at the end of the longest spoke, undisturbed
                 ChamberKind.Storage => new Vector2(-4, -9), ChamberKind.Forge => new Vector2(7, -9),
-                ChamberKind.Armory => new Vector2(12, 0), ChamberKind.Wings => new Vector2(-11, -2),
+                ChamberKind.Armory => new Vector2(12, 0), ChamberKind.Wings => new Vector2(-11, -2), ChamberKind.Nursery => new Vector2(9, 15),
                 _ => new Vector2(-10, 7),
             };
             var spot = nest + offset * (team == 0 ? 1 : -1);
@@ -134,8 +134,11 @@ public sealed partial class Sim
 
     int ConnectFrom(int team, Vector2 p, bool builtOnly)
     {
+        // like a Settlers village: galleries radiate from the entrance, and only a room beyond their reach hangs
+        // off the nearest room instead (the player links rooms by digging between them)
         int best = -1;
         float bestD = p.DistanceTo(W.Nests[team].Pos);
+        if (bestD <= MaxTunnel) return -1;
         foreach (var ch in Col[team].Chambers)
         {
             if (builtOnly && !ch.Built) continue;
@@ -201,7 +204,8 @@ public sealed partial class Sim
     {
         int brood = ChamberCount(c.Team, ChamberKind.Brood, true);
         int stores = ChamberCount(c.Team, ChamberKind.Storage, true);
-        c.PopCap = c.Founded ? Mathf.Min(Config.MaxPopCap, Config.StartPopCap + Config.ChamberPop * brood) : Config.FoundingPop;
+        int slots = c.Team == 0 ? Mutations.SlotsPerLevel * (c.Level - 1) : 0; // the campaign colony's level: room for more
+        c.PopCap = c.Founded ? Mathf.Min(Config.MaxPopCap + slots, Config.StartPopCap + Config.ChamberPop * brood + slots) : Config.FoundingPop;
         c.FoodCap = Mode == GameMode.Lanes ? 1e9f : Config.BaseFoodCap + Config.StorageFoodCap * stores;
     }
 
@@ -545,7 +549,9 @@ public sealed partial class Sim
         if (foe < 0 || foe > 1 || !Col[foe].Alive || !Col[foe].Founded || Config.Flies(a.Type) && a.Alt > 1f) return false;
         if (a.Goal.DistanceTo(W.Nests[foe].Pos) > 8 || a.Pos.DistanceTo(W.Nests[foe].Pos) > 10) return false;
         if (QueenShielded(foe)) return false;
-        a.Goal = ChamberPos(foe, Royal(foe));
+        // raiders that came for the royal larva's glow go for the nursery while it holds a larva or a cocoon
+        var lure = a.Raider && Col[foe].LarvaStage >= 2 ? Nursery(foe) : null;
+        a.Goal = ChamberPos(foe, lure ?? Royal(foe));
         a.GoalLayer = (byte)NestLayer(foe);
         return true;
     }

@@ -13,6 +13,7 @@ public static class NestArtValidation
             DirAccess.MakeDirRecursiveAbsolute(directory);
             app.StartSkirmish(); var game = app.Session;
             game.Sim.Tick(1f / 30); game.SetPaused(true); game.SetNestView(true);
+            game.Fog.RevealAll = true; // the black-floor check below must not count the fog of war's true black as a floor fault
             var home = game.World.Nests[0].Pos;
             game.Camera.UserControl = false; game.Camera.NestView = true; game.Camera.SetYaw(0, true);
             game.Camera.JumpTo(home + new Vector2(0, 5), 39);

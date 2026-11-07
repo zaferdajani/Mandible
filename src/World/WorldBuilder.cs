@@ -15,7 +15,8 @@ public static partial class WorldBuilder
     /// Lane War uses it so the lanes run along a phone held sideways.
     public static World Build(Node3D parent, uint seed, bool horizontal = false, bool firstNest = false)
     {
-        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest };
+        var w = new World { Root = new Node3D { Name = "World" }, FirstNest = firstNest, Seed = seed };
+        FoodArt.Reset();
         parent.AddChild(w.Root);
         var rng = new Rng(seed);                 // gameplay: rocks, food, lairs (must match on every machine)
         var deco = new Rng(seed ^ 0x5EEDu);      // decoration only: leaves, twigs, grass, litter
@@ -35,7 +36,8 @@ public static partial class WorldBuilder
             w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3));
         }
         RockDips(hf, rocks);
-        Crater(hf, w.Nests[0].Pos);
+        // the first nest is founded during play: its site starts as plain ground, with no crater dug yet
+        if (!firstNest) Crater(hf, w.Nests[0].Pos);
         Thatch(hf, w.Nests[1].Pos);
         hf.SnapshotGround();
 
@@ -48,13 +50,13 @@ public static partial class WorldBuilder
         BuildTerrainMesh(w, ao);
         BuildSkirt(w);
         foreach (var l in leaves) BuildLeaf(w, l);
-        foreach (var t in twigs) BuildTwig(w, t);
-        foreach (var r in rocks) BuildRock(w, r);
-        BuildGrass(w, deco);
+        BuildTwigs(w, deco, twigs);
         BuildNestDressing(w, deco);
         if (firstNest) BuildExpedition(w, deco);
         else { PlaceFood(w, rng); PlaceCamps(w, rng); }
+        BuildGrass(w, deco); // after the food, so no grass grows over a pile and hides it
         w.IndexObstacles();
+        DressYard(w, deco, rocks, firstNest);
         BuildLitter(w, deco);
         BuildMinimapBase(w, leaves, rocks);
         return w;
@@ -174,8 +176,8 @@ public static partial class WorldBuilder
             // the excavated ring, its lip a little sharper on the inside, and a soft apron of spoil beyond it
             // A small entrance and a low apron of excavated sand. A tall crater rim hides the
             // horizontal colony under it and reads as a quarry when the roof is translucent.
-            hf.H[i] += 0.55f * Mathf.Exp(-Mathf.Pow((r - 2.1f) / (r < 2.1f ? 0.9f : 1.6f), 2))
-                       + 0.12f * Mathf.Exp(-Mathf.Pow((r - 5f) / 2.5f, 2)) - 0.7f * Mathf.Exp(-Mathf.Pow(r / 0.9f, 2));
+            hf.H[i] += 0.95f * Mathf.Exp(-Mathf.Pow((r - 2.4f) / (r < 2.4f ? 0.8f : 1.9f), 2))
+                       + 0.18f * Mathf.Exp(-Mathf.Pow((r - 5.5f) / 2.5f, 2)) - 0.9f * Mathf.Exp(-Mathf.Pow(r / 1.1f, 2));
             hf.Mound[i] = Mathf.Max(hf.Mound[i], Mathf.SmoothStep(10.5f, 3.5f, r));
         });
     }
@@ -228,32 +230,11 @@ public static partial class WorldBuilder
         Seed = rng.I(1, 99999), Tint = rng.F(), Rust = rng.F() * 0.6f, Moss = rng.F() < 0.4f ? rng.R(0.4f, 1f) : 0f,
     };
 
-    static void BuildRock(World w, Rock r)
-    {
-        var n = new FastNoiseLite { Seed = r.Seed, Frequency = 1.6f, NoiseType = FastNoiseLite.NoiseTypeEnum.SimplexSmooth };
-        var n2 = new FastNoiseLite { Seed = r.Seed + 1, Frequency = 5f };
-        var k = new MeshKit();
-        k.Ellipsoid(Vector3.Zero, Basis.FromScale(r.Radii), 28, 18, new Color(1, r.Tint, r.Rust, r.Moss), Vector2.Zero, u =>
-        {
-            float d = 1 + 0.2f * n.GetNoise3D(u.X, u.Y, u.Z) + 0.05f * n2.GetNoise3D(u.X, u.Y, u.Z);
-            if (u.Y < -0.2f) d *= Mathf.Lerp(1f, 0.7f, Mathf.Clamp((-u.Y - 0.2f) * 2, 0, 1));
-            return d;
-        });
-        for (int i = 0; i < k.V.Count; i++)
-        {
-            var v = k.V[i];
-            float ao = Mathf.Lerp(0.45f, 1.05f, Mathf.SmoothStep(-0.5f * r.Radii.Y, 0.5f * r.Radii.Y, v.Y));
-            k.C[i] = new Color(ao, r.Tint, r.Rust, r.Moss);
-        }
-        k.RecalcNormals();
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Rock) };
-        float baseY = w.HF.Sample(r.P.X, r.P.Y);
-        mi.Transform = new Transform3D(new Basis(Vector3.Up, r.Yaw), new Vector3(r.P.X, baseY - r.Radii.Y * 0.18f, r.P.Y));
-        w.Root.AddChild(mi);
-    }
-
     // ---------------------------------------------------------------- leaves
-    sealed class LeafDef { public Vector2 P; public float Len, Wid, Yaw, Age, Seed; public Vector3[] Verts; public Vector2[] Uvs; public int Rows, Cols; }
+    sealed class LeafDef { public Vector2 P; public float Len, Wid, Yaw, Age, Seed; public int Species; public Vector3[] Verts; public Vector2[] Uvs; public int Rows, Cols; }
+
+    /// Width over length of each scanned leaf in the atlas (serrated broadleaf, dandelion, cut-leaf).
+    static readonly float[] LeafAspect = { 0.547f, 0.263f, 0.523f };
 
     static float LeafHalfWidth(float v, float wid) => wid * 0.5f * Mathf.Pow(Mathf.Max(0, Mathf.Sin(Mathf.Pi * Mathf.Pow(v, 0.75f))), 0.85f) * (1 + 0.035f * Mathf.Sin(v * 70));
 
@@ -275,8 +256,9 @@ public static partial class WorldBuilder
             var p = new Vector2(rng.R(20, S - 20), rng.R(20, S - 20));
             if (p.X + p.Y > S) continue;
             if (!Ok(p, len) || !Ok(Mirror(p), len) || p.DistanceTo(Mirror(p)) < len) continue;
-            var a = new LeafDef { P = p, Len = len, Wid = len * rng.R(0.42f, 0.55f), Yaw = rng.R(0, Mathf.Tau), Age = rng.R(0.15f, 1f), Seed = rng.F() };
-            var b = new LeafDef { P = Mirror(p), Len = a.Len, Wid = a.Wid, Yaw = a.Yaw + Mathf.Pi, Age = a.Age, Seed = a.Seed };
+            int sp = rng.F() < 0.55f ? 0 : rng.F() < 0.5f ? 2 : 1;
+            var a = new LeafDef { P = p, Len = len, Wid = len * LeafAspect[sp] * rng.R(0.95f, 1.05f), Yaw = rng.R(0, Mathf.Tau), Age = rng.R(0.3f, 1f), Seed = rng.F(), Species = sp };
+            var b = new LeafDef { P = Mirror(p), Len = a.Len, Wid = a.Wid, Yaw = a.Yaw + Mathf.Pi, Age = Mathf.Clamp(a.Age + rng.R(-0.2f, 0.2f), 0.3f, 1f), Seed = rng.F(), Species = rng.I(0, 3) == 1 ? 1 : sp };
             list.Add(a); list.Add(b);
         }
         // drape onto the ground and raise the walkable surface
@@ -291,7 +273,7 @@ public static partial class WorldBuilder
             for (int r = 0; r <= rows; r++)
             {
                 float v = (float)r / rows;
-                float hw = Mathf.Max(0.05f, LeafHalfWidth(v, l.Wid));
+                float hw = l.Wid * 0.5f; // a rectangle over the photo; the leaf's own outline is cut from its alpha
                 for (int c = 0; c <= cols; c++)
                 {
                     float u = (float)c / cols;
@@ -327,10 +309,18 @@ public static partial class WorldBuilder
         return list;
     }
 
+    static ShaderMaterial LeafMaterial(World w)
+    {
+        var m = Mat(w, Shaders.Leaf);
+        m.SetShaderParameter("leaf_tex", NatureAssets.Texture("tex/leaf_atlas_diff"));
+        m.SetShaderParameter("leaf_nor", NatureAssets.Texture("tex/leaf_atlas_nor"));
+        return m;
+    }
+
     static void BuildLeaf(World w, LeafDef l)
     {
         var k = new MeshKit();
-        var col = new Color(l.Age, l.Seed, 1, 1);
+        var col = new Color(l.Age, l.Seed, l.Species * 0.5f, 1);
         for (int i = 0; i < l.Verts.Length; i++) k.Add(l.Verts[i], Vector3.Up, col, l.Uvs[i], Vector2.Zero);
         int cols = l.Cols + 1;
         for (int r = 0; r < l.Rows; r++)
@@ -341,13 +331,7 @@ public static partial class WorldBuilder
             }
         k.RecalcNormals();
         for (int i = 0; i < k.Nrm.Count; i++) if (k.Nrm[i].Y < 0) k.Nrm[i] = -k.Nrm[i];
-        // stem
-        var rot = new Basis(Vector3.Up, l.Yaw);
-        Vector3 b0 = new Vector3(l.P.X, 0, l.P.Y) + rot * new Vector3(0, 0, -0.45f * l.Len);
-        Vector3 b1 = new Vector3(l.P.X, 0, l.P.Y) + rot * new Vector3(0, 0, -0.45f * l.Len - l.Len * 0.18f);
-        b0.Y = w.HF.Sample(b0.X, b0.Z) + 0.35f; b1.Y = w.HF.Sample(b1.X, b1.Z) + 0.45f;
-        k.Tube(b0, b1, 0.32f, 0.22f, 6, new Color(l.Age, l.Seed, 1, 1), new Color(l.Age, l.Seed, 1, 1), Vector2.Zero);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Leaf) };
+        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = LeafMaterial(w) };
         w.Root.AddChild(mi);
     }
 
@@ -406,18 +390,97 @@ public static partial class WorldBuilder
         return list;
     }
 
-    static void BuildTwig(World w, TwigDef t)
+    /// The fallen sticks the ants climb over: each a scanned dead branch laid along the bump the sim already raised.
+    /// The fallen sticks the ants climb over. A scanned branch stretched to 40 units smeared its 512 px photo into a
+    /// dark card, so each stick is built along the bump the sim raised and wrapped in photographed bark (Poly Haven
+    /// bark_brown_02, CC0) tiled at its real scale: square texels, ridges in the outline, a slow bend, a taper to
+    /// a broken tip, and a couple of snapped side stubs.
+    static void BuildTwigs(World w, Rng rng, List<TwigDef> twigs)
     {
-        var k = new MeshKit();
-        var white = new Color(1, 1, 1);
-        for (int s = 0; s < t.Pts.Length - 1; s++)
-            k.Tube(t.Pts[s], t.Pts[s + 1], t.R * (1 - s * 0.08f), t.R * (1 - (s + 1) * 0.08f), 10, white, white, Vector2.Zero, s == t.Pts.Length - 2);
-        // small side branch
-        var mid = (t.Pts[1] + t.Pts[2]) * 0.5f;
-        var dir = (t.Pts[2] - t.Pts[1]).Normalized().Cross(Vector3.Up);
-        k.Tube(mid, mid + dir * 7 + (t.Pts[2] - t.Pts[1]).Normalized() * 4 + Vector3.Up * 0.5f, t.R * 0.45f, t.R * 0.15f, 6, white, white, Vector2.Zero);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = Mat(w, Shaders.Twig) };
-        w.Root.AddChild(mi);
+        var bark = new StandardMaterial3D
+        {
+            AlbedoTexture = NatureAssets.Texture("tex/bark_tile_diff"), AlbedoColor = new Color(1.0f, 0.9f, 0.78f),
+            NormalEnabled = true, NormalTexture = NatureAssets.Texture("tex/bark_tile_nor"), NormalScale = 1.2f,
+            Roughness = 0.9f, TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+        };
+        var ridges = new FastNoiseLite { Seed = rng.I(1, 9999), Frequency = 0.9f };
+        foreach (var t in twigs)
+        {
+            var k = new MeshKit();
+            var white = new Color(1, 1, 1);
+            const int sides = 14, per = 10;
+            // a smooth path through the stick's points
+            var path = new List<Vector3>();
+            for (int i = 0; i < t.Pts.Length - 1; i++)
+                for (int j = 0; j < per; j++)
+                {
+                    float u = j / (float)per;
+                    var p0 = t.Pts[Math.Max(0, i - 1)]; var p1 = t.Pts[i]; var p2 = t.Pts[i + 1]; var p3 = t.Pts[Math.Min(t.Pts.Length - 1, i + 2)];
+                    path.Add(0.5f * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u));
+                }
+            path.Add(t.Pts[^1]);
+            float along = 0, circ = Mathf.Tau * t.R;
+            int rings = path.Count;
+            for (int r = 0; r < rings; r++)
+            {
+                var c = path[r];
+                var fwd = (path[Math.Min(rings - 1, r + 1)] - path[Math.Max(0, r - 1)]).Normalized();
+                var side = fwd.Cross(Vector3.Up).Normalized();
+                var up = side.Cross(fwd).Normalized();
+                if (r > 0) along += c.DistanceTo(path[r - 1]);
+                float f = r / (float)(rings - 1);
+                float taper = Mathf.Lerp(1.08f, 0.6f, f) * (f > 0.93f ? Mathf.Lerp(1f, 0.55f, (f - 0.93f) / 0.07f) : 1f);
+                for (int sIdx = 0; sIdx <= sides; sIdx++)
+                {
+                    float a = sIdx / (float)sides * Mathf.Tau;
+                    var dirOut = side * Mathf.Cos(a) + up * Mathf.Sin(a);
+                    float rr = t.R * taper * (1 + 0.09f * ridges.GetNoise2D(a * 3f, along * 0.8f) + 0.04f * Mathf.Sin(a * 9 + along));
+                    // bark texture tiled at its real scale: one tile around the stick, square texels along it
+                    k.Add(c + dirOut * rr, dirOut, white, new Vector2(sIdx / (float)sides, along / circ), Vector2.Zero);
+                }
+            }
+            for (int r = 0; r < rings - 1; r++)
+                for (int sIdx = 0; sIdx < sides; sIdx++)
+                {
+                    int a0 = r * (sides + 1) + sIdx;
+                    k.Quad(a0, a0 + sides + 1, a0 + sides + 2, a0 + 1);
+                }
+            // snapped side stubs
+            int stubs = rng.I(1, 3);
+            for (int sIdx = 0; sIdx < stubs; sIdx++)
+            {
+                int at = rng.I(rings / 5, rings * 4 / 5);
+                var c = path[at];
+                var fwd = (path[at + 1] - path[at - 1]).Normalized();
+                var outDir = (fwd.Cross(Vector3.Up).Normalized() * (rng.F() < 0.5f ? 1 : -1) + Vector3.Up * 0.4f + fwd * 0.5f).Normalized();
+                float sr = t.R * rng.R(0.25f, 0.4f);
+                k.Tube(c, c + outDir * t.R * rng.R(1.4f, 2.6f), sr, sr * 0.7f, 8, white, white, Vector2.Zero, true);
+            }
+            k.RecalcNormals();
+            w.Root.AddChild(new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = bark, Name = "Stick" });
+        }
+    }
+
+    /// Stones, debris and roots over the whole yard (NatureScatter), kept off nests, food, rocks and level 1's corridor.
+    static void DressYard(World w, Rng rng, List<Rock> rocks, bool firstNest)
+    {
+        var sites = rocks.ConvertAll(r => new NatureScatter.Site { P = r.P, R = r.R, Yaw = r.Yaw, Seed = r.Seed });
+        var a = w.Nests[0].Pos; var b = w.Nests[1].Pos;
+        float Trail(Vector2 p)
+        {
+            if (firstNest) return Mathf.Abs(p.Y - 256) + Mathf.Max(0, Mathf.Max(36 - p.X, p.X - 132));
+            float t = Mathf.Clamp((p - a).Dot(b - a) / (b - a).LengthSquared(), 0, 1);
+            return p.DistanceTo(a + (b - a) * t); // the worn hollow between the nests
+        }
+        bool KeepOut(Vector2 p)
+        {
+            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < n.Radius + 4) return true;
+            foreach (var f in w.Food) if (p.DistanceTo(f.Pos) < f.Radius + 1.5f) return true;
+            if (firstNest && Expedition.Contains(p, 1.5f)) return true;
+            foreach (var r in rocks) if (p.DistanceTo(r.P) < r.R * 0.9f) return true;
+            return false;
+        }
+        NatureScatter.Build(w, rng, sites, Trail, KeepOut, new Rect2(4, 4, S - 8, S - 8), Settings.Density);
     }
 
     // ---------------------------------------------------------------- terrain mesh
@@ -507,8 +570,9 @@ public static partial class WorldBuilder
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         w.TerrainMaterial = Mat(w, Shaders.Terrain);
-        w.TerrainMaterial.SetShaderParameter("normal_c", w.NormalC);
-        w.TerrainMaterial.SetShaderParameter("entrance_a", w.Nests[0].Pos);
+        Ground(w.TerrainMaterial);
+        // the first nest has no hole until its founders dig one (NestInterior opens it)
+        w.TerrainMaterial.SetShaderParameter("entrance_a", w.FirstNest ? new Vector2(-1000, -1000) : w.Nests[0].Pos);
         w.TerrainMaterial.SetShaderParameter("entrance_b", w.Nests[1].Pos);
         w.TerrainMaterials.Add(w.TerrainMaterial);
         var mi = new MeshInstance3D { Mesh = mesh, MaterialOverride = w.TerrainMaterial, Name = "Terrain" };
@@ -516,6 +580,17 @@ public static partial class WorldBuilder
     }
 
     // ---------------------------------------------------------------- grass
+    /// The photographed ground sets (assets/nature/ground, CC0): base, crest, hollow and litter layers.
+    static void Ground(ShaderMaterial m)
+    {
+        foreach (var (slot, set) in new[] { ("base", "gravelly_sand"), ("crest", "dry_ground_rocks"), ("hollow", "brown_mud_dry"), ("litter", "forest_leaves_04") })
+            foreach (var map in new[] { "d", "n", "a" })
+            {
+                if (map == "a" && slot is "hollow" or "litter") continue; // those two borrow the base's occlusion and roughness
+                m.SetShaderParameter($"g_{slot}_{map}", NatureAssets.Texture($"ground/{set}_{(map == "d" ? "diff" : map == "n" ? "nor" : "arm")}"));
+            }
+    }
+
     static ArrayMesh BladeMesh()
     {
         var k = new MeshKit();
@@ -569,29 +644,30 @@ public static partial class WorldBuilder
             }
         st.GenerateNormals();
         var skirt = Mat(w, Shaders.Terrain);
-        skirt.SetShaderParameter("normal_c", w.NormalC);
+        Ground(skirt);
         w.TerrainMaterials.Add(skirt);
         w.Root.AddChild(new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = skirt, Name = "Skirt" }); // fog of war carries on seamlessly past the edge
     }
 
+    /// Grass from the photographed Bermuda sprigs (CC0): clumps in the field, a lawn along the yard's rim and a tall
+    /// meadow beyond it. Each clump mixes sprig shapes and sizes, and some are dry.
     static void BuildGrass(World w, Rng rng)
     {
-        var xf = new List<Transform3D>();
-        var dry = new List<float>();
-        var hf = w.HF;
-        void Blade(Vector2 p, float h)
+        var d = new NatureScatter.Dresser(w, rng);
+        if (d.Grass.Count == 0) return;
+        void Blade(Vector2 p, float h, float dry)
         {
             if (w.Blocked(p, 0.5f)) return;
-            var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.3f, 0.3f)) * Basis.FromScale(new Vector3(rng.R(0.9f, 1.6f), h, 1));
-            xf.Add(new Transform3D(basis, new Vector3(p.X, SkirtY(hf, p.X, p.Y) - 0.2f, p.Y)));
-            dry.Add(rng.F());
+            foreach (var f in w.Food) if (p.DistanceTo(f.Pos) < f.Radius + 4f) return;
+            d.Sprig(p, h, dry);
         }
-        bool FarFromNests(Vector2 p, float d)
+        bool FarFromNests(Vector2 p, float dist)
         {
-            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < d) return false;
+            foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < dist) return false;
             return true;
         }
-        // in-field clumps (mirrored)
+        var hf = w.HF;
+        // in-field clumps (mirrored), each with its own height and dryness
         int clumps = 0, tries = 0;
         while (clumps < (int)(34 * Settings.Density) && tries++ < 2000)
         {
@@ -599,43 +675,35 @@ public static partial class WorldBuilder
             if (c.X + c.Y > S || !FarFromNests(c, 34) || !FarFromNests(Mirror(c), 34) || c.DistanceTo(Center) < 22) continue;
             if (hf.Bilinear(hf.Leaf, c.X, c.Y) > 0.1f) continue;
             float rad = rng.R(2.5f, 6.5f);
-            int count = (int)(rad * rad * 2.2f);
-            float hb = rng.R(10, 24);
+            int count = (int)(rad * rad * 0.8f);
+            float hb = rng.R(10, 22), dry = rng.R(0, 0.7f);
             for (int i = 0; i < count; i++)
             {
                 var o = rng.InDisk(rad);
-                float h = hb * rng.R(0.6f, 1.2f) * (1 - o.Length() / rad * 0.4f);
-                Blade(c + o, h);
-                Blade(Mirror(c + o), h);
+                float h = hb * rng.R(0.5f, 1.2f) * (1 - o.Length() / rad * 0.45f);
+                float dd = Mathf.Clamp(dry + o.Length() / rad * 0.3f, 0, 1); // the rim of a clump dries first
+                Blade(c + o, h, dd);
+                Blade(Mirror(c + o), h, dd);
             }
             clumps++;
         }
-        // dense border lawn
-        for (int i = 0; i < (int)(4200 * Settings.Density); i++)
+        // lawn along the rim
+        for (int i = 0; i < (int)(1500 * Settings.Density); i++)
         {
-            float t = rng.F() * S, d = Mathf.Pow(rng.F(), 1.6f) * 22f;
+            float t = rng.F() * S, dist = Mathf.Pow(rng.F(), 1.6f) * 22f;
             int side = rng.I(0, 4);
-            var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
-            Blade(p, rng.R(14, 34) * (1.2f - d / 22f * 0.5f));
+            var p = side switch { 0 => new Vector2(t, dist), 1 => new Vector2(t, S - dist), 2 => new Vector2(dist, t), _ => new Vector2(S - dist, t) };
+            Blade(p, rng.R(12, 28) * (1.2f - dist / 22f * 0.5f), rng.R(0.1f, 0.6f));
         }
         // and a tall wild meadow beyond the yard's edge, so the world never just stops
-        for (int i = 0; i < (int)(3600 * Settings.Density); i++)
+        for (int i = 0; i < (int)(1300 * Settings.Density); i++)
         {
-            float t = rng.R(-40, S + 40), d = -Mathf.Pow(rng.F(), 0.8f) * 34f;
+            float t = rng.R(-40, S + 40), dist = -Mathf.Pow(rng.F(), 0.8f) * 34f;
             int side = rng.I(0, 4);
-            var p = side switch { 0 => new Vector2(t, d), 1 => new Vector2(t, S - d), 2 => new Vector2(d, t), _ => new Vector2(S - d, t) };
-            Blade(p, rng.R(22, 44));
+            var p = side switch { 0 => new Vector2(t, dist), 1 => new Vector2(t, S - dist), 2 => new Vector2(dist, t), _ => new Vector2(S - dist, t) };
+            Blade(p, rng.R(20, 40), rng.R(0.2f, 0.8f));
         }
-        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = BladeMesh() };
-        mm.InstanceCount = xf.Count;
-        for (int i = 0; i < xf.Count; i++)
-        {
-            mm.SetInstanceTransform(i, xf[i]);
-            mm.SetInstanceCustomData(i, new Color(dry[i], 0, 0, 0));
-        }
-        var mmi = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = Mat(w, Shaders.Grass), Name = "Grass" };
-        w.Root.AddChild(mmi);
-        w.Scatter.Add((mmi, Scatter.Grass));
+        d.Commit();
     }
 
     // ---------------------------------------------------------------- nests
@@ -716,8 +784,16 @@ public static partial class WorldBuilder
             }
         }
         Pair(FoodKind.Berry, Find(home, 110, 150, 5), 420, 4.2f);
-        // contested prize in the middle
-        Spawn(w, rng, FoodKind.Berry, Center, 1100, 6.5f);
+        // contested prize in the middle: not the same pile every game. Its kind and its place along the line of points
+        // equally far from both nests (x = y) change with the map's seed, so neither colony is favoured
+        var pick = new Rng(w.Seed ^ 0xC0FFEEu); // its own sequence: the rest of the yard (and every tuned campaign map) stays as it was
+        var prize = Center + new Vector2(1, 1).Normalized() * pick.R(-26f, 26f);
+        switch ((int)pick.R(0, 2.999f))
+        {
+            case 0: Spawn(w, rng, FoodKind.Berry, prize, 1100, 6.5f); break;
+            case 1: Spawn(w, rng, FoodKind.Sugar, prize, 900, 5.5f); break;
+            default: for (int i = 0; i < 6; i++) Spawn(w, rng, FoodKind.Seed, prize + new Vector2(1, -1).Normalized() * (i - 2.5f) * 3.4f, 180, 2.6f); break;
+        }
     }
 
     /// Wild bug lairs beside the richest food. Rules depend only on distance to the nearest nest,
@@ -735,15 +811,19 @@ public static partial class WorldBuilder
         }
         // the great raspberry in the middle: a stag beetle lord and his beetles, each equidistant from both nests
         var mid = Center;
+        foreach (var f in w.Food) if (f.Max >= 900 || f.Kind == FoodKind.Seed && f.Max >= 180 && f.Pos.DistanceTo(Center) < 40) { mid = f.Pos; break; } // the prize, wherever it fell
         var bisector = new Vector2(1, 1).Normalized(); // points with x = y are equally far from both nests
         w.Camps.Add(new Camp { Pos = mid + bisector * 11, Facing = bisector.AngleD(), Bugs = new[] { (AntType.StagBeetle, 5) } });
-        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).AngleD(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Wasp, 4) } });
+        w.Camps.Add(new Camp { Pos = mid - bisector * 11, Facing = (-bisector).AngleD(), Bugs = new[] { (AntType.Beetle, 3), (AntType.Beetle, 3), (AntType.Spider, 4) } }); // no wings in the middle every army crosses
         foreach (var f in w.Food.ToArray())
         {
             float d = Mathf.Min(f.Pos.DistanceTo(w.Nests[0].Pos), f.Pos.DistanceTo(w.Nests[1].Pos));
+            // flying predators keep far from the starting nests (Config.WaspFloor): nothing with wings at the first prey
+            bool wasps = d >= Config.WaspFloor;
+            if (f.Max >= 900 || f.Kind == FoodKind.Seed && f.Max >= 180 && f.Pos.DistanceTo(Center) < 40) continue; // the prize has its own camps
             if (f.Kind == FoodKind.Berry && f.Max < 1000) Add(f.Pos, f.Radius, (AntType.Spider, 3), (AntType.Beetle, 2));
-            else if (f.Kind == FoodKind.Sugar) Add(f.Pos, f.Radius, (AntType.Beetle, 2), (AntType.Wasp, 1));
-            else if (f.Kind == FoodKind.Seed && d > 75) Add(f.Pos, f.Radius, (AntType.Wasp, 2));
+            else if (f.Kind == FoodKind.Sugar) Add(f.Pos, f.Radius, (AntType.Beetle, 2), wasps ? (AntType.Wasp, 1) : (AntType.Spider, 1));
+            else if (f.Kind == FoodKind.Seed && d > 75) Add(f.Pos, f.Radius, wasps ? (AntType.Wasp, 2) : (AntType.Beetle, 2));
             else if (f.Kind == FoodKind.Crumb && d > 110) Add(f.Pos, f.Radius, (AntType.Spider, 2));
             else if (f.Kind == FoodKind.Crumb && d > 80) Add(f.Pos, f.Radius, (AntType.Beetle, 1));
         }
@@ -771,6 +851,7 @@ public static partial class WorldBuilder
                 (AntType, int)[] bugs;
                 var a = lone[(int)rng.R(0, 2.999f)];
                 var b = lone[(int)rng.R(0, 2.999f)];
+                if (d < Config.WaspFloor) { if (a == AntType.Wasp) a = AntType.Spider; if (b == AntType.Wasp) b = AntType.Beetle; } // no wings near a start
                 if (d < 95) bugs = new[] { (a, rng.F() < 0.5f ? 1 : 2) };
                 else if (d < 140) bugs = new[] { (a, 2), (b, 3) };
                 else bugs = new[] { (a, 3), (b, 3), (AntType.Beetle, 4) };
@@ -780,103 +861,26 @@ public static partial class WorldBuilder
             }
     }
 
-    static readonly Dictionary<World, List<ArrayMesh>> _crumbCache = new();
+    static readonly HashSet<World> _crumbDraws = new();
 
+    /// A food source and its pile (FoodArt): crumbs, seeds, sugar or berries made of real pieces.
     public static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size)
     {
-        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
-        // mid-game crumb showers reuse a few pre-built crumb shapes, scaled, to avoid hitches
+        int id = w.NextFoodId++;
+        var f = new FoodSource { Id = id, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
+        float blockR = kind switch { FoodKind.Berry => size * 0.95f, FoodKind.Sugar => size * 0.6f, FoodKind.Seed => size * 0.5f, _ => size * 0.85f };
+        // the pile is decoration with its own stream; the gameplay rng (and the sim's, for mid-game crumb showers)
+        // takes exactly the draws the old single-mesh food took, so every later placement and the sim stay as they were
+        var art = new Rng((uint)(f.Id * 7919 + 17) ^ (uint)(p.X * 131 + p.Y * 17));
+        int draws = 3 + (kind == FoodKind.Berry ? 61 : 0);
         if (kind == FoodKind.Crumb && w.Food.Count > 40)
         {
-            if (!_crumbCache.TryGetValue(w, out var cache))
-            {
-                cache = new List<ArrayMesh>();
-                for (int i = 0; i < 6; i++)
-                {
-                    var tmp = Spawn(w, rng, FoodKind.Crumb, new Vector2(-100, -100), 0, 1f, true);
-                    cache.Add((ArrayMesh)((MeshInstance3D)tmp.Node).Mesh);
-                    tmp.Node.Free();
-                }
-                _crumbCache[w] = cache;
-            }
-            var cm = Mat(w, Shaders.Food);
-            cm.SetShaderParameter("kind", 0);
-            var node = new MeshInstance3D { Mesh = cache[rng.I(0, cache.Count)], MaterialOverride = cm };
-            float yy = w.HF.Sample(p.X, p.Y) + size * 0.7f * 0.75f * 0.9f;
-            node.Transform = new Transform3D(new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * Basis.FromScale(Vector3.One * size), new Vector3(p.X, yy, p.Y));
-            w.Root.AddChild(node);
-            f.Node = node;
-            f.BaseScale = Vector3.One * size;
-            f.Block = new Obstacle { P = p, R = size * 0.85f, BaseR = size * 0.85f };
-            w.AddObstacle(f.Block);
-            w.Food.Add(f);
-            return f;
+            draws = 2;
+            if (_crumbDraws.Add(w)) { draws += 6; w.NextFoodId += 6; } // the old crumb cache built six templates, each taking an id
         }
-        return Spawn(w, rng, kind, p, amount, size, false);
-    }
-
-    static FoodSource Spawn(World w, Rng rng, FoodKind kind, Vector2 p, float amount, float size, bool templateOnly)
-    {
-        var f = new FoodSource { Id = w.NextFoodId++, Kind = kind, Pos = p, Amount = amount, Max = amount, Radius = size };
-        var k = new MeshKit();
-        var nz = new FastNoiseLite { Seed = rng.I(1, 9999), Frequency = 1.3f };
-        Vector3 radii;
-        Func<Vector3, float> disp;
-        float sink = 0.25f;
-        switch (kind)
-        {
-            case FoodKind.Berry:
-                radii = new Vector3(size, size * 0.85f, size * 1.1f);
-                disp = u => (1 + 0.04f * nz.GetNoise3D(u.X * 4, u.Y * 4, u.Z * 4)) * (u.Y < -0.4f ? 0.85f : 1f) * (1 - Mathf.Max(0, u.Z) * 0.25f * Mathf.Max(0, -u.Y));
-                break;
-            case FoodKind.Sugar:
-                radii = Vector3.One * size * 0.62f;
-                disp = u => SuperEllipse(u, 7f) * (1 + 0.02f * nz.GetNoise3D(u.X * 9, u.Y * 9, u.Z * 9));
-                sink = 0.05f;
-                break;
-            case FoodKind.Seed:
-                radii = new Vector3(size * 0.38f, size * 0.24f, size * 0.85f);
-                disp = u => 1 - Mathf.Max(0, u.Z) * 0.35f;
-                sink = 0.3f;
-                break;
-            default:
-                radii = new Vector3(size, size * 0.7f, size * 0.9f);
-                disp = u => SuperEllipse(u, 2.6f) * (1 + 0.16f * nz.GetNoise3D(u.X, u.Y, u.Z));
-                break;
-        }
-        float blockR = kind switch { FoodKind.Berry => size * 0.95f, FoodKind.Sugar => size * 0.6f, FoodKind.Seed => size * 0.5f, _ => size * 0.85f };
-        if (kind == FoodKind.Berry)
-        {
-            // raspberry: a core plus a shell of glossy drupelets
-            k.Ellipsoid(Vector3.Zero, Basis.FromScale(radii * 0.86f), 18, 12, new Color(0.35f, 0, 0, 1), Vector2.Zero);
-            int count = 70;
-            for (int i = 0; i < count; i++)
-            {
-                float yy = 1 - 2 * (i + 0.5f) / count;
-                if (yy < -0.75f) continue;
-                float rr = Mathf.Sqrt(1 - yy * yy), th = i * 2.39996f;
-                var dir = new Vector3(Mathf.Cos(th) * rr, yy, Mathf.Sin(th) * rr);
-                var c = dir * radii * 0.9f;
-                var up = dir.Normalized();
-                var side = up.Cross(Mathf.Abs(up.Y) > 0.9f ? Vector3.Right : Vector3.Up).Normalized();
-                var b = new Basis(side, up, side.Cross(up)) * Basis.FromScale(new Vector3(0.24f, 0.2f, 0.24f) * size);
-                float tone = rng.R(0.75f, 1f);
-                k.Ellipsoid(c, b, 16, 11, new Color(tone, 0, 0, 1), Vector2.Zero);
-            }
-        }
-        else
-        {
-            k.Ellipsoid(Vector3.Zero, Basis.FromScale(radii), 24, 16, new Color(1, 1, 1), Vector2.Zero, disp);
-            k.RecalcNormals();
-        }
-        var m = Mat(w, Shaders.Food);
-        m.SetShaderParameter("kind", kind == FoodKind.Corpse ? 0 : (int)kind);
-        var mi = new MeshInstance3D { Mesh = k.Commit(), MaterialOverride = m };
-        if (templateOnly) { f.Node = mi; return f; }
-        var y = w.HF.Sample(p.X, p.Y) + radii.Y * (1 - sink) * 0.9f;
-        mi.Transform = new Transform3D(new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.15f, 0.15f)), new Vector3(p.X, y, p.Y));
-        w.Root.AddChild(mi);
-        f.Node = mi;
+        for (int i = 0; i < draws; i++) rng.F();
+        f.Node = FoodArt.Build(w, art, f);
+        w.Root.AddChild(f.Node);
         f.BaseScale = Vector3.One;
         f.Block = new Obstacle { P = p, R = blockR, BaseR = blockR };
         w.AddObstacle(f.Block);
@@ -910,21 +914,12 @@ public static partial class WorldBuilder
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < 2.2f) return false;
             return true;
         }
-        for (int variant = 0; variant < 3; variant++)
+        for (int variant = 0; variant < 1; variant++)
         {
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = PebbleMesh(17 + variant) };
             var xf = new List<Transform3D>();
             var cd = new List<Color>();
-            for (int i = 0; i < (int)(4200 * Settings.Density); i++)
-            {
-                var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
-                if (!Clear(p, 0.3f)) continue;
-                // mostly grit, some proper pebbles
-                float s = rng.F() < 0.85f ? rng.R(0.08f, 0.35f) : rng.R(0.4f, 1.1f);
-                var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.3f, 0.3f)) * Basis.FromScale(Vector3.One * s);
-                xf.Add(new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) + s * 0.12f, p.Y)));
-                cd.Add(new Color(rng.F(), rng.F() < 0.15f ? 1 : 0, rng.F() < 0.2f ? rng.R(0.3f, 0.8f) : 0, rng.F()));
-            }
+            // (the stones themselves are photoscans now, see NatureScatter; the ground sets carry the fine grit)
             // excavated grains around the crater
             if (variant == 0)
             {
@@ -951,7 +946,7 @@ public static partial class WorldBuilder
         var smm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = sk.Commit() };
         var sx = new List<Transform3D>();
         var sc = new List<float>();
-        for (int i = 0; i < (int)(2600 * Settings.Density); i++)
+        for (int i = 0; i < (int)(900 * Settings.Density); i++)
         {
             var p = new Vector2(rng.R(4, S - 4), rng.R(4, S - 4));
             if (!Clear(p, 0.5f)) continue;

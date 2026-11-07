@@ -93,6 +93,7 @@ public sealed class AIController : IColonyAI
         var c = _sim.Col[_team];
         if (!c.Alive) return;
         Produce(c);
+        GeneralAI.Learn(_sim, _team, Orders);
         Remains(c);
         March();
         Reinforce(c);

@@ -13,12 +13,24 @@ public sealed partial class NestInterior
     readonly Dictionary<(int team, int id), Room> _rooms = new();
     readonly Label3D[] _status = new Label3D[2];
     readonly MeshInstance3D[] _plug = new MeshInstance3D[2];
+    // the open entrance: nothing of it exists until the founders start digging (a site is only a site)
+    readonly MeshInstance3D[] _mouth = new MeshInstance3D[2], _mouthShadow = new MeshInstance3D[2];
+    readonly Node3D[] _mouthLight = new Node3D[2];
+    readonly bool[] _holeCut = { false, false };
     readonly NestGeometry[] _geometry = { new(), new() };
     readonly MeshInstance3D[] _excavation = new MeshInstance3D[2];
+    readonly Node3D[] _timber = new Node3D[2];
+    static readonly Dictionary<string, ShaderMaterial> _mineMats = new(); // shoring, stones and roots in the banks, rebuilt with the excavation
     readonly int[] _meshRevision = { -1, -1 };
     readonly List<ShaderMaterial> _soils = new(), _shafts = new();
     float _refresh;
     int _tierStamp = -1;
+    readonly NestLights _lights;
+
+    /// Render layer of everything dug (the excavation and the rooms' contents). The sun's cull mask leaves it
+    /// out, so the nest is lit by its lamps alone, never by daylight.
+    public const uint UndergroundLayer = 2;
+    public const uint SunMask = 0xFFFFFu & ~UndergroundLayer;
 
     /// The way the sun falls (world space): the shafts of light below ground follow it.
     static readonly Vector3 LightDir = (Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward).Normalized();
@@ -30,9 +42,12 @@ public sealed partial class NestInterior
         public Node3D Node, Contents;
         public Label3D Label;
         public int ContentCount = -1, Tier, TierStamp = -1;
-        public float ShownProgress = -1;
+        public float ShownProgress = -1, ShownScale = -1;
         public Bed[] Beds;            // a nursery's egg, larva and cocoon beds
     }
+
+    /// A chamber's node in the interior (the mutation props hang the nursery's dressing on it), or null.
+    public Node3D RoomNode(int team, int id) => _rooms.TryGetValue((team, id), out var r) ? r.Node : null;
 
     public NestInterior(GameSession g)
     {
@@ -40,21 +55,62 @@ public sealed partial class NestInterior
         _root = new Node3D { Name = "NestInterior" };
         g.AddChild(_root);
         for (int team = 0; team < 2; team++) BuildNest(team);
+        _lights = new NestLights(g, _root, SetPools);
         InitBrood();
         ApplyQuality();
+    }
+
+    /// Low tier: the cavity walls are unshaded, so the nearest lamps are handed to their shader as pools of light.
+    void SetPools(Vector4[] pools)
+    {
+        foreach (var m in _soils)
+            if (m.GetShaderParameter("cavity_surface").AsBool()) m.SetShaderParameter("lamps", pools);
+    }
+
+    static void MoveToUnderground(Node n)
+    {
+        if (n is VisualInstance3D v && v.Layers != UndergroundLayer) v.Layers = UndergroundLayer;
+        foreach (var c in n.GetChildren()) MoveToUnderground(c);
     }
 
     float Ground(int team) { var p = _g.World.Nests[team].Pos; return _g.World.HF.Sample(p.X, p.Y); }
 
     /// One shared Earth shader per culling mode; a material per surface role, tuned by how much sun it sees.
+    static Image _relief;
+
+    /// The rock scan's displacement map, read once for the bank relief (nest-local point, repeats like the shader's wall tiling).
+    static float Relief(Vector2 p)
+    {
+        if (_relief == null)
+        {
+            _relief = GD.Load<Texture2D>("res://assets/nature/ground/rock_face_03_disp.jpg").GetImage();
+            if (_relief.IsCompressed()) _relief.Decompress();
+        }
+        int w = _relief.GetWidth(), h = _relief.GetHeight();
+        float u = p.X * 0.32f, v = p.Y * 0.32f;
+        int x = ((int)Mathf.Floor((u - Mathf.Floor(u)) * w)) % w, y = ((int)Mathf.Floor((v - Mathf.Floor(v)) * h)) % h;
+        return _relief.GetPixel(x, y).R;
+    }
+
     ShaderMaterial Soil(float gy, float shade, float bounce, float grooves, bool back, bool cavity = false)
     {
-        var mode = cavity ? "cull_disabled, shadows_disabled" : back ? "cull_back" : "cull_disabled";
+        var mode = cavity ? "cull_disabled, shadows_disabled, ambient_light_disabled" : back ? "cull_back" : "cull_disabled";
         var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", mode)) };
         m.SetShaderParameter("cavity_surface", cavity);
         m.SetShaderParameter("noise_b", _g.World.NoiseB);
         m.SetShaderParameter("normal_c", _g.World.NormalC);
-        m.SetShaderParameter("soil_albedo", GD.Load<Texture2D>("res://assets/materials/nest-soil-albedo.png"));
+        m.SetShaderParameter("soil_albedo", NatureAssets.Texture("ground/red_mud_stones_diff")); // photographed clay with embedded stones (CC0)
+        if (cavity)
+        {
+            // the mine: Poly Haven rock_face_03 on the walls, coast_sand_05 on the floor (CC0, docs/asset-credits.md)
+            m.SetShaderParameter("mine", true);
+            m.SetShaderParameter("wall_albedo", NatureAssets.Texture("ground/rock_face_03_diff"));
+            m.SetShaderParameter("wall_normal", NatureAssets.Texture("ground/rock_face_03_nor"));
+            m.SetShaderParameter("wall_arm", NatureAssets.Texture("ground/rock_face_03_arm"));
+            m.SetShaderParameter("floor_albedo", NatureAssets.Texture("ground/coast_sand_05_diff"));
+            m.SetShaderParameter("floor_normal", NatureAssets.Texture("ground/coast_sand_05_nor"));
+            NestGeometry.WallRelief ??= Relief;
+        }
         m.SetShaderParameter("ground_y", gy);
         m.SetShaderParameter("shade", shade);
         m.SetShaderParameter("bounce", bounce);
@@ -75,14 +131,15 @@ public sealed partial class NestInterior
         // light the exposed underground floor: the bank shader supplies that shading.
         _excavation[team] = new MeshInstance3D
         {
-            Name = "ConnectedExcavation", MaterialOverride = earth,
+            Name = "ConnectedExcavation", MaterialOverride = earth, Layers = UndergroundLayer,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
         };
         n.AddChild(_excavation[team]);
         // The entrance is the only genuinely open hole in the surface.
         // the shaft: the ragged funnel runs from the lip all the way down to the pit floor
-        n.AddChild(new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false), Scale = new Vector3(1, (NestGeometry.Depth - 0.2f) / 1.9f, 1) });
-        n.AddChild(new MeshInstance3D
+        _mouth[team] = new MeshInstance3D { Mesh = RoughMouth(), MaterialOverride = Soil(gy, 0.65f, 0.2f, 1f, false), Scale = new Vector3(1, (NestGeometry.Depth - 0.2f) / 1.9f, 1) };
+        n.AddChild(_mouth[team]);
+        n.AddChild(_mouthShadow[team] = new MeshInstance3D
         {
             Name = "EntranceShadow", Mesh = new CylinderMesh { TopRadius = 0.8f, BottomRadius = 0.8f, Height = 0.03f, RadialSegments = 24 },
             Position = new Vector3(0, -NestGeometry.Depth + 0.08f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
@@ -92,12 +149,13 @@ public sealed partial class NestInterior
         _plug[team] = new MeshInstance3D { Mesh = RoughLump(), Scale = new Vector3(1.25f, 0.3f, 1.25f), MaterialOverride = Soil(gy + 1.2f, 1.0f, 0.3f, 0.5f, false), Position = new Vector3(0, 0.25f, 0) };
         n.AddChild(_plug[team]);
         // the sun falling down the shaft
-        n.AddChild(MakeShaft(team, new Vector3(0, 0.3f, 0), 0.9f, 1.8f, 6f));
+        n.AddChild(_mouthLight[team] = MakeShaft(team, new Vector3(0, 0.3f, 0), 0.9f, 1.8f, 6f));
         // status over the entrance
         _status[team] = new Label3D
         {
-            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 36, OutlineSize = 10, PixelSize = 0.011f,
-            Modulate = new Color(1f, 0.9f, 0.6f), OutlineModulate = new Color(0.05f, 0.03f, 0.02f, 0.85f), Font = UiTheme.Title,
+            Text = "", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, FontSize = 36, OutlineSize = 14, PixelSize = 0.011f,
+            // white on a heavy black outline: the old sand-gold vanished against the ground it floats over
+            Modulate = Colors.White, OutlineModulate = new Color(0.01f, 0.008f, 0.005f, 1f), Font = UiTheme.Title,
             Position = new Vector3(0, 4.2f, 0), Visible = false,
         };
         n.AddChild(_status[team]);
@@ -130,6 +188,12 @@ public sealed partial class NestInterior
     {
         if (OS.GetEnvironment("MANDIBLE_NOPANE") != "") strength = 0; // perf A/B: no shafts
         _open = strength;
+        Shaders.SetNestOpen(strength);
+        // with the earth opened for building, the chambers must read through the roof: a warm fill rises in the cavities
+        // (the lamps still pool on top of it), so the cut never shows as dark blotches under the soil
+        foreach (var m in _soils)
+            if (m.GetShaderParameter("cavity_surface").AsBool()) { m.SetShaderParameter("ambient_scale", 0.1f + 0.5f * strength); m.SetShaderParameter("cutaway", strength); }
+        foreach (var m in _mineMats.Values) m.SetShaderParameter("cutaway", strength);
         float shaft = Settings.Gfx >= Settings.Quality.Medium ? strength * 0.15f : 0f;
         foreach (var m in _shafts) m.SetShaderParameter("strength", shaft);
     }
@@ -145,9 +209,9 @@ public sealed partial class NestInterior
             bool low = Settings.Gfx == Settings.Quality.Low;
             // The Low cutaway supplies its own inexpensive directional shading;
             // it does not depend on lighting buffers rebuilt when MSAA/SSAO change.
-            m.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", low ? "cull_disabled, unshaded" : "cull_disabled, shadows_disabled"));
+            m.Shader = Shaders.Get(Shaders.Earth.Replace("cull_CULL", low ? "cull_disabled, unshaded" : "cull_disabled, shadows_disabled, ambient_light_disabled"));
             m.SetShaderParameter("flat_lighting", low);
-            m.SetShaderParameter("shade", low ? 1.55f : 0.94f);
+            m.SetShaderParameter("shade", low ? 0.7f : 0.94f); // Low is unshaded: a flat base dim enough for the lamp pools to show, bright enough to read
         }
         for (int team = 0; team < 2; team++) _meshRevision[team] = -1;
         _tierStamp = (int)Settings.Gfx; // rooms refill their props at the new density on the next refresh
@@ -272,16 +336,16 @@ public sealed partial class NestInterior
 
     // prop materials, shared
     static StandardMaterial3D _mEgg, _mLarva, _mCocoon, _mSeed, _mDrop, _mGrit, _mQuartz, _mThread, _mHusk, _mJelly;
-    static StandardMaterial3D MEgg => _mEgg ??= new() { AlbedoColor = new Color(0.82f, 0.73f, 0.57f), Roughness = 0.28f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.18f };
-    static StandardMaterial3D MLarva => _mLarva ??= new() { AlbedoColor = new Color(0.8f, 0.68f, 0.48f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.25f };
-    static StandardMaterial3D MCocoon => _mCocoon ??= new() { AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
-    static StandardMaterial3D MSeed => _mSeed ??= new() { AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
-    static StandardMaterial3D MDrop => _mDrop ??= new() { AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
-    static StandardMaterial3D MGrit => _mGrit ??= new() { AlbedoColor = new Color(0.16f, 0.13f, 0.11f), Roughness = 0.75f, Metallic = 0.25f };
-    static StandardMaterial3D MQuartz => _mQuartz ??= new() { AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
-    static StandardMaterial3D MThread => _mThread ??= new() { AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
-    static StandardMaterial3D MHusk => _mHusk ??= new() { AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
-    static StandardMaterial3D MJelly => _mJelly ??= new() { AlbedoColor = new Color(0.69f, 0.37f, 0.055f), Roughness = 0.12f, ClearcoatEnabled = true };
+    static StandardMaterial3D MEgg => _mEgg ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.82f, 0.73f, 0.57f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.82f, 0.73f, 0.57f), Roughness = 0.28f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.18f };
+    static StandardMaterial3D MLarva => _mLarva ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.8f, 0.68f, 0.48f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.8f, 0.68f, 0.48f), Roughness = 0.4f, SubsurfScatterEnabled = true, SubsurfScatterStrength = 0.25f };
+    static StandardMaterial3D MCocoon => _mCocoon ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.86f, 0.76f, 0.56f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.86f, 0.76f, 0.56f), Roughness = 0.95f };
+    static StandardMaterial3D MSeed => _mSeed ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.36f, 0.24f, 0.13f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.36f, 0.24f, 0.13f), Roughness = 0.55f };
+    static StandardMaterial3D MDrop => _mDrop ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.98f, 0.72f, 0.25f, 0.85f), Roughness = 0.04f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, EmissionEnabled = true, Emission = new Color(0.45f, 0.26f, 0.05f), Metallic = 0.1f, ClearcoatEnabled = true };
+    static StandardMaterial3D MGrit => _mGrit ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.16f, 0.13f, 0.11f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.16f, 0.13f, 0.11f), Roughness = 0.75f, Metallic = 0.25f };
+    static StandardMaterial3D MQuartz => _mQuartz ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.9f, 0.88f, 0.82f), Roughness = 0.2f, EmissionEnabled = true, Emission = new Color(0.12f, 0.11f, 0.1f) };
+    static StandardMaterial3D MThread => _mThread ??= new() { DisableAmbientLight = true, AlbedoColor = new Color(0.95f, 0.94f, 0.88f), Roughness = 0.4f, EmissionEnabled = true, Emission = new Color(0.1f, 0.1f, 0.09f) };
+    static StandardMaterial3D MHusk => _mHusk ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.85f, 0.68f, 0.4f, 0.55f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.85f, 0.68f, 0.4f, 0.55f), Roughness = 0.25f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled, ClearcoatEnabled = true };
+    static StandardMaterial3D MJelly => _mJelly ??= new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color(0.69f, 0.37f, 0.055f) * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color(0.69f, 0.37f, 0.055f), Roughness = 0.12f, ClearcoatEnabled = true };
 
     static (float w, float h, float d) RoomSize(NestChamber ch) => NestGeometry.RoomSize(ch);
 
@@ -302,11 +366,14 @@ public sealed partial class NestInterior
         return room;
     }
 
+    /// Room contents grow with the camera's distance in build mode so they stay readable from the tour spot (1.3x close, 2x far).
+    float ContentScale() => Mathf.Lerp(1.3f, 2.4f, Mathf.Clamp((_g.Camera.Distance - 20f) / 25f, 0, 1));
+
     void LayoutRoom(Room room)
     {
         var ch = room.Ch;
         room.Node.Position = new Vector3(ch.Offset.X, -NestGeometry.Depth + 0.025f, ch.Offset.Y);
-        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch);
+        room.Contents.Scale = Vector3.One * NestGeometry.Progress(ch) * ContentScale(); // what a room holds is its meaning: shown large
         room.Label.Position = new Vector3(0, 1.1f, 0);
     }
 
@@ -368,7 +435,17 @@ public sealed partial class NestInterior
             // the founders' plug
             var royal = sim.Royal(team);
             float dug = royal == null ? 0 : royal.Progress;
-            _plug[team].Visible = !col.Founded;
+            // before the founders dig, the site is plain ground: no hole, no plug, no light down a shaft
+            bool dugInto = col.Founded || royal != null;
+            _mouthLight[team].Visible = dugInto;
+            _mouth[team].Visible = _mouthShadow[team].Visible = false; // the hole opens straight into the hub bowl: no shaft hangs in the pit
+            _plug[team].Visible = !col.Founded && royal != null;
+            if (dugInto != _holeCut[team])
+            {
+                // the terrain's own hole at the entrance opens with the dig, not before
+                _holeCut[team] = dugInto;
+                foreach (var m in _g.World.TerrainMaterials) m.SetShaderParameter(team == 0 ? "entrance_a" : "entrance_b", dugInto ? nestPos : new Vector2(-1000, -1000));
+            }
             if (!col.Founded) { _plug[team].Position = new Vector3(0, 0.25f - dug * 1.1f, 0); _plug[team].Scale = new Vector3(1 - dug * 0.6f, 1, 1 - dug * 0.6f); }
             bool shown = mine && _open > 0.001f;
             _excavation[team].Visible = shown;
@@ -382,6 +459,7 @@ public sealed partial class NestInterior
                     _excavation[team].Mesh = geometry.BuildMesh(Settings.Gfx == Settings.Quality.Low ? 0.34f : 0.24f);
                     previous?.Dispose();
                     _meshRevision[team] = geometry.Revision;
+                    DressMine(team, geometry);
                 }
             }
             foreach (var ch in col.Chambers)
@@ -389,10 +467,11 @@ public sealed partial class NestInterior
                 if (!_rooms.TryGetValue((team, ch.Id), out var room)) _rooms[(team, ch.Id)] = room = MakeRoom(team, ch);
                 // the underground is hidden under plain ground until the player opens it; the enemy's never shows
                 room.Node.Visible = shown;
-                if (room.ShownProgress != ch.Progress || room.Tier != ch.Tier) { LayoutRoom(room); room.ShownProgress = ch.Progress; }
+                if (room.ShownProgress != ch.Progress || room.Tier != ch.Tier || Mathf.Abs(room.ShownScale - ContentScale()) > 0.02f) { LayoutRoom(room); room.ShownProgress = ch.Progress; room.ShownScale = ContentScale(); }
                 if (full)
                 {
                     FillRoom(team, room);
+                    MoveToUnderground(room.Contents);
                     string name = Sim.ChamberName(ch.Kind);
                     room.Label.Text = ch.Digging ? $"{name}  {ch.Progress * 100:0}%  ({ch.Diggers} digging)" : name;
                     room.Label.Modulate = ch.Digging ? new Color(1f, 0.75f, 0.35f) : new Color(1f, 0.88f, 0.6f, 0.95f);
@@ -403,12 +482,127 @@ public sealed partial class NestInterior
             {
                 // status over the entrance: the founding dig, then whatever is being dug below
                 var lines = new List<string>();
-                if (!col.Founded) lines.Add($"Digging the nest  {dug * 100:0}%  ·  {royal?.Diggers ?? 0} workers");
+                // the first nest's founding dig has its own panel at the top of the screen (FoundingPanel)
+                bool panelShowsIt = !col.Founded && sim.Mission is { Episode: 1 };
+                if (!col.Founded && !panelShowsIt) lines.Add($"Digging the nest  {dug * 100:0}%  ·  {royal?.Diggers ?? 0} workers");
                 else foreach (var ch in col.Chambers) if (ch.Digging) lines.Add($"{Sim.ChamberName(ch.Kind)}  {ch.Progress * 100:0}%  ·  {ch.Diggers} digging");
-                _status[team].Visible = mine && lines.Count > 0 && !nestView;
+                // no "digging 0%" floating over a site nobody is digging yet
+                _status[team].Visible = mine && lines.Count > 0 && !nestView && (col.Founded || sim.Royal(team) != null);
                 _status[team].Text = string.Join("\n", lines);
             }
         }
         UpdateBrood(alpha);
+        _lights.Update(1f / 60f, _open);
+    }
+
+    /// The worked look of a mine, from the scans the yard already uses: twig props and lintels at every gallery
+    /// mouth and along the long galleries (ants shore their tunnels with twigs), stones half-sunk in the banks, and
+    /// a root crossing here and there. Everything sits on the excavation's own surface. Rebuilt with the mesh; the
+    /// Low tier has none of it, Medium the mouths only.
+    void DressMine(int team, NestGeometry geometry)
+    {
+        _timber[team]?.QueueFree();
+        _timber[team] = null;
+        if (Settings.Gfx == Settings.Quality.Low) return;
+        var root = new Node3D { Name = "MineDressing" };
+        _excavation[team].AddChild(root);
+        _timber[team] = root;
+        var twigs = NatureAssets.Kind("twig").FindAll(p => p.Src.StartsWith("dry_branches"));
+        var stones = NatureAssets.Kind("stone");
+        var roots = NatureAssets.Kind("root").FindAll(p => p.Src == "single_root");
+        if (twigs.Count == 0 || stones.Count == 0) return;
+        var rng = new Rng((uint)(0x7133u + (uint)team * 977u));
+        var batches = new Dictionary<NatureAssets.Piece, List<(Transform3D t, Vector2 side)>>();
+        // `side`: the outward direction of the bank the piece stands in (zero for a lintel, which spans both)
+        void Add(NatureAssets.Piece p, Transform3D t, Vector2 side = default) { if (!batches.TryGetValue(p, out var l)) batches[p] = l = new(); l.Add((t, side)); }
+        float Y(Vector2 p) => NestGeometry.Height(geometry.Distance(p), NestGeometry.FloorDepth(p));
+        bool full = Settings.Gfx >= Settings.Quality.High;
+        // a twig laid along `dir` from `at`, its length `len`, lying on the surface at `at` (or standing when `up` is set)
+        void Twig(Vector2 at, float y, Vector3 axis, float len, float thick, Vector2 side = default)
+        {
+            var p = twigs[rng.I(0, twigs.Count)];
+            var laid = (p.Lie * p.Size).Abs();
+            float s = len / Mathf.Max(0.01f, laid.Z);
+            float st = thick / Mathf.Max(0.01f, Mathf.Max(laid.X, laid.Y));
+            var up = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.98f ? Vector3.Right : Vector3.Up;
+            var basis = Basis.LookingAt(axis, up) * new Basis(Vector3.Forward, rng.R(0, Mathf.Tau)) * Basis.FromScale(new Vector3(st, st, s)) * p.Lie;
+            Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)), side);
+        }
+        for (int i = 1; i < geometry.Count; i++)
+        {
+            int k = i * NestGeometry.Stride;
+            var a = new Vector2(geometry.Network[k], geometry.Network[k + 1]);
+            var b = new Vector2(geometry.Network[k + 2], geometry.Network[k + 3]);
+            var radii = new Vector2(geometry.Network[k + 4], geometry.Network[k + 5]);
+            float half = geometry.Network[k + 6];
+            var ab = b - a;
+            float len = ab.Length();
+            if (len < 2.5f) continue;
+            var dir = ab / len;
+            var side = new Vector2(-dir.Y, dir.X);
+            // frames along the gallery: at its mouth into the room and every few units on the way, each a pair of
+            // uprights leaning into the banks and a lintel across the top, slightly askew like real shoring
+            float roomEdge = len - Mathf.Min(radii.X, radii.Y) * 0.9f;
+            var stations = new List<float> { Mathf.Clamp(roomEdge - 0.6f, 2.0f, len - 1f) };
+            if (full) for (float d = 3.2f; d < roomEdge - 2.6f; d += rng.R(4.0f, 5.5f)) stations.Add(d);
+            foreach (float d in stations)
+            {
+                var c = a + dir * d;
+                float floorY = -NestGeometry.FloorDepth(c);
+                float wobble = rng.R(-0.12f, 0.12f);
+                float w = half + 0.35f;
+                Vector2 l = c + side * (w + wobble), r = c - side * (w - wobble);
+                float h = NestGeometry.FloorDepth(c) * rng.R(0.86f, 0.98f);
+                var lean = new Vector3(side.X, 0, side.Y) * rng.R(0.06f, 0.16f);
+                Twig(l, floorY + 0.05f, (Vector3.Up + lean).Normalized(), h, 0.55f, side);
+                Twig(r, floorY + 0.05f, (Vector3.Up - lean).Normalized(), h, 0.55f, -side);
+                var top = (l + r) * 0.5f;
+                Twig(top, floorY + h - 0.2f, new Vector3(side.X, rng.R(-0.04f, 0.04f), side.Y).Normalized(), l.DistanceTo(r) + 0.7f, 0.5f);
+            }
+            if (!full) continue;
+            // stones pressed into the banks on both sides, and the odd root breaking through near the lip
+            for (float d = 0.8f; d < len - 0.5f; d += rng.R(0.9f, 1.7f))
+            {
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    if (rng.F() > 0.55f) continue;
+                    float off = half + rng.R(0.15f, 1.1f);
+                    var at = a + dir * d + side * (sgn * off);
+                    float y = Y(at);
+                    var p = stones[rng.I(0, stones.Count)];
+                    float sz = rng.R(0.5f, 1.3f);
+                    float s = sz / Mathf.Max(0.01f, p.Footprint);
+                    var basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.R(-0.5f, 0.5f)) * Basis.FromScale(Vector3.One * s);
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y - p.Size.Y * s * rng.R(0.3f, 0.55f), at.Y)), side * sgn);
+                }
+                if (roots.Count > 0 && rng.F() < 0.14f)
+                {
+                    var p = roots[rng.I(0, roots.Count)];
+                    int rs = rng.F() < 0.5f ? -1 : 1;
+                    var at = a + dir * d + side * rs * (half + 0.9f);
+                    float y = Y(at) - 0.1f;
+                    float s = rng.R(1.6f, 2.6f) / Mathf.Max(0.01f, p.Longest);
+                    var basis = new Basis(Vector3.Up, dir.Angle() + rng.R(-0.4f, 0.4f)) * new Basis(Vector3.Right, rng.R(-0.3f, -0.05f)) * Basis.FromScale(Vector3.One * s) * p.Lie;
+                    Add(p, new Transform3D(basis, new Vector3(at.X, y, at.Y)), side * rs);
+                }
+            }
+        }
+        foreach (var (piece, list) in batches)
+        {
+            // the shoring's own shader: the scan's maps, a warm fill (it stands above the lamps), and the build-mode fold
+            if (!_mineMats.TryGetValue(piece.Src, out var mat))
+            {
+                var m = new ShaderMaterial { Shader = Shaders.Get(Shaders.Shoring) };
+                m.SetShaderParameter("albedo_tex", NatureAssets.Texture($"tex/{piece.Src}_diff"));
+                m.SetShaderParameter("normal_tex", NatureAssets.Texture($"tex/{piece.Src}_nor"));
+                m.SetShaderParameter("arm_tex", NatureAssets.Texture($"tex/{piece.Src}_arm"));
+                m.SetShaderParameter("tint", ((StandardMaterial3D)piece.Material).AlbedoColor);
+                _mineMats[piece.Src] = mat = m;
+            }
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = piece.Mesh, InstanceCount = list.Count };
+            for (int i = 0; i < list.Count; i++) { mm.SetInstanceTransform(i, list[i].t); mm.SetInstanceCustomData(i, new Color(list[i].side.X, list[i].side.Y, 0, 0)); }
+            root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = mat, CastShadow = full ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off });
+        }
+        MoveToUnderground(root); // lit by the nest's lamps, like everything else dug
     }
 }

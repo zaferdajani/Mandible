@@ -442,7 +442,7 @@ public static class Capture
         for (int i = 0; i < n; i++) await _app.ToSignal(_app.GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
-    static int _abilities;
+    static int _abilities, _skillCasts;
 
     /// Network self-test: --nettest=host[,seconds] or --nettest=join[:address][,seconds].
     /// Two processes play a full AI-vs-AI match over a real ENet connection and compare checksums.
@@ -770,7 +770,11 @@ public static class Capture
             sw.Restart();
             sim.Tick(dt);
             foreach (var ai in ais) ai.Tick(dt);
-            foreach (var e in sim.Events) if (e.Kind is EvKind.WebShot or EvKind.Sweep or EvKind.Sting or EvKind.WarCry or EvKind.AcidBurst or EvKind.DiveBomb or EvKind.Toss or EvKind.Lunge or EvKind.ShellWall) _abilities++;
+            foreach (var e in sim.Events)
+            {
+                if (e.Kind is EvKind.WebShot or EvKind.Sweep or EvKind.Sting or EvKind.WarCry or EvKind.AcidBurst or EvKind.DiveBomb or EvKind.Toss or EvKind.Lunge or EvKind.ShellWall) _abilities++;
+                if (e.Kind is EvKind.Pheromone or EvKind.Frenzy or EvKind.Summon or EvKind.Cloud or EvKind.TrailBlaze or EvKind.TalonDive) _skillCasts++;
+            }
             sw.Stop();
             double ms = sw.Elapsed.TotalMilliseconds;
             total += ms; ticks++;
@@ -811,7 +815,7 @@ public static class Capture
                 {
                     var parts = new System.Collections.Generic.List<string>();
                     for (int i = 0; i < sim.High; i++)
-                        if (sim.Ants[i].Alive && sim.Ants[i].Team == team && Config.IsHero(sim.Ants[i].Type)) parts.Add($"{sim.Ants[i].Type}{sim.Ants[i].Level}");
+                        if (sim.Ants[i].Alive && sim.Ants[i].Team == team && Config.IsHero(sim.Ants[i].Type)) parts.Add($"{sim.Ants[i].Type}{sim.Ants[i].Level}:{sim.Ants[i].Sk0}{sim.Ants[i].Sk1}{sim.Ants[i].Sk2}");
                     return string.Join(",", parts);
                 }
                 var c0 = sim.Col[0]; var c1 = sim.Col[1];
@@ -846,7 +850,7 @@ public static class Capture
                     return $"cap {c.FoodCap:0} rooms {c.Chambers.Count} assigned {diggers} [{string.Join(", ", parts)}]";
                 }
                 GD.Print($"[simtest]    digs black: {Digs(c0)} | red: {Digs(c1)}");
-                GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} wings {c0.T(Upgrade.Wings)}/{c1.T(Upgrade.Wings)} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities}");
+                GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} wings {c0.T(Upgrade.Wings)}/{c1.T(Upgrade.Wings)} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities} skill casts {_skillCasts}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m ants={alive} | black {p.Count[0]}w {p.Count[1]}s {p.Count[2]}m pop {p.PopUsed}/{p.PopCap} food {p.Food:0} gathered {p.Gathered:0} killed {p.Killed} | red {e.Count[0]}w {e.Count[1]}s {e.Count[2]}m pop {e.PopUsed}/{e.PopCap} food {e.Food:0} gathered {e.Gathered:0} killed {e.Killed} | tick avg {total / ticks:0.00}ms worst {worst:0.0}ms");
                 worst = 0;
             }

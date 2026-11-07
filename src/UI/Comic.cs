@@ -16,7 +16,7 @@ public static class Comic
     public static Panel[] For(int id) => _beats.TryGetValue(id, out var p) ? p : null;
     public static Panel[] Ending => _beats[Epilogue];
 
-    public static IEnumerable<Panel> Panels { get { foreach (int id in new[] { 1, 5, 2, 6, 3, 7, 10, 8, 9, 4, 11, 12, Epilogue }) foreach (var p in _beats[id]) yield return p; } }
+    public static IEnumerable<Panel> Panels { get { foreach (int id in Levels.Order) if (_beats.ContainsKey(id)) foreach (var p in _beats[id]) yield return p; foreach (int id in new[] { Epilogue }) foreach (var p in _beats[id]) yield return p; } }
 
     // The art is cinematic, photoreal stills in the game's look, generated with Higgsfield from the game's own hero
     // renders and a gameplay frame as references (prompts and provenance: docs/story-art.md). Captions stay live text.
@@ -24,7 +24,7 @@ public static class Comic
     {
         [1] = new[]
         {
-            new Panel { File = "o1-tube", Caption = "The Glass Queen was carried in a collector's tube, with old Burr, his soldiers and a handful of workers." },
+            new Panel { File = "o1-tube", Caption = "The Glass Queen was carried in a lab tube marked strain M-7, do not release, with old Burr, his soldiers and a handful of workers." },
             new Panel { File = "o2-fall", Caption = "On a woodland path, the backpack pocket gaped open." },
             new Panel { File = "o3-break", Caption = "The glass burst on the stones." },
             new Panel { File = "o4-woods", Caption = "She led her colony out of the wreck and into the woods. The Giant walked on and never looked back." },
@@ -41,13 +41,21 @@ public static class Comic
         {
             new Panel { File = "b-log", Caption = "In a rotting log at the clearing's edge, beetles and spiders had smelled the brood." },
         },
+        [13] = new[]
+        {
+            new Panel { File = "b-web", Caption = "Something had spilled with the tubes. In a spider's web hung a dead queen wasp, and deep inside her, something glowed." },
+        },
+        [14] = new[]
+        {
+            new Panel { File = "b-cocoon", Caption = "The Glass Queen ate the light from Ashling's body, and laid something no ant had ever laid." },
+        },
         [3] = new[]
         {
             new Panel { File = "b-cinder", Caption = "Across the clearing Queen Cinder raised her mound and sent her soldiers out." },
         },
         [7] = new[]
         {
-            new Panel { File = "b-cinder", Caption = "Then the red ants came: hundreds of them, walking the black colony's own trails." },
+            new Panel { File = "b-arrival", Caption = "Then the red ants came: hundreds of them, walking the black colony's own trails." },
             new Panel { File = "b-vetch", Caption = "In the bug country a scout found glass, and beside it, alive, old Vetch." },
         },
         [10] = new[]
@@ -189,7 +197,7 @@ public partial class ComicStrip : Control
     {
         int fs = Settings.Mobile ? 22 : Mathf.Clamp((int)(r.Size.Y / 26), 15, 24);
         float maxW = r.Size.X * 0.62f;
-        var font = UiTheme.Bold;
+        var font = UiTheme.Title; // Cinzel, in the game's gold, like an engraved caption card
         var lines = Wrap(font, text, fs, maxW - 24);
         float lh = fs * 1.25f;
         float w = 0; foreach (var l in lines) w = Mathf.Max(w, font.GetStringSize(l, HorizontalAlignment.Left, -1, fs).X);
@@ -198,7 +206,11 @@ public partial class ComicStrip : Control
         DrawRect(box, new Color(0.08f, 0.045f, 0.02f, 0.82f * k));
         DrawRect(box, new Color(0.78f, 0.58f, 0.28f, 0.9f * k), false, 1.5f);
         for (int i = 0; i < lines.Count; i++)
-            DrawString(font, box.Position + new Vector2(14, 9 + fs + i * lh - fs * 0.2f), lines[i], HorizontalAlignment.Left, -1, fs, new Color(1f, 0.92f, 0.76f, k));
+        {
+            var at = box.Position + new Vector2(14, 9 + fs + i * lh - fs * 0.2f);
+            DrawString(font, at + new Vector2(1, 1), lines[i], HorizontalAlignment.Left, -1, fs, new Color(0.03f, 0.015f, 0.005f, 0.8f * k));
+            DrawString(font, at, lines[i], HorizontalAlignment.Left, -1, fs, new Color(1f, 0.8f, 0.42f, k));
+        }
     }
 
     static List<string> Wrap(Font font, string text, int fs, float width)

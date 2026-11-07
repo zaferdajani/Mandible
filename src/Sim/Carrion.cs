@@ -136,7 +136,7 @@ public sealed partial class Sim
     /// keeps the queen laying faster.
     void StoreRemains(Colony c, AntType from, float loads)
     {
-        float gain = loads * Config.OrganicPerLoad(from) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.FoodBonus(c.Race) : 1f);
+        float gain = loads * Config.OrganicPerLoad(from) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.PredatorOrganic : 1f);
         c.Organic += gain;
         c.OrganicGathered += gain;
         c.ProteinT = Mathf.Min(Config.EffectMax, c.ProteinT + Config.EffectPerDelivery * loads);
@@ -226,6 +226,7 @@ public sealed partial class Sim
             if (!a.Alive || !Eats(a) || !CanEat(a, f)) continue;
             a.FoodTarget = f;
             a.FeastOrder = true;
+            if (a.Team < 2) { f.ClaimTeam = a.Team + 1; f.ClaimUntil = Time + Config.EatClaim; } // our own haulers leave it to them
             a.Goal = f.Pos;
             a.GoalLayer = f.Layer;
             a.State = AntState.Move;
@@ -246,9 +247,10 @@ public sealed partial class Sim
         if (!growing && a.Hp >= a.MaxHp * 0.999f) { a.FoodTarget = null; a.FeastOrder = false; return false; }
         var f = a.FoodTarget;
         if (f != null && !CanEat(a, f)) { f = a.FoodTarget = null; a.FeastOrder = false; }
-        if (f == null && think)
+        if (f != null && !a.FeastOrder && !a.AutoEat) { f = a.FoodTarget = null; } // auto-eat turned off: the kill is left for the workers
+        if (f == null && think && a.AutoEat)
         {
-            f = BestRemains(a.Team, a.Pos, a.Size * 0.5f + 3f, Cannibal(a), a.Layer);
+            f = BestRemains(a.Team, a.Pos, a.Size * 0.5f + 4f, Cannibal(a), a.Layer);
             a.FoodTarget = f;
         }
         if (f == null) { a.FeastT = 0; return false; }
@@ -271,6 +273,7 @@ public sealed partial class Sim
         a.FeastT = 0;
         f.Amount -= 1;
         f.Feasted++;
+        f.LastFeast = Time;
         a.AttackAnim = 1;
         a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Config.FeastHeal * (own ? Config.DevourHeal : 1f));
         Nourish(i, ref a, Config.OrganicPerLoad(f.AntType));
@@ -285,7 +288,7 @@ public sealed partial class Sim
         if (Config.IsHero(a.Type)) { GrantXp(i, organic * Config.HeroXpPerOrganic, true); return; }
         if (!Evolves(a) || a.Stage >= Config.MaxStage) return;
         if (Mission != null && a.Team == Config.Enemy) return; // the campaign's rival keeps the strength its level gives it
-        a.Evo += organic;
+        a.Evo += organic * (a.Team == 0 && Has(0, Mutation.HungryGut) ? Mutations.GutMul : 1f);
         while (a.Stage < Config.MaxStage && a.Evo >= Config.StageCost(a.Stage + 1))
         {
             a.Evo -= Config.StageCost(a.Stage + 1);
@@ -343,45 +346,105 @@ public sealed partial class Sim
         if (CarrionRules && Ticks % 60 == 0) foreach (var c in Col) Recruit(c);
     }
 
-    /// Prey recruitment: a worker that finds big prey runs home laying a trail, and nestmates stream out to it. Here, a
-    /// colony that hauls remains sends foragers to the richest remains any of its ants can see that are short of carriers.
+    /// Prey recruitment and automatic collection. The colony notices fresh remains anywhere within its collection
+    /// radius of the nest (it grows with the workforce), and further out wherever one of its ants can see them. It
+    /// ranks them by value and distance and sends foragers to the best few that are short of carriers. Remains an
+    /// auto-eat fighter has claimed, or that anyone is eating, are left alone. The computer colonies use the same rules.
     void Recruit(Colony c)
     {
         if (!c.Alive || c.Remains != RemainsOrder.Haul) return;
-        int team = c.Team;
+        int team = c.Team, bit = 1 << team;
         var nest = NestEntrance(team);
-        FoodSource prey = null;
-        float best = 0;
+        int workers = 0;
+        for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == team && Ants[i].Type == AntType.Worker) workers++;
+        float radius = Config.CollectRadius(workers);
+        var queue = new List<(float score, FoodSource f)>();
         foreach (var f in W.Food)
         {
             if (f.Kind != FoodKind.Corpse || !f.Alive || f.Layer != 0 || f.Team == team) continue;
+            bool claimed = f.ClaimTeam == team + 1 && f.ClaimUntil > Time;
+            bool eaten = f.Feasted > 0 && Time - f.LastFeast < 3f;
             float d = f.Pos.DistanceTo(nest);
-            if (d > Config.RecruitRange) continue;
             float value = RemainsValue(f);
-            if (value < 1.5f || !Seen(team, f.Pos)) continue;
-            float score = value / (20f + d);
-            if (score > best) { best = score; prey = f; }
+            bool known = d <= radius || d <= Config.RecruitRange && Seen(team, f.Pos);
+            if (claimed || eaten || value < 1.5f || !known) { f.Queued &= ~bit; continue; }
+            queue.Add((value / (20f + d), f));
         }
-        if (prey == null) return;
-        // carriers already on it
-        int already = 0, free = 0, workers = 0;
-        for (int i = 0; i < High; i++)
+        if (queue.Count == 0) return;
+        queue.Sort((x, y) => x.score != y.score ? y.score.CompareTo(x.score) : x.f.Id.CompareTo(y.f.Id));
+        int cap = workers / 3; // the colony keeps most of its foragers on food
+        int crewed = 0;
+        for (int q = 0; q < queue.Count && crewed < Config.CollectAtOnce && cap > 0; q++)
         {
-            ref var a = ref Ants[i];
-            if (!a.Alive || a.Team != team || a.Type != AntType.Worker) continue;
-            workers++;
-            if (a.Assigned == prey || a.FoodTarget == prey) already++;
+            var prey = queue[q].f;
+            int already = 0;
+            for (int i = 0; i < High; i++)
+            {
+                ref var a = ref Ants[i];
+                if (a.Alive && a.Team == team && a.Type == AntType.Worker && (a.Assigned == prey || a.FoodTarget == prey)) already++;
+            }
+            cap -= already;
+            int want = Mathf.Min(Mathf.CeilToInt(prey.Amount), Mathf.Max(Config.HaulNeed(prey.AntType) + 2, 3)) - already;
+            int sent = 0;
+            for (int i = 0; i < High && want > 0 && cap > 0; i++)
+            {
+                ref var a = ref Ants[i];
+                if (!a.Alive || a.Team != team || a.Type != AntType.Worker || a.Layer != 0 || a.Carrying || a.DigP1 > 0) continue;
+                if (a.State != AntState.Forage || a.Pos.DistanceTo(prey.Pos) > Config.RecruitRange) continue;
+                a.Assigned = prey; a.FoodTarget = prey; a.State = AntState.Gather;
+                want--; cap--; sent++;
+            }
+            if (sent > 0) crewed++; // remains already fully crewed do not hold up the next in the queue
+            if ((prey.Queued & bit) == 0 && already + sent > 0)
+            {
+                prey.Queued |= bit;
+                Events.Add(new SimEvent { Kind = EvKind.Collect, Pos = prey.Pos, Team = team, Type = prey.AntType, FoodP1 = prey.Id + 1 });
+            }
         }
-        int want = Mathf.Min(Mathf.CeilToInt(prey.Amount), Mathf.Max(Config.HaulNeed(prey.AntType) + 2, 3)) - already;
-        int cap = workers / 3 - already; // the colony keeps most of its foragers on food
-        for (int i = 0; i < High && want > 0 && cap > 0; i++)
+    }
+
+    /// How far around its nest a colony notices fresh remains on its own (rendering shows it on the Remains page).
+    public float CollectRadius(int team)
+    {
+        int workers = 0;
+        for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == team && Ants[i].Type == AntType.Worker) workers++;
+        return Config.CollectRadius(workers);
+    }
+
+    /// CmdKind.AutoEat: these fighters and generals (and the rest of their squads) eat what they kill, or leave it.
+    public void SetAutoEat(List<int> ids, bool on)
+    {
+        foreach (int id in ids)
         {
-            ref var a = ref Ants[i];
-            if (!a.Alive || a.Team != team || a.Type != AntType.Worker || a.Layer != 0 || a.Carrying || a.DigP1 > 0) continue;
-            if (a.State != AntState.Forage || a.Pos.DistanceTo(prey.Pos) > Config.RecruitRange) continue;
-            a.Assigned = prey; a.FoodTarget = prey; a.State = AntState.Gather;
-            want--; cap--; free++;
+            ref var a = ref Ants[id];
+            if (!a.Alive || !Eats(a)) continue;
+            a.AutoEat = on;
+            if (!on && !a.FeastOrder) { a.FoodTarget = null; a.Feasting = false; }
+            if (a.SquadP1 <= 0) continue;
+            var s = Squads[a.SquadP1 - 1];
+            s.AutoEat = on;
+            foreach (int m in s.Members) { Ants[m].AutoEat = on; if (!on && !Ants[m].FeastOrder) Ants[m].FoodTarget = null; }
         }
+    }
+
+    /// A kill by an auto-eat fighter: the remains are its (and its squad's) to eat, and the haulers keep off for a while.
+    void ClaimKill(int killer, FoodSource f)
+    {
+        if (!EatRules || killer < 0 || !Ants[killer].Alive) return;
+        ref var k = ref Ants[killer];
+        if (!k.AutoEat || !Eats(k) || !CanEat(k, f)) return;
+        bool Hungry(in Ant x) => EvolutionNeed(x) > 0 || x.Hp < x.MaxHp * 0.999f;
+        int eaters = 0;
+        if (Hungry(k) && k.FoodTarget is not { Alive: true }) { k.FoodTarget = f; eaters++; }
+        if (k.SquadP1 > 0)
+            foreach (int m in Squads[k.SquadP1 - 1].Members)
+            {
+                ref var b = ref Ants[m];
+                if (m != killer && b.AutoEat && b.Layer == f.Layer && b.Pos.DistanceTo(f.Pos) < 15f && Hungry(b) && b.FoodTarget is not { Alive: true }) { b.FoodTarget = f; eaters++; }
+            }
+        if (eaters == 0) return;
+        f.ClaimTeam = k.Team + 1;
+        f.ClaimUntil = Time + Config.EatClaim;
     }
 
     /// Whether any ant of the colony stands close enough to these remains to have found them.

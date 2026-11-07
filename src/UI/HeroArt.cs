@@ -92,7 +92,7 @@ public static class HeroStudio
         // the subject: the hero's own mesh and team material, posed for its special
         var holder = new Node3D();
         vp.AddChild(holder);
-        var mesh = AntMesh.Build(hero);
+        var mesh = AntMesh.Build(hero, false, team, AntMesh.Detail.Near);
         var aabb = mesh.GetAabb();
         var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, hero, false);
         mat.SetShaderParameter("detail", 1f);
@@ -109,7 +109,7 @@ public static class HeroStudio
             // wings swung open and held still: x = beat speed 0, y = spread
             holder.AddChild(new MultiMeshInstance3D { Multimesh = One(wings, new Color(0, 0.85f, 0, 0)), MaterialOverride = wm, SortingOffset = 5 });
         }
-        if (hero == AntType.Matron) Venom(holder, team);
+        if (hero == AntType.Matron) Venom(holder, AntMesh.GasterTip(hero, team));
         float floorY = mesh.GetAabb().Position.Y;
 
         Ground(vp, floorY, (uint)hero * 7 + (uint)team);
@@ -157,13 +157,14 @@ public static class HeroStudio
         return img;
     }
 
-    /// Ant shader instance data (see Shaders.Ant): standing idle, head and jaws set for each hero's character.
+    /// Ant shader instance data (see Shaders.Ant): standing idle, head and jaws set for each hero's character, at
+    /// its full mutation tier (target J: every thorn, spur and horn grown in).
     static Color Pose(AntType hero)
     {
         // y = yaw8 * 256 + pitch8: 128 is straight ahead; pitch above 128 looks up
         int yaw8 = 150, pitch8 = hero == AntType.Warlord ? 190 : 150;
         float bite = hero == AntType.Warlord ? 0.98f : hero == AntType.Marshal ? 0.35f : 0.2f; // the war cry: jaws flung wide
-        return new Color(5 + 0.3f, yaw8 * 256 + pitch8, bite, 0);
+        return new Color(5 + 0.3f, yaw8 * 256 + pitch8, bite, 512 * AntRenderer.MutationTier(Config.MaxLevelOf(hero)));
     }
 
     static MultiMesh One(Mesh m, Color custom)
@@ -174,12 +175,10 @@ public static class HeroStudio
         return mm;
     }
 
-    /// The Matron's acid: a bead hanging from the acidopore and a smoking splash on the soil below.
-    static void Venom(Node3D holder, int team)
+    /// The Matron's acid: a bead hanging from the acidopore at the gaster tip (never the mouth) and a smoking splash
+    /// on the soil below.
+    static void Venom(Node3D holder, Vector3 nozzle)
     {
-        // matches AntMesh.HeroRegalia's acidopore: body at y 0.13, gaster centre gz, nozzle 0.175 * gaster behind it
-        float g = 1.85f, bodyY = 0.13f, gz = -0.30f - (g - 1) * 0.12f;
-        var nozzle = new Vector3(0, bodyY - 0.035f, gz - 0.175f * g - 0.105f);
         var acid = new StandardMaterial3D
         {
             AlbedoColor = new Color(0.45f, 0.85f, 0.12f, 0.85f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,

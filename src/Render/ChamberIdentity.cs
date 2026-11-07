@@ -5,7 +5,7 @@ namespace Mandible;
 
 public sealed partial class NestInterior
 {
-    static readonly StandardMaterial3D RipeBerry = new() { AlbedoColor = new Color("791b22"), Roughness = 0.25f, ClearcoatEnabled = true };
+    static readonly StandardMaterial3D RipeBerry = new() { DisableAmbientLight = true, EmissionEnabled = true, EmissionEnergyMultiplier = 0.26f, Emission = new Color("791b22") * new Color(1f, 0.8f, 0.58f), AlbedoColor = new Color("791b22"), Roughness = 0.25f, ClearcoatEnabled = true };
 
     void FillIdentity(Room room, float density)
     {
@@ -49,12 +49,24 @@ public sealed partial class NestInterior
                 // the apron behind her gaster stays bare: that is where each new egg is laid (BroodLife)
                 var (tip, fwd) = GasterTip(room.Team);
                 var apron = tip - fwd * 0.6f - _g.Sim.ChamberPos(room.Team, ch);
-                OrganicScatter(node, Surface.Egg, N(135), _ =>
+                // the nurses keep the eggs in a few heaps beside her, not a ring: piled high in the middle of each,
+                // spilling at the edges, with bare floor between the heaps
+                var heaps = new (Vector2 c, float r)[3];
+                float a0 = rng.R(0, Mathf.Tau);
+                for (int h = 0; h < heaps.Length; h++)
                 {
-                    Vector3 p;
-                    do { p = Bed(0, 0, 3.55f, 2.55f, 0.28f, 0.23f); }
-                    while (new Vector2(p.X / 1.15f, p.Z / 1.3f).LengthSquared() < 1 || new Vector2(p.X, p.Z).DistanceSquaredTo(apron) < 0.95f * 0.95f);
-                    return new Transform3D(Pose(rng.R(1.2f, 1.6f)), p);
+                    float a = a0 + h * Mathf.Tau / 3 + rng.R(-0.5f, 0.5f);
+                    heaps[h] = (new Vector2(Mathf.Cos(a) * 2.35f, Mathf.Sin(a) * 1.75f), rng.R(0.6f, 1.05f));
+                }
+                OrganicScatter(node, Surface.Egg, N(135), i =>
+                {
+                    var (c, r) = heaps[i % heaps.Length];
+                    Vector2 q;
+                    int guard = 0;
+                    do { q = c + new Vector2(rng.R(-1, 1) + rng.R(-1, 1), rng.R(-1, 1) + rng.R(-1, 1)) * 0.5f * r; }
+                    while (guard++ < 40 && (new Vector2(q.X / 1.15f, q.Y / 1.3f).LengthSquared() < 1 || q.DistanceSquaredTo(apron) < 0.95f * 0.95f || new Vector2(q.X / 3.6f, q.Y / 2.6f).LengthSquared() > 1));
+                    float heap = Mathf.Max(0, 1 - q.DistanceTo(c) / (r * 1.1f)) * 0.32f; // eggs stack in the middle of a heap
+                    return new Transform3D(Pose(rng.R(1.1f, 1.65f)), new Vector3(q.X, 0.23f + heap + rng.R(0, 0.06f), q.Y));
                 });
                 OrganicScatter(node, Surface.Resin, N(21), _ =>
                 {

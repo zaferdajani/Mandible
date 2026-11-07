@@ -156,7 +156,7 @@ public static class CarrionValidation
             sim.Col[0].Organic = 50;
 
             // Devour the Fallen: only the fire ants' Warlord eats its own kind
-            var pit = Clear(home + outv * 24 - perp * 24);
+            var pit = Clear(home + outv * 70 - perp * 30); // beyond the black colony's collection ring: its haulers would come for the red dead
             var redDead = Carcass(AntType.Soldier, 1, pit);
             int blackWarlord = sim.Spawn(0, AntType.Warlord, pit + new Vector2(1.4f, 0), 0);
             var blackDead = Carcass(AntType.Soldier, 0, pit + new Vector2(30, 0));

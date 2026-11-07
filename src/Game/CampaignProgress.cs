@@ -25,7 +25,8 @@ public static class CampaignProgress
     public static bool Unlocked(int id)
     {
         int n = Levels.NumberOf(id);
-        return n == 1 || n > 1 && Completed(Levels.IdAt(n - 1));
+        // a chapter won before new chapters were added before it stays open
+        return n == 1 || n > 1 && Completed(Levels.IdAt(n - 1)) || Completed(id);
     }
     /// The furthest chapter this save has opened.
     public static int Frontier { get { int n = 1; for (int k = 2; k <= Levels.Count; k++) if (Unlocked(Levels.IdAt(k))) n = k; return n; } }
@@ -46,6 +47,9 @@ public static class CampaignProgress
 
     /// Evolution by eating, met in its chapter (or any Skirmish or Lane War): the Field Guide's Feeding page.
     public static bool MetEvolution { get { Ensure(); return _openModes || Frontier >= Reveal.Evolution; } }
+
+    /// The mutation track (mutagen, the sixth sense, mutations), met in the Silk Trap: the Field Guide's Mutation page.
+    public static bool MetMutation { get { Ensure(); return Frontier >= Reveal.Mutagen; } }
 
     public static void MetEverything() { Ensure(); if (_openModes) return; _openModes = true; Save(); }
 
@@ -103,6 +107,15 @@ public static class CampaignProgress
         if (next <= 0 || survivors == null || Completed(next)) return;
         _roster[next] = survivors.Save();
         Save();
+    }
+
+    /// The result card's mutation choice: the colony walking into the next chapter takes it (one mutagen). Like the
+    /// roster itself, a chapter already won keeps the colony it began with.
+    public static bool ChooseMutation(int id, ColonyRoster survivors, Mutation m)
+    {
+        if (survivors == null || !survivors.Take(m)) return false;
+        CarryRoster(id, survivors);
+        return true;
     }
 
     /// The comic beat before a level plays once by itself; the map replays it on request.

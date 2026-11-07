@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 
@@ -42,6 +43,7 @@ public partial class Main : Node
             if (a == "--campaign-test") { ColonyValidation.Campaign(this); return; }
             if (a == "--transport-test") { FoodTransportValidation.Run(this); return; }
             if (a == "--carrion-test") { CarrionValidation.Run(this); return; }
+            if (a == "--generaltest") { GeneralValidation.Run(this); return; }
             if (a.StartsWith("--synctest="))
             {
                 Capture.SyncTest(this, float.Parse(a.Substring(11), System.Globalization.CultureInfo.InvariantCulture));
@@ -65,6 +67,7 @@ public partial class Main : Node
             }
         }
         Settings.Load();
+        Settings.ApplyVolume();
         if (_gfx != null && System.Enum.TryParse<Settings.Quality>(_gfx, true, out var gq)) Settings.Gfx = gq;
         if (args.Count == 0) Settings.ApplyDisplay(); // test runs keep the window size they asked for
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
@@ -80,14 +83,20 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--episode=") && int.TryParse(a["--episode=".Length..], out int ep)) StartEpisode(ep); // jump straight into a campaign episode
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--level-capture=")) _ = LevelValidation.Capture(this, a["--level-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--mutation-capture=")) _ = MutationCapture.Run(this, a["--mutation-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--map-capture=")) _ = LevelValidation.MapCapture(this, a["--map-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--tube-capture=")) _ = LevelValidation.TubeCapture(this, a["--tube-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--art-capture=")) _ = ArtValidation.Capture(this, a["--art-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--ant-capture=")) _ = AntValidation.Capture(this, a["--ant-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--gore-capture=")) _ = GoreValidation.Capture(this, a["--gore-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--general-capture=")) _ = GeneralValidation.Capture(this, a["--general-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
+        foreach (var a in args) if (a == "--savetest") SaveValidation.Run(this);
+        foreach (var a in args) if (a.StartsWith("--founding-capture=")) SaveValidation.FoundingCapture(this, a["--founding-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
     }
 
@@ -130,7 +139,7 @@ public partial class Main : Node
         Local.Me = team;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified });
+        Swap(new GameSession { Demo = false, Diff = d, App = this, Fortified = fortified, Seed = TestRun ? 20261031u : (uint)GD.Randi() });
     }
 
     /// Episode 1, the guided colony founding.
@@ -146,12 +155,27 @@ public partial class Main : Node
         Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, Episode = id, Seed = Levels.Info(id).Seed });
     }
 
+    /// Rebuilds a saved single-player game exactly as it began and replays it to the moment it was saved.
+    public void LoadSave(string slot)
+    {
+        var save = SaveGame.Read(slot);
+        if (save == null) { GD.PushWarning($"[save] slot {slot} could not be read"); return; }
+        Local.Me = save.Team;
+        Audio.FadeMusic(1);
+        if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
+        Swap(new GameSession
+        {
+            Demo = false, App = this, Resume = save, Mode = save.Mode, Episode = save.Episode, Seed = save.Seed, Diff = save.Diff,
+            Skirmish = save.Skirmish, Fortified = save.Fortified, Heroes = new[] { save.Hero0, save.Hero1 },
+        });
+    }
+
     public void StartSkirmish(int team = 0)
     {
         Local.Me = team;
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
-        Swap(new GameSession { App = this, Diff = Difficulty.Normal, Skirmish = true });
+        Swap(new GameSession { App = this, Diff = Difficulty.Normal, Skirmish = true, Seed = TestRun ? 20261031u : (uint)GD.Randi() });
     }
 
     /// Starts a Lane War match against the AI: you steer one hero; creeps and guardians fight the lanes.
@@ -216,16 +240,21 @@ public partial class MainMenu : CanvasLayer
         UiTheme.Place(sub, 0, 0, 1, 0, 0, 300, 0, 340);
         _root.AddChild(sub);
 
-        _main = Column(
-            ("Campaign", OpenCampaign),
+        var latest = SaveGame.All();
+        var items = new System.Collections.Generic.List<(string, System.Action)>();
+        if (latest.Count > 0) items.Add(($"Continue  ·  {latest[0].Label}", () => App.LoadSave(latest[0].Slot)));
+        items.Add(("Campaign", OpenCampaign));
+        if (latest.Count > 0) items.Add(("Load game", OpenLoad));
+        _main = Column(items.Concat(new (string, System.Action)[] {
             ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
             ("Colony War", () => { _lanes = false; PickRace(); }),
-            ("Lane War  ·  heroes", () => { _lanes = true; PickRace(); }),
+            ("Lane War  ·  generals", () => { _lanes = true; PickRace(); }),
             ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", OpenGraphics),
             (DisplayLabel(), ToggleDisplay),
-            ("Quit", () => GetTree().Quit()));
+            (Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)"), CycleVolume),
+            ("Quit", () => GetTree().Quit()) }).ToArray());
         _diff = Column(
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
             ("Normal  ·  a fair war", () => Start(Difficulty.Normal)),
@@ -298,10 +327,40 @@ public partial class MainMenu : CanvasLayer
             if (n is Button b && b.Text.StartsWith("Display")) b.Text = DisplayLabel();
     }
 
+    /// The Sound button steps the volume down and wraps from off back to full.
+    void CycleVolume()
+    {
+        Settings.Volume = Settings.Volume <= 0.001f ? 1f : Settings.Volume - 0.2f;
+        Settings.ApplyVolume(save: true);
+        RefreshVolumeLabel();
+    }
+
+    void RefreshVolumeLabel()
+    {
+        if (_main == null) return;
+        foreach (var n in _main.GetChildren())
+            if (n is Button b && b.Text.StartsWith("Sound")) b.Text = Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)");
+    }
+
     public override void _UnhandledKeyInput(InputEvent e)
     {
+        if (e is not InputEventKey { Pressed: true } k) return;
         // F11 also works in the menus
-        if (Visible && e is InputEventKey { Pressed: true, Echo: false } k && k.PhysicalKeycode == Key.F11) ToggleDisplay();
+        if (Visible && !k.Echo && k.PhysicalKeycode == Key.F11) ToggleDisplay();
+        // volume works everywhere, in the menus and in battle: - and = (and the keypad), or the keyboard's media keys
+        float step = k.Keycode switch
+        {
+            Key.Minus or Key.KpSubtract or Key.Volumedown => -Settings.VolumeStep,
+            Key.Equal or Key.Plus or Key.KpAdd or Key.Volumeup => Settings.VolumeStep,
+            _ => 0f,
+        };
+        if (k.Keycode == Key.Volumemute && !k.Echo) step = Settings.Volume > 0.001f ? -1f : 0.8f;
+        if (step == 0f) return;
+        Settings.Volume += step;
+        Settings.ApplyVolume(save: true);
+        RefreshVolumeLabel();
+        App?.Session?.Hud?.Alert(Settings.VolumeLabel(), UiTheme.Dim);
+        GetViewport().SetInputAsHandled();
     }
 
     /// The graphics panel: the four tiers with a line on each, applied to the yard behind the menu as you click.
@@ -391,6 +450,48 @@ public partial class MainMenu : CanvasLayer
         v.AddChild(foot);
         panel.AddChild(v);
         Refresh();
+        _overlay = panel;
+        _root.AddChild(panel);
+    }
+
+    /// Saved games, newest first: the milestone autosave and three slots of your own.
+    void OpenLoad()
+    {
+        _main.Visible = false;
+        CloseOverlay();
+        var panel = new PanelContainer();
+        UiTheme.Place(panel, 0.5f, 0.5f, 0.5f, 0.5f, -380, -300, 380, 300);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 10);
+        var title = UiTheme.Text("LOAD GAME", 34, UiTheme.Title, UiTheme.Gold);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(title);
+        var saves = SaveGame.All();
+        if (saves.Count == 0)
+        {
+            var none = UiTheme.Text("No saved games yet. The game saves itself at every milestone, and you can save any time from the pause menu (Esc).", 16, null, UiTheme.Dim);
+            none.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            none.HorizontalAlignment = HorizontalAlignment.Center;
+            v.AddChild(none);
+        }
+        foreach (var s in saves)
+        {
+            var save = s;
+            var b = new Button { CustomMinimumSize = new Vector2(0, 64), Alignment = HorizontalAlignment.Left };
+            b.Text = $"{(save.Slot == SaveGame.Auto ? "Autosave" : $"Slot {save.Slot}")}  ·  {save.Label}  ·  {save.Clock} played\n{save.When}";
+            b.AddThemeFontSizeOverride("font_size", 17);
+            b.Pressed += () => { App.Audio.Ui("ui_click"); App.LoadSave(save.Slot); };
+            b.MouseEntered += () => App.Audio.Ui("ui_hover");
+            v.AddChild(b);
+        }
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(170, 48) };
+        back.AddThemeFontOverride("font", UiTheme.Title);
+        back.Pressed += () => { App.Audio.Ui("ui_click"); CloseOverlay(); _main.Visible = true; };
+        var foot = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        foot.AddChild(back);
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6) });
+        v.AddChild(foot);
+        panel.AddChild(v);
         _overlay = panel;
         _root.AddChild(panel);
     }
@@ -588,7 +689,7 @@ public partial class Lobby : Control
         v.AddChild(fortRow);
 
         var heroRow = new HBoxContainer();
-        heroRow.AddChild(UiTheme.Text("Lane War hero", 16, UiTheme.Bold, UiTheme.Dim));
+        heroRow.AddChild(UiTheme.Text("Lane War general", 16, UiTheme.Bold, UiTheme.Dim));
         var heroButtons = new System.Collections.Generic.List<Button>();
         foreach (var t in new[] { AntType.Warlord, AntType.Matron, AntType.Marshal })
         {

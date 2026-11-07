@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace Mandible;
@@ -14,6 +15,7 @@ public static class LevelValidation
     /// The colony the next Play/Open carries in (null: the level's own muster). Cleared after use.
     public static ColonyRoster Carry;
     public static ColonyRoster LastHarvest;
+    public static Sim LastSim;
 
     public static Sim Open(Main app, int id, out IColonyAI rival, Perk perks = Perk.None)
     {
@@ -127,8 +129,8 @@ public static class LevelValidation
         var home = s.W.Nests[0].Pos;
         bool marching = false;
         int lastStep = -1, strike = 0;
-        int gatherAt = id switch { 5 => 6, 6 => 99, 7 => 10, 8 => 20, 9 => 28, 10 => 30, 11 => 1, _ => 40 };
-        int queenAt = id switch { 7 => 24, 8 => 34, 9 => 34, 10 => 34, 11 => 1, _ => 34 };
+        int gatherAt = id switch { 5 => 6, 6 => 99, 7 => 10, 8 => 20, 9 => 28, 10 => 30, 11 => 1, 13 => 1, 14 => 18, _ => 40 };
+        int queenAt = id switch { 7 => 24, 8 => 34, 9 => 34, 10 => 34, 11 => 1, 14 => 26, _ => 34 };
         float limit = 2400;
         for (int t = 0; t < limit * 30 && s.Winner < 0; t++)
         {
@@ -137,6 +139,8 @@ public static class LevelValidation
                 Grow(s, id);
                 var army = Army(s);
                 var o = m.Objectives[Math.Min(m.Step, m.Objectives.Count - 1)];
+                // the Silk Trap: the winged ants stay home until they have their stings, as the briefing advises
+                if (id == Reveal.SilkTrapId && m.Step < 4) army.RemoveAll(a => s.Ants[a].Type == AntType.Flyer);
                 if (m.Step != lastStep) { marching = false; lastStep = m.Step; }
                 bool final = o.Kind == Expedition.Obj.KillQueen;
                 if (!(marching && final) && Repel(s, army, o.Kind == Expedition.Obj.Waves ? 60 : 45)) goto tick;
@@ -161,10 +165,39 @@ public static class LevelValidation
                     case Expedition.Obj.KillQueen:
                         // gather a strike force, commit it, and regroup if it is spent before she falls
                         if (!marching && army.Count >= queenAt) { marching = true; strike = army.Count; }
-                        else if (marching && army.Count < Math.Max(3, strike / 4)) marching = false;
+                        else if (marching && army.Count < Math.Max(3, id == 10 ? strike / 2 : strike / 4)) marching = false;
                         if (marching) s.CmdMove(army, s.W.Nests[1].Pos, true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
+                    case Expedition.Obj.Sense:
+                    case Expedition.Obj.Extract:
+                    case Expedition.Obj.Deliver:
+                    {
+                        // the army clears the web (or walks beside the carrier); five workers carve and carry the gland
+                        var gland = m.Gland;
+                        bool carried = gland.Carried;
+                        s.CmdMove(army, carried ? gland.Pos : gland.Pos + (gland.Pos - home).Normalized() * 4, true);
+                        if (o.Kind != Expedition.Obj.Sense && t % 300 == 0)
+                        {
+                            int on = 0;
+                            for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].MutaP1 == gland.Id + 1) on++;
+                            if (on < 4) s.CmdExtract(Workers(s, 5 - on), gland);
+                        }
+                        break;
+                    }
+                    case Expedition.Obj.Mutate:
+                        // the player opens the mutation card and lets the queen consume the mutagen
+                        s.Mutate(0, (Mutation)o.A);
+                        s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
+                        break;
+                    case Expedition.Obj.Larva:
+                    {
+                        // the larva's larder: the army hunts the lairs between raids; the workers haul the remains home
+                        var den = m.Groups.FindIndex(g => g.Exists(b => s.Valid(b.id, b.serial)));
+                        if (den >= 0 && army.Count >= gatherAt && m.WaveBugs.TrueForAll(b => !s.Valid(b.id, b.serial))) s.CmdMove(army, m.GroupPos[den], true);
+                        else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 6, false);
+                        break;
+                    }
                     case Expedition.Obj.Evolve:
                         // bring the army to the nest and feed it from the reserve, as the objective teaches
                         s.CmdMove(army, home, false);
@@ -204,6 +237,7 @@ public static class LevelValidation
         if (m.EndsWithQueen) Check(!s.Col[1].Alive, $"Level {Levels.NumberOf(id)} won without killing the red queen");
         stars = s.Stars();
         LastHarvest = s.HarvestRoster(Levels.NumberOf(id));
+        LastSim = s;
         Check((stars & 1) == 1, "A won level earned no star");
         // the stars match what happened
         for (int k = 0; k < 2; k++)
@@ -356,13 +390,13 @@ public static class LevelValidation
         int soldiers = s.Col[0].Count[(int)AntType.Soldier];
         Close();
         s = Open(app, 10, out _, Perk.Gunner | Perk.Flyer);
-        Check(s.Mission.AllowsResearch(Upgrade.Wings, 1) && s.Mission.AllowsProd(ProdKind.Flyer) && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Level 7");
+        Check(s.Mission.AllowsResearch(Upgrade.Wings, 1) && s.Mission.AllowsProd(ProdKind.Flyer) && s.Mission.AllowsProd(ProdKind.Gunner) && s.Mission.AllowsResearch(Upgrade.Queen, 3), "Early gunner and flyer perks did not reach Act III");
         Close();
         s = Open(app, 3, out _);
         Check(soldiers == s.Col[0].Count[(int)AntType.Soldier], "Perks changed the soldiers without the veteran perk");
         Close();
         s = Open(app, 10, out _);
-        Check(!s.Mission.AllowsProd(ProdKind.Gunner), "Gunners open at Level 7 without stars");
+        Check(!s.Mission.AllowsProd(ProdKind.Gunner), "Gunners open in Act III without stars");
         Close();
         s = Open(app, 3, out _, Perk.Veteran);
         Check(s.Col[0].Count[(int)AntType.Soldier] == soldiers + 6, "The veteran brood perk did not add its squad");
@@ -404,7 +438,7 @@ public static class LevelValidation
                 }
             foreach (Upgrade u in Enum.GetValues(typeof(Upgrade)))
                 Check(m.ShowsResearch(u) == (Reveal.Research(u, u == Upgrade.Queen ? 2 : 1) <= n), $"Chapter {n}: the {u} research card is {(m.ShowsResearch(u) ? "shown" : "hidden")} on the HUD");
-            Check(m.ShowsAnyResearch == (n >= 6), $"Chapter {n}: the Research tab is {(m.ShowsAnyResearch ? "shown" : "hidden")}");
+            Check(m.ShowsAnyResearch == (n >= Reveal.Research(Upgrade.Queen, 2)), $"Chapter {n}: the Research tab is {(m.ShowsAnyResearch ? "shown" : "hidden")}");
             Check(m.ShowsHeroes == (n >= Reveal.Prod(ProdKind.Warlord)), $"Chapter {n}: the Heroes tab is {(m.ShowsHeroes ? "shown" : "hidden")}");
             for (int i = 0; i < s.High; i++)
             {
@@ -415,6 +449,10 @@ public static class LevelValidation
             Check(s.OrganicRules == (n >= Reveal.Organic) && s.EatRules == (n >= Reveal.Evolution) && !s.CarrionRules, $"Chapter {n}: organic matter or eating to evolve on the wrong side of their reveal");
             Check(s.Col[1].Alive == (n >= Reveal.RedColony), $"Chapter {n}: the red colony is {(s.Col[1].Alive ? "present" : "absent")}");
             Check(m.EndsWithQueen == (n >= Reveal.FirstQueenKill && Levels.Info(id).Rival != RivalKind.None), $"Chapter {n}: {(m.EndsWithQueen ? "won" : "not won")} by a queen kill");
+            // the mutation track: what the story has given by this chapter, and the sixth sense from the Silk Trap on
+            Check(s.Has(0, Mutation.Stinger) == (n > Reveal.Mutagen) && s.Has(0, Mutation.RoyalLarva) == (n > Reveal.RoyalLarva), $"Chapter {n}: the story's mutations are wrong ({s.Col[0].Mutations})");
+            Check((s.Nursery(0) != null) == (n > Reveal.RoyalLarva), $"Chapter {n}: the royal nursery is {(s.Nursery(0) != null ? "dug" : "missing")}");
+            if (n > Reveal.RoyalLarva) Check(s.CanEnqueue(0, ProdKind.Warlord) is QueueResult.Ok or QueueResult.HeroExists or QueueResult.NoFood, $"Chapter {n}: the royal larva cannot be laid for a hero");
             foreach (var (name, _) in Reveal.NewIn(n)) introduced.Add(name);
             Close();
         }
@@ -433,6 +471,121 @@ public static class LevelValidation
         CampaignProgress.UsePath("user://campaign.cfg");
         GD.Print($"[campaign-test] PASS gradual reveal: every caste, hero, chamber, research rank and wild bug appears only from its chapter, the Field Guide and star unlocks name only what the save has met; red colony from Chapter {Reveal.RedColony}, first queen kill in Chapter {Reveal.FirstQueenKill}; {introduced.Count} lessons introduced after Chapter 1");
     }
+
+    /// The mutation track: both mutation chapters played by the scripted player (the gland carved, carried home and
+    /// fed to the queen, the stingers on the flyers; the royal larva fed full, the cocoon, the hero), the result card's
+    /// mutation choice carried by the save into the next chapter, instability on the woods, and the losses: the
+    /// larva devoured (retried from the same colony) and the gland dropped by a fallen carrier.
+    public static (float silk, float larva) MutationTimes;
+
+    public static void Mutations(Main app)
+    {
+        const string path = "user://campaign_mutation.cfg";
+        CampaignProgress.UsePath(path); CampaignProgress.Reset();
+        // ---- the Silk Trap
+        Play(app, Reveal.SilkTrapId, out int stars13);
+        var s = LastSim; var m = s.Mission; var c = s.Col[0];
+        MutationTimes.silk = m.EndTime;
+        Check(m.Gland.Home && c.MutagenGathered >= 1, "The gland was not carried home");
+        Check(s.Has(0, Mutation.Stinger) && c.Instability == 1 && c.Mutagen == 0, $"The queen did not take the venom stingers (mutations {c.Mutations}, instability {c.Instability}, mutagen {c.Mutagen})");
+        Check(m.Stings > 0, "No flyer ever stung after the mutation");
+        Check(LastHarvest.Mutations == (int)Mutation.Stinger && LastHarvest.Instability == 1, "The stingers did not walk out of the Silk Trap");
+        GD.Print($"[campaign-test] PASS Silk Trap: gland carved and hauled home, stingers taken (stings {m.Stings}), web spider {(m.MastersSlain > 0 ? "slain" : "left alive")}, colony level {LastHarvest.Level}");
+        // venom: a stinging flyer's strike keeps burning
+        {
+            var t = Open(app, Reveal.SilkTrapId, out _);
+            t.Mutate(0, Mutation.Stinger); // refused: no mutagen in the reserve yet
+            Check(!t.Has(0, Mutation.Stinger), "A mutation was taken without mutagen");
+            t.Col[0].Mutagen = 1; Check(t.Mutate(0, Mutation.Stinger) && !t.Mutate(0, Mutation.FireBlood), "The chapter's mutation was refused, or another one offered");
+            var at = t.W.Nests[0].Pos + new Vector2(30, 30);
+            int fly = t.Spawn(0, AntType.Flyer, at, 0), bug = t.Spawn(Config.Wild, AntType.Beetle, at + new Vector2(0.8f, 0), 0, 3);
+            t.Ants[fly].Alt = t.Ants[bug].Alt;
+            for (int k = 0; k < 90 && t.Ants[bug].PoisonT <= 0; k++) { t.CmdAttack(new List<int> { fly }, bug); t.Tick(1f / 30); }
+            Check(t.Ants[bug].PoisonT > 0, "A stinging flyer's strike did not poison");
+            Close();
+        }
+        // a carrier that falls drops the gland where it stands; another worker takes it up
+        {
+            var t = Open(app, Reveal.SilkTrapId, out _);
+            var g = t.Mission.Gland; g.Done = g.Work;
+            int w = t.Spawn(0, AntType.Worker, g.Pos + new Vector2(0.5f, 0), 0);
+            t.CmdExtract(new List<int> { w }, g);
+            for (int k = 0; k < 30 && !g.Carried; k++) t.Tick(1f / 30);
+            Check(g.Carried, "A worker at a free gland did not take it up");
+            for (int k = 0; k < 60; k++) t.Tick(1f / 30);
+            var dropAt = g.Pos;
+            t.Slay(w);
+            t.Tick(1f / 30);
+            Check(!g.Carried && !g.Home && g.Pos.DistanceTo(dropAt) < 1.5f, "A fallen carrier did not drop the gland where it fell");
+            GD.Print("[campaign-test] PASS loss path: the gland falls with its carrier and waits to be taken up again");
+            Close();
+        }
+        // ---- Ashling's body: the chapter before the Royal Larva gives its mutagen
+        CampaignProgress.Record(Levels.IdAt(Reveal.FirstQueenKill), 1, 900);
+        var afterAshling = new ColonyRoster { QueenTier = 2, Mutations = LastHarvest.Mutations, Instability = LastHarvest.Instability, Level = LastHarvest.Level, Mutagen = 1 };
+        afterAshling.Plain[(int)AntType.Worker] = 14; afterAshling.Plain[(int)AntType.Soldier] = 18; afterAshling.Plain[(int)AntType.Flyer] = 6;
+        CampaignProgress.CarryRoster(Levels.IdAt(Reveal.FirstQueenKill), afterAshling);
+        // ---- the Royal Larva: the loss first (the larva devoured), then the retry from the same colony, won
+        var entering = CampaignProgress.RosterFor(Reveal.RoyalLarvaId);
+        Check(entering != null && entering.Mutagen == 1 && entering.Mutations == (int)Mutation.Stinger, "The Royal Larva did not receive Ashling's mutagen and the stingers");
+        {
+            Carry = entering;
+            var t = Open(app, Reveal.RoyalLarvaId, out var rival);
+            Check(t.Mutate(0, Mutation.RoyalLarva), "The queen did not take the royal larva");
+            var room = t.ChamberOf(0, ChamberKind.Nursery);
+            Check(room != null && !room.Built && t.Col[0].LarvaStage == 1, "The royal larva did not wait for a nursery");
+            room.Done = room.Work; room.Built = true;
+            for (int k = 0; k < 30; k++) t.Tick(1f / 30);
+            Check(t.Col[0].LarvaStage == 2, "The larva did not move into the dug nursery");
+            var nest = t.ChamberPos(0, room);
+            for (int k = 0; k < 6; k++)
+            {
+                int sp = t.Spawn(Config.Wild, AntType.Spider, nest + MathX.Dir(k) * 0.8f, 0, 2);
+                t.Ants[sp].Layer = (byte)Sim.NestLayer(0); t.Ants[sp].Raider = true; t.Ants[sp].State = AntState.Hold;
+            }
+            for (int k = 0; k < 30 * 120 && t.Winner < 0; k++) { rival?.Tick(1f / 30); t.Tick(1f / 30); }
+            Check(t.Winner == 1 && t.Col[0].Alive && t.Mission.LossReason.Contains("larva"), $"Raiders in the nursery did not cost the chapter ({t.Winner}, {t.Mission.LossReason})");
+            GD.Print($"[campaign-test] PASS loss path: {t.Mission.LossReason}");
+            Close();
+        }
+        CampaignProgress.Load();
+        var retry = CampaignProgress.RosterFor(Reveal.RoyalLarvaId);
+        Check(retry != null && retry.Save() == entering.Save() && !CampaignProgress.Completed(Reveal.RoyalLarvaId), "The lost Royal Larva changed the saved colony");
+        Carry = retry;
+        Play(app, Reveal.RoyalLarvaId, out int stars14);
+        s = LastSim; m = s.Mission; c = s.Col[0];
+        MutationTimes.larva = m.EndTime;
+        Check(m.HeroesBorn == 1, "No hero broke out of the cocoon");
+        Check(s.Has(0, Mutation.RoyalLarva) && c.LarvaFed >= 0 && c.Instability == 2, "The royal larva mutation was not kept");
+        var hemlock = LastHarvest.Veterans.Find(v => v.Type == AntType.Warlord);
+        Check(hemlock == null ? c.Count[(int)AntType.Warlord] == 0 : hemlock.Name == "Hemlock", "The hero from the cocoon was not remembered as Hemlock"); // the hero may fall in the assault on the queen
+        Check(LastHarvest.Mutagen == 1 && LastHarvest.Level == retry.Level + 1, $"The red queen's body gave no mutagen or level (mutagen {LastHarvest.Mutagen}, level {LastHarvest.Level})");
+        Check(LastHarvest.Chambers.Contains(ChamberKind.Nursery), "The royal nursery was not carried");
+        GD.Print($"[campaign-test] PASS Royal Larva: larva fed {c.LarvaNeed:0} organic, cocoon hatched, Hemlock born and {(hemlock != null ? "walks on" : "fell in the assault")}; queen's mutagen and colony level {LastHarvest.Level}");
+        // ---- the result card's choice: three cards, the queen's trait first, carried into Queen Cinder
+        CampaignProgress.Record(Reveal.RoyalLarvaId, stars14, m.EndTime);
+        CampaignProgress.CarryRoster(Reveal.RoyalLarvaId, LastHarvest);
+        var offer = global::Mandible.Mutations.Offer(Reveal.RoyalLarvaId, LastHarvest.Mutations);
+        Check(offer.Count == 3 && offer[0] == global::Mandible.Mutations.TraitOf(Reveal.RoyalLarvaId) && !offer.Contains(Mutation.Stinger) && !offer.Contains(Mutation.RoyalLarva), "The mutation cards are wrong");
+        Check(global::Mandible.Mutations.Offer(Reveal.RoyalLarvaId, LastHarvest.Mutations).SequenceEqual(offer), "The mutation cards change between looks");
+        Check(CampaignProgress.ChooseMutation(Reveal.RoyalLarvaId, LastHarvest, offer[0]) && !CampaignProgress.ChooseMutation(Reveal.RoyalLarvaId, LastHarvest, offer[1]), "The choice spent no mutagen, or a second card was taken");
+        CampaignProgress.Load();
+        int cinder = Levels.IdAt(Reveal.RoyalLarva + 1);
+        var intoCinder = CampaignProgress.RosterFor(cinder);
+        Check(intoCinder != null && (intoCinder.Mutations & (int)offer[0]) != 0 && intoCinder.Instability == 3 && intoCinder.Mutagen == 0, "The chosen mutation did not reach the next chapter");
+        Carry = intoCinder;
+        var q = Open(app, cinder, out _);
+        Check(q.Has(0, offer[0]) && q.Col[0].Instability == 3 && (hemlock == null || q.Col[0].Count[(int)AntType.Warlord] > 0), "Queen Cinder did not begin with the mutation, the instability and Hemlock");
+        int wild = -1; for (int i = 0; i < q.High; i++) if (q.Ants[i].Alive && q.Ants[i].Team == Config.Wild) { wild = i; break; }
+        if (wild >= 0) Check(q.Ants[wild].MaxHp > Config.Of(q.Ants[wild].Type).Hp * Config.HpMul(q.Ants[wild].Type, q.Ants[wild].Level) * 1.1f, "Instability did not toughen the woods");
+        Check(q.Col[0].PopCap >= Config.StartPopCap + Global.Slots(intoCinder.Level), "The colony's level added no room");
+        Close();
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
+        CampaignProgress.UsePath("user://campaign.cfg");
+        GD.Print($"[campaign-test] PASS mutation track: cards {string.Join(", ", offer)} (trait first), {offer[0]} chosen and carried into Queen Cinder with instability 3; stars {Count(stars13)} and {Count(stars14)}");
+    }
+
+    static class Global { public static int Slots(int level) => global::Mandible.Mutations.SlotsPerLevel * (level - 1); }
 
     /// `--tube-capture=<dir>`: level 1's broken tube from the opening camera, close up and from the alley.
     public static async System.Threading.Tasks.Task TubeCapture(Main app, string directory)
@@ -602,7 +755,7 @@ public static class LevelValidation
         Check(CampaignProgress.Colour == 0 && CampaignProgress.Emblem == 1, "The colony look ignored its locks or was not saved");
         foreach (int id in Levels.Order) CampaignProgress.Record(id, 7, 500);
         CampaignProgress.Load();
-        Check(CampaignProgress.TotalStars == 36 && CampaignProgress.Next == 0 && CampaignProgress.CompletedCount == 12, "A finished map does not total 36 stars");
+        Check(CampaignProgress.TotalStars == 3 * Levels.Count && CampaignProgress.Next == 0 && CampaignProgress.CompletedCount == Levels.Count, $"A finished map does not total {3 * Levels.Count} stars");
         Check(CampaignProgress.Perks == (Perk.Matron | Perk.Gunner | Perk.Marshal | Perk.Flyer | Perk.Veteran) && Levels.NextUnlock(36) == null, "Every unlock not open at 36 stars");
         CampaignProgress.Choose(3, 4);
         CampaignProgress.Load();

@@ -50,10 +50,10 @@ public sealed partial class Expedition
     {
         ExpeditionStage.ClearTrail => "Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it. Its shell is hard, so attack together.",
         ExpeditionStage.EscortQueen => "With your attackers selected, right-click the food clearing. The queen and workers follow them along the protected trail.",
-        ExpeditionStage.Provision => $"A queen can only found her nest where the colony has stocked both food and remains: everything the tube held was lost in the fall. "
-            + (RemainsLeft ? "Select workers (F3) and right-click the beetle's remains: they carry it to the clearing in jawfuls, and the rest gather seeds there. " : "The others gather seeds. ")
-            + $"Food {StockFood}/{Config.FoundFood:0} · remains {StockOrganic}/{Config.FoundOrganic:0}.",
-        ExpeditionStage.DigEntrance => "Press F3 to select workers, then click Dig entrance below. They will excavate the shaft and royal chamber at the food clearing.",
+        ExpeditionStage.Provision => "A queen can only found her nest where the colony has stocked both food and remains: everything the tube held was lost in the fall. "
+            + "The two bars at the top show what the site still needs. "
+            + (RemainsLeft ? "Workers gather seeds by themselves; send some to the beetle's remains (F3, then right-click them)." : "Workers are gathering: wait for both bars to fill."),
+        ExpeditionStage.DigEntrance => "The site is stocked. Press DIG THE NEST at the top (or Enter): the workers at the clearing dig the shaft and the royal chamber.",
         ExpeditionStage.RoyalChamber => "Workers are excavating. The queen will enter the royal chamber as soon as it is ready.",
         ExpeditionStage.Incubator => "Press N, choose Brood Chamber, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
@@ -155,6 +155,23 @@ public sealed partial class Sim
             var remains = BestRemains(0, Expedition.Ambush, 40f);
             Mission.RemainsLeft = remains != null && !remains.Hauled;
             if (remains != null) Mission.RemainsPos = remains.Pos;
+            // the founders fetch the beetle themselves while the site lacks remains: half the workers haul, half gather seeds
+            // (a player who orders it sooner only speeds it up; nobody gets stuck on a step the game never explained)
+            if (remains != null && c.Organic < Config.FoundOrganic && Ticks % 30 == 0)
+            {
+                int workers = 0, hauling = 0;
+                var free = new List<int>();
+                for (int i = 0; i < High; i++)
+                {
+                    ref var a = ref Ants[i];
+                    if (!a.Alive || a.Team != 0 || a.Type != AntType.Worker) continue;
+                    workers++;
+                    if (a.Assigned == remains) hauling++;
+                    else if (!a.Carrying && a.State is AntState.Forage or AntState.Idle) free.Add(i);
+                }
+                int want = (workers + 1) / 2 - hauling;
+                if (want > 0 && free.Count > 0) CmdGather(free.GetRange(0, System.Math.Min(want, free.Count)), remains);
+            }
             if (CanFound(0)) Mission.Stage = ExpeditionStage.DigEntrance;
         }
         if (Mission.Stage == ExpeditionStage.RoyalChamber && c.Founded && queen.Layer == NestLayer(0) && queen.Pos.DistanceTo(ChamberPos(0, Royal(0))) < 1.4f)

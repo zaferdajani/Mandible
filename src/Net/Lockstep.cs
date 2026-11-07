@@ -13,7 +13,7 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-13"; // 12 the level system and carrion; 13 organic matter and evolution by eating
+    const string Version = "mandible-mp-16"; // 16 everything together for 0.12: general skills (Learn, Cast, SkillAuto), auto-eat, Entrance, mutagen and the royal larva, flyers out of reach, web pins; 12 the level system and carrion; 13 organic matter and evolution by eating
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }

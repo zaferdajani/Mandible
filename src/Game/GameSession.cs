@@ -16,6 +16,8 @@ public partial class GameSession : Node3D
     public Effects Effects;
     public Carnage Gore;
     public Guidance Guide;
+    public MutagenGlow Glow;
+    public MutagenProps Props;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -46,7 +48,7 @@ public partial class GameSession : Node3D
     byte[] _pherPx;
     float _pherAcc, _trailView = 0.18f, _trailTarget = 0.18f;
     bool _paused, _ended;
-    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd;
+    float _combat, _queenAlertCd, _attackAlertCd, _popAlertCd, _levelAlertCd, _collectAlertCd;
     float _demoT;
     DirectionalLight3D _sun;
     /// The one light in the world: a mid-morning sun. Everything, above and below ground, is lit and shadowed by it.
@@ -61,10 +63,21 @@ public partial class GameSession : Node3D
         if (Skirmish) Sim.BeginSkirmish();
         if (!Campaign) CampaignProgress.MetEverything(); // a Skirmish or Lane War shows every caste and bug
         if (Episode > 1) Sim.BeginEpisode(Episode);
-        if (Campaign) { Sim.ApplyRoster(CampaignProgress.RosterFor(Episode), Levels.NumberOf(Episode)); Sim.ApplyPerks(CampaignProgress.Perks); }
+        if (Campaign)
+        {
+            // a loaded game rebuilds the colony that entered the level, not the one saved since
+            var roster = Resume != null ? (Resume.Roster.Length > 0 ? ColonyRoster.Load(Resume.Roster) : null) : CampaignProgress.RosterFor(Episode);
+            var perks = Resume != null ? (Perk)Resume.Perks : CampaignProgress.Perks;
+            RosterAtStart = roster?.Save(); PerksAtStart = (int)perks;
+            Sim.ApplyRoster(roster, Levels.NumberOf(Episode));
+            Sim.ApplyPerks(perks);
+        }
         foreach (var f in World.Food) if (!f.Alive && f.Node != null) f.Node.Visible = false; // the Dry Spell's dried-up food
         CampaignProgress.ApplyLook(!Demo && Local.Me == Config.Player);
-        Orders = Net != null ? Net : new DirectOrders(Sim);
+        // single player keeps a log of the player's orders: with the setup above it is the whole save game
+        if (Net != null) Orders = Net;
+        else if (Demo) Orders = new DirectOrders(Sim);
+        else Orders = Recorder = new RecordingOrders(Sim, new DirectOrders(Sim));
         long tSim = sw.ElapsedMilliseconds;
         Ants = new AntRenderer(this);
         long tAnts = sw.ElapsedMilliseconds;
@@ -73,7 +86,10 @@ public partial class GameSession : Node3D
         Guide = new Guidance(this, World.HF);
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
+        if (Campaign) { Glow = new MutagenGlow(this); Props = new MutagenProps(this); }
         Ants.Brood = Interior;
+        var nestPos = World.Nests[Local.Me].Pos;
+        Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
         BuildLighting();
         if (Lanes) { BuildLaneDressing(); BuildHerdDressing(); BuildStagDressing(); }
         if (Episode == 2) BuildHerdDressing();
@@ -106,6 +122,10 @@ public partial class GameSession : Node3D
         {
             Fog = new FogOfWar(World);
             Ants.VisibleToPlayer = Fog.Visible;
+            FogOverlay.Attach(Camera.Cam, World);
+            // level 1 opens on the trail alone: it is known (dim) before anyone walks it, everything else is black
+            if (Sim.Mission is { Episode: 1 })
+                Fog.Know(p => 1f - Mathf.SmoothStep(3f, 7f, p.DistanceTo(new Vector2(Mathf.Clamp(p.X, 36, 128), Mathf.Clamp(p.Y, 252, 260)))));
             if (Lanes)
             {
                 if (Net == null) _ai.Add(new LaneAI(Sim, Local.Foe, Diff));
@@ -129,12 +149,16 @@ public partial class GameSession : Node3D
             if (Campaign)
             {
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
+                Telepathy = new Telepathy { Game = this };
+                Hud.AddPanel(Telepathy);
                 Hud.Alert(TutorialMode ? Settings.Mobile ? "Level 1: tap Army to select the attackers" : "Level 1: select the attackers with F2" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
                 var beat = Comic.For(Episode);
                 if (beat != null && (ForceStory || !CampaignProgress.StorySeen(Episode) && !App.TestRun))
                 {
                     var info = Levels.Info(Episode);
-                    Hud.ShowStory(beat, $"{Levels.Seasons[info.Season].ToUpperInvariant()}  ·  {Levels.SeasonThemes[info.Season].ToUpperInvariant()}", () => { CampaignProgress.SeeStory(Episode); Hud.ShowBriefing(Episode); });
+                    void Comic() => Hud.ShowStory(beat, $"{Levels.Seasons[info.Season].ToUpperInvariant()}  ·  {Levels.SeasonThemes[info.Season].ToUpperInvariant()}", () => { CampaignProgress.SeeStory(Episode); Hud.ShowBriefing(Episode); });
+                    // the opening cinematic plays before the first chapter's comic (skipped when the build has none)
+                    if (Episode == 1) { SetPaused(true); StoryVideo.Play(Hud, StoryVideo.Opening, Comic); } else Comic();
                 }
                 else Hud.ShowBriefing(Episode);
             }
@@ -148,9 +172,91 @@ public partial class GameSession : Node3D
                 Input.SelectedRoom = Sim.ChamberOf(Local.Me, ChamberKind.Brood).Id;
             }
         }
+        if (Resume != null) ReplaySave(Resume);
+    }
+
+    // ------------------------------------------------------------- save, load, autosave
+    public SaveData Resume;              // set by Main.LoadSave: rebuild this game, then replay it to where it was saved
+    public RecordingOrders Recorder;     // single player only
+    public string RosterAtStart;         // the campaign colony as it entered the level
+    public int PerksAtStart;
+    public bool Restoring { get; private set; }
+    public Telepathy Telepathy { get; private set; } // the Glass Queen's voice in campaign levels
+    float _autosaveCd;
+    int _milestoneMark = -1;
+
+    /// Plays the saved orders back at full speed, tick for tick, exactly as they were first given; the AI
+    /// decides again from the same state, so the result is the same game. The briefing and story are not shown again.
+    void ReplaySave(SaveData save)
+    {
+        Restoring = true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int next = 0;
+        while (true)
+        {
+            while (next < save.Orders.Count && save.Orders[next].Tick <= Sim.Ticks) Recorder.Issue(save.Orders[next++].Cmd);
+            if (Sim.Ticks >= save.Ticks) break;
+            Sim.Tick(TickDt);
+            foreach (var ai in _ai) ai.Tick(TickDt);
+            Sim.Events.Clear(); // no sounds, alerts or effects for what already happened
+            if (Fog != null && Sim.Ticks % 4 == 0) Fog.Update(Sim, 0.13f); // the ground you had explored is explored again
+        }
+        Restoring = false;
+        _milestoneMark = Milestone();
+        Hud?.CloseBriefing();
+        Camera.JumpTo(save.CameraFocus, save.CameraDistance);
+        bool exact = Sim.Checksum() == save.Checksum;
+        GD.Print($"[save] restored {save.Label} at {save.Clock} ({save.Ticks} ticks, {save.Orders.Count} orders) in {sw.ElapsedMilliseconds} ms, {(exact ? "exact" : "CHECKSUM MISMATCH")}");
+        Hud?.Alert(exact ? $"Loaded: {save.Label} · {save.Clock}" : "Loaded, but this save was made by another version and may differ slightly", exact ? UiTheme.Gold : UiTheme.Dim);
+    }
+
+    /// Saves to a slot now (manual saves, and autosaves at milestones). Multiplayer and the menu backdrop never save.
+    public bool SaveTo(string slot)
+    {
+        if (Recorder == null || _ended || Sim.Winner >= 0) return false;
+        bool ok = SaveGame.Write(this, slot);
+        if (ok && slot != SaveGame.Auto) Hud?.Alert($"Saved to slot {slot}", UiTheme.Gold);
+        return ok;
+    }
+
+    /// A number that rises with every real step forward: a campaign objective done, a nest founded, a chamber finished,
+    /// a hero raised, a research tier reached, an enemy queen killed. Autosave happens only when it rises, never on a timer,
+    /// so the save marks the moments the player is proud of and leaves the rest of the session to be played.
+    int Milestone()
+    {
+        if (Recorder == null) return 0;
+        var c = Sim.Col[Local.Me];
+        int n = (Sim.Mission != null ? Sim.Mission.Step * 100 + (int)Sim.Mission.Stage * 1000 : 0) + (c.Founded ? 1 : 0);
+        foreach (var ch in c.Chambers) if (ch.Built) n += 3;
+        for (int u = 0; u < c.Tier.Length; u++) n += c.Tier[u] * 5;
+        for (int i = 0; i < Sim.High; i++) if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Local.Me && Config.IsHero(Sim.Ants[i].Type)) n += 7;
+        if (!Sim.Col[Local.Foe].Alive) n += 10000;
+        return n;
+    }
+
+    void CheckAutosave(float dt)
+    {
+        if (Recorder == null || Restoring || _ended) return;
+        _autosaveCd -= dt;
+        int m = Milestone();
+        if (_milestoneMark < 0) { _milestoneMark = m; return; }
+        if (m <= _milestoneMark || _autosaveCd > 0) return;
+        _milestoneMark = m;
+        _autosaveCd = 15f; // two milestones a moment apart make one save
+        if (SaveTo(SaveGame.Auto)) Hud?.Alert("Progress saved", UiTheme.Dim);
     }
 
     Environment _env;
+    const float SurfaceExposure = 1.05f, NestExposure = 1.6f;
+    float _underT; // 0 = looking at the yard, 1 = looking into the nest; eased over ~0.6 s
+
+    /// Eye adaptation going underground: the exposure rises and falls smoothly as the camera drops into the nest
+    /// (and back), so the dark tunnels stay readable and nothing pops at the entrance.
+    void UpdateExposure(float dt)
+    {
+        _underT = Mathf.MoveToward(_underT, Camera.NestView ? 1f : 0f, dt / 0.6f);
+        _env.TonemapExposure = Mathf.Lerp(SurfaceExposure, NestExposure, Mathf.SmoothStep(0f, 1f, _underT));
+    }
 
     /// One sun, one sky. The ProceduralSkyMaterial draws its sun disc where the DirectionalLight3D points, the
     /// ambient and reflections come from that sky, and the sun is the only light in the scene: every shadow in
@@ -172,7 +278,7 @@ public partial class GameSession : Node3D
             },
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightSkyContribution = 0.6f, AmbientLightColor = new Color(0.78f, 0.68f, 0.56f), // sky fill blended with warm bounce off the sand, so shadows never go blue
-            AmbientLightEnergy = 0.45f,
+            AmbientLightEnergy = 0.34f, // less sky fill: shadows hold their shape and the soil keeps its relief
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Aces,
             TonemapExposure = 1.05f,
@@ -180,18 +286,19 @@ public partial class GameSession : Node3D
             SsaoRadius = 1.2f, SsaoIntensity = 2.2f, SsaoPower = 1.5f, SsaoDetail = 0.8f,
             SsilRadius = 5f, SsilIntensity = 0.45f,
             GlowIntensity = 0.4f, GlowBloom = 0.03f, GlowHdrThreshold = 1.15f,
-            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0011f, FogAerialPerspective = 0.3f, FogSkyAffect = 0.3f,
+            FogEnabled = true, FogLightColor = new Color(0.74f, 0.77f, 0.76f), FogDensity = 0.0005f, FogAerialPerspective = 0.12f, FogSkyAffect = 0.3f, // only the far distance hazes
             // Ultra: a breath of dust in the air that the sun shafts through; set up once, switched by the tier
             VolumetricFogDensity = 0.004f, VolumetricFogAlbedo = new Color(0.95f, 0.9f, 0.82f), VolumetricFogEmission = new Color(0.2f, 0.17f, 0.12f), VolumetricFogEmissionEnergy = 0.02f,
             VolumetricFogAnisotropy = 0.55f, VolumetricFogLength = 180f, VolumetricFogDetailSpread = 1.6f, VolumetricFogAmbientInject = 0.15f, VolumetricFogSkyAffect = 0.2f,
-            AdjustmentEnabled = true, AdjustmentSaturation = 1.1f, AdjustmentContrast = 1.07f, AdjustmentBrightness = 1.0f,
+            AdjustmentEnabled = true, AdjustmentSaturation = 1.12f, AdjustmentContrast = 1.14f, AdjustmentBrightness = 0.98f,
         };
         AddChild(new WorldEnvironment { Environment = _env });
         _sun = new DirectionalLight3D
         {
             LightColor = new Color(1f, 0.94f, 0.84f), LightEnergy = 1.85f, ShadowEnabled = true,
             DirectionalShadowBlendSplits = true, DirectionalShadowFadeStart = 0.85f, DirectionalShadowPancakeSize = 10f,
-            ShadowBias = 0.03f, ShadowNormalBias = 1.6f, ShadowOpacity = 1f,
+            ShadowBias = 0.03f, ShadowNormalBias = 0.9f, ShadowOpacity = 1f, // low normal bias: ant legs meet their shadows
+            LightCullMask = NestInterior.SunMask, // the dug nest is lit by its lamps, never by the sun
         };
         _sun.RotationDegrees = SunAngles;
         AddChild(_sun);
@@ -216,7 +323,7 @@ public partial class GameSession : Node3D
         {
             case Settings.Quality.Low:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits; _sun.DirectionalShadowMaxDistance = 110;
-                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f;
+                _sun.LightAngularDistance = 0f; _sun.ShadowBlur = 0.7f; // phones: hard sun shadows (soft ones cost a fifth of the frame)
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
                 break;
@@ -234,7 +341,7 @@ public partial class GameSession : Node3D
                 break;
             default:
                 _sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits; _sun.DirectionalShadowMaxDistance = 260;
-                _sun.LightAngularDistance = 1.2f; _sun.ShadowBlur = 1.6f;
+                _sun.LightAngularDistance = 1.0f; _sun.ShadowBlur = 1.5f;
                 RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
                 RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftHigh);
                 break;
@@ -529,16 +636,83 @@ public partial class GameSession : Node3D
     {
         int team = Local.Me;
         if (item < 3 && Sim.Items[team, item] >= Lane.MaxItemTier) { Hud.Alert($"{Lane.ItemNames[item]} is fully upgraded", UiTheme.Dim); Audio.Ui("ui_error"); return; }
-        if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your hero is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (item == 3 && Sim.HeroId[team] < 0) { Hud.Alert("Your general is respawning", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (item == 3 && Sim.JellyCd[team] > 0) { Hud.Alert($"The last dose of Royal Jelly is still settling ({Mathf.Ceil(Sim.JellyCd[team]):0}s)", UiTheme.Dim); Audio.Ui("ui_error"); return; }
         if (!Sim.CanBuy(team, item))
         {
-            Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your hero is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
+            Hud.Alert(item == 3 && Sim.HeroId[team] >= 0 && Sim.Ants[Sim.HeroId[team]].Hp >= Sim.Ants[Sim.HeroId[team]].MaxHp ? "Your general is already at full health" : "Not enough food", new Color(1, 0.5f, 0.35f));
             Audio.Ui("ui_error");
             return;
         }
         Issue(new Cmd { Kind = CmdKind.BuyItem, Team = (byte)team, Arg = (byte)item });
         Audio.Ui("research", -4);
+    }
+
+    /// Q / W / E or a skill button: the selected general (Lane War: your hero) uses that skill. Self skills fire at once;
+    /// aimed ones wait for a click on an enemy or a spot (pressing the key again fires on the best target in reach).
+    public void TrySkill(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        var sk = Skills.At(a, slot);
+        if (Sim.Rank(a, slot) == 0)
+        {
+            Hud.Alert(a.Level < Skills.ReqLevel(a, slot, 1) ? $"{Skills.Name(sk)} opens at level {Skills.ReqLevel(a, slot, 1)}" : $"{Skills.Name(sk)} is not learnt yet: press O to spend a skill point", UiTheme.Dim);
+            Audio.Ui("ui_error");
+            return;
+        }
+        float cd = Sim.SkillCd(a, slot);
+        if (cd > 0) { Hud.Alert($"{Skills.Name(sk)} ready in {Mathf.Ceil(cd):0}s", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        if (Skills.Aim(sk) == SkillAim.Passive) { Hud.Alert($"{Skills.Name(sk)} is always on: it works in every bite", UiTheme.Dim); return; }
+        if (Skills.Aim(sk) == SkillAim.Self || Input.Casting(id, slot)) { CastSkill(id, slot, -1, Vector2.Zero); return; }
+        Input.BeginCast(id, slot);
+    }
+
+    /// Sends the cast order: at an ant, at a spot, or (neither) at the best target the general can find.
+    public void CastSkill(int id, int slot, int target, Vector2 at)
+    {
+        var c = new Cmd { Kind = CmdKind.Cast, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { Sim.Ants[id].Serial }, Arg = (byte)slot, P = at };
+        if (target >= 0) { c.Target = target; c.TargetSerial = Sim.Ants[target].Serial; }
+        Issue(c);
+        Audio.Ui("ui_click", -4);
+    }
+
+    /// The fighters and generals among the selection (Lane War: your hero) that can eat remains.
+    public List<int> Eaters()
+    {
+        var ids = new List<int>();
+        if (Lanes) { int h = Sim.HeroId[Local.Me]; if (h >= 0 && Sim.Ants[h].Alive) ids.Add(h); return ids; }
+        foreach (int id in Input.Selection)
+            if (id >= 0 && id < Sim.High && Sim.Ants[id].Alive && Sim.Ants[id].Team == Local.Me && Sim.Eats(Sim.Ants[id])) ids.Add(id);
+        return ids;
+    }
+
+    /// J or the Auto-eat button: the selected fighters (and their squads) eat what they kill, or leave it for the workers.
+    /// Mixed selections all switch on first.
+    public void ToggleAutoEat()
+    {
+        var ids = Eaters();
+        if (ids.Count == 0) { Hud.Alert("Select fighters or a general to set auto-eat", UiTheme.Dim); Audio.Ui("ui_error"); return; }
+        bool allOn = ids.TrueForAll(i => Sim.Ants[i].AutoEat);
+        var c = Cmd.Units(CmdKind.AutoEat, Local.Me, ids, Sim);
+        c.Arg = (byte)(allOn ? 0 : 1);
+        Issue(c);
+        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home to the queen"
+                        : "Auto-eat ON: they eat what they kill and evolve", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
+        Audio.Ui("ui_click", -4);
+    }
+
+    /// Right-click (long press) on a skill button: autocast on or off for the selected general's skill.
+    public void ToggleAutocast(int slot)
+    {
+        int id = Hud.SkillBar?.General() ?? -1;
+        if (id < 0 || Sim.Ants[id].Manual) { Audio.Ui("ui_error"); return; }
+        ref var a = ref Sim.Ants[id];
+        bool on = (a.AutoMask & (1 << slot)) != 0;
+        Issue(new Cmd { Kind = CmdKind.SkillAuto, Team = (byte)Local.Me, Ids = new[] { id }, Serials = new[] { a.Serial }, Arg = (byte)slot });
+        Hud.Alert($"{Skills.Name(Skills.At(a, slot))}: autocast {(on ? "off: it fires only when you order it" : "on")}", UiTheme.Dim);
+        Audio.Ui("ui_click", -4);
     }
 
     /// Lane War: ask the hero to use its ability (it fires on the best target in reach).
@@ -662,8 +836,11 @@ public partial class GameSession : Node3D
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
-        if (!Demo) UpdateGlass(dt);
+        Glow?.Update(dt);
+        Props?.Update(dt);
+        if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
+        Ants.ShowCollect = Hud?.CommandHud?.RemainsPage == true && Sim.Col[Local.Me].Remains == RemainsOrder.Haul;
         Ants.Update(Sim, Camera.Cam, _alpha);
         if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
         Effects.Update(_paused ? 0 : dt);
@@ -673,6 +850,7 @@ public partial class GameSession : Node3D
         if (Demo) DemoCamera(dt);
         if (Lanes) UpdateMounds();
         ConfineMouse();
+        CheckAutosave(dt);
         CheckEnd();
     }
 
@@ -724,7 +902,7 @@ public partial class GameSession : Node3D
                 if (f.Node.Visible) { f.Node.Visible = false; Effects.Burst(World.HF.Point(f.Pos, 0.5f), 10, 2, 3, 0.5f, 0.8f); }
                 continue;
             }
-            f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
+            if (!FoodArt.Update(f)) f.Node.Scale = f.BaseScale * Sim.FoodScale(f);
         }
     }
 
@@ -750,6 +928,7 @@ public partial class GameSession : Node3D
             var wp = World.HF.Point(e.Pos, 0.3f);
             bool seen = Demo || e.Team == Local.Me || Fog == null || Fog.Visible(e.Pos);
             Gore.Event(e, Sim, seen);
+            Telepathy?.OnEvent(e);
             switch (e.Kind)
             {
                 case EvKind.Bite:
@@ -788,6 +967,33 @@ public partial class GameSession : Node3D
                                 $"{Config.StageNames[Mathf.Clamp(e.Tier, 0, 3)]}: {Config.StageGain(e.Tier)}", 4.5f);
                         }
                     }
+                    break;
+                case EvKind.MutagenFree:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The gland is free", "Its glow pulses in the workers' jaws. Get it home: hunters smell it on the move.", 4f);
+                    break;
+                case EvKind.MutagenDropped:
+                    if (e.Team == Local.Me && !Demo) Hud.Alert("The carrier fell: the gland lies on the ground. Send workers to take it up.", new Color(0.85f, 0.7f, 1f));
+                    break;
+                case EvKind.MutagenHome:
+                    if (e.Team == Local.Me && !Demo) { Hud.Banner("Mutagen in the reserve", "The queen can consume it now: the mutation card is on the objectives.", 4.5f); Audio.Ui("research"); }
+                    break;
+                case EvKind.Mutate:
+                    if (e.Team == Local.Me && !Demo)
+                    {
+                        var mu = (Mutation)e.Tier;
+                        Hud.Banner($"The colony mutates: {Mutations.Name(mu)}", Mutations.Text(mu), 6f);
+                        Audio.Ui("victory", -6);
+                        Effects.Marker(wp, new Color(0.78f, 0.6f, 1f), 2.4f);
+                    }
+                    break;
+                case EvKind.Cocoon:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The royal larva spins its cocoon", "It throbs with light, and the raids will grow desperate. Hold the nursery until it bursts.", 5f);
+                    break;
+                case EvKind.HeroBorn:
+                    if (e.Team == Local.Me && !Demo) { Hud.Banner($"A hero breaks out: {Config.Of(e.Type).Name}", "Born from the royal larva. Heroes fight with special moves and grow by eating remains.", 6f); Audio.Ui("levelup"); }
+                    break;
+                case EvKind.LarvaLost:
+                    if (e.Team == Local.Me && !Demo) Hud.Alert("The royal larva has been devoured.", new Color(1f, 0.45f, 0.35f));
                     break;
                 case EvKind.WebShot:
                     if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
@@ -866,7 +1072,10 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.Spit:
                 {
-                    var from = World.HF.Point(e.Pos, 0.8f);
+                    // formicine acid leaves the acidopore: the gaster tip, curled forward under the body (target G7)
+                    float size = Config.Of(e.Type).Size;
+                    var aim = (e.To - e.Pos).LengthSquared() > 1e-6f ? (e.To - e.Pos).Normalized() : Vector2.Right;
+                    var from = World.HF.Point(e.Pos + aim * (0.12f * size), 0.12f * size);
                     var to = World.HF.Point(e.To, 0.5f);
                     if (seen)
                     {
@@ -919,11 +1128,11 @@ public partial class GameSession : Node3D
                     if (seen) { Effects.Burst(wp, 8, 0, 2f, 0.8f, 1f); if (Audible(e.Pos)) Audio.At("spawn", wp, -8, 0.2f); }
                     break;
                 case EvKind.HerdArrives:
-                    if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone hero among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
+                    if (!Demo) { Hud.Alert("An aphid herd has settled in the upper undergrowth. A lone general among them milks honeydew.", new Color(0.8f, 0.95f, 0.55f)); Audio.Ui("ui_ready", -4); }
                     break;
                 case EvKind.HerdMilked:
                     if (!Demo && Campaign) Hud.Alert($"The aphid herd is yours: +{Expedition.HerdFood:0} food. Leave two ants with it for honeydew.", new Color(0.6f, 1f, 0.55f));
-                    else if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your hero milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy hero milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
+                    else if (!Demo) Hud.Alert(e.Team == Local.Me ? $"Your general milked the herd: +{Lane.HerdFood:0} food. The aphids move on." : "The enemy general milked the aphid herd.", e.Team == Local.Me ? new Color(0.6f, 1f, 0.55f) : new Color(1, 0.6f, 0.45f));
                     if (!Demo && e.Team == Local.Me) Audio.Ui("research", -4);
                     break;
                 case EvKind.StagWakes:
@@ -939,7 +1148,107 @@ public partial class GameSession : Node3D
                         Audio.Ui("ui_ready", -4);
                     }
                     break;
+                case EvKind.Collect:
+                    if (!Demo && e.Team == Local.Me && _collectAlertCd <= 0)
+                    {
+                        string what = Config.IsBug(e.Type) ? $"a {Config.Of(e.Type).Name.ToLowerInvariant()} carcass" : $"the remains of an enemy {Config.Of(e.Type).Name.ToLowerInvariant()}";
+                        Hud.Alert($"Workers are bringing home {what}", new Color(0.95f, 0.72f, 0.4f));
+                        _collectAlertCd = 8;
+                    }
+                    break;
+                case EvKind.RallyScent:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos) || e.Team == Local.Me)
+                    {
+                        var rp = World.HF.Point(e.Pos, 0.3f);
+                        Effects.Marker(rp, new Color(1f, 0.6f, 0.25f), e.Radius * 0.8f);
+                        Effects.Burst(rp + Vector3.Up * 0.3f, 16, 2, 1.8f, 0.2f, 1.2f);
+                        if (Audible(e.Pos)) Audio.At("alert", rp, -6, 0.2f, 0.03f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("RALLY SCENT! Nestmates rush to the mark.", new Color(1f, 0.8f, 0.45f));
+                    }
+                    break;
+                case EvKind.Bridge:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("LIVING BRIDGE! Workers lock into a span over the rocks.", new Color(1f, 0.8f, 0.45f));
+                    if (seen && Audible(e.Pos)) Audio.At("swarm", wp, -6, 0.2f, 0.05f, 1.0f);
+                    break;
+                case EvKind.Scout:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert("SCOUT SWARM! The fog lifts and the enemy there is marked.", new Color(1f, 0.8f, 0.45f));
+                    break;
+                case EvKind.Thrall:
+                    if (!Demo && e.Team == Local.Me) Hud.Alert($"THRALL RAID! {e.Tier} stolen brood will serve us as {Config.Of(e.Type).Name.ToLowerInvariant()}s.", new Color(1f, 0.8f, 0.45f));
+                    else if (!Demo) Hud.Alert("Their general has raided our brood!", new Color(1f, 0.5f, 0.35f));
+                    if (seen) Effects.Burst(wp, 24, 0, 3f, 0.4f, 1.0f);
+                    break;
+                case EvKind.SkillLearned:
+                    if (seen) Effects.Burst(wp + Vector3.Up * 0.6f, 20, 2, 3.5f, 0.3f, 1.2f);
+                    break;
+                case EvKind.Pheromone:
+                {
+                    var to = World.HF.Point(e.To, 0.4f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(1f, 0.74f, 0.32f), e.Radius * 0.7f);
+                        Effects.Burst(to + Vector3.Up * 0.4f, 12, 2, 1.6f, 0.18f, 1.0f); // a faint drift of scent, not a cloud
+                        if (Audible(e.To)) Audio.At("research", to, -4, 0.1f, 0.03f, 0.7f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert($"QUEEN'S PHEROMONE! {e.Tier} {(e.Tier == 1 ? "enemy fights" : "enemies fight")} for us.", new Color(1f, 0.8f, 0.4f));
+                        else if (!Demo) Hud.Alert($"Their general's pheromone has turned {e.Tier} of ours!", new Color(1f, 0.5f, 0.35f));
+                    }
+                    break;
+                }
+                case EvKind.Frenzy:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.32f, 0.1f), 2.4f);
+                        Effects.Burst(wp + Vector3.Up * 0.8f, 26, 7, 4f, 0.3f, 1.0f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -2, 0.3f, 0.02f, 0.85f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("MANDIBLE FRENZY! The Warlord drinks what it bites.", new Color(1f, 0.6f, 0.3f));
+                    }
+                    break;
+                case EvKind.Summon:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(0.95f, 0.85f, 0.6f), 3.2f);
+                        Effects.Burst(wp, 40, 0, 3.5f, 0.6f, 1.1f); // soil thrown up as the callows pour out
+                        if (Audible(e.Pos)) Audio.At("swarm", wp, -2, 0.2f, 0.05f, 1.1f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("BROOD CALL! Callows pour out to fight; they harden as they fight.", new Color(1f, 0.85f, 0.5f));
+                    }
+                    break;
+                case EvKind.Fade:
+                    if (seen) Effects.Burst(wp, 10, 0, 1.6f, 0.4f, 0.8f);
+                    break;
+                case EvKind.Cloud:
+                {
+                    var to = World.HF.Point(e.To, 0.5f);
+                    if (Demo || Fog == null || Fog.Visible(e.To) || e.Team == Local.Me)
+                    {
+                        Effects.Marker(to, new Color(0.85f, 0.9f, 0.3f), e.Radius * 0.8f);
+                        Effects.Burst(to + Vector3.Up * 0.6f, 60, 4, 3f, 0.6f, 2.2f);
+                        if (Audible(e.To)) Audio.At("web_land", to, 2, 0.15f, 0.05f, 0.55f);
+                    }
+                    break;
+                }
+                case EvKind.TrailBlaze:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.8f, 0.4f), e.Radius * 0.6f);
+                        if (Audible(e.Pos)) Audio.At("alert", wp, -4, 0.2f, 0.02f, 1.2f);
+                        if (!Demo && e.Team == Local.Me) Hud.Alert("TRAIL BLAZE! The army marches faster and holds its line.", new Color(1f, 0.85f, 0.45f));
+                    }
+                    break;
+                case EvKind.TalonDive:
+                    if (seen)
+                    {
+                        Effects.Marker(wp, new Color(1f, 0.9f, 0.65f), 2f);
+                        Effects.Burst(wp, 30, 0, 6f, 0.9f, 1.0f);
+                        Effects.Burst(wp + Vector3.Up * 0.5f, 18, 7, 4f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("sweep", wp, 6, 0.2f, 0.05f, 0.9f);
+                    }
+                    break;
                 case EvKind.LevelUp:
+                    if (!Demo && e.Team == Local.Me && Config.IsHero(e.Type) && e.Who > 0 && Sim.Ants[e.Who - 1].Alive && Sim.AnyLearnable(Sim.Ants[e.Who - 1]))
+                    {
+                        Hud.Banner($"{Config.Of(e.Type).Name.ToUpperInvariant()}  ·  LEVEL {Sim.Ants[e.Who - 1].Level}", "A new skill point: choose a skill (O)", 3f);
+                        Hud.SkillBar?.OnLevelUp(e.Who - 1);
+                    }
                     if (seen)
                     {
                         Effects.Burst(wp + Vector3.Up * 0.8f, 16, 2, 4.5f, 0.28f, 1.1f);
@@ -991,7 +1300,7 @@ public partial class GameSession : Node3D
                     break;
             }
         }
-        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60;
+        _queenAlertCd -= 1f / 60; _attackAlertCd -= 1f / 60; _popAlertCd -= 1f / 60; _levelAlertCd -= 1f / 60; _collectAlertCd -= 1f / 60;
     }
 
     void UpdateAudio(float dt)
@@ -1044,6 +1353,8 @@ public partial class GameSession : Node3D
         Audio.FadeMusic(0.15f);
         Audio.Ui(win ? "victory" : "defeat");
         Camera.PanTo(World.Nests[win ? Local.Foe : Local.Me].Pos);
-        Hud.ShowEnd(win, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
+        // a won chapter's reward cinematic comes before its result card (skipped when the build has none)
+        if (win && Campaign && !App.TestRun) StoryVideo.Play(Hud, StoryVideo.Reward(Episode), () => Hud.ShowEnd(true, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time));
+        else Hud.ShowEnd(win, Sim.Col[Local.Me], Sim.Col[Local.Foe], Sim.Time);
     }
 }

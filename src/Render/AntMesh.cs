@@ -21,14 +21,97 @@ public static class AntMesh
         public float Head, Mandible, Gaster, Thorax, Leg, Seg;
     }
 
-    /// `far`: the distant-crowd build of a colony caste, with half the rings, four-sided limbs and no setae,
-    /// drawn by the renderer once an ant is far enough from the camera that the detail would be sub-pixel.
-    public static ArrayMesh Build(AntType type, bool far = false)
+    /// How much of the modelled anatomy a mesh carries: Near for close-ups and the cards (setae, claws, tarsal
+    /// segments, mandible teeth), Mid at play zoom, Far for the crowd past AntRenderer.FarDist.
+    public enum Detail { Near, Mid, Far }
+
+    static readonly Dictionary<(AntType, int, Detail), ArrayMesh> Modelled = new();
+    static readonly Dictionary<(AntType, int), Vector3> NeckOfTeam = new();
+    static readonly Dictionary<(AntType, int), Vector3> TipOfTeam = new();
+    static readonly Dictionary<(AntType, int), Vector3> WaistOfTeam = new();
+    static readonly Dictionary<(AntType, int), Texture2D> DetailOfTeam = new();
+
+    /// Where the gaster hangs from the body: it nods about this point as the ant walks, and swings from it to spray.
+    public static Vector3 WaistOf(AntType type, int team)
+    {
+        Build(type, false, team);
+        return WaistOfTeam.TryGetValue((type, team), out var w) ? w : new Vector3(0, 0.14f, -0.105f);
+    }
+
+    /// The normal map baked from the real specimen the caste's body was scanned from, or null.
+    public static Texture2D DetailOf(AntType type, int team)
+    {
+        Build(type, false, team);
+        return DetailOfTeam.TryGetValue((type, team), out var t) ? t : null;
+    }
+
+    /// The head's turning point of a colony's caste (each species' head sits a little differently).
+    public static Vector3 NeckOf(AntType type, int team)
+    {
+        if (NeckOfTeam.TryGetValue((type, team), out var n)) return n;
+        Build(type, false, team);
+        return NeckOfTeam.TryGetValue((type, team), out n) ? n : Neck.GetValueOrDefault(type, new Vector3(0, 0.14f, 0.13f));
+    }
+
+    /// Where the acidopore sits: the tip of the gaster, which a Matron or a gunner curls forward to spray from.
+    public static Vector3 GasterTip(AntType type, int team)
+    {
+        Build(type, false, team);
+        return TipOfTeam.TryGetValue((type, team), out var t) ? t : new Vector3(0, 0.12f, -0.48f);
+    }
+
+    /// The mutation track's models (tools/blender/brood_models.py, targets H3-H5).
+    /// The venom sting of a mutated black flying ant, in the flying ant's model space: draw it with the same transform,
+    /// instance data and material as the ant (its vertices carry the gaster's part, so it nods and curls with it), and
+    /// set "venom_bands" = 1 on that material for the banded gaster tip. Null if the model is missing.
+    public static ArrayMesh Sting() => LoadExtra("lasius_Flyer_sting");
+    /// The royal larva, about 1 unit long with its head at +Z: draw it with RoyalLarvaMaterial at about 4x a larva.
+    public static ArrayMesh RoyalLarva() => LoadExtra("royal_larva");
+    /// The hero's womb cocoon, about 1 unit long: draw it with WombMaterial, the hero inside it, darker, first.
+    public static ArrayMesh WombCocoon() => LoadExtra("womb_cocoon");
+    public static ShaderMaterial RoyalLarvaMaterial() => new() { Shader = Shaders.Get(Shaders.RoyalLarva) };
+    public static ShaderMaterial WombMaterial() => new() { Shader = Shaders.Get(Shaders.Womb) };
+
+    static readonly Dictionary<string, ArrayMesh> Extras = new();
+    static ArrayMesh LoadExtra(string name)
+    {
+        if (Extras.TryGetValue(name, out var m)) return m;
+        string path = $"res://assets/ants/{name}.res";
+        return Extras[name] = ResourceLoader.Exists(path) ? ResourceLoader.Load<ArrayMesh>(path) : null;
+    }
+
+    /// The Blender-modelled ant (tools/blender/ant_models.py, baked by tools/ant-bake.gd), Lasius for the black
+    /// colony and Solenopsis for the red; null when the model is missing, and the code-built ant stands in.
+    static ArrayMesh Model(AntType type, int team, Detail d)
+    {
+        if (Modelled.TryGetValue((type, team, d), out var cached)) return cached;
+        string path = $"res://assets/ants/{(team == 1 ? "solenopsis" : "lasius")}_{type}_{d.ToString().ToLowerInvariant()}.res";
+        var mesh = ResourceLoader.Exists(path) ? ResourceLoader.Load<ArrayMesh>(path) : null;
+        Modelled[(type, team, d)] = mesh;
+        if (mesh != null)
+        {
+            var neck = (Vector3)mesh.GetMeta("neck");
+            NeckOfTeam[(type, team)] = neck;
+            TipOfTeam[(type, team)] = (Vector3)mesh.GetMeta("gaster_tip");
+            if (mesh.HasMeta("waist")) WaistOfTeam[(type, team)] = (Vector3)mesh.GetMeta("waist");
+            if (mesh.HasMeta("detail") && ResourceLoader.Exists((string)mesh.GetMeta("detail")))
+                DetailOfTeam[(type, team)] = ResourceLoader.Load<Texture2D>((string)mesh.GetMeta("detail"));
+            if (team == 0 || !Neck.ContainsKey(type)) Neck[type] = neck;
+        }
+        return mesh;
+    }
+
+    /// `far`: the distant-crowd build of a colony caste, drawn once an ant is far enough from the camera that the
+    /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
+    public static ArrayMesh Build(AntType type, bool far = false, int team = 0, Detail? detail = null)
     {
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
         if (type == AntType.Spider) return Spider();
         if (type == AntType.Wasp) return Wasp();
+        var model = Model(type, team == 1 ? 1 : 0, detail ?? (far ? Detail.Far : Detail.Mid));
+        if (model != null) return model;
+        far = far || detail == Detail.Far;
         Shape s = type switch
         {
             AntType.Soldier => new Shape { Head = 1.35f, Mandible = 1.45f, Gaster = 1.0f, Thorax = 1.05f, Leg = 1.0f, Seg = 14 },
@@ -532,7 +615,8 @@ public static class AntMesh
         var pairs = wasp
              ? new[] { (0.09f, 0.48f, 0.12f, 0.35f), (0.03f, 0.34f, 0.09f, 0.55f) }
             : type == AntType.Marshal
-             ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f) }
+             // the mutant general (target J): a third, smaller pair behind the two an ant has
+             ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f), (-0.01f, 0.42f, 0.1f, 0.55f) }
             : new[] { (0.09f, 0.62f, 0.14f, 0.25f), (0.04f, 0.46f, 0.11f, 0.4f) };
         float hy = wasp ? 0.3f : type == AntType.Marshal ? 0.25f : 0.22f;
         foreach (var (hz, len, wid, sweep) in pairs)

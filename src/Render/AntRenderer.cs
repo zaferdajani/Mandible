@@ -78,6 +78,9 @@ public sealed class AntRenderer
     /// The rank and file far from the camera: the same material on a mesh with half the detail, no shadow.
     readonly Batch[,] _far = new Batch[3, 13];
     public const float FarDist = 62f;
+    /// Ants this near the camera get the full anatomy: setae, claws, tarsal segments, mandible teeth.
+    readonly Batch[,] _close = new Batch[3, 13];
+    public const float CloseDist = 26f;
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
     float _now, _lastNow = -1;
@@ -122,15 +125,21 @@ public sealed class AntRenderer
     readonly Batch[,] _pieceCargo = new Batch[3, 3]; // carcass pieces in a worker's jaws: head, gaster, legs × black, red, bug chitin
     readonly Batch _rings, _bars, _evoBars;
     readonly Batch _auraGround, _auraHalo;
+    readonly Batch[] _insignia = new Batch[3]; // the generals' royal seals: bronze (levels 1-3), gold (4-7), red-gold (8-10)
+    readonly Batch _haze;
+    readonly Batch _drops, _collectRing, _queuedRing; // auto-eat drops over ants; the collection radius; remains queued for collection
+    /// Set by the HUD while the Remains page is open: draw the colony's collection radius.
+    public bool ShowCollect;                       // Queen's Pheromone: the scent film under a borrowed ant
     readonly Dictionary<int, (float cd, float flare)> _aura = new(); // per hero: last cooldown seen, cast flare 0..1
     internal int VisibleCargoCount { get { int n = 0; foreach (var b in _cargo) n += b.Count; foreach (var b in _pieceCargo) n += b.Count; return n; } }
     public Func<Vector2, bool> VisibleToPlayer = _ => true;
     public bool ShowAllBars;
 
-    static readonly Color[] Body = { new(0.028f, 0.025f, 0.024f), new(0.42f, 0.11f, 0.04f) };
-    static readonly Color[] HeadC = { new(0.034f, 0.03f, 0.028f), new(0.46f, 0.13f, 0.05f) };
-    static readonly Color[] GasterC = { new(0.022f, 0.02f, 0.019f), new(0.10f, 0.035f, 0.025f) };
-    static readonly Color[] LegC = { new(0.07f, 0.05f, 0.04f), new(0.48f, 0.18f, 0.08f) };
+    // Lasius niger: a warm brown-black with browner legs; Solenopsis: reddish amber over a dark brown gaster (target G)
+    static readonly Color[] Body = { new(0.11f, 0.075f, 0.05f), new(0.24f, 0.085f, 0.03f) };
+    static readonly Color[] HeadC = { new(0.1f, 0.07f, 0.047f), new(0.27f, 0.095f, 0.035f) };
+    static readonly Color[] GasterC = { new(0.09f, 0.064f, 0.044f), new(0.085f, 0.035f, 0.022f) };
+    static readonly Color[] LegC = { new(0.16f, 0.11f, 0.07f), new(0.32f, 0.12f, 0.055f) };
 
     // wild bugs: body, head, shell/abdomen, legs per species
     static readonly Dictionary<AntType, Color[]> BugColors = new()
@@ -167,13 +176,15 @@ public sealed class AntRenderer
             for (int t = 0; t < 13; t++)
             {
                 if ((team == Config.Wild) != Config.IsBug((AntType)t)) continue;
-                var mesh = AntMesh.Build((AntType)t);
+                var mesh = AntMesh.Build((AntType)t, false, team);
                 var mat = AntMat(shader, team, (AntType)t, false);
                 var dmat = AntMat(shader, team, (AntType)t, true);
                 _live[team, t] = new Batch(root, mesh, mat, true, $"Ants{team}_{t}");
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
                 if (team != Config.Wild && !Config.IsHero((AntType)t) && t != (int)AntType.Queen)
-                    _far[team, t] = new Batch(root, AntMesh.Build((AntType)t, true), mat, false, $"Far{team}_{t}");
+                    _far[team, t] = new Batch(root, AntMesh.Build((AntType)t, true, team), mat, false, $"Far{team}_{t}");
+                var near = team == Config.Wild ? null : AntMesh.Build((AntType)t, false, team, AntMesh.Detail.Near);
+                if (near != null && near != mesh) _close[team, t] = new Batch(root, near, mat, true, $"Close{team}_{t}");
             }
         ApplyQuality();
         // translucent wings for every flyer, beating in their own batch
@@ -216,6 +227,26 @@ public sealed class AntRenderer
         var haloMat = new ShaderMaterial { Shader = auraShader };
         haloMat.SetShaderParameter("billboard", 1f);
         _auraHalo = new Batch(root, new QuadMesh { Size = Vector2.One }, haloMat, false, "HeroAuraHalo");
+        var insigniaShader = Shaders.Get(Shaders.Insignia);
+        for (int k = 0; k < 3; k++)
+        {
+            var m = new ShaderMaterial { Shader = insigniaShader, RenderPriority = 1 }; // after the soil (drawn in the transparent pass)
+            m.SetShaderParameter("tex", GD.Load<Texture2D>($"res://assets/insignia/insignia_{k + 1}.png"));
+            m.SetShaderParameter("gems", k == 2 ? 1f : 0f);
+            m.SetShaderParameter("lift", k == 0 ? 1.5f : 1f);
+            if (k == 0) { m.SetShaderParameter("tint", new Vector3(0.9f, 0.74f, 0.55f)); m.SetShaderParameter("relief", 11f); }
+            _insignia[k] = new Batch(root, new PlaneMesh { Size = Vector2.One }, m, false, $"Insignia{k + 1}");
+            _insignia[k].Node.SortingOffset = 2;
+        }
+        _drops = new Batch(root, new QuadMesh { Size = Vector2.One }, new ShaderMaterial { Shader = Shaders.Get(Shaders.Drop) }, false, "AutoEatDrops");
+        _drops.Node.SortingOffset = 101;
+        var wide = new ShaderMaterial { Shader = Shaders.Get(Shaders.Circle), RenderPriority = 1 };
+        wide.SetShaderParameter("width", 0.006f);
+        _collectRing = new Batch(root, new PlaneMesh { Size = Vector2.One }, wide, false, "CollectRadius");
+        var tight = new ShaderMaterial { Shader = Shaders.Get(Shaders.Circle), RenderPriority = 1 };
+        tight.SetShaderParameter("width", 0.045f);
+        _queuedRing = new Batch(root, new PlaneMesh { Size = Vector2.One }, tight, false, "QueuedRemains");
+        _haze = new Batch(root, new PlaneMesh { Size = Vector2.One }, new ShaderMaterial { Shader = Shaders.Get(Shaders.Haze), RenderPriority = 1 }, false, "PheromoneHaze");
         var barMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Bar) };
         _bars = new Batch(root, new QuadMesh { Size = Vector2.One }, barMat, false, "Bars");
         _bars.Node.SortingOffset = 100;
@@ -239,6 +270,7 @@ public sealed class AntRenderer
                 var cast = !small || Settings.SmallAntShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
                 _live[team, t].Node.CastShadow = cast;
                 _dead[team, t].Node.CastShadow = cast;
+                if (_close[team, t] != null) _close[team, t].Node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
             }
     }
 
@@ -264,12 +296,29 @@ public sealed class AntRenderer
             m.SetShaderParameter("leg_color", LegC[team]);
             m.SetShaderParameter("accent", Accent[team]);
             if (Config.IsHero(type)) m.SetShaderParameter("hero", 1f);
+            // the Warlord's scarred rugose cuticle, a major's coarser sculpture
+            m.SetShaderParameter("sculpture", type switch { AntType.Warlord => 0.3f, AntType.Major => 0.15f, AntType.Soldier => 0.11f, _ => 0.08f });
             if (type == AntType.Matron || type == AntType.Gunner) m.SetShaderParameter("acid", type == AntType.Matron ? new Color(0.35f, 0.75f, 0.08f) : new Color(0.18f, 0.4f, 0.05f));
         }
-        if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
+        if (team != Config.Wild)
+        {
+            m.SetShaderParameter("neck", AntMesh.NeckOf(type, team));
+            m.SetShaderParameter("waist", AntMesh.WaistOf(type, team));
+            var detail = AntMesh.DetailOf(type, team);
+            if (detail != null) { m.SetShaderParameter("detail_normal", detail); m.SetShaderParameter("has_detail", 1f); }
+        }
+        else if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;
     }
+
+    /// How much larger than life an ant is drawn at this camera distance: 1 up close (the macro view and the cards),
+    /// rising to 1.9 by the usual play zoom.
+    /// A general's mutation tier (target J): its thorns, spurs and horns grow in at
+    /// levels 4, 7 and 10. Heroes do not evolve by eating, so the tier travels in the instance's evolution-stage slot.
+    public static int MutationTier(int level) => level >= 10 ? 3 : level >= 7 ? 2 : level >= 4 ? 1 : 0;
+
+    public static float PlayScale(float camDist) => 1f + 0.9f * Mathf.SmoothStep(18f, 45f, camDist);
 
     public static Basis Orient(Vector3 up, float heading, float scale)
     {
@@ -282,18 +331,20 @@ public sealed class AntRenderer
     public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
         foreach (var b in _live) b?.Begin();
+        foreach (var b in _close) b?.Begin();
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
         foreach (var cargo in _cargo) cargo.Begin();
         foreach (var cargo in _broodCargo) cargo.Begin();
         foreach (var cargo in _pieceCargo) cargo.Begin();
-        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin();
+        _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin(); _drops.Begin(); _collectRing.Begin(); _queuedRing.Begin();
         foreach (var w in _wings.Values) w.Begin();
         _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camUp = cam.GlobalTransform.Basis.Y.Normalized();
-        var camPos = cam.GlobalPosition;
+        var camPos = (cam.GetViewport()?.GetCamera3D() ?? cam).GlobalPosition; // the camera actually drawing (a capture may use its own lens)
+        _camPos = camPos;
         var cam2 = new Vector2(camPos.X, camPos.Z);
         int labelsUsed = 0;
         _now = Time.GetTicksMsec() * 0.001f;
@@ -328,7 +379,7 @@ public sealed class AntRenderer
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
             // underground ants stand on the gallery floor at their depth below the mound
-            float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.Depth;
+            float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.FloorDepth(ip - sim.W.Nests[layer - 1].Pos);
             if (layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
             if (callow.Active)
             {
@@ -344,26 +395,37 @@ public sealed class AntRenderer
             if (a.Root > 0) amp = 0.35f; // struggling in silk
             if (callow.Active) amp = callow.Amp;
             float camDist = camPos.DistanceTo(o);
+            // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
+            // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
+            float show = PlayScale(camDist), size = st.Size * show;
+            if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
             data.A += 4 * callow.Pale;
-            var farBatch = _far[a.Team, (int)a.Type];
+            // a Brood Call summons is a callow: pale and soft at first, darkening as its cuticle hardens
+            if (a.Summoned && !callow.Active) data.A += 4 * Mathf.RoundToInt(15 * Mathf.Clamp(0.85f - 0.8f * (a.Level - 1 + a.HardenT / Skills.HardenEvery) / Mathf.Max(1, a.SummonCap - 1), 0.05f, 0.85f));
+            int look = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team; // a borrowed ant keeps its own colony's body
+            var farBatch = _far[look, (int)a.Type];
+            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[look, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
             if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
-            else _live[a.Team, (int)a.Type].Add(b, o, data);
-            if (flies && _wings.TryGetValue((a.Team, a.Type), out var wb))
+            else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
+            else _live[look, (int)a.Type].Add(b, o, data);
+            if (a.CharmP1 > 0)
+                _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
+            if (flies && _wings.TryGetValue((look, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
-                _cocoons.Add(Orient(up, ih, st.Size * 1.05f), o + up * (0.13f * st.Size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
+                _cocoons.Add(Orient(up, ih, size * 1.05f), o + up * (0.13f * size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (a.Carrying && a.Type == AntType.Worker)
             {
                 if (a.Burying)
                 {
                     // a dead nestmate held crosswise in the jaws, legs curled, carried out to the midden
-                    var body = Orient(up, ih + Mathf.Pi * 0.5f, st.Size * 0.8f);
+                    var body = Orient(up, ih + Mathf.Pi * 0.5f, size * 0.8f);
                     body = new Basis(-body.X, -body.Y, body.Z);
                     var fwd = new Vector3(Mathf.Cos(ih), 0, Mathf.Sin(ih));
                     var dead = Config.HaulNeed(a.CarryType) == 0 && !Config.IsBug(a.CarryType) ? a.CarryType : AntType.Worker;
-                    AddDead(a.CarryTeam, dead, body, o + fwd * (st.Size * 0.5f) + up * (st.Size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
+                    AddDead(a.CarryTeam, dead, body, o + fwd * (size * 0.5f) + up * (size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
                 }
                 else if (a.CarryKind == FoodKind.Corpse)
                     // a piece of the carcass: a head, a gaster or a bundle of legs, in the chitin it came from
@@ -373,25 +435,28 @@ public sealed class AntRenderer
                     // load clamped in its jaws on slopes, in tunnels and while turning.
                     _cargo[(int)a.CarryKind].Add(b, o, data);
             }
-            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, st.Size, camPos, rdt);
-            if (a.Selected)
-                _rings.Add(Basis.FromScale(Vector3.One * st.Size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
+            if (Config.IsHero(a.Type) && a.Team < 2) HeroAura(i, a, o, new Vector3(o.X, gy + 0.05f, o.Z), up, ih, size, camPos, rdt);
+            if (a.Selected && !Config.IsHero(a.Type)) // a general's insignia is its selection mark
+                _rings.Add(Basis.FromScale(Vector3.One * size * 1.25f), o + up * 0.05f, new Color(1, 0, 0, 0));
             bool wild = a.Team == Config.Wild;
-            float barY = st.Size * 0.55f + 0.5f;
+            float barY = size * 0.55f + 0.5f;
             if (a.Selected || (ShowAllBars && a.DamagedT > -6) || (a.Type == AntType.Queen && a.Hp < a.MaxHp * 0.98f) || (wild && a.Hp < a.MaxHp * 0.99f))
             {
                 var tc = Config.TeamUi(a.Team);
-                float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, st.Size * 1.0f);
+                float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
                 if (sim.EatRules && sim.Eats(a))
                     _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
+            // auto-eat: a drop of hemolymph over our own ants that will eat their kills
+            if (a.AutoEat && a.Team == Local.Me && sim.EatRules && a.CharmP1 == 0)
+                _drops.Add(Basis.FromScale(Vector3.One * Mathf.Clamp(0.32f + st.Size * 0.08f, 0.4f, 0.62f)), o + Vector3.Up * (barY + 0.15f) + camRight * (Mathf.Max(1.1f, st.Size) * 0.5f + 0.35f), new Color(0.95f, 0, 0, 0));
             // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
             int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
             if (ranks > 0)
             {
-                float pip = Mathf.Clamp(0.3f + st.Size * 0.1f, 0.38f, 0.6f);
+                float pip = Mathf.Clamp(0.3f + size * 0.1f, 0.38f, 0.6f);
                 var top = o + Vector3.Up * (barY + 0.45f);
                 for (int p = 0; p < ranks; p++)
                 {
@@ -468,6 +533,54 @@ public sealed class AntRenderer
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
             _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
+        // Living Bridge: workers of the colony lying head to tail across the span, legs locked
+        foreach (var br in sim.Bridges)
+        {
+            if (br.Team > 1 || (!VisibleToPlayer(br.A) && !VisibleToPlayer(br.B) && br.Team != Local.Me)) continue;
+            var ab = br.B - br.A;
+            float len = ab.Length(), yaw = ab.Angle();
+            int n = Mathf.Max(2, (int)(len / 0.95f));
+            float fade = Mathf.Clamp(br.Life / 1.0f, 0, 1) * Mathf.Clamp((br.Max - br.Life) * 3f, 0, 1);
+            for (int k = 0; k < n && k < n * fade + 1; k++)
+            {
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    var p = br.A + ab * ((k + 0.5f) / n) + MathX.Dir(yaw + DMath.Pi * 0.5f) * (side * 0.35f);
+                    float h = hf.Sample(p.X, p.Y);
+                    foreach (var o in sim.W.ObstaclesNear(p)) if (o.R > 0 && p.DistanceTo(o.P) < o.R) h = Mathf.Max(h, hf.Sample(o.P.X, o.P.Y) + o.R * 0.6f * (1 - p.DistanceTo(o.P) / o.R));
+                    var bb = Orient(Vector3.Up, yaw + (k % 2 == 0 ? 0.08f : -0.08f), 1.0f);
+                    AddWorker(br.Team, bb, new Vector3(p.X, h + 0.12f, p.Y), Pack(k * 7 + side, 0, 0, 0, 0, 0.2f, false, 0), 0);
+                }
+            }
+        }
+        // Scout Swarm: winged scouts circling the marked ground
+        foreach (var z in sim.Scouts)
+        {
+            if (z.Team > 1 || _live[z.Team, (int)AntType.Flyer] == null) continue;
+            for (int k = 0; k < z.Flyers; k++)
+            {
+                float ang = sim.Time * 0.7f + k * DMath.Tau / z.Flyers;
+                var p = z.Pos + MathX.Dir(ang) * (z.R * 0.6f);
+                var fo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 5f + 0.4f * Mathf.Sin(sim.Time * 2f + k), p.Y);
+                var fb = Orient(Vector3.Up, ang + DMath.Pi * 0.5f, Config.Of(AntType.Flyer).Size);
+                _live[z.Team, (int)AntType.Flyer].Add(fb, fo, Pack(k, 0, sim.Time * 3f + k, 0, 0, 1f, false, 0));
+                if (_wings.TryGetValue((z.Team, AntType.Flyer), out var swb)) swb.Add(fb, fo, new Color(36f, 1f, 0, 0));
+            }
+        }
+        // remains our workers have been sent to bring home: a slowly turning amber ring around each
+        foreach (var f in sim.W.Food)
+        {
+            if (f.Kind != FoodKind.Corpse || !f.Alive || (f.Queued & (1 << Local.Me)) == 0 || f.Layer != 0) continue;
+            var qo = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.08f, f.Pos.Y);
+            _queuedRing.Add(Basis.FromScale(new Vector3(f.Radius * 2.6f + 1.4f, 1, f.Radius * 2.6f + 1.4f)), qo, new Color(0.95f, 0.6f, 0.2f, 0.6f));
+        }
+        if (ShowCollect && Local.Me < 2)
+        {
+            var nest = sim.NestEntrance(Local.Me);
+            float r = sim.CollectRadius(Local.Me);
+            var no = new Vector3(nest.X, hf.Sample(nest.X, nest.Y) + 0.3f, nest.Y);
+            _collectRing.Add(Basis.FromScale(new Vector3(r * 2, 1, r * 2)), no, new Color(0.95f, 0.62f, 0.22f, 0.65f));
+        }
         foreach (var z in sim.Webs)
         {
             if (!VisibleToPlayer(z.Pos)) continue;
@@ -490,56 +603,73 @@ public sealed class AntRenderer
         }
         Brood?.DrawNurses(this);
         foreach (var b in _live) b?.End();
+        foreach (var b in _close) b?.End();
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
         foreach (var cargo in _pieceCargo) cargo.End();
-        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End();
+        _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End(); _drops.End(); _collectRing.End(); _queuedRing.End();
         foreach (var w in _wings.Values) w.End();
         _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
     }
 
-    /// Each level a hero gains shifts its aura one step along this ramp, from a pale gold recruit to a radiant legend.
+    /// Each level a general gains warms its seal and halo one step: aged bronze, brass, gold, red-gold, and at the top a
+    /// deep royal amber. Warm metals only: the owner's palette has no greys and no cold colours.
     public static readonly Color[] AuraLevel =
     {
-        new(0.95f, 0.84f, 0.55f), new(1f, 0.7f, 0.25f), new(1f, 0.5f, 0.14f), new(0.98f, 0.27f, 0.13f), new(0.92f, 0.16f, 0.42f),
-        new(0.74f, 0.22f, 0.9f), new(0.46f, 0.32f, 1f), new(0.22f, 0.56f, 1f), new(0.2f, 0.92f, 0.86f), new(1f, 0.96f, 0.82f),
+        new(0.72f, 0.52f, 0.3f), new(0.8f, 0.58f, 0.32f), new(0.88f, 0.65f, 0.34f), new(1f, 0.78f, 0.36f), new(1f, 0.82f, 0.4f),
+        new(1f, 0.85f, 0.45f), new(1f, 0.88f, 0.52f), new(1f, 0.62f, 0.34f), new(1f, 0.55f, 0.28f), new(1f, 0.5f, 0.2f),
     };
-    /// The colour of each hero's special, which the aura blends toward when it is cast.
+    /// The colour of each general's signature special, which the halo blends toward when it is cast.
     public static Color AuraAbility(AntType t) => t switch
     {
-        AntType.Warlord => new Color(1f, 0.34f, 0.08f), AntType.Matron => new Color(0.45f, 1f, 0.15f), _ => new Color(0.55f, 0.82f, 1f),
+        AntType.Warlord => new Color(1f, 0.34f, 0.08f), AntType.Matron => new Color(0.85f, 0.9f, 0.25f), _ => new Color(1f, 0.85f, 0.55f),
     };
 
-    /// A faint aura under and around a hero, in its level's colour. It breathes while the special is ready, and
-    /// flares toward the special's colour when the hero casts (the cooldown jumping back up).
-    void HeroAura(int i, in Ant a, Vector3 o, Vector3 ground, Vector3 up, float size, Vector3 camPos, float rdt)
+    /// Insignia tier for a general's level: 0 bronze (1-3), 1 gold (4-7), 2 red-gold with amber (8-10); and how rich within it.
+    public static int InsigniaTier(int level) => level >= 8 ? 2 : level >= 4 ? 1 : 0;
+    public static float InsigniaRich(int level) => level >= 8 ? (level - 8) / 2f : level >= 4 ? (level - 4) / 3f : (level - 1) / 2f;
+
+    /// Under a general: its royal insignia on the soil, crown forward, richer with every level; above, a faint warm halo
+    /// that breathes while a skill is ready and flares when one is cast (any cooldown jumping back up).
+    void HeroAura(int i, in Ant a, Vector3 o, Vector3 ground, Vector3 up, float heading, float size, Vector3 camPos, float rdt)
     {
         _aura.TryGetValue(i, out var s);
-        if (a.AbilityCd > s.cd + 1f) s.flare = 1f;
+        float cdSum = a.AbilityCd + a.CdW + a.CdE;
+        if (cdSum > s.cd + 1f) s.flare = 1f;
         s.flare = Mathf.Max(0, s.flare - rdt * 0.7f);
-        s.cd = a.AbilityCd;
+        s.cd = cdSum;
         _aura[i] = s;
         float flare = s.flare * s.flare * (3 - 2 * s.flare); // smooth fade out
-        float ready = a.AbilityCd <= 0 ? 0.5f + 0.5f * Mathf.Sin(_now * 2.6f + i) : 0f;
-        var col = AuraLevel[Mathf.Clamp(a.Level, 1, AuraLevel.Length) - 1].Lerp(AuraAbility(a.Type), flare * 0.75f);
-        float level01 = (Mathf.Clamp(a.Level, 1, Config.HeroMaxLevel) - 1f) / (Config.HeroMaxLevel - 1f);
-        float strength = 0.24f + 0.14f * level01 + 0.1f * ready + 0.85f * flare;
-        // the pool of light stays on the soil even under a flier
-        _auraGround.Add(Orient(up, 0, size * (1.55f + 0.3f * level01 + 1.2f * flare)), ground, new Color(col.R, col.G, col.B, strength * 0.8f));
+        int lv = Mathf.Clamp(a.Level, 1, Config.HeroMaxLevel);
+        bool ready = a.AbilityCd <= 0 || a.Sk1 > 0 && a.CdW <= 0 || a.Sk2 > 0 && a.CdE <= 0;
+        float breathe = ready ? 0.5f + 0.5f * Mathf.Sin(_now * 2.6f + i) : 0f;
+        float level01 = (lv - 1f) / (Config.HeroMaxLevel - 1f);
+        int tier = InsigniaTier(lv);
+        float seal = size * (1.15f + 0.1f * tier); // about the old selection ring: a seal under the general, not a stage
+        // the crown always points up the screen, like a coat of arms, whatever way the general turns
+        var look = new Vector2(o.X - camPos.X, o.Z - camPos.Z);
+        float upright = look.LengthSquared() > 0.01f ? look.Angle() : heading;
+        _insignia[tier].Add(Orient(up, upright, seal), ground + up * 0.01f,
+            new Color(InsigniaRich(lv), a.Selected ? 1f : 0f, flare, 1f));
+        var col = AuraLevel[lv - 1].Lerp(AuraAbility(a.Type), flare * 0.75f);
+        float strength = 0.08f + 0.08f * level01 + 0.05f * breathe + 0.6f * flare;
         // the halo sits just behind the body, so it rims the silhouette rather than washing over it
         var away = (o - camPos).Normalized();
-        _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.7f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
-            new Color(col.R, col.G, col.B, strength * 0.75f));
+        _auraHalo.Add(Basis.FromScale(Vector3.One * size * (1.6f + 0.3f * level01 + 0.9f * flare)), o + Vector3.Up * size * 0.3f + away * size * 0.45f,
+            new Color(col.R, col.G, col.B, strength));
     }
 
     /// A dead body or a piece of one (Carnage): the colony's or the bug's own dead material.
     internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data)
     {
         var batch = _dead[Math.Clamp(team, 0, 2), (int)type];
-        batch?.Add(b, o, data);
+        // the dead are drawn as large as the living around them
+        float show = PlayScale(_camPos.DistanceTo(o));
+        batch?.Add(show > 1.001f ? new Basis(b.X * show, b.Y * show, b.Z * show) : b, o, data);
     }
+    Vector3 _camPos;
 
     /// A render-only worker (a nurse in the nest) drawn with the colony's own, and the brood in its jaws (1 egg, 2 larva).
     internal void AddWorker(int team, in Basis b, in Vector3 o, in Color data, int brood)
@@ -657,7 +787,7 @@ public sealed class AntRenderer
         flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
         if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
         float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
-        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(a.Stage, 0, 3);
+        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(Config.IsHero(a.Type) ? MutationTier(a.Level) : a.Stage, 0, 3);
         if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }

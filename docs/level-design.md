@@ -1,4 +1,4 @@
-# Level design: twelve levels under the grass
+# Level design: fourteen chapters under the grass
 
 This is the study and the plan behind Mandible's level system: twelve levels telling one story in four acts, one to
 three stars per level from optional goals, and unlocks earned with stars. It sits on top of the campaign
@@ -116,28 +116,30 @@ copied: no level, name, character or text from any of these games appears in Man
 
 ## 4. The level plan: one story in four acts
 
-The owner's premise holds the levels together. A collector carries a glass tube of black garden ants in his backpack: a queen (the **Glass Queen**), her eldest soldier **Burr** and his soldiers, a handful of workers, and the old Acid Matron **Vetch**. The tube falls out on a woodland path and breaks, and the queen leads her colony into the woods. Every level is a chapter of their survival.
+The owner's premise holds the levels together. A researcher carries a batch of lab tubes in his backpack; one holds black garden ants of a modified strain (label: *Lasius niger, strain M-7, do not release*): a queen (the **Glass Queen**), her eldest soldier **Burr** and his soldiers, a handful of workers, and the old Acid Matron **Vetch**. The batch falls out on a woodland path and breaks, spilling the mutagen it carried as well, and the queen leads her colony into the woods. Every level is a chapter of their survival.
 
-The rival is the red fire ants' royal line: the young queen **Ashling**, then her mother **Queen Cinder**, then Cinder's mother, the **Ember Empress**. They do not appear as an opponent until Act II. Act I is survival after the tube, and the red ants are only hinted at: a strange scent trail, a dead red ant in the grass, a silent line of red ants watching from the hollow log. Their arrival at the start of Act II is the campaign's first cliffhanger. The rival queen kills are the climaxes, and the first comes only in Chapter 5. The **Hornet Mother** is a recurring menace who comes herself in Act III. Burr becomes the colony's first hero, its Warlord, in the middle of the campaign, and Vetch is found again on the Matron's Road. Story text lives in `Levels.Intro`/`Outro`; the story panels before each level are in `src/UI/Comic.cs` and `docs/story-art.md`.
+The rival is the red fire ants' royal line: the young queen **Ashling**, then her mother **Queen Cinder**, then Cinder's mother, the **Ember Empress**. They do not appear as an opponent until Act II. Act I is survival after the tube, and the red ants are only hinted at: a strange scent trail, a dead red ant in the grass, a silent line of red ants watching from the hollow log. Their arrival at the start of Act II is the campaign's first cliffhanger. The rival queen kills are the climaxes, and the first comes only in Chapter 6. The **Hornet Mother** is a recurring menace who comes herself in Act III. The colony's first hero, the Warlord **Hemlock**, breaks out of a royal cocoon in Chapter 7 (old Burr stays the soldier he always was), and Vetch is found again on the Matron's Road. Story text lives in `Levels.Intro`/`Outro`; the story panels before each level are in `src/UI/Comic.cs` and `docs/story-art.md`.
 
-"Ep" marks a re-slotted PR #6 episode. The internal scenario ids stay 1-4 so their code does not move, and new levels use ids 5-12. The order on the map is the table below (`Levels.Order`).
+"Ep" marks a re-slotted PR #6 episode. The internal scenario ids stay 1-4 so their code does not move, and new levels use ids 5-12, and the two mutation chapters ids 13 and 14. The order on the map is the table below (`Levels.Order`).
 
 | # | Act | Level | Novelty | Rival | Win | Star goals (2nd, 3rd) |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | I · The Broken Tube | **The First Nest** (Ep 1) | the hunt, remains, founding, workers | - | hunt the beetle, stock the site with seeds and its remains, found the nest and hatch the first workers | under 9:00 · lose no more than 3 ants |
 | 2 | I | **Sweet Rain** | soldiers, food effects, storm deadline | - (a dead red ant: the first hint) | fill the galleries before the storm | under 9:00 · carry home all four kinds of food |
 | 3 | I | **The Hollow Log** | majors, spiders, raids led by an old wolf spider | - (red ants watch: the cliffhanger) | break every raid | lose no more than 30 ants · queen never below 70% |
-| 4 | II · Red Neighbours | **The Matron's Road** | the red colony arrives; escort Vetch home | young | bring Vetch home and break the red raid | under 15:00 · Vetch lives to the end |
-| 5 | II | **The Foraging Season** (Ep 2) | the aphid herd, a lair raid, the first queen kill | Ashling | kill Ashling | under 18:00 · every step before she falls |
-| 6 | II | **Queen Cinder** (Ep 3) | research, scouting, an outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
-| 7 | III · Hard Times | **The Hornet Mother** | heroes (Burr becomes the Warlord), wasps, a boss with her own nest | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
-| 8 | III | **The Dry Spell** | economy puzzle: the lairs are the larder | grown | kill the red queen | under 26:00 · clear all three lairs first |
-| 9 | III | **Wings and Acid** | flyers, gunners, watch posts shield the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
-| 10 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
-| 11 | IV | **The Long March** | time pressure: eight minutes, one army | awake | kill the mound's queen before the seal | under 4:00 · lose no more than 60 ants |
-| 12 | IV | **The Ember Empress** | the finale: every tool against an awake Empress | awake, shielded | kill the Ember Empress | under 25:00 · queen never below 50% |
+| 4 | II · Strange Blood | **The Matron's Road** | the red colony arrives; escort Vetch home | young | bring Vetch home and break the red raid | under 15:00 · Vetch lives to the end |
+| 5 | II | **The Silk Trap** (new, id 13) | mutagen, the sixth sense, winged ants, the first mutation (venom stingers) | young (passive scouts) | carve the queen wasp's gland out of the web, haul it home, feed it to the queen, sting the red raid | under 14:00 · slay the web spider |
+| 6 | II | **The Foraging Season** (Ep 2) | the aphid herd, a lair raid, the first queen kill; her body glows | Ashling | kill Ashling | under 18:00 · every step before she falls |
+| 7 | II | **The Royal Larva** (new, id 14) | the hero mutation: nursery, nurses, the gauge, the cocoon, the first hero (Hemlock); mutation cards | young (Cinder's scouts) | raise the larva into a hero, guard the cocoon, kill the scouts' queen | under 21:00 · no raider ever wounds the larva |
+| 8 | II | **Queen Cinder** (Ep 3) | research, scouting, an outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
+| 9 | III · Hard Times | **The Hornet Mother** | wasps, a boss with her own nest (Hemlock leads) | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
+| 10 | III | **The Dry Spell** | economy puzzle: the lairs are the larder; evolution by eating | grown | kill the red queen | under 26:00 · clear all three lairs first |
+| 11 | III | **Wings and Acid** | wings research (hatching flyers), gunners, watch posts shield the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
+| 12 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
+| 13 | IV | **The Long March** | time pressure: eight minutes, one army | awake | kill the mound's queen before the seal | under 4:00 · lose no more than 60 ants |
+| 14 | IV | **The Ember Empress** | the finale: every tool against an awake Empress | awake, shielded | kill the Ember Empress | under 25:00 · queen never below 50% |
 
-The curve: 1 (gentle) → 2 (breather) → 3 (defence) → 4 (the red arrival, escort) → 5 (first queen kill) → 6 (peak) → 7 (boss, first hero) → 8 (puzzle) → 9 (new castes) → 10 (peak) → 11 (blitz) → 12 (finale).
+The curve: 1 (gentle) → 2 (breather) → 3 (defence) → 4 (the red arrival, escort) → 5 (mutation puzzle, a boss you may avoid) → 6 (first queen kill) → 7 (defence and the first hero) → 8 (peak) → 9 (boss) → 10 (puzzle) → 11 (new castes) → 12 (peak) → 13 (blitz) → 14 (finale). The two mutation chapters sit in Act II around the first queen kill: the Silk Trap is a change of pace after the escort and before Ashling, and the Royal Larva follows her death directly, because her glowing body is the mutagen that pays for the hero. The red colony still arrives at Chapter 4.
 
 ### Build the game up gradually
 
@@ -157,14 +159,18 @@ Each chapter's briefing lists what it introduces, and that chapter's objectives 
 | 2 | soldiers | | | food effects |
 | 3 | majors | | spiders | raids down the shaft |
 | 4 | Vetch (escort) | | the red colony | escort |
-| 5 | | | | the queen kill |
-| 6 | | royal jelly (Matriarch), Mandible Forge and Chitin Armory rank 1 | | research |
-| 7 | the first hero raised: Burr as Warlord | | wasps, the Hornet Mother | heroes |
-| 8 | | Silk Cutters | | lairs as larders, evolution by eating |
-| 9 | flying ants, acid gunners | wings, Empress, Forge and Armory rank 2 | | wings |
-| 10 | | every remaining rank | the Old Stag | |
+| 5 | winged ants (given, not yet hatched) | | the web spider (a nest master) | mutagen, the sixth sense, the first mutation (venom stingers) |
+| 6 | | | | the queen kill (her body holds mutagen) |
+| 7 | the first hero: Hemlock, from the royal larva | the royal nursery | | the royal larva, heroes, mutation cards, colony level, instability |
+| 8 | | royal jelly (Matriarch), Mandible Forge and Chitin Armory rank 1 | | research |
+| 9 | | | wasps, the Hornet Mother | |
+| 10 | | Silk Cutters | | lairs as larders, evolution by eating |
+| 11 | hatching flying ants, acid gunners | wings, Empress, Forge and Armory rank 2 | | wings |
+| 12 | | every remaining rank | the Old Stag | |
 
-Star perks never break the rule early: the Acid Matron, the Sky Marshal, early gunners and early flyers open no sooner than Act III (Chapter 7). ### The opening chapter: hunt, remains, founding
+Star perks never break the rule early: the Acid Matron, the Sky Marshal, early gunners and early flyers open no sooner than Act III (Chapter 9).
+
+### The opening chapter: hunt, remains, founding
 
 The tube's fall lost everything the colony carried. Chapter 1 opens with no food and no organic matter, and it plays as follows:
 
@@ -187,7 +193,7 @@ PR #8's burial, midden and morale (`Sim.CarrionRules`) stay outside the campaign
 
 A rival keeps the queen rank its level gives it. The levels are tuned on her, and remains would otherwise let a raiding rival ascend on the player's dead.
 
-**Evolution by eating** (`Sim.EatRules`) is the Dry Spell's lesson (Chapter 8). After the lairs are hunted and the feast hauled home, its objective is **Feed a fighter**: bring a squad to the nest and feed it from the reserve, or right-click remains with it, until one fighter evolves.
+**Evolution by eating** (`Sim.EatRules`) is the Dry Spell's lesson (Chapter 10). After the lairs are hunted and the feast hauled home, its objective is **Feed a fighter**: bring a squad to the nest and feed it from the reserve, or right-click remains with it, until one fighter evolves.
 
 From then on, fighters that eat evolve through three stages, and with them come the guide arrow over remains, the Remains order tab and the Field Guide's Feeding page. The colony's save carries each fighter's stage.
 
@@ -213,18 +219,18 @@ The campaign follows one colony from the broken tube to the Empress's chamber (`
 
 The level map is a cut through the Glass Queen's nest. Level 1 is the first chamber below the entrance, and each act is a stratum of earth, darker and deeper than the last. The Ember Empress is the deepest, widest chamber. Ants walk the dug galleries. Locked chambers are still undug soil, and won chambers keep a keepsake of their level (a shard of the tube, a honeydew drop, a captured red banner) along with their stars. The palette is warm earth and amber throughout, with no grey.
 
-### Unlocks (36 stars in all)
+### Unlocks (42 stars in all; the last unlock is at 36)
 
 | Stars | Unlock | Kind |
 | --- | --- | --- |
 | 3 | Clover emblem | cosmetic |
 | 6 | Ember colony colour | cosmetic |
-| 9 | Acid Matron can be raised from Level 7 on | hero |
+| 9 | Acid Matron can be raised from a royal larva from Level 9 on | hero |
 | 12 | Raspberry emblem | cosmetic |
-| 15 | Acid gunners from Level 7 on (the story opens them at Level 9) | caste |
+| 15 | Acid gunners from Level 9 on (the story opens them at Level 11) | caste |
 | 18 | Saffron colony colour | cosmetic |
-| 21 | Sky Marshal can be raised from Level 7 on | hero |
-| 24 | Flying ants from Level 7 on | caste |
+| 21 | Sky Marshal can be raised from a royal larva from Level 9 on | hero |
+| 24 | Hatching flying ants from Level 9 on (the story opens it at Level 11) | caste |
 | 27 | Stag Crest emblem | cosmetic |
 | 30 | Rosewood colony colour | cosmetic |
 | 33 | Veteran brood: every level starts with an extra veteran squad | perk |
@@ -234,7 +240,100 @@ The colony colour tints your ants' crest and trim and your selection, minimap an
 the level map, the briefing and the result card. Unlocks affect only your own colony and are fixed when a level
 starts, so the sim stays deterministic (they enter `Expedition.Perks` before the first tick).
 
-## 5. How it is built
+## 5. Mutation: the second track
+
+The owner's design (2026-11-04). The tube ants are a lab-modified strain, M-7, bred to take up mutagen without limit. The researcher's batch broke with them, and the creatures that fed on the spill carry mutagen in their bodies. That is why this colony can mutate at all, and why the woods grow more dangerous as it does.
+
+Two tracks grow the colony, and they never mix:
+
+- **Evolution** (unchanged): organic matter eaten makes single ants and the queen stronger (`src/Sim/Carrion.cs`).
+- **Mutation** (`src/Sim/Mutation.cs`): **mutagen** is found only in special bodies (dead queens, nest masters, rare bosses). It glows faintly and pulses. Workers carve it out (`CmdKind.Extract`, four at a time), carry it home at 45% pace while hunters within 32 units come for the glow, and the queen consumes it from the reserve (`CmdKind.Mutate`) to give the colony things real ants do not have. Mutagen has its own counter and icon on the objective card (`src/UI/MutationHud.cs`) and its own slot in the save.
+- **The sixth sense**: every ant within 60 units feels a source through the fog; it shows as a pulsing violet-green ripple (`Sim.Senses`, `src/Render/MutagenGlow.cs`).
+- **Colony level**: every queen or nest master the colony defeats raises it (from Ashling on, plus the web spider if slain). Each level adds 4 population room and 3% health to every fighter.
+- **Instability**: every mutation adds one. Each point gives wild predators 4% and the rival strain 1.5% more health (harder to kill, not deadlier: with bite as well, the tuned lair fights of later chapters collapsed).
+
+### The mutations
+
+| Mutation | Where it comes from | Effect |
+| --- | --- | --- |
+| Venom Stingers | the queen wasp in the web (fixed, Chapter 5) | flyers gain a sting: +10% bite, and every strike injects venom (55% of the blow over 4 s) |
+| The Royal Larva | Ashling's body (fixed, Chapter 7) | the queen can lay a royal larva in its own nursery: the campaign's only way to a hero |
+| Fire Blood | the fire ants' venom (Cinder's line) | soldiers' and majors' bites burn for 3 s |
+| Hornet Wings | the Hornet Mother | flyers 30% faster and 25% tougher |
+| Iron Chitin | the sealed mound's queen | every fighter +15% health |
+| Regrowth | (pool) | ants mend 1% health a second away from a fight |
+| Hungry Gut | the Dry Spell's starving queen | fighters evolve on 60% more from every mouthful |
+| Acid Blood | the queen behind the watch posts | a fallen fighter leaves a pool of acid |
+| Swift Brood | the nuptial flight's mother | the queen lays 20% faster |
+| Web Throwing | the silk spitter's spinneret (fixed, Chapter 9; later cards raise its rank) | soldiers fling silk that pins flying enemies to the ground for every ant to bite. Rank 1: one flyer pinned for 3 s within 8 units; rank 2: two, 4.5 s, 10 units; rank 3: three, 6 s, 12 units; a 9 s cooldown |
+
+From the Royal Larva on, every queen kill yields one mutagen, and the result card offers **one of three cards**: the dead queen's own trait first, then two others the colony lacks, in an order seeded by the chapter (a replay offers the same three). The choice goes into the colony that walks into the next chapter (`CampaignProgress.ChooseMutation`); skipping it banks the mutagen for the next card. Mutations, mutagen, level and instability live in the persistent roster (a fifth part of `[colony] enterN`; older saves load as level 1 with no mutations), so a lost chapter retries with exactly the mutations it began with.
+
+### Chapter 5, The Silk Trap
+
+A dead queen wasp hangs in a spider's web on the far flank, and the glow is inside her. The colony has its first winged daughters (6 flyers; hatching more waits for Wings and Acid). The red scouts' mound is across the yard but passive.
+
+1. **Follow the sixth sense** until an ant is within sensing range of the web.
+2. **Carve out the gland.** The web spider (level 4, the nest master) sits at the hub 6.5 units above the wasp; a younger spider guards a strand. Fight it, lure it off with soldiers, or slip workers past it (wild hunters only snap at workers that come within 6 units). Four workers carve for 9 s.
+3. **Haul it home.** The carrier staggers at 45% pace and hunters on the way come for it; if the carrier falls, the gland lies where it fell for the next worker.
+4. **Feed it to the queen** with the mutation card on the objective card. Flyers grow venom stingers at once.
+5. **Sting the red raid**: the scouts smelled the change, and ten raiders come for the shaft.
+
+Stars: under 14:00, slay the web spider (which also raises the colony's level).
+
+### Chapter 7, The Royal Larva
+
+Ashling's body is the mutagen. Feeding it to the queen gives the hero mutation, and the chapter is a defence built around one chamber:
+
+1. **Feed the queen Ashling's mutagen** (the card).
+2. **Dig the royal nursery**: workers dig it on their own; the queen holds the larva until it is ready.
+3. **Feed the royal larva.** Three workers become its nurses and live in the nursery; each spoons 0.55 organic matter a second from the reserve into it, up to 170 (the gauge on the card and, once the art is approved, the living heap in the chamber). Two bug lairs are the larder. Its glow draws five raids from the bramble, and raiders go down the shaft for the nursery, not the queen. Enemies in the nursery eat the larva (1.4% a second each); if it dies before the hero is born, the chapter is lost.
+4. **Guard the cocoon**: 100 s of a throbbing, light-filled cocoon while the raids keep coming.
+5. **Blood the hero**: Hemlock breaks out (a Warlord), and the chapter ends with the red scouts' queen.
+
+Stars: under 21:00, no raider ever wounds the larva.
+
+From then on, **heroes in the campaign come only this way**: the Heroes tab lays a royal larva (its food cost now, 60 organic matter through the nurses, a 40 s cocoon). Skirmish and Lane War keep their own hero rules. A chapter played without a save behind it gets the story's mutations and a dug nursery, so every chapter stays playable on its own; the Hornet Mother and the Long March muster the hero the story has given the colony.
+
+### Flyers and the ground (the owner's rule)
+
+"A normal ant should not be able to attack a wasp... It shouldn't be able to fight those predators until we have the flying ants."
+
+- A flying predator (a wasp, the Hornet Mother) in the air is out of every ground ant's reach: ground ants cannot target it, are not sent onto it by an attack order (the click is refused with "It's in the air: only flying ants can reach it"), and duck away from one that is hunting them. Acid gunners are ground ants too: they cannot reach it either, which keeps the rule clean (`Config.Predator`, `Sim.Airborne`, `Sim.CanReach`, used by `FindEnemy` and every engage path, so the AI follows the same rule).
+- Flying ants reach it. A ground ant reaches it only in the moment a wasp comes down to sting (it hangs at `Config.HoverAlt` above its prey and drops for the bite), or while thrown silk pins it to the ground (`Ant.PinT`).
+- Other flyers (the colonies' flying ants, the Sky Marshal) keep the old rule: they swoop low to bite and can be bitten back.
+
+### Chapter 9, the silk spitter (Web Throwing)
+
+The wasps arrive in Chapter 9 (the Hornet Mother). Her paper nest hums with them and the briefing makes the threat plain, but her raids hold off until the colony has earned its answer:
+
+1. **Hunt the silk spitter** in the free corner of the yard: a level-4 spitting spider and two young spiders in a hollow strung with permanent webs that pin ants. The corridor to it is cleared of wasp lairs.
+2. **Cut out its spinneret** and **carry it home** (the mutagen haul).
+3. **Feed the queen the fragment**: Web Throwing, rank 1.
+4. **Break the hornet raid**: now the raids begin, and the soldiers' silk brings the wasps down.
+5. **Slay the Hornet Mother**, then **kill the red queen**.
+
+From Chapter 10 on, a chapter played without a save starts with Web Throwing at rank 1. Later mutation cards can raise it to rank 3.
+
+### Start areas
+
+- No wasp lair lies within `Config.WaspFloor` (115) of a starting nest in any mode. Lairs nearer the nests that used to hold wasps hold spiders or beetles instead, so the first prey is never a flyer.
+- The campaign already hides wasps before Chapter 9 (the gradual reveal) and keeps level scripts' wasps far from home. `--campaign-test` checks that no wasp starts within 100 of the nest in any chapter.
+- The middle prize is no longer the same raspberry in every game. Its kind (a raspberry, a sugar drop or a pile of seeds) and its place along the line of points equally far from both nests come from the map seed, on a sequence of their own, so the rest of every tuned campaign yard is unchanged. Colony War and Skirmish against the AI now use a new seed each game; test runs keep the fixed seed, and multiplayer already shares the host's seed.
+
+### Cinematic slots
+
+`src/UI/StoryVideo.cs` plays `res://assets/video/opening.ogv` before Chapter 1's comic, and `res://assets/video/reward-<slug>.ogv` after every won chapter, before its result card (`Levels.Slug`: the chapter's name in lower case with dashes, for example `reward-the-silk-trap.ogv`, `reward-the-royal-larva.ogv`). A missing file is skipped with no trace; any key, click or tap skips a playing video. Ogg Theora is Godot's video format.
+
+### Art
+
+The visuals of the track are built against targets **H1-H5**, approved by the owner on 2026-11-06 (`docs/art-targets/REVIEW-mutation.jpg`: the queen wasp in the web, the mutagen haul and its pulse, the royal nursery and its living gauge, the womb cocoon, the venom flyer). Until then `src/Render/MutagenGlow.cs` draws placeholders only: a breathing violet-green light where mutagen lies or is carried (on the game's own wasp mesh), the sixth-sense ripple, and the light of the larva and the cocoon in the nursery. The stinger, royal larva and cocoon meshes belong to the ant-rebuild session. The comic beats for the two chapters use H1 and H4.
+
+### Tests
+
+`--campaign-test` plays both chapters with the scripted player (`LevelValidation.Mutations`, or `MANDIBLE_LEVELS=mutation` alone): the gland carved, carried home and fed to the queen, stingers poisoning, a fallen carrier dropping the gland, the larva devoured (a loss, retried from the same saved colony), the larva fed full, the cocoon, Hemlock born and carried, the queen's mutagen and level, the three cards with the trait first, and the chosen mutation and instability arriving in Queen Cinder. The reveal check also covers the story's mutations and the nursery in every chapter.
+
+## 6. How it is built
 
 - `src/Sim/Levels.cs`: the level table (order, season, novelty, rival, star goals), the generic objectives the new
   levels use (build, gather, deliver kinds, waves, destroy a group, escort, raise a hero, a deadline) and their

@@ -31,6 +31,7 @@ public static class ColonyValidation
             if (only == "checks")
             {
                 LevelValidation.Losses(app); LevelValidation.Gates(app); LevelValidation.Progress();
+                if (OS.GetEnvironment("MANDIBLE_MUTATION") != "") LevelValidation.Mutations(app);
                 GD.Print("[campaign-test] ALL PASS (loss paths, gates, perks and saved progress only)");
                 app.GetTree().Quit();
                 return;
@@ -40,6 +41,8 @@ public static class ColonyValidation
                 // "ep2".."ep4": the scripted episode runs; numbers: the level bot
                 foreach (var part in only.Split(','))
                     if (part == "ep2") Episode2(app); else if (part == "ep3") Episode3(app); else if (part == "ep4") Episode4(app);
+                    else if (part == "mutation") LevelValidation.Mutations(app);
+                    else if (part == "flight") FlightValidation.Run(app);
                     else LevelValidation.Play(app, int.Parse(part), out _);
                 GD.Print("[campaign-test] ALL PASS (selected levels)");
                 app.GetTree().Quit();
@@ -130,13 +133,16 @@ public static class ColonyValidation
             if (only == "chain") { GD.Print("[campaign-test] ALL PASS (episode 1 and the persistent colony chain)"); app.GetTree().Quit(); return; }
             var times = new Dictionary<int, float> { [1] = s.Mission.EndTime, [2] = Episode2(app), [3] = Episode3(app), [4] = Episode4(app) };
             Defeat(app);
-            for (int id = 5; id <= Levels.Count; id++) times[id] = LevelValidation.Play(app, id, out _);
+            for (int id = 5; id <= Levels.Count; id++) if (id is not (Reveal.SilkTrapId or Reveal.RoyalLarvaId)) times[id] = LevelValidation.Play(app, id, out _);
+            LevelValidation.Mutations(app); // plays the Silk Trap and the Royal Larva with the mutation checks
+            FlightValidation.Run(app); // the owner's flight rules and start areas
+            times[Reveal.SilkTrapId] = LevelValidation.MutationTimes.silk; times[Reveal.RoyalLarvaId] = LevelValidation.MutationTimes.larva;
             LevelValidation.Losses(app);
             LevelValidation.Gates(app);
             LevelValidation.Progress();
             var sb = new System.Text.StringBuilder();
             for (int n = 1; n <= Levels.Count; n++) sb.Append($"L{n} {times[Levels.IdAt(n)]:0}s  ");
-            GD.Print($"[campaign-test] ALL PASS; 12 levels won ({sb.ToString().TrimEnd()}); loss paths, gates, perks, stars and saved progress checked");
+            GD.Print($"[campaign-test] ALL PASS; {Levels.Count} levels won ({sb.ToString().TrimEnd()}); loss paths, gates, perks, stars and saved progress checked");
             app.GetTree().Quit();
         }
         catch (Exception e) { GD.PushError("[campaign-test] FAIL " + e); app.GetTree().Quit(1); }
@@ -150,6 +156,7 @@ public static class ColonyValidation
         var root = new Node3D(); app.AddChild(root); _worlds.Add(root);
         var s = new Sim(WorldBuilder.Build(root, 20261031));
         s.BeginEpisode(episode);
+        s.ApplyRoster(null, Levels.NumberOf(episode)); // as GameSession does: the story's mutations and the royal nursery
         // the same rival a campaign session runs: it grows and guards its mound, the episode sends the raids
         rival = episode >= 3 ? AIController.CampaignRival(s) : null;
         Check(s.Mission?.Episode == episode && s.Mission.Step == 0 && s.Winner < 0, $"Episode {episode} did not start on its first objective");

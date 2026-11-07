@@ -74,7 +74,7 @@ public sealed class Carnage
     };
     static bool Heavy(AntType by) => by is AntType.Major or AntType.Warlord or AntType.StagBeetle or AntType.Beetle or AntType.Spider or AntType.Wasp or AntType.Queen;
 
-    float Floor(Sim sim, int layer, Vector2 p) => layer == 0 ? _hf.Sample(p.X, p.Y) : _hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.Depth;
+    float Floor(Sim sim, int layer, Vector2 p) => layer == 0 ? _hf.Sample(p.X, p.Y) : _hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.FloorDepth(p - sim.W.Nests[layer - 1].Pos);
 
     int Budget(int n) { float f = n * Settings.GoreBudget; int k = (int)f; return k + (_rng.F() < f - k ? 1 : 0); }
 

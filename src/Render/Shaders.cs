@@ -6,24 +6,63 @@ public static class Shaders
 
     /// One shared Shader per source: the renderer compiles every Shader object separately, so
     /// creating one per rock, leaf or crumb stalled the first frame for many seconds.
+    static bool _globals;
+
+    /// Runtime global: (nest x, nest z, nest ground height, 0) of the local colony. Shaders read it to know when
+    /// a fragment is underground, where the sky must not light it. Must exist before any shader using it compiles.
+    public static void EnsureGlobals()
+    {
+        if (_globals) return;
+        _globals = true;
+        Godot.RenderingServer.GlobalShaderParameterAdd("nest_info", Godot.RenderingServer.GlobalShaderParameterType.Vec4, new Godot.Vector4(-1000f, -1000f, 0f, 0f));
+    }
+
+    static Godot.Vector4 _nest = new(-1000f, -1000f, 0f, 0f);
+
+    public static void SetNest(Godot.Vector2 pos, float groundY)
+    {
+        _nest = new Godot.Vector4(pos.X, pos.Y, groundY, _nest.W);
+        Godot.RenderingServer.GlobalShaderParameterSet("nest_info", _nest);
+    }
+
+    /// How far the earth is opened for building (0..1): the nest's contents take more fill so they read through the roof.
+    public static void SetNestOpen(float open)
+    {
+        if (Godot.Mathf.IsEqualApprox(open, _nest.W)) return;
+        _nest.W = open;
+        Godot.RenderingServer.GlobalShaderParameterSet("nest_info", _nest);
+    }
+
     public static Godot.Shader Get(string code)
     {
+        EnsureGlobals();
         if (!_cache.TryGetValue(code, out var s)) _cache[code] = s = new Godot.Shader { Code = code };
         return s;
     }
 
-    const string Fow = @"
-uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
-uniform float map_size = 320.0;
-float fow(vec3 wp) {
-    vec2 f = texture(fow_tex, wp.xz / map_size).rg;
-    return mix(0.10, mix(0.42, 1.0, f.r), f.g);
+    /// How much sky ambient reaches a point: 1 on the surface, `UNDER_AMBIENT` in the dug nest (below the entrance
+    /// and within its footprint), blended over a short distance so nothing pops at the hole.
+    public const string Under = @"
+global uniform vec4 nest_info;
+float under_ambient(vec3 p) {
+    float depth = nest_info.z - p.y;
+    float near = 1.0 - smoothstep(26.0, 32.0, length(p.xz - nest_info.xy));
+    // underground it is dark (0.09 of the sky's fill); with the earth opened for building, enough fill returns (0.6)
+    // for the brood and the ants to read in the lamp light (nest_info.w = how open)
+    return mix(1.0, mix(0.09, 0.6, nest_info.w), smoothstep(0.9, 1.6, depth) * near);
 }
+";
+
+    const string Fow = @"
+uniform float map_size = 320.0;
+// the fog of war itself is FogOverlay's screen pass (true black over the unknown); materials no longer dim themselves
+float fow(vec3 wp) { return 1.0; }
 ";
 
     public const string Ant = @"
 shader_type spatial;
-render_mode depth_draw_opaque;
+render_mode depth_draw_opaque, cull_disabled; // a scanned shell can stay open where a limb was cut: show its inside, not the soil
+" + Under + @"
 uniform vec3 body_color : source_color = vec3(0.03, 0.026, 0.024);
 uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
@@ -34,6 +73,12 @@ uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
+uniform float sculpture = 0.08; // the cuticle's micro-relief: fine imbricate on a worker, coarse rugose on the Warlord
+uniform vec3 waist = vec3(0.0, 0.14, -0.105); // the gaster nods (and curls to spray) about this model-space point
+// a body made from a real specimen scan (Antscan micro-CT): its sutures, punctures and setae sockets, baked
+uniform sampler2D detail_normal : hint_normal, filter_linear_mipmap, repeat_disable;
+uniform float has_detail = 0.0;
+uniform float venom_bands = 0.0; // a venom flyer (mutation): faint amber bands over the last gaster segments
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
 varying float v_part;
 varying float v_flash;
@@ -49,10 +94,28 @@ varying float v_ao;
 varying float v_pale;
 varying float v_etch;
 varying float v_stage;
+varying vec4 v_cus; // CUSTOM0: membrane, seta, textured
 
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float hash1(float x) { return fract(sin(x * 127.1 + 311.7) * 43758.5453); }
+float vnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash3(i), hash3(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 0.0)), hash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+               mix(mix(hash3(i + vec3(0.0, 0.0, 1.0)), hash3(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 1.0)), hash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
 
+// distance to the nearest of a jittered lattice of points: the punctures that pit an ant's cuticle
+float worley(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    float d = 9.0;
+    for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec3 o = vec3(float(x), float(y), float(z));
+        vec3 r = o + vec3(hash3(i + o), hash3(i + o + 1.7), hash3(i + o + 3.3)) - f;
+        d = min(d, dot(r, r));
+    }
+    return sqrt(d);
+}
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 vec3 rot_x(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
 vec3 rot_z(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z); }
@@ -162,7 +225,7 @@ void vertex() {
                    + (pose == 1.0 ? 0.3 : 0.0) + idle * 0.12 * max(0.0, sin(TIME * 2.6 + id * 2.0));
         if (carry > 0.5) open = 0.16; // keep a firm grip on food instead of chewing through it
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q *= 1.0 + 0.16 * stage; // each moult grows heavier jaws
+        q *= 1.0 + (hero > 0.0 ? 0.05 : 0.16) * stage; // each moult grows heavier jaws (a general's are already huge)
         q = rot_y(q, open * side);
         n = rot_y(n, open * side);
         p = q + vec3(piv.x, 0.0, piv.y);
@@ -179,10 +242,12 @@ void vertex() {
         if (part == 13.0) {
             p.y += sin(TIME * 2.0 + id) * 0.004;
             if (pattern == 0) {
-                vec3 q = p - vec3(0.0, 0.14, -0.105);
+                vec3 q = p - waist;
                 float g = sin(2.0 * phase - 0.6) * 0.05 * amp;
+                // a formicine sprays from the acidopore: the gaster swings down and forward under the body on the shot
+                if (length(acid) > 0.0) g -= bite * 1.25 * alive;
                 q = rot_x(q, g); n = rot_x(n, g);
-                p = q + vec3(0.0, 0.14, -0.105);
+                p = q + waist;
             }
         }
         // a beetle hunkers behind its shell wall; an ant dips to acknowledge, crouches on a flinch, rises to listen
@@ -220,6 +285,9 @@ void vertex() {
     v_sel = sel;
     v_hov = hov;
     v_ao = COLOR.a; // occlusion baked by MeshKit.BakeAO: legs under the body, the neck, the waist
+    v_cus = CUSTOM0;
+    // a general's growths (thorns, spurs, horns) appear with its mutation tier: hero levels 4, 7, 10
+    if (CUSTOM0.w > stage + 0.5) { p = vec3(0.0, 0.1, 0.0); n = vec3(0.0, 1.0, 0.0); }
     VERTEX = p;
     NORMAL = n;
 }
@@ -248,16 +316,13 @@ void fragment() {
             float chev = smoothstep(0.4, 0.5, fract((v_local.z + abs(v_local.x) * 1.4) * 14.0)) * step(v_local.z, -0.25);
             c = mix(c, c * 0.35, max(heart * step(-0.3, v_local.z), chev * 0.7));
         } else {
-            // tergite bands: darker toward each seam, and the seam itself tilts the normal so it catches the sun
-            float f = fract(v_local.z * 18.0 + 0.3);
-            float band = smoothstep(0.42, 0.5, f);
-            c *= 1.0 - band * 0.35;
             if (pattern == 0) {
-                float seam = smoothstep(0.36, 0.46, f) - smoothstep(0.46, 0.56, f);
-                vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
-                NORMAL = normalize(NORMAL - fwd * seam * 0.35);
-                // honey through the abdomen when the sun is behind it
+                // the tergites are modelled; honey glows through the abdomen when the sun is behind it
                 BACKLIGHT = gaster_color * 1.5 + vec3(0.26, 0.13, 0.03);
+            } else {
+                // tergite bands: darker toward each seam
+                float band = smoothstep(0.42, 0.5, fract(v_local.z * 18.0 + 0.3));
+                c *= 1.0 - band * 0.35;
             }
         }
     }
@@ -285,30 +350,66 @@ void fragment() {
         c *= 1.0 - (1.0 - smoothstep(0.006, 0.014, abs(v_local.x))) * 0.6;
     }
     if (pattern == 4 && part == 12.0) c = head_color * (0.85 + 0.3 * smoothstep(0.0, 0.05, v_local.y - 0.16)); // polished crown
-    if (pattern == 0 && part == 0.0) {
-        // the thorax is three plates: seams across the back where pronotum, mesonotum and propodeum meet
-        float seam = exp(-pow((v_local.z + 0.03) * 70.0, 2.0)) + exp(-pow((v_local.z - 0.05) * 70.0, 2.0));
-        seam *= smoothstep(0.12, 0.17, v_local.y);
-        c *= 1.0 - 0.4 * seam;
-        vec3 fwd = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
-        NORMAL = normalize(NORMAL - fwd * seam * 0.3);
-    }
     if (part >= 1.0 && part <= 8.0) {
         c = leg_color; rough = 0.62; BACKLIGHT = leg_color * 0.6;
-        if (hero > 0.0 && part <= 6.0) {
-            // a hero's legs are ringed in its metal at the knee and the ankle
-            float ring = step(0.42, v_w) * step(v_w, 0.48) + step(0.87, v_w) * step(v_w, 0.92);
-            c = mix(c, accent, ring);
-            metal = ring * 0.9; rough = mix(rough, 0.35, ring);
-        }
         if (pattern == 2) c *= 0.65 + 0.55 * step(0.5, fract(v_w * 4.0 + 0.2)); // banded legs
         if (pattern == 1 || pattern == 4) c *= 0.8 + 0.2 * step(0.85, v_w);
         if (part >= 7.0) BACKLIGHT += vec3(0.2, 0.1, 0.02) * v_w; // light through the antenna tips
     }
     if (part == 9.0 || part == 10.0) c *= 0.6;
-    if (part == 11.0) {
-        // part 11 is now only the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture
+    bool eye = part == 11.0 && pattern == 0 && v_region < 0.25;
+    if (part == 11.0 && !eye) {
+        // the hard black parts: a spider's fangs, a wasp's sting, a beetle's suture, a fire ant's sting
         c = vec3(0.012); rough = 0.3; cc = 0.0;
+    }
+    if (eye) {
+        // a compound eye: hundreds of ommatidia, each a tiny lens. A hexagonal lattice over the eye's surface tilts
+        // each facet's normal a little, so the eye breaks the light into a fine glitter instead of one smooth dome
+        vec2 q = vec2(v_local.z * 1.1547, v_local.y + v_local.z * 0.57735) * 520.0;
+        vec2 cell = floor(q), f = fract(q);
+        vec2 ctr = (f.x + f.y < 1.0) ? vec2(0.33) : vec2(0.67);
+        vec2 dd = f - ctr;
+        float edge = smoothstep(0.18, 0.3, length(dd));
+        vec3 tilt = (VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, dd.y, dd.x, 0.0)).xyz;
+        NORMAL = normalize(NORMAL + tilt * 0.35);
+        // dark warm lenses: a metal-like reflection tinted brown, so the sky does not turn the eye blue
+        c = mix(vec3(0.035, 0.028, 0.022), vec3(0.006, 0.005, 0.004), edge); // darker than the head around it
+        rough = 0.2; cc = 0.0; metal = 0.55;
+        // the spark of life: the sky caught in the eye, a small bright window that slides over the dome as the head
+        // turns (the head group's rotation already moved NORMAL); dimmed underground, where only the lamps are
+        vec3 r = reflect(-VIEW, NORMAL);
+        vec3 sky = normalize((VIEW_MATRIX * vec4(0.35, 1.0, 0.25, 0.0)).xyz);
+        float spark = smoothstep(0.975, 0.992, dot(r, sky));
+        eyeEm += vec3(1.0, 0.93, 0.8) * spark * 2.4 * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+    }
+    if (pattern == 0 && !eye && part != 14.0 && part != 15.0) {
+        // cuticle micro-relief: two octaves of smooth noise tilt the normal, finest on the legs, coarse on a rugose hero
+        vec3 sp = v_local * (part >= 1.0 && part <= 8.0 ? 300.0 : 180.0);
+        vec3 jit = vec3(vnoise(sp), vnoise(sp + 17.3), vnoise(sp + 41.9)) - 0.5
+                 + 0.5 * (vec3(vnoise(sp * 2.7 + 5.1), vnoise(sp * 2.7 + 23.4), vnoise(sp * 2.7 + 61.2)) - 0.5);
+        // (a scanned body carries the real relief in its normal map instead)
+        bool scanned = has_detail > 0.5 && v_cus.z > 0.5;
+        if (scanned) { NORMAL_MAP = texture(detail_normal, v_uv).rgb; NORMAL_MAP_DEPTH = 1.0; }
+        else NORMAL = normalize(NORMAL + (VIEW_MATRIX * MODEL_MATRIX * vec4(jit, 0.0)).xyz * sculpture * 1.6);
+        // punctures, each with a hair socket: only near the camera, where they are more than a pixel (and phones skip them)
+        if (!scanned && -VERTEX.z < 18.0 && v_cus.x < 0.5) {
+            float pit = 1.0 - smoothstep(0.1, 0.24, worley(v_local * (part >= 1.0 && part <= 8.0 ? 260.0 : 150.0)));
+            c *= 1.0 - 0.45 * pit * (1.0 - smoothstep(10.0, 18.0, -VERTEX.z));
+            rough += 0.12 * pit;
+        }
+        cc = 0.0; rough = max(rough, 0.72); // satin, not lacquer: the sheen comes from the setae and the sculpture
+        // the pale seams between tergites and the stretched membrane of a replete
+        float mem = clamp(v_cus.x, 0.0, 1.0);
+        c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
+        rough = mix(rough, 0.18, mem); cc = mix(cc, 0.8, mem);
+        BACKLIGHT = mix(BACKLIGHT, vec3(0.9, 0.5, 0.12), mem);
+        if (venom_bands > 0.0 && part == 13.0) {
+            float tipward = smoothstep(waist.z - 0.2, waist.z - 0.36, v_local.z);
+            float band = smoothstep(0.6, 0.8, fract(v_local.z * 14.0));
+            c = mix(c, vec3(0.3, 0.16, 0.04), band * tipward * venom_bands * 0.35);
+        }
+        // setae: fine golden hairs that catch the sun
+        if (v_cus.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
@@ -341,7 +442,7 @@ void fragment() {
     }
     if ((pattern == 1 || pattern == 4) && part != 11.0 && part != 14.0 && part != 15.0) { rough = pattern == 4 ? 0.36 : 0.42; cc = 0.4; metal = 0.15; }
     if (pattern == 3 && part != 11.0 && part != 14.0) { rough = 0.48; cc = 0.25; }
-    if (hero > 0.0 && part != 11.0 && part != 14.0 && part != 15.0) {
+    if (hero > 0.0 && pattern != 0 && part != 11.0 && part != 14.0 && part != 15.0) {
         // metal filigree in the colony's colour: bands on the abdomen, a crest line on the head, edged mandibles
         float gband = part == 13.0 ? step(0.74, fract(v_local.z * 11.0 + 0.1)) : 0.0;
         float crest = part == 12.0 ? smoothstep(0.02, 0.0, abs(v_local.x)) * step(0.17, v_local.y) : 0.0;
@@ -379,11 +480,11 @@ void fragment() {
     }
     BACKLIGHT *= 1.0 - dead * 0.85; // dead tissue no longer glows through
     ALBEDO = c * (1.0 - dead * 0.35) * mix(0.72, 1.0, v_ao);
-    AO = v_ao;
+    AO = v_ao * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
     AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
-    SPECULAR = 0.32;
+    SPECULAR = pattern == 0 ? 0.14 : 0.32;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.42;
     RIM = pattern == 2 ? 0.6 : 0.35;
@@ -392,17 +493,20 @@ void fragment() {
     EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08) + eyeEm;
     // a beetle behind its shell wall: the wing cases gleam hard along their edges
     if (v_block > 0.5 && part != 11.0) { EMISSION += accent * (0.08 + 0.35 * fres) * (0.7 + 0.3 * sin(TIME * 6.0)); ROUGHNESS = 0.25; }
-    if (part == 13.0 && length(acid) > 0.0) {
-        // translucent acid sac: smooth glossy green with a slow inner glow, gold bands still on top
-        float pulse = 0.75 + 0.25 * sin(TIME * 2.2);
-        float bands = hero * step(0.74, fract(v_local.z * 11.0 + 0.1));
-        ALBEDO = mix(acid * 0.6, accent, bands);
-        EMISSION += acid * 0.22 * pulse * (1.0 - bands);
-        CLEARCOAT = 0.5;
-        CLEARCOAT_ROUGHNESS = 0.35;
-        ROUGHNESS = 0.42;
-        METALLIC = bands * 0.8;
-        BACKLIGHT = vec3(0.0);
+    if (part == 13.0 && length(acid) > 0.0 && v_cus.x > 0.5) {
+        // a replete's membrane: amber formic acid seen through taut cuticle, glowing where the sun comes through
+        float pulse = 0.85 + 0.15 * sin(TIME * 2.2);
+        // the acid inside is not even: darker where it is deep, paler veins where the membrane is stretched thinnest
+        float mottle = vnoise(v_local * 38.0) * 0.6 + vnoise(v_local * 110.0) * 0.4;
+        ALBEDO = mix(vec3(0.075, 0.03, 0.006), vec3(0.2, 0.09, 0.016), mottle) * (1.0 - dead * 0.35);
+        EMISSION += vec3(0.16, 0.065, 0.01) * 0.05 * pulse * (1.0 - dead);
+        if (hero > 0.0) {
+            // a general Matron (target J): the acid sac and its coiled glands glow amber-green through the membrane
+            float coil = smoothstep(0.55, 0.85, vnoise(v_local * vec3(14.0, 14.0, 22.0) + vec3(0.0, 0.0, TIME * 0.15)));
+            EMISSION += mix(vec3(0.75, 0.5, 0.05), vec3(0.5, 0.95, 0.12), coil) * (0.55 + 0.9 * coil) * pulse * (1.0 - dead);
+        }
+        BACKLIGHT = vec3(0.32, 0.15, 0.03) * (0.6 + 0.6 * mottle) * (1.0 - dead);
+        CLEARCOAT = 1.0; CLEARCOAT_ROUGHNESS = 0.08; ROUGHNESS = 0.12; METALLIC = 0.0;
     }
 }
 ";
@@ -416,8 +520,8 @@ uniform float net_ground_y = 0.0;
 uniform float net[224];
 uniform int net_count = 0;
 float nest_union(float a, float b) {
-    float h = max(0.45 - abs(a - b), 0.0) / 0.45;
-    return min(a, b) - h * h * 0.1125;
+    float h = max(0.22 - abs(a - b), 0.0) / 0.22;
+    return min(a, b) - h * h * 0.055;
 }
 float nest_field(vec2 p) {
     float best = 100000.0;
@@ -441,7 +545,10 @@ float net_dist(vec3 p, vec3 cam) {
     vec2 shift = dir.y < -0.001 ? dir.xz / (-dir.y) : vec2(0.0);
     float sl = length(shift);
     if (sl > 6.0) shift *= 6.0 / sl;
-    vec2 q = p.xz + shift * (p.y - net_ground_y) - xray_center; // the cut is at the surface: the pit's walls below are real geometry
+    // the cut is at the surface: the pit's walls below are real geometry. The surface itself is not projected (its own
+    // relief sits a little above or below the entrance datum), so the hole stays exactly over the excavation's footprint
+    float dy = p.y - net_ground_y;
+    vec2 q = p.xz + shift * (abs(dy) < 2.0 ? 0.0 : dy) - xray_center;
     return nest_field(q);
 }
 float glass_at(vec3 p, vec3 cam) {
@@ -467,7 +574,17 @@ uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
 uniform vec2 entrance_a = vec2(-1000.0);
 uniform vec2 entrance_b = vec2(-1000.0);
-uniform int detail = 1; // graphics tier: 0 plain soil (phones), 1 grain and clods, 2 a finer grain octave on top
+uniform int detail = 1; // graphics tier: 0 phones (base and hollow sets only), 1 and up every ground set
+uniform sampler2D g_base_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_base_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_base_a : filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_crest_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_crest_n : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_crest_a : filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_hollow_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_hollow_n : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D g_litter_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D g_litter_n : hint_normal, filter_linear_mipmap, repeat_enable;
 // Glass Earth: while xray_on, the soil directly over the colony's galleries and rooms is cut away
 varying vec3 wpos;
 varying vec4 vcol;   // r baked shade, g excavated sand, b pine thatch, a 0.5 level / <0.5 crest / >0.5 hollow
@@ -476,20 +593,22 @@ void vertex() {
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vcol = COLOR;
+    TANGENT = normalize(vec3(1.0, 0.0, 0.0) - NORMAL * NORMAL.x);
+    BINORMAL = normalize(cross(TANGENT, NORMAL));
 }
 " + NetworkFn + @"
 void fragment() {
     vec2 uv = wpos.xz;
     // Actual small entrance holes remain readable with build mode both open and closed.
     vec2 mouth = distance(uv, entrance_a) < distance(uv, entrance_b) ? uv - entrance_a : uv - entrance_b;
-    if (length(mouth) < 0.82 + 0.055 * sin(atan(mouth.y, mouth.x) * 7.0)) discard;
+    if (length(mouth) < 1.15 + 0.07 * sin(atan(mouth.y, mouth.x) * 7.0)) discard;
     // Glass Earth: the soil over the galleries thins to a translucent roof (the roof variant of this shader) and
     // carries the shadow of the hollow beneath it: a soft band along the cavity's edge, lighter over its middle
     float nd = xray_on > 0.001 ? net_dist(wpos, CAMERA_POSITION_WORLD) : 1e9;
     // the pit is open: no soil over it, a thin crumbling fringe at the lip, a shadow band just beyond
-    float lip = 1.25;
+    float lip = 0.45;
     if (xray_on > 0.5 && nd < lip) discard;
-    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.55, nd));
+    float glass = xray_on * (1.0 - smoothstep(lip, lip + 0.2, nd));
     float band = exp(-pow((nd - lip - 0.3) / 0.8, 2.0)) * xray_on;
     // relief: how far this point sits below its surroundings (+) or above them (-), and how steep it is
     float hollow = clamp((vcol.a - 0.5) * 2.0, -1.0, 1.0);
@@ -498,60 +617,82 @@ void fragment() {
     float steep = smoothstep(0.08, 0.35, 1.0 - wnrm.y);
     float n1 = texture(noise_a, uv * 0.0035).r;
     float n2 = texture(noise_a, uv * 0.017 + 0.3).r;
-    float g = texture(noise_b, uv * 0.09).r;
     float g2 = texture(noise_b, uv * 0.41 + 0.7).r;
-    float grain = texture(noise_b, uv * 1.7).r;
-    float grain2 = detail > 0 ? texture(noise_b, uv * 4.3 + 0.23).r : 0.5;
-    float grain3 = detail > 0 ? texture(noise_b, uv * 9.1 + 0.61).r : 0.5;
-    float grit = texture(noise_b, uv * 0.83 + 0.37).r;
-    vec3 dry = vec3(0.42, 0.315, 0.22);
-    vec3 damp = vec3(0.19, 0.135, 0.09);
-    vec3 clay = vec3(0.38, 0.23, 0.13);
-    vec3 pale = vec3(0.58, 0.49, 0.37);   // sun-dried crests
-    vec3 col = mix(dry, damp, smoothstep(0.45, 0.85, n1) * 0.8);
-    col = mix(col, clay, smoothstep(0.5, 0.8, n2) * 0.5);
-    // hollows hold the damp and the fines; crests dry pale; steep sides show the lighter subsoil
-    col = mix(col, damp * 0.9, inHollow * 0.55);
-    col = mix(col, pale, onCrest * 0.45 + steep * 0.25);
-    col *= 0.72 + 0.45 * g;
-    col *= 0.8 + 0.3 * g2;
-    // individual sand grains: bright quartz flecks and dark pores (stronger in the pebble beds of the hollows)
-    float gc = 1.0 + 0.5 * inHollow;
-    col *= 1.0 - (0.26 - 0.32 * grain) * gc;
-    col *= 0.86 + 0.28 * grain2;
-    col *= 0.92 + 0.16 * grain3;
-    float quartz = smoothstep(0.80, 0.88, grit) * smoothstep(0.35, 0.7, g) * (1.0 + 0.7 * onCrest);
-    col = mix(col, vec3(0.64, 0.59, 0.52), clamp(quartz, 0.0, 1.0) * 0.6);
-    // a bed of small stones where the fines have washed in
-    float bed = step(0.74 - 0.08 * inHollow, g2) * inHollow * float(detail > 0);
-    col = mix(col, vec3(0.38, 0.35, 0.31) * (0.7 + 0.5 * grain3), bed * 0.65);
-    float pore = smoothstep(0.72, 0.8, texture(noise_b, uv * 0.6 + 0.11).r);
-    col = mix(col, vec3(0.06, 0.045, 0.035), pore * 0.35);
-    float dark = smoothstep(0.7, 0.8, texture(noise_b, uv * 0.23).r);
-    col = mix(col, vec3(0.1, 0.075, 0.05), dark * 0.35);
-    // excavated sand around the black colony's nest
-    vec3 sand = vec3(0.50, 0.40, 0.28) * (0.7 + 0.5 * g2) * (0.8 + 0.3 * grain) * (0.82 + 0.36 * grain2) * (0.9 + 0.2 * grain3);
-    sand = mix(sand, vec3(0.30, 0.22, 0.14), step(0.86, grain3) * 0.6);          // scattered dark grains
-    sand = mix(sand, vec3(0.72, 0.66, 0.58), step(0.9, grain2) * smoothstep(0.5, 0.8, grain3)); // bright quartz specks
+    // photographed soil (CC0 ground sets, assets/nature/ground), blended by the lie of the land. The base is read
+    // twice, at two scales and angles, and the two are mixed by slow noise so its tile never repeats visibly.
+    vec2 ua = uv / 26.0;
+    vec2 ub = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80)) * uv / 18.0 + 0.37;
+    float mixAB = smoothstep(0.35, 0.65, n2);
+    vec3 baseC = mix(texture(g_base_d, ua).rgb, texture(g_base_d, ub).rgb, mixAB);
+    vec3 baseN = mix(texture(g_base_n, ua).rgb, texture(g_base_n, ub).rgb, mixAB);
+    vec3 baseA = mix(texture(g_base_a, ua).rgb, texture(g_base_a, ub).rgb, mixAB);
+    // where each layer lies, sharpened against the base's own height so stones stand proud of the fines
+    float hBase = baseA.b;
+    float edgeD = min(min(wpos.x, map_size - wpos.x), min(wpos.z, map_size - wpos.z));
+    float wCrest = clamp(onCrest * 0.9 + steep * 0.6 + smoothstep(0.62, 0.8, n1) * 0.35, 0.0, 1.0);
+    float wHollow = clamp(inHollow * 1.1 + smoothstep(0.7, 0.9, n1) * 0.3, 0.0, 1.0);
+    float wLitter = clamp((1.0 - smoothstep(8.0, 30.0, edgeD)) * 0.9 + smoothstep(0.66, 0.82, n2) * 0.55 * (1.0 - inHollow), 0.0, 1.0);
+    vec3 col = baseC; vec3 nmT = baseN; float rough = baseA.g; float occ = baseA.r;
+    if (detail > 0) {
+        vec2 uc = uv / 30.0 + 0.19;
+        vec3 crestA = texture(g_crest_a, uc).rgb;
+        float tC = smoothstep(0.0, 0.25, wCrest + crestA.b - hBase - 0.35);
+        col = mix(col, texture(g_crest_d, uc).rgb, tC); nmT = mix(nmT, texture(g_crest_n, uc).rgb, tC);
+        rough = mix(rough, crestA.g, tC); occ = mix(occ, crestA.r, tC);
+    }
+    vec2 uh = uv / 26.0 + 0.53;
+    float tH = smoothstep(0.0, 0.3, wHollow - hBase * 0.5 - 0.15);
+    col = mix(col, texture(g_hollow_d, uh).rgb * vec3(1.02, 0.98, 0.92), tH);
+    nmT = mix(nmT, texture(g_hollow_n, uh).rgb, tH);
+    if (detail > 0) {
+        vec2 ul = uv / 40.0 + 0.71;
+        float tL = smoothstep(0.0, 0.25, wLitter - hBase * 0.4 - 0.2);
+        col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
+    }
+    col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
+    // close to the camera, a macro layer: the pebbly ground set at a tenth of the base tile, so at ant framing the
+    // soil shows individual grains, grit and pebbles; it fades out by ~30 units, where the base sets carry the look
+    float camD = length(CAMERA_POSITION_WORLD - wpos);
+    float macro = detail > 0 ? 1.0 - smoothstep(10.0, 30.0, camD) : 0.0;
+    vec3 macroN = vec3(0.5, 0.5, 1.0);
+    if (macro > 0.001) {
+        vec2 um = mat2(vec2(0.6, 0.8), vec2(-0.8, 0.6)) * uv / 2.6 + 0.13;
+        vec3 mc = texture(g_crest_d, um).rgb;
+        float ml = dot(mc, vec3(0.3, 0.59, 0.11));
+        // its own stones show through where they stand proud; elsewhere it only adds grain to the base colour
+        float stones = smoothstep(0.42, 0.62, texture(g_crest_a, um).b) * (0.35 + 0.65 * wHollow);
+        col = mix(col, col * clamp(0.5 + ml * 1.4, 0.65, 1.3), macro * 0.8);
+        col = mix(col, mc * vec3(1.05, 0.96, 0.86), stones * macro * 0.7);
+        macroN = texture(g_crest_n, um).rgb;
+    }
+    // the grains themselves: a fine octave of the photographed sand, in luminance only so the layer colours stay
+    vec3 fineN = vec3(0.5, 0.5, 1.0);
+    if (detail > 0) {
+        vec2 uf = mat2(vec2(0.31, 0.95), vec2(-0.95, 0.31)) * uv / 6.5 + 0.61;
+        float fl = dot(texture(g_base_d, uf).rgb, vec3(0.3, 0.59, 0.11));
+        col *= clamp(0.45 + fl * 1.35, 0.6, 1.35);
+        fineN = texture(g_base_n, uf).rgb;
+    }
+    float quartz = 0.0;
+    // excavated sand around the black colony's nest: the same soil, sifted paler
+    vec3 sand = baseC * vec3(1.18, 1.12, 1.02) * (0.85 + 0.3 * g2);
     col = mix(col, sand, vcol.g);
     // pine thatch mound of the red colony
-    vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g) * (0.7 + 0.4 * g2);
+    vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g2) * (0.7 + 0.4 * n2);
     col = mix(col, thatch, vcol.b);
     col *= vcol.r;
     float wet = smoothstep(0.55, 0.85, n1) * (1.0 - onCrest * 0.6) + inHollow * 0.3;
     // the freshly cut soil at the opening's edge: darker and damper than the surface
-    col *= 1.0 - 0.32 * band - 0.46 * glass;
+    col *= 1.0 - 0.32 * band - 0.18 * glass; // the roof stays readable over the opened galleries
     col = mix(col, col * vec3(1.0, 0.9, 0.8), 0.5 * max(band, glass));
     ALBEDO = col;
-    ROUGHNESS = mix(0.96, 0.74, clamp(wet, 0.0, 1.0)) - quartz * 0.25;
+    ROUGHNESS = clamp(mix(rough, rough * 0.8, clamp(wet, 0.0, 1.0)), 0.4, 1.0);
     SPECULAR = 0.3;
-    // the surface: broad undulations, clods, then the grains (two octaves at Ultra); plain soil keeps only the first two
-    vec2 nm = (texture(normal_a, uv * 0.11).xy - 0.5) * 1.0 + (texture(normal_b, uv * 0.47).xy - 0.5) * 0.9;
-    if (detail > 0) nm += (texture(normal_c, uv * 0.26).xy - 0.5) * (1.0 + 0.4 * inHollow);
-    if (detail > 1) nm += (texture(normal_c, uv * 0.95 + 0.31).xy - 0.5) * 0.6;
+    // the photographed relief on top of the broad undulations of the land
+    vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (macroN.xy - 0.5) * 1.3 * macro + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
-    NORMAL_MAP_DEPTH = detail > 0 ? 1.5 : 1.1;
+    NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;
     float ph = texture(pher_tex, uv / map_size).r;
     float f = fow(wpos);
     ALBEDO = mix(ALBEDO, vec3(1.0, 0.72, 0.32), clamp(ph, 0.0, 1.0) * pher_view * 0.35) * f;
@@ -587,9 +728,216 @@ void fragment() {
     // dust settles on top
     col = mix(col, vec3(0.36, 0.28, 0.20), smoothstep(0.8, 1.0, wnrm.y) * 0.3);
     ALBEDO = col * vcol.r * fow(wpos);
-    ROUGHNESS = 0.82 - b * 0.2;
+    ROUGHNESS = 0.9 - b * 0.12;
+    SPECULAR = 0.25;
     NORMAL_MAP = texture(normal_b, UV * 3.0).rgb;
     NORMAL_MAP_DEPTH = 0.8;
+}
+";
+
+    /// Fallen leaves: real scanned leaves (ambientCG Leaf001-003, CC0) in one atlas, cut out by their own outline and
+    /// dried from green through yellow to brown by age, keeping the photo's veins and blemishes.
+    /// Cotton wool: a mass of fine strands, off-white and a little soiled where it touched the sand, with a soft
+    /// fuzz at the silhouette and light passing through.
+    public const string Cotton = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+void fragment() {
+    float f1 = texture(noise_b, lp.xy * vec2(7.0, 1.3) + lp.z * 0.7).r;
+    float f2 = texture(noise_b, lp.zy * vec2(1.2, 8.0) + 0.37).r;
+    float f3 = texture(noise_b, (lp.xz + lp.y) * vec2(11.0, 2.0) + 0.71).r;
+    float strands = smoothstep(0.45, 0.85, max(max(f1, f2), f3));
+    vec3 col = vec3(0.7, 0.67, 0.6) * (0.6 + 0.5 * strands);
+    col = mix(col, vec3(0.56, 0.46, 0.34), smoothstep(-0.3, -1.1, lp.y) * 0.55);   // soiled underneath
+    float fz = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.5);
+    ALBEDO = col + fz * 0.1;
+    ROUGHNESS = 1.0;
+    SPECULAR = 0.15;
+    BACKLIGHT = vec3(0.42, 0.38, 0.3);
+    NORMAL_MAP = normalize(vec3((f1 - 0.5) * 0.9, (f3 - 0.5) * 0.9, 1.0)) * 0.5 + 0.5;
+}
+";
+
+    /// The collector's paper label on the tube: the scanned label, lines along the tube, a little translucent paper.
+    public const string TubeLabel = @"
+shader_type spatial;
+render_mode cull_back;
+uniform sampler2D label : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+void fragment() {
+    ALBEDO = texture(label, vec2(UV.y, 1.0 - UV.x)).rgb;
+    ROUGHNESS = 0.85;
+    SPECULAR = 0.25;
+    BACKLIGHT = ALBEDO * 0.25;
+}
+";
+
+    /// Food cut from a scan: up to three planes slice the piece and the faces they open are drawn as its inside
+    /// (bread crumb, apple flesh, seed kernel). `bite` (0..1, how much has been eaten) pushes the cuts inward.
+    /// outside: 0 the scan's own photo, 1 a striped sunflower seed shell, 2 a husked grass grain.
+    public const string FoodCut = @"
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, hint_default_white;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform vec4 cut0 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform vec4 cut1 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform vec4 cut2 = vec4(0.0, 1.0, 0.0, 1e6);
+uniform float bite = 0.0;
+uniform float bite_depth = 0.0;
+uniform int inside = 0;
+uniform int outside = 0;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+float plane(vec4 c) { return c.w > 1e5 ? -1e6 : dot(c.xyz, lp) - (c.w - bite * bite_depth); }
+void fragment() {
+    float d0 = plane(cut0), d1 = plane(cut1), d2 = plane(cut2);
+    if (d0 > 0.0 || d1 > 0.0 || d2 > 0.0) discard;
+    float n1 = texture(noise_b, lp.xz * 9.0 + lp.y * 3.1).g;
+    float n2 = texture(noise_b, lp.zy * 23.0 + 0.41).g;
+    if (FRONT_FACING) {
+        if (outside == 0) {
+            ALBEDO = texture(albedo_tex, UV).rgb;
+            NORMAL_MAP = texture(normal_tex, UV).rgb;
+            ROUGHNESS = 0.7;
+        } else if (outside == 1) {
+            // sunflower seed: black and cream stripes running its length, glossy shell
+            float a = atan(lp.x, lp.y);
+            // dark grey-black shell with thin pale stripes, as a sunflower seed has
+            float stripe = smoothstep(0.82, 0.95, abs(sin(a * 5.0 + n1 * 1.2)));
+            ALBEDO = mix(vec3(0.07, 0.065, 0.06), vec3(0.62, 0.58, 0.5), stripe * 0.75) * (0.85 + 0.25 * n2);
+            ROUGHNESS = 0.35; CLEARCOAT = 0.4; CLEARCOAT_ROUGHNESS = 0.3;
+        } else {
+            ALBEDO = mix(vec3(0.55, 0.4, 0.2), vec3(0.78, 0.64, 0.4), n1) * (0.85 + 0.2 * n2);
+            ROUGHNESS = 0.6;
+        }
+    } else {
+        // the opened face: lit as the flat plane it is
+        vec3 n = d0 >= d1 && d0 >= d2 ? cut0.xyz : d1 >= d2 ? cut1.xyz : cut2.xyz;
+        NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(n, 0.0))).xyz);
+        if (inside == 0) {
+            // bread: soft cream crumb full of gas pockets
+            float pore = smoothstep(0.55, 0.7, n2) + smoothstep(0.62, 0.75, n1) * 0.6;
+            ALBEDO = vec3(0.86, 0.74, 0.52) * (1.0 - 0.45 * clamp(pore, 0.0, 1.0)) * (0.9 + 0.15 * n1);
+            ROUGHNESS = 0.95;
+        } else if (inside == 1) {
+            // apple flesh, browning where it has been open longest
+            ALBEDO = mix(vec3(0.95, 0.88, 0.64), vec3(0.72, 0.5, 0.24), clamp(0.25 + bite * 0.6 + (n1 - 0.5) * 0.4, 0.0, 1.0));
+            ROUGHNESS = 0.45; SPECULAR = 0.6;
+        } else if (inside == 2) {
+            // berry pulp: wet, translucent, deep red
+            ALBEDO = mix(vec3(0.45, 0.04, 0.05), vec3(0.85, 0.75, 0.68), smoothstep(0.6, 0.8, n2) * 0.4);
+            ROUGHNESS = 0.15; SPECULAR = 0.7;
+        } else {
+            ALBEDO = vec3(0.88, 0.84, 0.72) * (0.9 + 0.15 * n1);
+            ROUGHNESS = 0.6;
+        }
+    }
+}
+";
+
+    /// A currant: glossy, translucent red skin with the dried calyx at its crown; `burst` splits it open.
+    public const string Currant = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float tone = 1.0;
+uniform float burst = 0.0;
+varying vec3 lp;
+void vertex() { lp = VERTEX; }
+void fragment() {
+    float n = texture(noise_b, lp.xz * 1.7 + lp.y).r;
+    vec3 skin = mix(vec3(0.22, 0.015, 0.025), vec3(0.5, 0.05, 0.06), tone * (0.7 + 0.4 * n));
+    // faint pale veins under the skin, as currants have
+    float a = atan(lp.x, lp.z);
+    skin = mix(skin, skin * 1.6 + vec3(0.06, 0.0, 0.0), smoothstep(0.96, 1.0, abs(sin(a * 5.0))) * 0.35 * (1.0 - abs(lp.y)));
+    // the dried calyx: a dark star at the crown
+    float crown = smoothstep(0.955, 0.985, lp.y) * (0.6 + 0.4 * smoothstep(0.2, 0.6, abs(sin(a * 2.5))));
+    vec3 col = mix(skin, vec3(0.12, 0.07, 0.03), clamp(crown, 0.0, 1.0));
+    // a burst berry: a split down one side, wet dark pulp showing
+    float split = burst * smoothstep(0.08, 0.0, abs(lp.x - 0.15 * sin(lp.y * 6.0))) * step(0.0, lp.z);
+    col = mix(col, vec3(0.2, 0.0, 0.02), split);
+    ALBEDO = col;
+    ROUGHNESS = 0.12 + 0.1 * n;
+    SPECULAR = 0.6;
+    CLEARCOAT = 0.35;
+    CLEARCOAT_ROUGHNESS = 0.15;
+    BACKLIGHT = vec3(0.45, 0.04, 0.03) * (1.0 - crown);
+    RIM = 0.2;
+}
+";
+
+    /// Bread crumbs: irregular broken chunks (the scanned stones' shapes, which are real broken forms) in bread:
+    /// golden-brown crust on the faces that were the loaf's outside (up), soft porous crumb on the broken sides.
+    public const string Crumb = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float seed = 0.0;
+varying vec3 lp;
+varying vec3 ln;
+void vertex() { lp = VERTEX; ln = NORMAL; }
+float tri(vec3 p, vec3 an, float s, float o) {
+    return texture(noise_b, p.yz * s + o).r * an.x + texture(noise_b, p.xz * s + o).r * an.y + texture(noise_b, p.xy * s + o).r * an.z;
+}
+void fragment() {
+    vec3 an = abs(ln); an /= an.x + an.y + an.z;
+    float n = tri(lp, an, 9.0, seed);
+    float pore = tri(lp, an, 41.0, seed + 0.37);
+    float crust = smoothstep(0.05, 0.55, ln.y + (n - 0.5) * 0.8);
+    vec3 crumbC = vec3(0.78, 0.62, 0.38) * (1.0 - 0.6 * smoothstep(0.5, 0.68, pore)) * (0.85 + 0.15 * n);
+    vec3 crustC = mix(vec3(0.33, 0.14, 0.04), vec3(0.62, 0.33, 0.1), n) * (0.85 + 0.25 * pore);
+    ALBEDO = mix(crumbC, crustC, crust);
+    ROUGHNESS = mix(0.95, 0.5, crust);
+    SPECULAR = mix(0.2, 0.45, crust);
+    NORMAL_MAP = normalize(vec3((pore - 0.5) * (1.0 - crust) * 1.6, (n - 0.5) * 0.6, 1.0)) * 0.5 + 0.5;
+}
+";
+
+    /// A sunflower seed modelled in Blender: UV.x runs around the shell, UV.y along it. Dark grey-black with thin
+    /// pale stripes along its length, a little glossy; the split halves show the cream kernel inside.
+    public const string Seed = @"
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float seed = 0.0;
+void fragment() {
+    float n = texture(noise_b, UV * vec2(3.0, 9.0) + seed).r;
+    if (FRONT_FACING) {
+        float stripes = smoothstep(0.82, 0.94, abs(sin((UV.x * 5.0 + n * 0.25) * 3.14159)));
+        float tip = smoothstep(0.85, 1.0, UV.y);
+        vec3 shell = mix(vec3(0.05, 0.048, 0.045), vec3(0.6, 0.57, 0.5), stripes * (1.0 - tip * 0.6));
+        ALBEDO = shell * (0.85 + 0.3 * n);
+        ROUGHNESS = 0.5 + 0.2 * n;
+        SPECULAR = 0.35;
+        CLEARCOAT = 0.25; CLEARCOAT_ROUGHNESS = 0.4;
+    } else {
+        ALBEDO = vec3(0.86, 0.8, 0.66) * (0.85 + 0.2 * n);
+        ROUGHNESS = 0.7;
+    }
+}
+";
+
+    /// A currant modelled in Blender: vertex colour 1 is skin, 0 the dried calyx and stalk. Glossy, light passing
+    /// through the skin, pale veins, each berry its own red.
+    public const string BerrySkin = @"
+shader_type spatial;
+uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
+uniform float tone = 1.0;
+varying float skin;
+varying vec3 lp;
+void vertex() { skin = COLOR.r; lp = VERTEX; }
+void fragment() {
+    float n = texture(noise_b, UV * 4.0 + tone).r;
+    vec3 red = mix(vec3(0.08, 0.005, 0.015), vec3(0.24, 0.018, 0.03), clamp(tone * (0.65 + 0.45 * n), 0.0, 1.0));
+    float vein = smoothstep(0.93, 1.0, abs(sin(atan(lp.x, lp.z) * 5.0))) * 0.25;
+    vec3 col = mix(red, red * 1.7 + vec3(0.05, 0.0, 0.0), vein);
+    vec3 dry = vec3(0.16, 0.1, 0.05) * (0.8 + 0.4 * n);
+    ALBEDO = mix(dry, col, skin);
+    ROUGHNESS = mix(0.85, 0.16 + 0.1 * n, skin);
+    SPECULAR = mix(0.2, 0.55, skin);
+    CLEARCOAT = 0.4 * skin; CLEARCOAT_ROUGHNESS = 0.12;
+    BACKLIGHT = vec3(0.22, 0.02, 0.02) * skin;
 }
 ";
 
@@ -597,32 +945,42 @@ void fragment() {
 shader_type spatial;
 render_mode cull_disabled;
 " + Fow + @"
+uniform sampler2D leaf_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2D leaf_nor : hint_normal, filter_linear_mipmap, repeat_disable;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec4 vcol;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; vcol = COLOR; }
+float h11(float x) { return fract(sin(x * 91.3458 + 17.17) * 47453.5453); }
 void fragment() {
-    float age = vcol.r;
-    vec3 green = vec3(0.22, 0.34, 0.09);
-    vec3 yellow = vec3(0.70, 0.52, 0.13);
-    vec3 brown = vec3(0.40, 0.21, 0.08);
-    vec3 col = age < 0.5 ? mix(green, yellow, age * 2.0) : mix(yellow, brown, (age - 0.5) * 2.0);
-    float u = UV.x - 0.5;
-    float v = UV.y;
-    float rib = 1.0 - smoothstep(0.0, 0.012, abs(u));
-    float lat = 1.0 - smoothstep(0.0, 0.03, abs(fract(v * 9.0 - abs(u) * 5.0) - 0.5) - 0.44);
-    lat *= step(0.02, abs(u));
-    float spots = smoothstep(0.62, 0.7, texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r);
+    // the photographed leaf (atlas), dried by age, with PR #11's per-leaf variation and matte rules: the seed in the
+    // vertex colour shifts each leaf's age and drying colours, so no two neighbours match
+    float h1 = h11(vcol.g * 313.0), h2 = h11(vcol.g * 571.0 + 3.0), h3 = h11(vcol.g * 977.0 + 7.0);
+    float age = clamp(vcol.r + (h1 - 0.5) * 0.3, 0.0, 1.0);
+    // where each species sits in the atlas (x, y, w, h); the stem end of the mesh (v = 0) is the photo's bottom
+    vec4 r = vcol.b < 0.25 ? vec4(0.0, 0.1943, 0.3333, 0.6104) : vcol.b < 0.75 ? vec4(0.3684, 0.0, 0.2622, 0.999) : vec4(0.6667, 0.1807, 0.3333, 0.6387);
+    vec2 t = r.xy + vec2(UV.x, 1.0 - UV.y) * r.zw;
+    vec4 photo = texture(leaf_tex, t);
+    if (photo.a < 0.5) discard;
+    float lum = dot(photo.rgb, vec3(0.3, 0.59, 0.11));
+    vec3 yellow = mix(vec3(1.6, 1.1, 0.3), vec3(1.85, 1.3, 0.42), h3) * lum * 0.6;
+    vec3 ochre = mix(vec3(1.35, 0.8, 0.22), vec3(1.5, 0.92, 0.3), h2) * lum * 0.55;
+    vec3 brown = mix(vec3(0.95, 0.5, 0.2), vec3(1.2, 0.68, 0.28), h1) * lum * 0.5;
+    vec3 col = age < 0.35 ? mix(photo.rgb, yellow, age / 0.35) : age < 0.7 ? mix(yellow, ochre, (age - 0.35) / 0.35) : mix(ochre, brown, (age - 0.7) / 0.3);
+    // decay: dark blotches that spread with age, and dry edges
     float n = texture(noise_b, UV * vec2(3.0, 8.0) + vcol.g * 3.0).r;
-    col *= 0.82 + 0.3 * n;
-    col = mix(col, col * 1.45 + 0.04, max(rib, lat * 0.6));
-    col = mix(col, vec3(0.16, 0.09, 0.04), spots * (0.3 + age * 0.5));
-    // dry, darker edges
-    col = mix(col, brown * 0.7, smoothstep(0.38, 0.5, abs(u) / max(0.001, vcol.b)) * age);
-    ALBEDO = col * fow(wpos);
-    ROUGHNESS = mix(0.45, 0.85, age);
-    SPECULAR = 0.35;
-    BACKLIGHT = col * 0.5;
+    float blotch = smoothstep(0.58, 0.72, texture(noise_b, UV * vec2(2.0, 5.0) + vcol.g * 7.0).r);
+    float fine = smoothstep(0.66, 0.78, texture(noise_b, UV * vec2(9.0, 22.0) + vcol.g * 11.0).r);
+    float decay = clamp(blotch * (0.3 + age * 0.7) * (0.6 + 0.8 * h3) + fine * age * 0.5, 0.0, 1.0);
+    col = mix(col, vec3(0.13, 0.07, 0.03), decay * 0.7);
+    col = mix(col, brown * 0.62, smoothstep(0.32, 0.5, abs(UV.x - 0.5)) * age * 0.5);
+    ALBEDO = clamp(col, 0.03, 0.72);
+    NORMAL_MAP = texture(leaf_nor, t).rgb;
+    // matte (the lighting audit: a dry leaf never below 0.8; a fresh one may be a little smoother), grain breaks the highlight
+    ROUGHNESS = clamp(mix(0.7, 0.9, age) + (n - 0.5) * 0.16 + decay * 0.05, 0.6, 1.0);
+    SPECULAR = 0.2;
+    METALLIC = 0.0;
+    BACKLIGHT = col * (0.55 - 0.35 * age);
 }
 ";
 
@@ -671,14 +1029,15 @@ void fragment() {
 
     public static readonly string Food = @"
 shader_type spatial;
-" + Fow + @"
+" + Under + Fow + @"
 uniform int kind = 0; // 0 crumb, 1 berry, 2 sugar, 3 seed
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 varying vec3 wpos;
 varying vec3 lpos;
 varying vec3 lnrm;
 varying float vcol_r;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; lpos = VERTEX; lnrm = NORMAL; vcol_r = COLOR.r; }
+varying float v_h;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; lpos = VERTEX; lnrm = NORMAL; vcol_r = COLOR.r; v_h = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453); }
 void fragment() {
     float n = texture(noise_b, lpos.xz * 0.9 + lpos.y * 0.3).r;
     float m = texture(noise_b, lpos.xy * 2.3).r;
@@ -688,6 +1047,9 @@ void fragment() {
         vec3 crumb = mix(vec3(0.70, 0.58, 0.38), vec3(0.80, 0.68, 0.48), m);
         float pores = smoothstep(0.6, 0.7, m);
         col = mix(crumb * (1.0 - pores * 0.45), crust, smoothstep(0.1, 0.6, lnrm.y + n * 0.4));
+        col *= 0.84 + 0.32 * v_h;                           // each scrap its own tone
+        col = mix(col, col * vec3(1.1, 0.95, 0.8), fract(v_h * 7.0) * 0.5);
+        rough = clamp(0.88 + (n - 0.5) * 0.16 + (v_h - 0.5) * 0.1, 0.78, 0.97); spec = 0.22;
     } else if (kind == 1) {
         // raspberry drupelets: vertex red channel carries the per-drupelet tone, core is darker
         float tone = vcol_r;
@@ -706,13 +1068,15 @@ void fragment() {
     } else {
         float stripe = smoothstep(0.35, 0.5, abs(sin(atan(lpos.x, lpos.y) * 6.0 + n * 2.0)));
         col = mix(vec3(0.05, 0.045, 0.04), vec3(0.78, 0.74, 0.66), stripe * 0.85);
-        rough = 0.4; spec = 0.5; cc = 0.4;
+        rough = clamp(0.8 + (n - 0.5) * 0.12 + (v_h - 0.5) * 0.08, 0.75, 0.9); spec = 0.28; // dry seed husk: matte, no varnish
+        col *= 0.88 + 0.24 * v_h;
     }
     ALBEDO = col * fow(wpos);
     ROUGHNESS = rough;
     SPECULAR = spec;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.2;
+    AO = under_ambient(wpos);
 }
 ";
 
@@ -736,8 +1100,9 @@ void fragment() {
     float n = texture(noise_b, wpos.xz * 2.5 + v_c.w * 9.0).r;
     a *= 0.72 + 0.42 * n;
     a *= mix(0.6, 1.0, smoothstep(-0.6, 0.6, v_n.y));
+    a *= 0.88 + 0.24 * v_h;                                               // no two stones alike
     ALBEDO = a * fow(wpos);
-    ROUGHNESS = mix(0.9, 0.6, v_c.y);
+    ROUGHNESS = clamp(mix(0.92, 0.8, v_c.y) + (n - 0.5) * 0.16 + (v_h - 0.5) * 0.08, 0.75, 0.97);
     SPECULAR = 0.25;
 }
 ";
@@ -798,6 +1163,111 @@ void fragment() {
     float rim = (1.0 - billboard) * smoothstep(0.6, 0.82, r) * (1.0 - smoothstep(0.82, 1.0, r)) * 0.35 * swirl;
     ALBEDO = v_c.rgb;
     ALPHA = clamp((glow + rim) * v_c.a, 0.0, 1.0);
+}
+";
+
+    /// A general's royal insignia: an engraved metal seal (assets/insignia, one texture per rank of tiers) lying on the
+    /// soil under it. Lit as real metal, with a relief normal from the engraving. Per instance: x = richness within its
+    /// tier 0..1, y = selected, z = cast flare 0..1, w = opacity.
+    public const string Insignia = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap, repeat_disable;
+uniform float gems = 0.0; // the top tier's amber cabochons glow a little
+uniform float lift = 1.0; // the dark bronze of the first tier is brightened so it reads on brown soil
+uniform vec3 tint = vec3(1.0); // ...and pulled back toward a deep aged bronze
+uniform float relief = 6.0; // engraving depth (the bronze's thin spokes need more to show)
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+float lum(vec2 uv) { vec4 t = texture(tex, uv); return dot(t.rgb, vec3(0.3, 0.5, 0.2)) * t.a; }
+void fragment() {
+    vec2 uv = vec2(UV.x, 1.0 - UV.y); // the crown points the way the general faces
+    vec4 t = texture(tex, uv);
+    t.rgb = min(t.rgb * lift, vec3(1.0)) * tint;
+    float rich = v_c.x, sel = v_c.y, flare = v_c.z;
+    // richer within the tier: from a dull, dusty patina to a polished, warmer gold
+    vec3 col = mix(t.rgb * vec3(0.78, 0.72, 0.62), t.rgb * vec3(1.08, 1.0, 0.86), rich);
+    float e = 1.0 / 512.0;
+    float hx = lum(uv + vec2(e, 0.0)) - lum(uv - vec2(e, 0.0));
+    float hy = lum(uv + vec2(0.0, e)) - lum(uv - vec2(0.0, e));
+    NORMAL = normalize(NORMAL + (TANGENT * hx - BINORMAL * hy) * relief);
+    ALBEDO = col;
+    METALLIC = 0.85;
+    ROUGHNESS = mix(0.55, 0.3, rich);
+    SPECULAR = 0.6;
+    // no glow of its own: sun and shade act on it like metal. A faint warmth only while selected, a flare when casting.
+    float amber = gems * smoothstep(0.25, 0.6, t.r - t.b) * smoothstep(0.35, 0.8, t.r);
+    EMISSION = col * (0.03 + 0.06 * sel + 0.6 * flare) + vec3(1.0, 0.5, 0.1) * amber * 0.25;
+    // solid metal and enamel; outside it, a soft contact shadow where the seal presses into the soil
+    float r = length(UV - 0.5) * 2.0;
+    float shadow = smoothstep(0.88, 0.96, r) * smoothstep(1.0, 0.97, r) * (1.0 - t.a) * 0.5; // a thin band at the outer rim only
+    float body = t.a * v_c.w;
+    ALBEDO = mix(vec3(0.0), col, body / max(body + shadow * (1.0 - body), 0.001));
+    METALLIC = 0.85 * body;
+    SPECULAR = 0.6 * body * (1.0 - 0.4 * gems); // the red-gold rim must not blow out to white
+    ROUGHNESS = mix(1.0, mix(0.55, 0.3, rich), body);
+    ALPHA = clamp(body + shadow * (1.0 - body), 0.0, 1.0);
+}
+";
+
+    /// A pheromone haze under an ant whose mind a Queen's Pheromone has taken: a faint, slowly breathing honey-coloured
+    /// film, brightest at its rim. Per instance: rgb colour, a strength.
+    public const string Haze = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+void fragment() {
+    vec2 p = UV - 0.5;
+    float r = length(p) * 2.0;
+    float a = atan(p.y, p.x);
+    float wisps = 0.6 + 0.4 * sin(a * 5.0 + TIME * 1.3 + r * 9.0);
+    float film = smoothstep(1.0, 0.55, r) * smoothstep(0.1, 0.6, r) * wisps;
+    ALBEDO = v_c.rgb;
+    ALPHA = clamp(film * v_c.a * (0.75 + 0.25 * sin(TIME * 3.0)), 0.0, 1.0);
+}
+";
+
+    /// Over an ant on auto-eat: a small drop of hemolymph, glossy and dark-rimmed, so the player sees who will eat
+    /// its kills. Billboard; per instance x = opacity.
+    public const string Drop = @"
+shader_type spatial;
+render_mode unshaded, depth_test_disabled, cull_disabled, shadows_disabled, blend_mix;
+varying float v_a;
+void vertex() {
+    v_a = INSTANCE_CUSTOM.x;
+    float s = length(MODEL_MATRIX[0].xyz);
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s, MODEL_MATRIX[3]);
+}
+void fragment() {
+    vec2 p = (UV - vec2(0.5, 0.58)) * vec2(2.0, 2.0);
+    // a teardrop: a round belly drawn up to a point
+    float belly = length(p) - 0.42;
+    float tip = max(abs(p.x) - (0.42 * smoothstep(-0.95, 0.0, p.y)), -p.y - 0.95);
+    float d = p.y < 0.0 ? min(belly, tip) : belly;
+    float inner = 1.0 - smoothstep(0.0, 0.04, d);
+    float outer = 1.0 - smoothstep(0.0, 0.04, d - 0.08);
+    vec3 blood = mix(vec3(0.42, 0.06, 0.03), vec3(0.85, 0.28, 0.1), smoothstep(0.4, -0.3, p.y));
+    float shine = smoothstep(0.12, 0.0, length(p - vec2(-0.14, -0.12)));
+    ALBEDO = mix(vec3(0.06, 0.02, 0.01), blood + shine * 0.6, inner);
+    ALPHA = outer * v_a;
+}
+";
+
+    /// A thin circle on the ground (the collection radius, the ring on remains queued for collection).
+    /// Per instance: rgb colour, a opacity; uniform width = the line's width as a share of the radius.
+    public const string Circle = @"
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float width = 0.02;
+varying vec4 v_c;
+void vertex() { v_c = INSTANCE_CUSTOM; }
+void fragment() {
+    float r = length(UV - 0.5) * 2.0;
+    float line = smoothstep(1.0 - width * 2.0, 1.0 - width, r) * (1.0 - smoothstep(1.0 - width * 0.4, 1.0, r));
+    float dash = 0.6 + 0.4 * step(0.5, fract(atan(UV.y - 0.5, UV.x - 0.5) * 12.0 + TIME * 0.15));
+    ALBEDO = v_c.rgb;
+    ALPHA = line * dash * v_c.a;
 }
 ";
 
@@ -900,6 +1370,73 @@ void fragment() {
     ROUGHNESS = 0.55;
     BACKLIGHT = vec3(0.6);
     ALPHA = v_a * (0.75 + 0.25 * strands);
+}
+";
+
+    /// The royal larva (target H3): a giant grub, pearly cream with a mother-of-pearl sheen, breathing slowly.
+    /// `breath` 0..1 scales the swell (set it to 0 for a larva that is failing).
+    public const string RoyalLarva = @"
+shader_type spatial;
+render_mode depth_draw_opaque;
+" + Under + @"
+uniform float breath = 1.0;
+varying vec3 v_local;
+varying float v_ao;
+void vertex() {
+    v_local = VERTEX;
+    v_ao = COLOR.a;
+    // a slow wave of breath along the body, segment by segment
+    VERTEX += NORMAL * sin(TIME * 1.3 - VERTEX.z * 9.0) * 0.006 * breath;
+}
+void fragment() {
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+    vec3 pearl = vec3(0.62, 0.56, 0.44);
+    // mother-of-pearl: the hue drifts with the viewing angle, strongest at the rim
+    vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (fres * 1.3 + v_local.z * 1.5 + vec3(0.0, 0.33, 0.67)));
+    ALBEDO = mix(pearl, pearl * rainbow * 1.25, 0.3 + 0.45 * fres) * mix(0.55, 1.0, v_ao);
+    ROUGHNESS = 0.3;
+    CLEARCOAT = 0.7;
+    CLEARCOAT_ROUGHNESS = 0.2;
+    BACKLIGHT = vec3(0.75, 0.6, 0.42);
+    AO = v_ao * under_ambient((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
+    AO_LIGHT_AFFECT = 0.3;
+}
+";
+
+    /// The hero's womb cocoon (target H4): translucent tan silk lit from inside, bulging and throbbing.
+    /// `throb` 0..1 is how hard it pulses, `rate` its beats per second (faster as the hero nears hatching), `glow`
+    /// how bright the light inside is. The hero inside is drawn separately, darker, behind the silk.
+    public const string Womb = @"
+shader_type spatial;
+render_mode blend_mix, cull_back, depth_draw_opaque;
+uniform float throb = 0.6;
+uniform float rate = 0.8;
+uniform float glow = 1.0;
+varying vec3 lpos;
+float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void vertex() {
+    lpos = VERTEX;
+    // a heartbeat: a quick swell and a slow ease, rolling over the lumps as the hero presses against the silk
+    float beat = pow(max(0.0, sin(TIME * rate * 6.2831)), 3.0);
+    float press = 0.5 + 0.5 * sin(VERTEX.y * 9.0 + VERTEX.z * 7.0 + TIME * 1.7);
+    VERTEX += NORMAL * (0.012 + 0.03 * press) * beat * throb;
+}
+void fragment() {
+    float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 1.5);
+    // wound silk: fine crossing strands and fuzz
+    float s1 = abs(sin(lpos.z * 70.0 + lpos.x * 45.0 + sin(lpos.y * 60.0) * 2.0));
+    float s2 = abs(sin(lpos.z * 55.0 - lpos.y * 50.0 + sin(lpos.x * 70.0) * 2.0));
+    float strands = max(s1, s2);
+    float fuzz = hash(floor(lpos * 260.0));
+    float beat = pow(max(0.0, sin(TIME * rate * 6.2831)), 3.0);
+    ALBEDO = vec3(0.5, 0.38, 0.22) * (0.6 + 0.4 * strands) * (0.85 + 0.15 * fuzz);
+    ROUGHNESS = 0.7;
+    BACKLIGHT = vec3(0.45, 0.3, 0.14);
+    // the light inside: amber through the thin middle, a violet core, thinner and brighter at the edges of the bulges
+    vec3 inner = mix(vec3(1.0, 0.55, 0.18), vec3(0.75, 0.35, 0.85), smoothstep(0.6, 0.0, length(lpos.xz)) * 0.35);
+    EMISSION = inner * glow * (0.16 + 0.16 * beat * throb) * (1.0 - 0.7 * fres) * (0.4 + 0.6 * strands);
+    // thin where the strands part, so the hero shows through; denser at the rim
+    ALPHA = clamp(0.12 + 0.4 * strands * strands * strands + 0.35 * fres, 0.0, 0.9);
 }
 ";
 
@@ -1049,9 +1586,9 @@ void fragment() {
     /// Every dug surface of a nest: the pit walls, the shaft, the galleries, the room walls and floors. The soil
     /// is read by world height below the entrance (`ground_y`): a dark organic topsoil with roots and leaf
     /// litter, an ochre loam set with pebbles, and a pale loose sandy subsoil underneath, the boundaries wavy.
-    /// The walls carry the scallops of the diggers' jaws (`grooves`), the floors are trodden smooth. There is no
-    /// lamp below ground: the one sun comes in through the opened earth, and the sand around the mouth throws a
-    /// little warm light into the hole (`bounce`). CULL is replaced per use (back faces for the cavities, which
+    /// The walls carry the scallops of the diggers' jaws (`grooves`), the floors are trodden smooth. Cavity
+    /// surfaces take no sun and no sky ambient (see NestLights): they are lit by the warm lamps and a faint fill
+    /// (`ambient_scale`); the sand around the mouth throws a little warm light into the hole (`bounce`). CULL is replaced per use (back faces for the cavities, which
     /// are seen from inside, both for the bowl and the mouth).
     public static readonly string Earth = @"
 shader_type spatial;
@@ -1060,23 +1597,54 @@ uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform sampler2D normal_c : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float ground_y = 0.0;   // world height of the nest entrance
 uniform sampler2D soil_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+// the mine: a photoscanned rock face on the walls, scanned compacted sand on the floor (Poly Haven, CC0)
+uniform sampler2D wall_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D wall_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D wall_arm : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform sampler2D floor_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D floor_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float wall_scale = 0.32;    // texture repeats per world unit on the walls (one scan tile is about 3 units)
+uniform float floor_scale = 0.22;
+uniform bool mine = false;          // the scanned mine look (false keeps the older generated soil)
 uniform float shade = 1.0;      // how much of the sun this surface can see
 uniform float bounce = 0.5;     // warm light thrown in from the sunlit sand above
 uniform bool cavity_surface = false;
 uniform bool flat_lighting = false; // Low tier: stable directional light without screen-space buffers
+uniform float ambient_scale = 0.1;  // cavity walls: share of the sky's fill that reaches underground (the sky ambient is switched off there)
+uniform float cutaway = 0.0;        // build mode: the banks facing away from the camera (the near walls) are cut away, like a diorama, so the eye looks onto the floors
+uniform vec4 lamps[8];              // Low tier: nearest lamps (xyz world, w range) painted as pools, as there are no real shaded lights
+
 uniform float grooves = 1.0;    // claw marks of the digging (0 on trodden floors)
 uniform int detail = 1;         // graphics tier: 0 plain layers, 1 pebbles, roots and grooves, 2 finer grain
 varying vec3 wpos;
 varying vec3 wnrm;
 void vertex() {
+    if (cavity_surface && cutaway > 0.001) {
+        // build mode: a bank between the camera and the room (its slope faces away from the eye) is laid flat at
+        // the floor's level, so the eye looks onto the floor as in a cutaway diorama. The floor and the far wall stay;
+        // the fold follows the camera as it turns. UV.y carries the floor height for this column of the mesh.
+        float bank = smoothstep(-0.5, -0.3, UV.x);
+        vec3 wp0 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        vec3 wn0 = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wp0.xz);
+        // only a standing wall folds; the flat lip and skirt keep their place (a flat face has no sideways normal to
+        // judge by: normalising it gave a random answer, which punched holes in the skirt and showed the sky as grey)
+        float steep = smoothstep(0.8, 0.5, wn0.y);
+        float nl = length(wn0.xz);
+        float away = nl > 1e-3 ? -dot(wn0.xz / nl, toEye) : -1.0;
+        float fold = bank * steep * smoothstep(0.0, 0.3, away) * cutaway;
+        VERTEX.y = mix(VERTEX.y, UV.y + 0.02, fold);
+        NORMAL = normalize(mix(NORMAL, vec3(0.0, 1.0, 0.0), fold));
+    }
     wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-    // Excavation UV.x stores a distance and UV.y is constant; it is not a valid
+    // Excavation UV.x stores a distance and UV.y is the floor height; neither is a valid
     // tangent parameterization. Supply a stable basis for the triplanar normal map.
     vec3 tangent_axis = abs(NORMAL.x) > 0.95 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     TANGENT = normalize(tangent_axis - NORMAL * dot(NORMAL, tangent_axis));
     BINORMAL = normalize(cross(NORMAL, TANGENT));
 }
+vec3 unpack_n(vec2 xy) { vec2 n = xy * 2.0 - 1.0; return normalize(vec3(n, sqrt(max(1.0 - dot(n, n), 0.0)))); }
 float tri(sampler2D t, vec3 p, vec3 an, float s, float o) {
     return texture(t, p.yz * s + o).r * an.x + texture(t, p.xz * s + o).r * an.y + texture(t, p.xy * s + o).r * an.z;
 }
@@ -1113,14 +1681,54 @@ void fragment() {
     if (detail > 1) col *= 0.92 + 0.16 * tri(noise_b, wpos, an, 4.5, 0.9);
     // a trodden floor darkens toward the foot of the wall, so the cavity reads as a depression
     if (grooves < 0.01) { float rr = length(UV - 0.5) * 2.0; col *= 1.0 - 0.42 * smoothstep(0.5, 1.0, rr); }
-    if (cavity_surface) {
+    float wallness = 0.0;
+    vec3 mine_nrm = vec3(0.0, 0.0, 1.0);
+    float mine_rough = 0.9;
+    if (cavity_surface && mine) {
+        // the walls: triplanar rock face, blended by the surface's slope into the trodden sand of the floor
+        vec3 w3 = pow(an, vec3(5.0)); w3 /= max(dot(w3, vec3(1.0)), 0.001);
+        vec3 rx = texture(wall_albedo, wpos.yz * wall_scale).rgb;
+        vec3 ry = texture(wall_albedo, wpos.xz * wall_scale + 0.37).rgb;
+        vec3 rz = texture(wall_albedo, wpos.xy * wall_scale).rgb;
+        vec3 rock = rx * w3.x + ry * w3.y + rz * w3.z;
+        // the normal maps are VRAM-compressed to two channels: z is rebuilt from xy
+        vec3 nx = unpack_n(texture(wall_normal, wpos.yz * wall_scale).xy);
+        vec3 ny = unpack_n(texture(wall_normal, wpos.xz * wall_scale + 0.37).xy);
+        vec3 nz = unpack_n(texture(wall_normal, wpos.xy * wall_scale).xy);
+        vec3 rockN = normalize(nx * w3.x + ny * w3.y + nz * w3.z);
+        vec3 armv = texture(wall_arm, wpos.yz * wall_scale).rgb * w3.x + texture(wall_arm, wpos.xz * wall_scale + 0.37).rgb * w3.y + texture(wall_arm, wpos.xy * wall_scale).rgb * w3.z;
+        vec3 sand = texture(floor_albedo, wpos.xz * floor_scale).rgb;
+        vec3 sandN = unpack_n(texture(floor_normal, wpos.xz * floor_scale).xy);
+        wallness = smoothstep(0.35, 0.75, 1.0 - an.y);
+        // the walls carry the soil's layers faintly (dark topsoil at the lip, ochre loam, pale sand low down),
+        // the rock scan's own colour underneath; the floor is the surface's sand, trodden and a little darker
+        vec3 layer = mix(mix(vec3(0.62, 0.50, 0.40), vec3(1.0, 0.86, 0.68), t1), vec3(1.0, 0.95, 0.85), t2);
+        rock *= layer * vec3(0.78, 0.66, 0.56); // the walls frame the room: darker and cooler than the floor
+        sand *= vec3(0.78, 0.66, 0.52); // a sunken bowl: warm, but clearly darker and richer than the sunlit surface, so the rooms read at every zoom
+        col = mix(sand, rock, wallness);
+        col *= 0.9 + 0.2 * g;
+        float crevice = exp(-pow((UV.x + 0.48) / 0.4, 2.0));
+        col *= 1.0 - 0.3 * crevice;
+        // the shadow ring under the lip: the floor darkens toward the foot of the wall, as in the close-up
+        float ring = smoothstep(-0.95, -0.35, UV.x) * (1.0 - wallness);
+        col *= 1.0 - 0.42 * ring;
+        // the flat skirt beyond the lip lies under the surface's hole and sees neither sun nor lamps: give it the surface
+        // sand's own warm colour and fill, so no grey edge ever shows along a cut
+        float skirt = smoothstep(0.2, 0.45, UV.x);
+        col = mix(col, vec3(0.40, 0.30, 0.20) * (0.78 + 0.34 * g), skirt); // the surface's own dry soil: the lip reads as one ground with the yard
+        mine_nrm = mix(sandN, rockN, wallness);
+        mine_rough = mix(0.95, 0.8 + 0.2 * armv.g, wallness);
+        if (flat_lighting) col *= 0.45 + 0.55 * max(dot(normalize(wnrm), normalize(vec3(-0.6,0.8,0.4))), 0.0);
+        AO = (1.0 - 0.45 * crevice) * mix(1.0, armv.r, 0.6 * wallness);
+        AO_LIGHT_AFFECT = 0.5;
+    } else if (cavity_surface) {
         // Triplanar photographic soil keeps grain continuous across the floor and banks.
         vec3 weights = pow(an, vec3(4.0)); weights /= max(dot(weights, vec3(1.0)), 0.001);
         vec3 tx = texture(soil_albedo, wpos.yz * 0.17).rgb;
         vec3 ty = texture(soil_albedo, wpos.xz * 0.17).rgb;
         vec3 tz = texture(soil_albedo, wpos.xy * 0.17).rgb;
         col = tx * weights.x + ty * weights.y + tz * weights.z;
-        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.58) * vec3(0.55,0.53,0.50);
+        col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 0.8) * vec3(0.92,0.84,0.76);
         col *= mix(0.88, 1.08, smoothstep(-1.4, 0.3, UV.x));
         col *= 0.87 + 0.20 * g;
         // the walls show the soil in its layers (dark topsoil, ochre loam, pale sand), the floor stays trodden sand
@@ -1134,12 +1742,15 @@ void fragment() {
         AO_LIGHT_AFFECT = 0.5;
     }
     ALBEDO = col * shade;
-    ROUGHNESS = 0.96 - t2 * 0.08;
+    ROUGHNESS = mine && cavity_surface ? mine_rough : 0.96 - t2 * 0.08;
     SPECULAR = 0.2;
     vec2 nm = (texture(normal_c, (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.7).xy - 0.5) * (detail > 0 ? 1.0 : 0.6);
     NORMAL_MAP = normalize(vec3(nm, 0.6)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = 1.0 + claw * 0.6 * scal;
-    if (cavity_surface && !flat_lighting) {
+    if (cavity_surface && mine) {
+        NORMAL_MAP = mine_nrm * 0.5 + 0.5;
+        NORMAL_MAP_DEPTH = 1.1;
+    } else if (cavity_surface && !flat_lighting) {
         vec2 suv = (an.y > 0.5 ? wpos.xz : an.x > an.z ? wpos.yz : wpos.xy) * 0.17;
         vec2 px = 1.0 / vec2(textureSize(soil_albedo, 0));
         float l = dot(texture(soil_albedo, suv - vec2(px.x, 0.0)).rgb, vec3(0.3333));
@@ -1150,11 +1761,54 @@ void fragment() {
         NORMAL_MAP_DEPTH = 0.8;
     }
     EMISSION = col * vec3(0.72, 0.50, 0.28) * bounce * 0.55; // warm bounce fills the shadows that the blue sky would otherwise tint
+    if (cavity_surface) {
+        // the sky ambient is off down here: a faint warm fill keeps the blacks readable
+        EMISSION += col * vec3(1.0, 0.78, 0.55) * ambient_scale * 0.6;
+        if (flat_lighting) {
+            float pool = 0.0;
+            for (int i = 0; i < 8; i++) {
+                float r = max(lamps[i].w, 0.001);
+                float f = clamp(1.0 - length(wpos - lamps[i].xyz) / r, 0.0, 1.0);
+                pool += f * f * step(0.01, lamps[i].w);
+            }
+            EMISSION += col * vec3(1.0, 0.72, 0.45) * pool * 1.5;
+        }
+    }
 }
 ";
 
     /// A shaft of sunlight falling into the opened earth: a cone of warm haze, strongest along its edges where
     /// the eye looks through the most of it, fading toward the floor. Drawn only while the glass is up.
+    /// The mine's shoring and the stones in its banks: a scanned piece whose instance carries the outward direction
+    /// of the bank it stands in (INSTANCE_CUSTOM.xy). In build mode the pieces on the bank facing away from the eye
+    /// (the near wall, which the Earth shader folds flat) are hidden with it.
+    public const string Shoring = @"
+shader_type spatial;
+render_mode ambient_light_disabled;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D arm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform vec3 tint : source_color = vec3(1.0);
+uniform float cutaway = 0.0;
+uniform float fill = 0.14;
+varying vec2 v_side;
+varying vec3 wpos;
+void vertex() { v_side = INSTANCE_CUSTOM.xy; wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+    if (cutaway > 0.001 && dot(v_side, v_side) > 0.1) {
+        vec2 toEye = normalize(CAMERA_POSITION_WORLD.xz - wpos.xz);
+        if (dot(normalize(v_side), toEye) > 0.0) discard; // its bank faces the eye from the near side: folded away
+    }
+    vec3 c = texture(albedo_tex, UV).rgb * tint;
+    vec3 arm = texture(arm_tex, UV).rgb;
+    ALBEDO = c;
+    ROUGHNESS = arm.g;
+    AO = arm.r;
+    NORMAL_MAP = texture(normal_tex, UV).rgb;
+    EMISSION = c * vec3(0.55, 0.4, 0.26) * max(fill, 0.42);
+}
+";
+
     public const string Shaft = @"
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;

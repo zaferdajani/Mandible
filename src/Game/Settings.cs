@@ -38,6 +38,21 @@ public static class Settings
     /// Computers start fullscreen: in a window the mouse slides off the edge instead of scrolling the map.
     public static bool Fullscreen = true;
 
+    /// Master volume, 0 (muted) to 1: the menu's Sound button, the - and = keys and the keyboard's media volume keys.
+    public static float Volume = 0.8f;
+    public const float VolumeStep = 0.1f;
+
+    /// Sets the master bus to the chosen volume; zero mutes outright.
+    public static void ApplyVolume(bool save = false)
+    {
+        Volume = Mathf.Clamp(Mathf.Snapped(Volume, 0.05f), 0f, 1f);
+        AudioServer.SetBusMute(0, Volume <= 0.001f);
+        AudioServer.SetBusVolumeDb(0, Mathf.LinearToDb(Mathf.Max(Volume, 0.001f)));
+        if (save) Save();
+    }
+
+    public static string VolumeLabel() => Volume <= 0.001f ? "Sound: off" : $"Sound: {Mathf.RoundToInt(Volume * 100)}%";
+
     /// Short descriptions of each tier, for the settings panel.
     public static string Describe(Quality q) => q switch
     {
@@ -56,6 +71,7 @@ public static class Settings
         Fullscreen = (bool)cfg.GetValue("display", "fullscreen", true);
         CombatDetail = (Detail)Mathf.Clamp((int)cfg.GetValue("graphics", "combat_detail", 0), 0, 1);
         Tips = (int)cfg.GetValue("tips", "shown", 0);
+        Volume = (float)(double)cfg.GetValue("audio", "volume", 0.8);
     }
 
     public static void Save()
@@ -65,6 +81,7 @@ public static class Settings
         cfg.SetValue("display", "fullscreen", Fullscreen);
         cfg.SetValue("graphics", "combat_detail", (int)CombatDetail);
         cfg.SetValue("tips", "shown", Tips);
+        cfg.SetValue("audio", "volume", Volume);
         cfg.Save(Path);
     }
 
