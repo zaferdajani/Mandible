@@ -203,9 +203,9 @@ def gland():
                         break
                     bp.append(qb); b = (b + bstep).normalized()
                 if len(bp) > 1:
-                    tube(core, bp, [0.012 * (1 - 0.5 * t / len(bp)) for t in range(len(bp))], sides=4, cap=False)
+                    tube(core, bp, [0.006 * (1 - 0.5 * t / len(bp)) for t in range(len(bp))], sides=4, cap=False)
         if len(pts) > 1:
-            tube(core, pts, [0.018 * (1 - 0.6 * t / len(pts)) for t in range(len(pts))], sides=4, cap=False)
+            tube(core, pts, [0.009 * (1 - 0.6 * t / len(pts)) for t in range(len(pts))], sides=4, cap=False)
     co = obj("gland_core", core)
     paint(co, lambda p, n: (0.75, 0.55, 1.0))
     export("gland")
@@ -440,8 +440,8 @@ def web():
                 stems.faces.new((prev[0], prev[1], b, a))
             prev = (a, b)
     # the bramble: a woody twig across the top with hooked thorns and three serrated leaves
-    twig = bezier((-11, 1.5, 17.8), (-3, 0.5, 16.2), (5.5, -0.3, 12.0), 14)
-    tube(stems, twig, [0.32 - 0.012 * i for i in range(14)], sides=7)
+    twig = bezier((-12.0, 2.6, 0.0), (-12.8, 2.2, 15.0), (-4.0, 0.8, 16.6), 14)
+    tube(stems, twig, [0.3 - 0.014 * i for i in range(14)], sides=8, ridges=5, ridge_depth=0.06)
     for i in range(2, 13):
         p = twig[i]
         d = Vector((R.uniform(-0.3, 0.3), R.uniform(-1, 1), R.choice((-1, 1)))).normalized()
@@ -463,13 +463,13 @@ def web():
             row = []
             for b in range(rows + 1):
                 v = b / rows - 0.5
-                p = Vector((u * 3.2, v * w * 2, -abs(v) * 0.35 + 0.15 * math.sin(u * 3 + k)))
+                p = Vector((u * 2.2, v * w * 1.4, -abs(v) * 0.3 + 0.12 * math.sin(u * 3 + k)))
                 row.append(leaves.verts.new(base + rot @ p))
             grid.append(row)
         for a in range(cols):
             for b in range(rows):
                 leaves.faces.new((grid[a][b], grid[a + 1][b], grid[a + 1][b + 1], grid[a][b + 1]))
-    anchors = [Vector((-8.2, 0.2, 13.5)), Vector((-3.8, 0.5, 15.9)), Vector((3.6, -0.2, 13.0)), Vector((6.1, 0.1, 10.0)),
+    anchors = [Vector((-8.2, 0.2, 13.5)), Vector((-4.2, 0.8, 16.5)), Vector((5.0, 0.0, 13.0)), Vector((6.1, 0.1, 10.0)),
                Vector((5.5, 0.0, 0.0)), Vector((-2.0, 0.0, 0.0)), Vector((-8.2, 0.1, 4.5))]
     # frame threads between the anchors, then radials from the hub to the frame
     frame = []
@@ -554,9 +554,14 @@ def web():
     ob = obj("web_wrap", wrap); paint(ob, lambda p, n: (0.96, 0.9, 0.78))
     ob = obj("web_dew", dew); paint(ob, lambda p, n: (0.9, 0.95, 1.0))
     ob = obj("web_stems", stems)
-    paint(ob, lambda p, n: mix(mix((0.55, 0.42, 0.22), (0.8, 0.66, 0.38), 0.5 + 0.5 * noise.noise(p * 1.7)), (0.32, 0.22, 0.12), 0.55 * max(0.0, noise.noise(Vector((math.atan2(p.y, p.x + 8.5) * 9, p.z * 0.4, 0))) * 2 - 0.3)) if p.z < 15 else mix((0.36, 0.2, 0.12), (0.5, 0.3, 0.16), 0.5 + 0.5 * noise.noise(p * 4)))
+    def stem_colour(p, n):
+        if p.x < -9.8 or (p.x < -3 and p.z > 14.5):  # the bramble cane: red-brown bark
+            return mix((0.32, 0.16, 0.1), (0.48, 0.26, 0.14), 0.5 + 0.5 * noise.noise(p * 4))
+        straw = mix((0.5, 0.42, 0.3), (0.7, 0.6, 0.42), 0.5 + 0.5 * noise.noise(p * 1.7))  # weathered straw, not yellow
+        return mix(straw, (0.3, 0.22, 0.14), 0.55 * max(0.0, noise.noise(Vector((math.atan2(p.y, p.x + 8.5) * 9, p.z * 0.4, 0))) * 2 - 0.3))
+    paint(ob, stem_colour)
     ob = obj("web_leaves", leaves)
-    paint(ob, lambda p, n: mix((0.42, 0.45, 0.16), (0.7, 0.58, 0.2), 0.5 + 0.6 * noise.noise(p * 0.9)))
+    paint(ob, lambda p, n: mix((0.26, 0.3, 0.12), (0.44, 0.38, 0.16), 0.5 + 0.6 * noise.noise(p * 0.9)))
     export("web")
 
 
@@ -606,7 +611,7 @@ def nursery():
     shades = [(0.5, 0.36, 0.18), (0.36, 0.24, 0.12), (0.66, 0.52, 0.3), (0.28, 0.18, 0.09), (0.74, 0.62, 0.4), (0.45, 0.4, 0.22)]
     paint(ob, lambda p, n: mix(shades[int(abs(noise.noise(p * 5.3)) * 60) % 6], (0.9, 0.82, 0.6), 0.1 * (noise.noise(p * 9) + 0.5)))
     # the heap, laid from one end of the ledge to the other and stacked as it grows
-    pieces = 120
+    pieces = 170
     for i in range(pieces):
         t = i / pieces
         u = (t * 3.0) % 1.0
@@ -628,7 +633,7 @@ def nursery():
                 v.co.y *= 0.55 + 0.45 * max(0.0, 1 - max(0.0, t)) ** 0.5 if t > 0 else 1
                 v.co.z *= 1 + 0.15 * math.cos(v.co.y * 40)
                 v.co = rot @ v.co + base
-            col = lambda p, n, b=base, r=rot: mix((0.13, 0.11, 0.09), (0.76, 0.73, 0.66), 1.0 if math.sin(((r.inverted() @ (p - b)).y) * 48) > 0.6 else 0.0)
+            col = lambda p, n, b=base, r=rot: mix((0.16, 0.13, 0.1), (0.56, 0.52, 0.44), 1.0 if math.sin(((r.inverted() @ (p - b)).y) * 48) > 0.6 else 0.0)
         elif kind < 0.5:    # grass seed
             blob(bm, base, (0.22, 0.1, 0.08), subdiv=2, rough=0.06, seed=i, rot=rot)
             col = lambda p, n: mix((0.8, 0.66, 0.34), (0.92, 0.8, 0.5), noise.noise(p * 20) + 0.5)
@@ -668,8 +673,9 @@ def nursery():
                     for loop, (ai, bi) in zip(f.loops, ((a, b), (a + 1, b), (a + 1, b + 1), (a, b + 1))):
                         loop[uv].uv = (0.3 + ai / 4 * 0.5, bi / 3)
             col = lambda p, n: (0.8, 0.62, 0.3)
-        for v in bm.verts:  # pieces large enough to read from the nest view
-            v.co = base + (v.co - base) * 1.35
+        k_size = 1.35 * R.uniform(0.7, 1.25)
+        for v in bm.verts:  # pieces large enough to read from the nest view, and no two alike
+            v.co = base + (v.co - base) * k_size
         ob = obj(f"heap_{i:03d}" + ("_wing" if kind >= 0.86 else ""), bm)
         paint(ob, col)
     export("nursery")
