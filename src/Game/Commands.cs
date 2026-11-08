@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Mutate }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Mutate, Straw }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -85,6 +85,7 @@ public sealed class Cmd
                 break;
             }
             case CmdKind.Extract: if (ids.Count > 0) sim.CmdExtract(ids, sim.MutagenById(FoodId)); break;
+            case CmdKind.Straw: if (ids.Count > 0) sim.CmdStraw(ids, sim.Mission?.StrawById(FoodId)); break; // level 1's bridge: carry a straw together
             case CmdKind.Mutate: if (Arg < 31) sim.Mutate(Team, (Mutation)(1 << Arg)); break;
             case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;
             case CmdKind.Learn: if (ids.Count > 0) sim.LearnSkill(ids[0], Arg); break;     // spend a general's skill point

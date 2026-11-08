@@ -72,6 +72,21 @@ public partial class ExpeditionGuide : PanelContainer
                 guiding = true;
                 Game.Guide.Show(Expedition.Clearing, "NEST SITE", ""); // the panel at the top carries the button and the words
             }
+            else if (m.Stage == ExpeditionStage.Bridge && m.NextStraw is { } straw)
+            {
+                // a straw on the shore until a crew has one; then the water's edge where it is laid
+                guiding = true;
+                if (straw.HoldCount >= Expedition.StrawCrew)
+                    Game.Guide.Show(Expedition.BridgeSite, $"BRIDGE · {m.StrawsLaid}/{Expedition.StrawGoal}", "Keep at least two workers on the straw; more carry it faster");
+                else
+                    Game.Guide.Show(straw.Pos, "STRAW · CARRY TOGETHER", Settings.Mobile ? "Tap Workers, then the straw: two or more carry it to the water" : "Two or more workers (F3), then right-click: they carry it to the water");
+            }
+            else if (m.Stage == ExpeditionStage.Fragment && Game.Sim.MutagenById(m.GlandId) is { Home: false } gland)
+            {
+                guiding = true;
+                if (gland.Carried) Game.Guide.Show(Game.Sim.NestEntrance(Local.Me), "THE QUEEN", "The gland is heavy: its carrier walks slowly home");
+                else Game.Guide.Show(Expedition.Island, "DEAD QUEEN · MUTAGEN", Settings.Mobile ? "Tap Workers, then the glowing gland on the island" : "Workers (F3), then right-click the glowing gland on the island");
+            }
         }
         if (!guiding && _guiding) Game.Guide.Clear();
         _guiding = guiding;
@@ -146,6 +161,8 @@ public partial class ExpeditionGuide : PanelContainer
     {
         ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
         ("right-click the food clearing", "tap the food clearing"),
+        ("Select two or more workers (F3) and right-click a straw", "Tap Workers, then tap a straw"),
+        ("(F3, then right-click the glowing gland)", "(tap Workers, then tap the glowing gland)"),
         ("Press F3 to select workers, then click Dig entrance below.", "Tap Workers to select them, then tap Dig entrance below."),
         ("Press N, choose Brood Chamber, then click beside the royal chamber.", "Tap Build, choose Brood Chamber, then tap beside the royal chamber."),
         ("Choose Storage and click beside a connected room.", "Choose Storage and tap beside a connected room."),

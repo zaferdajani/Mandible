@@ -17,7 +17,7 @@ public static class ColonyValidation
             sim.Tick(1f / 30);
             Check(sim.Col[0].Alive, "Queen died during " + reason);
             for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Layer == 0)
-                Check(Expedition.Contains(sim.Ants[i].Pos), "An ant escaped the confined trail");
+                Check(Expedition.Contains(sim.Ants[i].Pos, 0, sim.Mission.Bridged), "An ant escaped the confined trail");
         }
         Check(done(), $"Timed out: {reason}; stage {sim.Mission?.Stage}; queen {sim.Ants[sim.Col[0].QueenId].Pos}; food {sim.Col[0].Food}");
         GD.Print("[campaign-test] PASS " + reason);
@@ -98,7 +98,34 @@ public static class ColonyValidation
                 Until(s, () => s.CanEnqueue(0, ProdKind.Worker) == QueueResult.Ok, 120, "economy can pay for a worker");
                 Check(s.Enqueue(0, ProdKind.Worker) == QueueResult.Ok, "Worker queue rejected");
             }
-            Until(s, () => s.Winner == 0, 180, "four workers hatch and complete episode one");
+            Until(s, () => s.Mission.Stage == ExpeditionStage.Bridge, 180, "four workers hatch and the bridge lesson begins");
+            Check(s.Winner < 0 && s.Mission.Straws.Count == Expedition.StrawGoal, "Episode one ended before the teamwork lesson");
+            var wet = Expedition.BridgeSite + new Vector2(4, 0);
+            Check(Expedition.InWater(wet) && s.Mission.Constrain(wet).DistanceTo(wet) > 0.5f, "Ants can walk on the water before the bridge");
+            // the lesson: one worker cannot move a straw; a crew can, and a bigger crew is faster
+            void Straw(List<int> ids, Straw st) { var sc = Cmd.Units(CmdKind.Straw, 0, ids, s); sc.FoodId = st.Id; sc.Apply(s); }
+            var crew = Units(s, AntType.Worker);
+            Check(crew.Count >= 4, $"Too few workers for the bridge: {crew.Count}");
+            var lone = s.Mission.Straws[0]; var lonePos = lone.Pos;
+            Straw(crew.GetRange(0, 1), lone);
+            for (int i = 0; i < 30 * 25; i++) s.Tick(1f / 30);
+            Check(lone.Pos.DistanceTo(lonePos) < 0.01f && !lone.Laid, "One worker carried a straw alone");
+            Check(Expedition.StrawSpeed(4) > Expedition.StrawSpeed(2) && Expedition.StrawSpeed(1) == 0, "Straw pace does not reward a bigger crew");
+            foreach (var st in s.Mission.Straws)
+            {
+                crew = Units(s, AntType.Worker);
+                Straw(crew.GetRange(0, Math.Min(4, crew.Count)), st);
+                Until(s, () => st.Laid, 150, $"a crew lays straw {st.Id + 1}");
+            }
+            Until(s, () => s.Mission.Stage == ExpeditionStage.Fragment, 5, "five straws make the bridge");
+            Check(s.Mission.Constrain(wet).DistanceTo(wet) < 0.01f, "The bridge does not carry ants over the water");
+            var gland = s.MutagenById(s.Mission.GlandId);
+            Check(gland != null && !gland.Home, "No gland in the dead queen");
+            int mutagenBefore = c.Mutagen;
+            crew = Units(s, AntType.Worker);
+            s.CmdExtract(crew.GetRange(0, Math.Min(3, crew.Count)), gland);
+            Until(s, () => s.Winner == 0, 300, "workers cross, carve the dead queen's gland and carry it to the queen");
+            Check(gland.Home && c.Mutagen == mutagenBefore, "The story gland changed the colony's mutagen reserve");
             Check(c.Gathered > 0, "No actual food was gathered");
             Check(s.Mission.Stage == ExpeditionStage.Complete, "Wrong victory condition");
             capacity = c.PopCap;

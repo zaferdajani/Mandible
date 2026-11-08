@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum ExpeditionStage { ClearTrail, EscortQueen, Provision, DigEntrance, RoyalChamber, Incubator, Store, RaiseWorkers, RaiseSoldiers, Complete }
+public enum ExpeditionStage { ClearTrail, EscortQueen, Provision, DigEntrance, RoyalChamber, Incubator, Store, RaiseWorkers, RaiseSoldiers, Bridge, Fragment, Complete }
 
 /// An authored campaign episode. Its gates live in the simulation, so hotkeys and UI buttons
 /// obey the same rules. Episode one is the confined founding lesson (Stage); episodes two to
@@ -23,15 +23,7 @@ public sealed partial class Expedition
     public const int WorkerGoal = 4, SoldierGoal = 6;
     public static readonly Vector2 Start = new(48, 256), Ambush = new(88, 256), Clearing = new(144, 256);
 
-    public static Vector2 Constrain(Vector2 p)
-    {
-        var trail = new Vector2(Mathf.Clamp(p.X, 40, 144), Mathf.Clamp(p.Y, 250, 262));
-        var d = p - Clearing;
-        var clearing = Clearing + (d.Length() > 27 ? d.Normalized() * 27 : d);
-        return p.DistanceSquaredTo(trail) < p.DistanceSquaredTo(clearing) ? trail : clearing;
-    }
-    public static bool Contains(Vector2 p, float margin = 0)
-        => p.DistanceTo(Constrain(p)) <= margin + 0.01f;
+    // walkable ground (Constrain, Contains) and the pond, straws and bridge: Bridge.cs
 
     public string Title => Episode > 1 ? StepTitle(Step) : Stage switch
     {
@@ -44,6 +36,8 @@ public sealed partial class Expedition
         ExpeditionStage.Store => "Store the harvest",
         ExpeditionStage.RaiseWorkers => "Grow the workforce",
         ExpeditionStage.RaiseSoldiers => "Raise a fighting squad",
+        ExpeditionStage.Bridge => "Bridge the water together",
+        ExpeditionStage.Fragment => "The dead queen's gland",
         _ => "The first nest is thriving",
     };
     public string Instruction => Episode > 1 ? StepInstruction : Stage switch
@@ -57,11 +51,31 @@ public sealed partial class Expedition
         ExpeditionStage.RoyalChamber => "Workers are excavating. The queen will enter the royal chamber as soon as it is ready.",
         ExpeditionStage.Incubator => "Press N, choose Brood Chamber, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
-        ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food; the chapter ends when they hatch.",
+        ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food.",
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
+        ExpeditionStage.Bridge => $"Across the pond to the east lie a dead queen and a second broken tube. Water stops every ant: build a bridge of straws. "
+            + $"A straw is too long for one ant. Select two or more workers (F3) and right-click a straw: they carry it together, and more workers carry it faster. Straws laid: {StrawsLaid}/{StrawGoal}.",
+        ExpeditionStage.Fragment => "The bridge holds. Send workers across to the dead queen (F3, then right-click the glowing gland): they carve it out, and one carries it home to the queen.",
         _ => "Level complete. Sweet Rain is now open on the colony map; Skirmish lets you try the complete roster now.",
     };
-    public Vector2 Marker => Episode > 1 ? MarkerPos : Stage == ExpeditionStage.ClearTrail ? Ambush : Stage == ExpeditionStage.Provision && RemainsLeft ? RemainsPos : Clearing;
+    public Vector2 Marker => Episode > 1 ? MarkerPos : Stage switch
+    {
+        ExpeditionStage.ClearTrail => Ambush,
+        ExpeditionStage.Provision when RemainsLeft => RemainsPos,
+        ExpeditionStage.Bridge => NextStraw?.Pos ?? BridgeSite,
+        ExpeditionStage.Fragment => Island,
+        _ => Clearing,
+    };
+    /// The straw the guide points at: one already moving, else the nearest one still on the shore.
+    public Straw NextStraw
+    {
+        get
+        {
+            Straw best = null;
+            foreach (var s in Straws) if (!s.Laid && (best == null || s.HoldCount > best.HoldCount || s.HoldCount == best.HoldCount && s.Pos.X > best.Pos.X)) best = s;
+            return best;
+        }
+    }
 }
 
 public sealed partial class Sim
@@ -184,7 +198,10 @@ public sealed partial class Sim
         if (Mission.Stage == ExpeditionStage.Incubator && ChamberCount(0, ChamberKind.Brood, true) > 0) Mission.Stage = ExpeditionStage.Store;
         if (Mission.Stage == ExpeditionStage.Store && ChamberCount(0, ChamberKind.Storage, true) > 0) Mission.Stage = ExpeditionStage.RaiseWorkers;
         // the soldier caste is Chapter 2's lesson: the founding ends with the first workers
-        if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal)
+        // then the teamwork lesson: a straw bridge to the island, and the dead queen's gland carried home
+        if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal) BeginBridge();
+        if (Mission.Stage == ExpeditionStage.Bridge) TickBridge(dt);
+        if (Mission.Stage == ExpeditionStage.Fragment && MutagenById(Mission.GlandId) is { Home: true })
         { Mission.Stage = ExpeditionStage.Complete; Winner = 0; }
         if (c.Founded || Mission.EntranceOrdered || Mission.Stage == ExpeditionStage.Provision) return;
         // Founders stay behind the fighting party, rather than foraging into the ambush.
@@ -193,7 +210,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive || a.Team != 0 || a.Type != AntType.Worker) continue;
             a.State = AntState.Move;
-            a.Goal = Expedition.Constrain(queen.Pos + new Vector2(-3 - i % 3, (i % 5 - 2) * 0.8f));
+            a.Goal = Mission.Constrain(queen.Pos + new Vector2(-3 - i % 3, (i % 5 - 2) * 0.8f));
             a.GoalLayer = 0;
         }
     }

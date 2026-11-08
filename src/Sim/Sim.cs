@@ -83,6 +83,7 @@ public struct Ant
     // mutation (Mutation.cs)
     public int MutaP1;                // mutagen source id + 1 this worker carves, carries or guards (0 = none)
     public bool MutaCarry;            // has the gland in its jaws
+    public byte StrawP1;              // level 1's bridge: straw id + 1 this worker helps carry (0 = none)
     public bool Nurse;                // lives in the nursery, feeding the royal larva
     // flight (the owner's rule: ground ants cannot fight a flyer in the air)
     public float PinT;                // seconds pinned to the ground by thrown silk (Mutation.WebThrowing)
@@ -91,7 +92,7 @@ public struct Ant
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
     SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
-    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost }
+    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost }
 
 public struct SimEvent
 {
@@ -583,7 +584,7 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ commands
     public void CmdMove(List<int> ids, Vector2 p, bool attack, int layer = 0)
     {
-        if (Mission?.Confined == true && layer == 0) p = Expedition.Constrain(p);
+        if (Mission?.Confined == true && layer == 0) p = Mission.Constrain(p);
         if (layer > 0 && (layer > 2 || !Col[layer - 1].Founded)) layer = 0; // no such underground yet
         float spacing = 0;
         foreach (int id in ids) spacing = Mathf.Max(spacing, Ants[id].Size);
@@ -599,6 +600,7 @@ public sealed partial class Sim
             a.GoalLayer = (byte)layer;
             if (a.DigP1 > 0) a.DigP1 = 0; // an ordered worker drops its shovel
             if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.StrawP1 = 0;
             a.Nurse = false;
             if (a.FeastOrder) { a.FeastOrder = false; a.FoodTarget = null; }
             a.State = attack ? AntState.AttackMove : AntState.Move;
@@ -634,6 +636,7 @@ public sealed partial class Sim
             if (!a.Alive) continue;
             if (a.Type != AntType.Worker) { others.Add(id); continue; }
             if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.StrawP1 = 0;
             a.Nurse = false;
             a.Assigned = f;
             a.FoodTarget = f;
@@ -649,6 +652,7 @@ public sealed partial class Sim
             ref var a = ref Ants[id];
             if (!a.Alive || a.Type == AntType.Queen) continue;
             if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            a.StrawP1 = 0;
             a.Nurse = false;
             a.Assigned = null;
             a.Forced = false;
@@ -716,7 +720,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1);
         }
         foreach (var c in Col)
         {
@@ -727,6 +731,7 @@ public sealed partial class Sim
             Mix((uint)c.Mutagen); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
         }
         foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
+        if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -1062,6 +1067,12 @@ public sealed partial class Sim
             if (desired.LengthSquared() < 0.5f) a.CoverT = 0;
             if (a.Team < 2) desired = Layering(ref a, desired);
             Move(i, ref a, st, desired, 1f, dt);
+            return;
+        }
+        if (a.StrawP1 > 0)
+        {
+            desired = Layering(ref a, StrawLogic(ref a, st, ref speedMul));
+            Move(i, ref a, st, desired, speedMul, dt);
             return;
         }
         if (a.MutaP1 > 0 || a.Nurse)
@@ -1743,7 +1754,7 @@ public sealed partial class Sim
         }
         pos = ClampMap(pos);
         float moved = pos.DistanceTo(a.Pos);
-        a.Pos = Mission?.Confined == true && a.Layer == 0 ? Expedition.Constrain(pos) : pos;
+        a.Pos = Mission?.Confined == true && a.Layer == 0 ? Mission.Constrain(pos) : pos;
         a.Gait = (a.Gait + moved / (0.55f * a.Size)) % 1f;
         a.Height = W.HF.Sample(pos.X, pos.Y);
     }

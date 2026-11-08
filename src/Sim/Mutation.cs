@@ -197,6 +197,7 @@ public sealed partial class Sim
             if (a.Type != AntType.Worker) { others.Add(id); continue; }
             if (a.MutaP1 > 0 && a.MutaP1 != m.Id + 1) DropMutagen(id, ref a);
             a.MutaP1 = m.Id + 1;
+            a.StrawP1 = 0;
             a.Nurse = false;
             a.DigP1 = 0;
             a.Assigned = null; a.FoodTarget = null;
