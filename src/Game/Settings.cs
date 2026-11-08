@@ -2,7 +2,9 @@ using Godot;
 
 namespace Mandible;
 
-/// Player settings kept in user://settings.cfg. Phones and tablets start on Low.
+/// Player settings kept in user://settings.cfg. Phones, tablets, Macs and laptops on integrated graphics start on
+/// Low; a computer with its own graphics card starts on High. Until the player picks a tier themselves, a battle
+/// that runs slowly steps down on its own (GameSession.WatchFrameRate).
 public static class Settings
 {
     public enum Quality { Low, Medium, High, Ultra }
@@ -13,7 +15,28 @@ public static class Settings
     public static bool Touch => Mobile || DisplayServer.IsTouchscreenAvailable();
     const string Path = "user://settings.cfg";
 
-    static Quality Default() => Mobile ? Quality.Low : Quality.High;
+    /// The tier a fresh install starts on. Phones and Macs (Apple's chips share memory with the screen, and a Retina
+    /// display has three times the pixels of a 1080p one) start on Low, like a laptop's integrated graphics; only a
+    /// separate graphics card starts on High.
+    static Quality Default()
+    {
+        if (Mobile || OS.GetName() == "macOS") return Quality.Low;
+        var kind = RenderingServer.GetVideoAdapterType();
+        return kind == RenderingDevice.DeviceType.DiscreteGpu ? Quality.High : Quality.Low;
+    }
+
+    /// True once the player has chosen a tier in the settings: the game never second-guesses that choice.
+    public static bool QualityChosen;
+
+    /// Share of the screen's pixels the 3D yard is drawn at before it is upscaled (the menus stay sharp). A phone or a
+    /// Retina laptop draws the yard at no more than a laptop screen's resolution: most of a mobile game's speed is
+    /// not drawing pixels no one can tell apart.
+    public static float RenderScale(int screenHeight)
+    {
+        float tier = Gfx switch { Quality.Low => 0.8f, Quality.Medium => 0.9f, _ => 1f };
+        int most = Gfx switch { Quality.Low => 720, Quality.Medium => 900, Quality.High => 1440, _ => 2160 };
+        return Mathf.Clamp(Mathf.Min(tier, (float)most / Mathf.Max(screenHeight, 1)), 0.5f, 1f);
+    }
 
     /// How much of a kill the player sees: Full sprays hemolymph, severs legs and leaves bodies in pieces; Reduced keeps
     /// the fluids light and the bodies whole. Rendering only.
@@ -56,9 +79,9 @@ public static class Settings
     /// Short descriptions of each tier, for the settings panel.
     public static string Describe(Quality q) => q switch
     {
-        Quality.Low => "Phones and old laptops. Hard sun shadows; workers and soldiers cast none. No ambient occlusion, plain soil, a third of the pebbles and grass.",
-        Quality.Medium => "Integrated graphics. Shadows on every ant, bloom, two thirds of the ground litter. No ambient occlusion.",
-        Quality.High => "Dedicated graphics (the default on computers). Crisp four-split shadows, ambient occlusion and bounced light, 2x MSAA, detailed soil.",
+        Quality.Low => "Phones, Macs and laptops (the default there). The yard is drawn at a lower resolution and sharpened. Hard sun shadows; workers and soldiers cast none. No ambient occlusion, plain soil, a third of the pebbles and grass.",
+        Quality.Medium => "Integrated graphics and newer Macs. Shadows on every ant, bloom, two thirds of the ground litter. No ambient occlusion.",
+        Quality.High => "Dedicated graphics (the default on computers with one). Crisp four-split shadows, ambient occlusion and bounced light, 2x MSAA, detailed soil.",
         Quality.Ultra => "A strong graphics card. Soft sun shadows out to the horizon, richer soil grain, dust haze in the air, 4x MSAA, every pebble and blade, and the straw casts shadows too.",
         _ => "",
     };
@@ -72,6 +95,7 @@ public static class Settings
         CombatDetail = (Detail)Mathf.Clamp((int)cfg.GetValue("graphics", "combat_detail", 0), 0, 1);
         Tips = (int)cfg.GetValue("tips", "shown", 0);
         Volume = (float)(double)cfg.GetValue("audio", "volume", 0.8);
+        QualityChosen = (bool)cfg.GetValue("graphics", "chosen", false);
     }
 
     public static void Save()
@@ -82,6 +106,7 @@ public static class Settings
         cfg.SetValue("graphics", "combat_detail", (int)CombatDetail);
         cfg.SetValue("tips", "shown", Tips);
         cfg.SetValue("audio", "volume", Volume);
+        cfg.SetValue("graphics", "chosen", QualityChosen);
         cfg.Save(Path);
     }
 

@@ -1,7 +1,7 @@
 # End-to-end test of the in-game updater, silently, on a throwaway copy of the Windows build:
 # the copy pretends to be an old version, finds the latest GitHub release, downloads it, quits,
 # the installer unpacks it over the copy and restarts it. Usage: powershell -File tools/updatetest.ps1
-$build = "C:\Users\Drzaf\Documents\MandibleBuilds\Windows"
+$build = "D:\MandibleBuilds\Windows"
 $t = Join-Path $env:TEMP "mandible-updatetest"
 $log = "$env:APPDATA\Godot\app_userdata\Mandible\update\install.log"
 Get-Process | Where-Object { $_.Path -like "$t*" } | Stop-Process -Force

@@ -16,6 +16,7 @@ public partial class Main : Node
     public override void _Ready()
     {
         var args = new System.Collections.Generic.List<string>(OS.GetCmdlineUserArgs());
+        GD.Print($"[startup] main scene at {Time.GetTicksMsec()} ms");
         // phones cannot easily be given command-line arguments: a test harness can drop them in a file instead
         if (FileAccess.FileExists("user://test_args.txt"))
         {
@@ -24,10 +25,12 @@ public partial class Main : Node
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://test_args.txt"));
         }
         if (args.Count > 0) GD.Print($"[args] {string.Join(" ", args)}");
-        TestRun = args.Count > 0;
+        TestRun = args.Exists(a => a is not ("--startup-probe" or "--still-menu" or "--mobile") && !a.StartsWith("--gfx=") && !a.StartsWith("--probe-shot=")); // these only measure or emulate a player's launch
         foreach (var a in args)
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
+            if (a == "--still-menu") _stillMenu = true;
+            if (a.StartsWith("--probe-shot=")) { var ps = a["--probe-shot=".Length..].Split('@'); _probeShot = ps[0]; _probeFrame = ps.Length > 1 ? int.Parse(ps[1]) : 30; }
             if (a.StartsWith("--layout=")) _layout = a.Substring(9);
             if (a == "--mobile") Settings.ForceMobile = true;
             if (a.StartsWith("--gfx=")) _gfx = a.Substring(6); // test runs: start on this graphics tier
@@ -73,11 +76,18 @@ public partial class Main : Node
         if (Settings.Mobile) GetTree().Root.ContentScaleFactor = 1.3f; // bigger buttons for fingers
         GetTree().Root.SizeChanged += ApplyOrientation;
         ApplyOrientation();
+        GD.Print($"[startup] settings at {Time.GetTicksMsec()} ms");
         Audio = new AudioDirector();
         AddChild(Audio);
+        GD.Print($"[startup] audio at {Time.GetTicksMsec()} ms");
         foreach (var a in args)
             if (a.StartsWith("--nesttest=")) { _ = NestRenderTest.Run(this, a.Substring(11)); return; }
+        GD.Print($"[startup] engine ready at {Time.GetTicksMsec()} ms");
         ShowMenu();
+        GD.Print($"[startup] menu built at {Time.GetTicksMsec()} ms");
+        int drawn = 0;
+        void Drawn() { drawn++; if (drawn == 1 || drawn == 30) GD.Print($"[startup] frame {drawn} drawn at {Time.GetTicksMsec()} ms"); if (_probeShot != null && drawn == _probeFrame) GetViewport().GetTexture().GetImage().SaveJpg(_probeShot, 0.9f); if (drawn == System.Math.Max(30, _probeFrame + 1)) { RenderingServer.FramePostDraw -= Drawn; if (args.Contains("--startup-probe")) GetTree().Quit(); } }
+        RenderingServer.FramePostDraw += Drawn;
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
         foreach (var a in args) if (a.StartsWith("--episode=") && int.TryParse(a["--episode=".Length..], out int ep)) StartEpisode(ep); // jump straight into a campaign episode
@@ -96,8 +106,21 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--pickertest=")) _ = Capture.PickerTest(this, a.Substring(13));
         foreach (var a in args) if (a.StartsWith("--tutorialtest=")) _ = Capture.TutorialTest(this, a.Substring(15));
         foreach (var a in args) if (a == "--savetest") SaveValidation.Run(this);
+        foreach (var a in args) if (a.StartsWith("--menu-shot=")) _ = MenuShot(a["--menu-shot=".Length..]);
         foreach (var a in args) if (a.StartsWith("--founding-capture=")) SaveValidation.FoundingCapture(this, a["--founding-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
+    }
+
+    /// Renders the menu's yard without the menu (the key art for the launch splash and the loading curtain).
+    async System.Threading.Tasks.Task MenuShot(string path)
+    {
+        for (int i = 0; i < 240; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        _menu.Visible = false;
+        for (int i = 0; i < 3; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        var img = GetViewport().GetTexture().GetImage();
+        img.SaveJpg(path, 0.9f);
+        GD.Print($"[menu-shot] saved {path} {img.GetWidth()}x{img.GetHeight()}");
+        GetTree().Quit();
     }
 
     string _layout, _gfx;
@@ -111,26 +134,61 @@ public partial class Main : Node
         bool portrait = size.Y > size.X && !Settings.Mobile; // phones and tablets are locked to landscape; only a desktop window can stand upright
         Settings.Portrait = portrait;
         GetTree().Root.ContentScaleSize = portrait ? new Vector2I(1440, 810) : new Vector2I(1920, 1080);
+        _session?.ApplyRenderScale(); // a resized window keeps the yard at the same pixel budget
     }
 
-    void Swap(GameSession s)
+    LoadingCurtain _curtain;
+    int _swapSerial;
+
+    /// Replaces the running battle. For a player the new one is built behind the loading picture: the picture is
+    /// drawn first, so a phone never sits on a frozen or black screen while the yard is built. Test runs swap at
+    /// once (they read the new session on the next line).
+    void Swap(GameSession s, string line = "Loading")
+    {
+        if (TestRun) { SwapNow(s); return; }
+        _ = SwapBehindCurtain(s, line);
+    }
+
+    void SwapNow(GameSession s)
     {
         if (_session != null) { _session.QueueFree(); _session = null; }
         _session = s;
-        AddChild(s);
+        if (s != null) AddChild(s);
     }
+
+    async System.Threading.Tasks.Task SwapBehindCurtain(GameSession s, string line)
+    {
+        int serial = ++_swapSerial;
+        if (_curtain == null) { _curtain = new LoadingCurtain(); AddChild(_curtain); }
+        _curtain.Show(line);
+        // two drawn frames: the picture is on screen before the long build starts
+        for (int i = 0; i < 2; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        if (serial != _swapSerial) { s?.QueueFree(); return; } // a newer swap took over
+        SwapNow(s);
+        // a few frames of the new battle behind the picture: first-use shaders compile out of sight
+        for (int i = 0; i < 4; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        if (serial == _swapSerial) _curtain.Lift();
+    }
+
+    /// Phones show the menu over a still picture of the yard instead of a live battle: it opens at once, keeps the
+    /// phone cool and the battery full while the player reads the menu.
+    public bool StillMenu => (OS.HasFeature("mobile") || _stillMenu) && !TestRun;
+    bool _stillMenu;
+    string _probeShot; int _probeFrame = 30;
 
     public void ShowMenu()
     {
         Local.Me = Config.Player;
         Audio.FadeMusic(1);
-        Swap(new GameSession { Demo = true, App = this });
+        if (StillMenu) { if (_curtain != null) _curtain.Lift(); _swapSerial++; SwapNow(null); }
+        else Swap(new GameSession { Demo = true, App = this }, "");
         if (_menu == null)
         {
             _menu = new MainMenu { App = this };
             AddChild(_menu);
         }
         _menu.Visible = true;
+        _menu.ShowBackdrop(StillMenu);
     }
 
     /// Starts a battle against the AI; team 0 leads the black garden ants, team 1 the red fire ants.
@@ -152,7 +210,7 @@ public partial class Main : Node
         Audio.FadeMusic(1);
         if (_menu != null) { _menu.CloseScreens(); _menu.Visible = false; }
         int id = System.Math.Clamp(episode, 1, CampaignEpisodes.Count);
-        Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, Episode = id, Seed = Levels.Info(id).Seed });
+        Swap(new GameSession { Demo = false, Diff = Difficulty.Easy, App = this, Episode = id, Seed = Levels.Info(id).Seed }, $"Level {Levels.NumberOf(id)}  ·  {CampaignEpisodes.Name(id)}");
     }
 
     /// Rebuilds a saved single-player game exactly as it began and replays it to the moment it was saved.
@@ -210,6 +268,8 @@ public partial class MainMenu : CanvasLayer
 {
     public Main App;
     Control _root, _main, _diff;
+    TextureRect _backdrop;
+    public void ShowBackdrop(bool on) { if (_backdrop != null) _backdrop.Visible = on; }
     Lobby _lobby;
 
     public override void _Ready()
@@ -218,6 +278,15 @@ public partial class MainMenu : CanvasLayer
         _root = new Control { Theme = UiTheme.Build(), MouseFilter = Control.MouseFilterEnum.Ignore };
         UiTheme.Place(_root, 0, 0, 1, 1, 0, 0, 0, 0);
         AddChild(_root);
+
+        // phones: the yard as a still picture behind the menu (desktop menus stand on a live battle)
+        _backdrop = new TextureRect
+        {
+            Texture = GD.Load<Texture2D>("res://assets/ui/menu-backdrop.jpg"), MouseFilter = Control.MouseFilterEnum.Ignore,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered, Visible = false,
+        };
+        UiTheme.Place(_backdrop, 0, 0, 1, 1, 0, 0, 0, 0);
+        _root.AddChild(_backdrop);
 
         // vignette
         var shade = new TextureRect { MouseFilter = Control.MouseFilterEnum.Ignore, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale };
@@ -401,7 +470,7 @@ public partial class MainMenu : CanvasLayer
             b.Pressed += () =>
             {
                 App.Audio.Ui("ui_click");
-                Settings.Gfx = tier;
+                Settings.Gfx = tier; Settings.QualityChosen = true;
                 Settings.Save();
                 App.Session?.ApplyQuality(); // live: the yard behind the menu changes on the spot
                 Refresh();

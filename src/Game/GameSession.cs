@@ -307,6 +307,32 @@ public partial class GameSession : Node3D
 
     /// Puts the current graphics tier into effect, on a running battle too: screen-space effects, anti-aliasing,
     /// the sun's shadow maps, the soil shader's detail and which small things cast shadows.
+    /// The yard drawn at fewer pixels than the screen and sharpened back up (AMD FidelityFX 1.0); menus stay crisp.
+    public void ApplyRenderScale()
+    {
+        var vp = GetViewport();
+        float scale = Settings.RenderScale(DisplayServer.WindowGetSize().Y);
+        vp.Scaling3DScale = scale;
+        vp.Scaling3DMode = scale < 0.99f ? Viewport.Scaling3DModeEnum.Fsr : Viewport.Scaling3DModeEnum.Bilinear;
+        vp.FsrSharpness = 0.35f;
+    }
+
+    // the frame-rate watch: a battle that keeps stuttering steps the graphics down a tier, until the player picks one
+    float _fpsWatch, _fpsSum; int _fpsFrames;
+    void WatchFrameRate(double delta)
+    {
+        if (Demo || App == null || App.TestRun || Settings.QualityChosen || Settings.Gfx == Settings.Quality.Low || _paused) { _fpsWatch = 0; _fpsSum = 0; _fpsFrames = 0; return; }
+        _fpsWatch += (float)delta; _fpsSum += (float)delta; _fpsFrames++;
+        if (_fpsWatch < 6) return; // judge six seconds at a time
+        float fps = _fpsFrames / Mathf.Max(_fpsSum, 0.001f);
+        _fpsWatch = 0; _fpsSum = 0; _fpsFrames = 0;
+        if (Sim.Time < 8 || fps >= 28) return; // the first seconds compile shaders and stream textures: they are not the game
+        Settings.Gfx--;
+        Settings.Save();
+        ApplyQuality();
+        Hud?.Alert($"Graphics lowered to {Settings.Gfx} to keep the battle smooth (change it in Settings)", UiTheme.Dim);
+    }
+
     public void ApplyQuality()
     {
         bool noSs = System.Environment.GetEnvironmentVariable("MANDIBLE_NOSS") != null; // tests on machines without the effects
@@ -318,6 +344,7 @@ public partial class GameSession : Node3D
         var vp = GetViewport();
         vp.Msaa3D = q switch { Settings.Quality.Ultra => Viewport.Msaa.Msaa4X, Settings.Quality.High => Viewport.Msaa.Msaa2X, _ => Viewport.Msaa.Disabled };
         vp.ScreenSpaceAA = q is Settings.Quality.Medium or Settings.Quality.High ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
+        ApplyRenderScale();
         // shadows: how far out the sun's maps reach, how many splits share them, and how soft the edge is
         switch (q)
         {
@@ -831,6 +858,7 @@ public partial class GameSession : Node3D
     public override void _Process(double delta)
     {
         float dt = Mathf.Min((float)delta, 0.05f);
+        WatchFrameRate(delta);
         StepSimulation((float)delta);
         Input?.Prune();
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);

@@ -707,7 +707,7 @@ public partial class Hud : CanvasLayer
     /// Mid-battle graphics switch: Low → Medium → High → Ultra → Low, applied on the spot (litter density waits for the next battle).
     void CycleGraphics()
     {
-        Settings.Gfx = (Settings.Quality)(((int)Settings.Gfx + 1) % 4);
+        Settings.Gfx = (Settings.Quality)(((int)Settings.Gfx + 1) % 4); Settings.QualityChosen = true;
         Settings.Save();
         Game.ApplyQuality();
         Relabel(_pause);
