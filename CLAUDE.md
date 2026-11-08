@@ -39,9 +39,11 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   and steps, `CampaignColony.cs` (persistent roster, veterans; Burr is tracked by name), `CampaignReveal.cs` (what each
   chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
-  Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Complete). Walkable area is
-  `Expedition.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256)); used in Sim.Move, Carrion.cs,
-  Sim.cs:586. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
+  Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
+  `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at
+  (200,256), its shore and island; the water opens only once the bridge is built). Bridge/Fragment is the teamwork
+  lesson in `Bridge.cs`: a straw needs 2+ workers (`CmdKind.Straw`, `Ant.StrawP1`), 5 laid make the bridge, then a
+  story-only gland (Units 0) from the dead queen is carried home. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
 - Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying.
 - Startup/menu: `Main.cs` (`Swap` builds sessions behind `LoadingCurtain`; phones use a still menu backdrop),
   graphics tiers and render scale in `Settings.cs`, applied in `GameSession.ApplyQuality`.
