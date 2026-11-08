@@ -1,0 +1,52 @@
+# Mandible: notes for Claude sessions
+
+Ant-war RTS, Godot 4.7.2 .NET (C#), repo github.com/zaferdajani/Mandible, checkout D:\Mandible.
+Read this instead of re-surveying the codebase. Keep it short and current.
+
+## Token budget (owner's rule)
+- Small, targeted changes. Do not re-read whole files or re-survey systems this file already describes.
+- While iterating, run only the test for what changed (see below). The full suite, the 4-platform build and the
+  GitHub release happen once per release batch, not per change.
+- No screenshot or art-review loops unless the change is visual. New visual objects still need an approved target
+  (docs/art-pipeline.md).
+- One feature per session; start a fresh session for a new feature rather than growing a long one.
+
+## Build and test (always muted: --audio-driver Dummy)
+- Godot: `G=/d/Tools/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe`
+- Compile check: `dotnet build -nologo -v q`. Godot does NOT rebuild C#: always dotnet build before a Godot run.
+- Headless runs always under `timeout`. Windowed runs: `bash D:/MandibleBuilds/godot-run.sh <secs> <godot args>` (GPU queue).
+- Targeted campaign: `MANDIBLE_LEVELS=<ids|mutation|flight|ep2|chain|checks> timeout 900 $G --headless --audio-driver Dummy --path . -- --campaign-test`
+  (level ids, not numbers; `MANDIBLE_CAMPAIGN_TRACE=1` prints progress). Full campaign is ~25 min: release only.
+- Others: `--savetest` (GPU queue), `--transport-test`, `--carrion-test`, `--generaltest`, two-process `--nettest=host,120` + `--nettest=join,120`,
+  screenshot tour `--capture=<dir>` (12 self-tests). Launch timing: `--startup-probe [--still-menu] [--probe-shot=path@frame]`.
+- Godot import rewrites many `.import` files with LF endings only: discard them (`git checkout -- '*.import'`), never commit.
+
+## Release recipe (only when the owner asks)
+Bump `src/Game/Updater.cs` Version, commit, tag vX, push main + tag; run `macos-build.yml` and `ios-build.yml`
+(`/d/Tools/gh/bin/gh.exe workflow run ... --ref vX`); `git worktree add D:/MandibleBuilds/src-X vX`, import, export
+"Windows Desktop" and "Android" (JAVA_HOME=D:\Tools\jdk17, keystore env vars, see past releases). If export says
+"Failed to build project", create `D:/GodotData/mono/build_logs/<hash>_ExportRelease` (hash from a --verbose export).
+Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Android.apk / Mandible-iOS-unsigned.ipa
+(the updater looks for them). Then `powershell -File tools/updatetest.ps1`. End every reply with the release link.
+
+## Architecture in one screen
+- Deterministic 30 Hz lockstep sim (`src/Sim`, DMath only, no Mathf trig in sim). Player actions go through `Cmd`
+  (`src/Game/Commands.cs`) so saves (order log replay) and multiplayer work. Changing sim state layout: add the field
+  to the checksum in Sim.cs and bump `Version` in `src/Net/Lockstep.cs`.
+- Ants are `struct Ant` in `Sim.Ants[]`; movement `Sim.Move` = look-ahead steering around circular `Obstacle`s
+  (`World.Obstacles`, `W.Blocked`), no pathfinding. No water exists anywhere yet.
+- Campaign: `Levels.cs` (setup + objectives per level id, `Levels.Order` maps ids to numbers), `Expedition` objectives
+  and steps, `CampaignColony.cs` (persistent roster, veterans; Burr is tracked by name), `CampaignReveal.cs` (what each
+  chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon).
+- Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
+  Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Complete). Walkable area is
+  `Expedition.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256)); used in Sim.Move, Carrion.cs,
+  Sim.cs:586. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
+- Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying.
+- Startup/menu: `Main.cs` (`Swap` builds sessions behind `LoadingCurtain`; phones use a still menu backdrop),
+  graphics tiers and render scale in `Settings.cs`, applied in `GameSession.ApplyQuality`.
+
+## Story rules (owner)
+Real ant behaviour, macro nature-documentary realism, warm palette, no grey, no code-primitive art. Gradual reveal
+(red colony from Act II). Generals (never "heroes" in player text). Old Burr goes into the royal cocoon and becomes
+the Warlord (Hemlock only if Burr fell first). Ground ants cannot hit airborne wasps. Autosave only at milestones.
