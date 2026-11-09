@@ -29,6 +29,13 @@ public sealed partial class Expedition
 
     public readonly List<Straw> Straws = new();
     public int StrawsLaid, GlandId = -1;
+    /// The island's queen: another strain from the glass, mutated by it, alive but badly wounded (her own workers
+    /// lie dead around her). Her chitin and her bite are still a mutated queen's; the colony must kill her together.
+    public int IslandQueen = -1;
+    public Vector2 QueenAt = Island + new Vector2(-0.2f, 0.6f);
+    public const int QueenLevel = 3;
+    public const float QueenWounds = 0.09f, QueenBite = 0.28f; // the share of her health left, and of her bite
+    public bool QueenAlive(Sim s) => IslandQueen >= 0 && s.Ants[IslandQueen].Alive && s.Ants[IslandQueen].Type == AntType.Queen;
     public bool Bridged => StrawsLaid >= StrawGoal;
     public Straw StrawById(int id) => id >= 0 && id < Straws.Count ? Straws[id] : null;
 
@@ -96,7 +103,7 @@ public sealed partial class Sim
         var side = new Vector2(-along.Y, along.X);
         // grips spread along the trailing half, alternating sides, so the front end can reach out over the water
         float t = (a.Serial * 0.618034f) % 1f;
-        var slot = s.Pos + along * (0.5f - t * Expedition.StrawLength * 0.45f) + side * (a.Serial % 2 == 0 ? 0.45f : -0.45f);
+        var slot = s.Pos + along * (2.5f - t * Expedition.StrawLength * 0.72f) + side * (a.Serial % 2 == 0 ? 0.72f : -0.72f);
         var to = slot - a.Pos;
         a.Goal = slot;
         if (a.Layer != 0 || to.Length() > 1.1f || s.Holders >= Expedition.StrawMaxCrew) return to;
@@ -115,6 +122,25 @@ public sealed partial class Sim
         m.Straws.Clear();
         for (int i = 0; i < Expedition.StrawGoal; i++)
             m.Straws.Add(new Straw { Id = i, Pos = Expedition.StrawSpots[i], Heading = Expedition.StrawTurns[i] });
+        // the island queen: on her feet over her dead, facing the shore
+        int q = Spawn(Config.Wild, AntType.Queen, m.QueenAt, Mathf.Pi);
+        ref var a = ref Ants[q];
+        a.State = AntState.Hold; a.Home = a.Anchor = a.Goal = a.Pos;
+        a.Level = Expedition.QueenLevel;
+        ApplyLevel(ref a);
+        a.Hp = a.MaxHp * Expedition.QueenWounds;
+        a.DmgMul *= Expedition.QueenBite;
+        m.IslandQueen = q;
+    }
+
+    /// Once she falls, her gland can be carved from her gaster (a story beat: no mutagen goes into the reserve).
+    void TickFragment()
+    {
+        var m = Mission;
+        if (m.GlandId >= 0) return;
+        if (m.QueenAlive(this)) { m.QueenAt = Ants[m.IslandQueen].Pos; return; }
+        var g = AddMutagen(m.QueenAt + new Vector2(1.3f, 0f), "the island queen's mutagen gland", AntType.Queen, Mutations.ExtractWork, 0);
+        m.GlandId = g.Id;
     }
 
     /// The plank: straight across the water, side by side with the ones already laid.
@@ -122,8 +148,8 @@ public sealed partial class Sim
     {
         var m = Mission;
         s.Laid = true;
-        s.Heading = 0;
-        s.Pos = new Vector2(Expedition.Pond.X - (Expedition.WaterR + Expedition.IslandR) * 0.5f, Expedition.Pond.Y + (m.StrawsLaid - 2) * 0.45f);
+        s.Heading = ((m.StrawsLaid * 3) % 5 - 2) * 0.012f; // never quite parallel, as laid by jaws
+        s.Pos = new Vector2(Expedition.Pond.X - (Expedition.WaterR + Expedition.IslandR) * 0.5f, Expedition.Pond.Y + (m.StrawsLaid - 2) * 0.36f);
         m.StrawsLaid++;
         Events.Add(new SimEvent { Kind = EvKind.StrawLaid, Pos = s.Pos, Team = 0, Tier = m.StrawsLaid });
     }
@@ -135,8 +161,10 @@ public sealed partial class Sim
         BeginBridge();
         for (int k = 0; k < laid && k < Mission.Straws.Count; k++) Lay(Mission.Straws[k]);
         if (Mission.Bridged) TickBridge(0);
+        // a whole bridge: Burr's squad crossing to fight the island queen; otherwise a crew of workers on a straw
+        var kind = Mission.Bridged ? AntType.Soldier : AntType.Worker;
         var ids = new List<int>();
-        for (int i = 0; i < High && ids.Count < crew; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type == AntType.Worker) ids.Add(i);
+        for (int i = 0; i < High && ids.Count < crew; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type == kind) ids.Add(i);
         Straw next = null; // the farthest straw from the water, so the frame catches the crew on the way
         foreach (var s in Mission.Straws) if (!s.Laid && (next == null || s.Pos.X < next.Pos.X)) next = s;
         foreach (int id in ids)
@@ -147,7 +175,7 @@ public sealed partial class Sim
             a.Layer = 0;
         }
         if (next != null) CmdStraw(ids, next);
-        else CmdExtract(ids, MutagenById(Mission.GlandId));
+        else CmdAttack(ids, Mission.IslandQueen);
     }
 
     /// Straws held by a full crew slide toward the bridge site; one that arrives is laid as the next plank.
@@ -168,9 +196,7 @@ public sealed partial class Sim
             Lay(s);
         }
         if (!m.Bridged) return;
-        // the bridge holds: the dead queen's gland waits on the island (a story beat, no mutagen in the reserve)
+        // the bridge holds: the way to the island queen is open
         m.Stage = ExpeditionStage.Fragment;
-        var g = AddMutagen(Expedition.Island + new Vector2(1.2f, 0.6f), "the dead queen's mutagen gland", AntType.Queen, Mutations.ExtractWork, 0);
-        m.GlandId = g.Id;
     }
 }

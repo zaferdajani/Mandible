@@ -37,7 +37,7 @@ public sealed partial class Expedition
         ExpeditionStage.RaiseWorkers => "Grow the workforce",
         ExpeditionStage.RaiseSoldiers => "Raise a fighting squad",
         ExpeditionStage.Bridge => "Bridge the water together",
-        ExpeditionStage.Fragment => "The dead queen's gland",
+        ExpeditionStage.Fragment => GlandId < 0 ? "The mutated queen" : "The queen's gland",
         _ => "The first nest is thriving",
     };
     public string Instruction => Episode > 1 ? StepInstruction : Stage switch
@@ -55,7 +55,9 @@ public sealed partial class Expedition
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
         ExpeditionStage.Bridge => $"Across the pond to the east lie a dead queen and a second broken tube. Water stops every ant: build a bridge of straws. "
             + $"A straw is too long for one ant. Select two or more workers (F3) and right-click a straw: they carry it together, and more workers carry it faster. Straws laid: {StrawsLaid}/{StrawGoal}.",
-        ExpeditionStage.Fragment => "The bridge holds. Send workers across to the dead queen (F3, then right-click the glowing gland): they carve it out, and one carries it home to the queen.",
+        ExpeditionStage.Fragment => GlandId < 0
+            ? "The bridge holds. On the island a queen of another strain still lives among her dead: wounded, but the glass mutated her, and her bite kills. Send Burr's soldiers across together (F2, then right-click her)."
+            : "She is dead. Send workers to her body (F3, then right-click the glowing gland): they carve it out, and one carries it home to the queen.",
         _ => "Level complete. Sweet Rain is now open on the colony map; Skirmish lets you try the complete roster now.",
     };
     public Vector2 Marker => Episode > 1 ? MarkerPos : Stage switch
@@ -63,7 +65,7 @@ public sealed partial class Expedition
         ExpeditionStage.ClearTrail => Ambush,
         ExpeditionStage.Provision when RemainsLeft => RemainsPos,
         ExpeditionStage.Bridge => NextStraw?.Pos ?? BridgeSite,
-        ExpeditionStage.Fragment => Island,
+        ExpeditionStage.Fragment => QueenAt,
         _ => Clearing,
     };
     /// The straw the guide points at: one already moving, else the nearest one still on the shore.
@@ -201,6 +203,7 @@ public sealed partial class Sim
         // then the teamwork lesson: a straw bridge to the island, and the dead queen's gland carried home
         if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal) BeginBridge();
         if (Mission.Stage == ExpeditionStage.Bridge) TickBridge(dt);
+        if (Mission.Stage == ExpeditionStage.Fragment) TickFragment();
         if (Mission.Stage == ExpeditionStage.Fragment && MutagenById(Mission.GlandId) is { Home: true })
         { Mission.Stage = ExpeditionStage.Complete; Winner = 0; }
         if (c.Founded || Mission.EntranceOrdered || Mission.Stage == ExpeditionStage.Provision) return;

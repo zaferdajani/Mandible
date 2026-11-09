@@ -24,8 +24,17 @@ public sealed class StrawProps
         if (kind.Count == 0) return null;
         var p = kind[variant % kind.Count];
         float s = Expedition.StrawLength / p.Size.X;
-        return new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = p.Material, Scale = Vector3.One * s };
+        // each straw its own shade of dead grass: some fresh gold, some bleached, some weathered brown
+        var mat = (StandardMaterial3D)p.Material.Duplicate();
+        mat.AlbedoColor = Tones[variant % Tones.Length];
+        return new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = mat, Scale = Vector3.One * s };
     }
+
+    static readonly Color[] Tones =
+    {
+        new(1f, 0.97f, 0.9f), new(0.9f, 0.82f, 0.68f), new(1.04f, 0.98f, 0.86f), new(0.8f, 0.7f, 0.55f),
+        new(0.96f, 0.9f, 0.76f), new(0.86f, 0.78f, 0.62f), new(1.02f, 0.92f, 0.74f),
+    };
 
     public void Update(float dt)
     {
@@ -52,7 +61,7 @@ public sealed class StrawProps
             else
             {
                 // carried at jaw height while a crew holds it, otherwise lying in the grit
-                float lift = s.HoldCount >= Expedition.StrawCrew ? 0.38f : s.HoldCount > 0 ? 0.12f : 0f;
+                float lift = s.HoldCount >= Expedition.StrawCrew ? 0.22f : s.HoldCount > 0 ? 0.08f : 0f;
                 at = new Vector3(s.Pos.X, hf.Sample(s.Pos.X, s.Pos.Y) - 0.06f + lift, s.Pos.Y);
             }
             var target = new Transform3D(new Basis(Vector3.Up, -s.Heading).Scaled(n.Scale), at);

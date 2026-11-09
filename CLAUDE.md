@@ -44,6 +44,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   (200,256), its shore and island; the water opens only once the bridge is built). Bridge/Fragment is the teamwork
   lesson in `Bridge.cs`: a straw needs 2+ workers (`CmdKind.Straw`, `Ant.StrawP1`), 5 laid make the bridge, then a
   story-only gland (Units 0) from the dead queen is carried home. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
+- Combat scale: per-type attack/defence/HP with per-type growth per level (`Config.GrowthOf`, `DefenceAt`); table in
+  `docs/combat-scale.md` (regenerate when numbers change). Changing it needs the full campaign test.
 - Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying.
 - Startup/menu: `Main.cs` (`Swap` builds sessions behind `LoadingCurtain`; phones use a still menu backdrop),
   graphics tiers and render scale in `Settings.cs`, applied in `GameSession.ApplyQuality`.

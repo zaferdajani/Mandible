@@ -73,16 +73,16 @@ public static partial class WorldBuilder
 
         var dress = new NatureScatter.Dresser(w, rng);
         // the island: damp soil, pebbles of every size half sunk in it, a few clumps at the waterline
-        for (int i = 0; i < 46; i++)
+        for (int i = 0; i < 120; i++)
         {
             var p = c + rng.InDisk(Expedition.IslandR + 0.6f);
             float r = p.DistanceTo(c);
-            float s = rng.F() < 0.25f ? rng.R(0.35f, 0.75f) : rng.R(0.08f, 0.3f);
+            float s = rng.F() < 0.12f ? rng.R(0.35f, 0.7f) : rng.R(0.05f, 0.22f); // clods and grit, a few real pebbles
             if (r < 2.6f && s > 0.3f) continue; // the queen's bed stays clear of big stones
             dress.Stone(p, s * 2f, rng.R(0.25f, 0.6f));
         }
         // the shore: grit and pebbles thick at the waterline and thinning up the bank, dry grass leaning over it
-        for (int i = 0; i < 150; i++)
+        for (int i = 0; i < 230; i++)
         {
             float a = rng.R(0, Mathf.Tau), r = Expedition.WaterR + 0.6f + Mathf.Pow(rng.F(), 1.8f) * 5.5f;
             var p = c + MathX.Dir(a) * r;
@@ -119,7 +119,7 @@ public static partial class WorldBuilder
             {
                 AlbedoColor = new Color(0.86f, 0.95f, 0.93f, 0.08f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 Roughness = 0.01f, MetallicSpecular = 1f, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                RefractionEnabled = true, RefractionScale = 0.03f, RimEnabled = true, Rim = 0.35f, RimTint = 0.2f,
+                RimEnabled = true, Rim = 0.35f, RimTint = 0.2f, // no screen refraction: it smeared at the frame's edge
             };
             var t = tubeScan[0];
             float sr = TubeR * 1.6f / Mathf.Max(t.Size.X, t.Size.Z), sl = 7.5f / t.Size.Y;
@@ -141,20 +141,37 @@ public static partial class WorldBuilder
             }
         }
 
-        // the dead queen: another strain from the glass, pale amber and larger than ours, on her side, legs drawn in.
-        // Her gaster lies where the sim keeps the gland (Expedition.Island + (1.2, 0.6)).
-        var queen = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = AntMesh.Build(AntType.Queen), InstanceCount = 1 };
-        // on her side (her back toward the south bank), head west, gaster east at the gland; built like the live ants
-        var qAt = c + new Vector2(-0.2f, 0.6f);
-        var basis = AntRenderer.Orient(new Vector3(0, 0.25f, 1).Normalized(), Mathf.Pi, Config.Stats[(int)AntType.Queen].Size);
-        queen.SetInstanceTransform(0, new Transform3D(basis, new Vector3(qAt.X, hf.Sample(qAt.X, qAt.Y) + 0.55f, qAt.Y)));
-        queen.SetInstanceCustomData(0, new Color(5, 128 * 256 + 128, 0, 24)); // still; 24 = callow paleness 6
-        var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), Config.Player, AntType.Queen, true);
-        mat.SetShaderParameter("body_color", new Color(0.62f, 0.38f, 0.16f));
-        mat.SetShaderParameter("head_color", new Color(0.55f, 0.32f, 0.13f));
-        mat.SetShaderParameter("gaster_color", new Color(0.86f, 0.66f, 0.38f));
-        mat.SetShaderParameter("leg_color", new Color(0.6f, 0.4f, 0.2f));
-        w.Root.AddChild(new MultiMeshInstance3D { Multimesh = queen, MaterialOverride = mat, Name = "DeadQueen" });
+        // her children: the island queen's pale workers lie dead around her, on their backs and sides, legs drawn in
+        // (she lives: the sim spawns her when the bridge lesson starts, Sim.BeginBridge)
+        const int Fallen = 9;
+        var fallen = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = AntMesh.Build(AntType.Worker), InstanceCount = Fallen };
+        for (int i = 0; i < Fallen; i++)
+        {
+            float a = i * 2.39996f + rng.R(-0.4f, 0.4f), r = rng.R(1.8f, Expedition.IslandR - 0.6f);
+            var p = c + new Vector2(-0.2f, 0.6f) + MathX.Dir(a) * r;
+            if (p.DistanceTo(c) > Expedition.IslandR - 0.4f) p = c + (p - c).Normalized() * (Expedition.IslandR - 0.5f);
+            bool back = rng.F() < 0.6f;
+            var up = back ? Vector3.Down : new Vector3(rng.R(-1, 1), 0.3f, rng.R(-1, 1)).Normalized();
+            var basis = back ? new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Forward, Mathf.Pi) * Basis.FromScale(Vector3.One * 0.95f)
+                             : AntRenderer.Orient(up, rng.R(0, Mathf.Tau), 0.95f);
+            fallen.SetInstanceTransform(i, new Transform3D(basis, new Vector3(p.X, hf.Sample(p.X, p.Y) + (back ? 0.32f : 0.2f), p.Y)));
+            fallen.SetInstanceCustomData(i, new Color(i * 5 % 16, 128 * 256 + 128, 1024 * (i % 3 == 0 ? 1 : 0), 24)); // some lost a leg; pale
+        }
+        w.Root.AddChild(new MultiMeshInstance3D { Multimesh = fallen, MaterialOverride = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), Config.Wild, AntType.Worker, true), Name = "IslandDead" });
+    }
+
+    /// The waterline's wet soil: darker in a band round the shore and the island (through the terrain's AO).
+    static void PondWet(Heightfield hf, float[] ao)
+    {
+        var c = Expedition.Pond;
+        for (int z = (int)c.Y - 18; z <= (int)c.Y + 18; z++)
+            for (int x = (int)c.X - 18; x <= (int)c.X + 18; x++)
+            {
+                float r = new Vector2(x, z).DistanceTo(c);
+                float shore = 1 - Mathf.SmoothStep(0.4f, 2.4f, Mathf.Abs(r - (Expedition.WaterR - 0.6f)));
+                float isle = 1 - Mathf.SmoothStep(0.3f, 1.6f, Mathf.Abs(r - (Expedition.IslandR + 0.2f)));
+                ao[z * hf.N + x] *= 1 - 0.38f * Mathf.Max(shore, isle);
+            }
     }
 
     /// No grass, leaf or litter grows in the water (the island and the shore are dressed by BuildPond).

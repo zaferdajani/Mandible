@@ -1164,7 +1164,8 @@ void fragment() {
     vec3 wn = normalize(vec3(n.x, n.z, n.y));
     float broad = smoothstep(0.3, 0.9, texture(ripple_a, wpos.xz * 0.008 + TIME * 0.002).r);
     float facing2 = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-    float refl = clamp(pow(1.0 - facing2, 3.0) * 0.5 + 0.12 * broad * broad + 0.35 * max(wn.x + wn.z - 0.15, 0.0), 0.0, 0.28) * smoothstep(0.05, 0.6, thick);
+    float refl = clamp(pow(1.0 - facing2, 3.0) * 0.4 + 0.08 * broad * broad + 0.3 * max(wn.x + wn.z - 0.2, 0.0), 0.0, 0.18) * smoothstep(0.05, 0.6, thick);
+    col *= mix(0.72, 1.0, smoothstep(0.0, 0.3, thick)); // the wet meniscus darkens the mud at the waterline
     ALBEDO = vec3(0.0);
     EMISSION = mix(col, sky * 0.9, refl);
     ROUGHNESS = 0.04;

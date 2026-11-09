@@ -350,3 +350,10 @@ read 2. Not passed. Main blockers: straws too uniform and smooth (no fibre or sp
 the bridge does not read as spanning shore to island; water still reads milky and flat; island soil smooth, no clods or wet
 edge; the crew merges into one dark clump; the dead queen too small to read at play zoom; glass tube shows a refraction
 smear at the screen edge. Chain test passes.
+
+Gate round 2 on K1-K3, 2026-11-09 (living island queen, thinner fluted straws with tones, clearer water, wet AO band,
+litter kept off the island): K1 art 3 2 3 2 3 3, read 3; K2 art 3 2 3 2 3 4, read 2;
+K3 art 3 3 3 3 3 4, read 2. Not passed. The blockers that remain are structural: the straws still read as smooth code
+tubes at this mesh fidelity (need a scanned or generated straw mesh with split fibres); the island and yard soil is the
+shared terrain material, flat next to the targets' crumbly clods; the water lacks a refraction/caustic/meniscus look;
+black worker ants vanish in their own shadow at play zoom.

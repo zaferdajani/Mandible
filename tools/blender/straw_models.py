@@ -75,8 +75,9 @@ def straw(seed):
     col = bm.loops.layers.color.new("Col")
     uv = bm.loops.layers.uv.new("UVMap")
     nodes = sorted([rnd.uniform(0.22, 0.34), rnd.uniform(0.58, 0.72)])
-    bow = rnd.uniform(0.0012, 0.0028) * rnd.choice((-1, 1))
-    lift = rnd.uniform(0.0004, 0.0012)
+    bow = rnd.uniform(0.0004, 0.0009) * rnd.choice((-1, 1))
+    lift = rnd.uniform(0.0002, 0.0005)
+    flutes = rnd.choice((8, 9, 11))
     crush_at, crush_w = rnd.uniform(0.4, 0.85), rnd.uniform(0.05, 0.1)
     tip_split = rnd.uniform(0.88, 0.93)
     strips = rnd.choice((3, 4))
@@ -104,6 +105,7 @@ def straw(seed):
 
     def radius(t, a):
         r = RAD * (1 - 0.22 * t) * (1 + 0.07 * node_bulge(t)) * crush(t, a)
+        r *= 1 + 0.045 * math.cos(a * flutes + t * 1.3)  # the culm's fine longitudinal ridges
         return r * (1 + 0.04 * noise.noise(Vector((t * 40 + off, a * 3, 1))))
 
     def fray(t, a, r, c):
@@ -112,8 +114,8 @@ def straw(seed):
         k = (t - tip_split) / (1 - tip_split)
         s = (a / (2 * math.pi)) * strips
         gap = abs(s - round(s)) < 0.12  # the splits between the strips open up
-        spread = k * k * (0.0005 + 0.0003 * math.sin(round(s) * 2.1 + seed))
-        return r * (1 + k * 0.25) + spread - (0.0006 * k if gap else 0), c
+        spread = k * k * (0.00025 + 0.0002 * math.sin(round(s) * 2.1 + seed))
+        return r * (1 + k * 0.05) + spread - (0.0005 * k if gap else 0), c
 
     def colour(t, u):
         b = node_bulge(t)
@@ -175,6 +177,6 @@ def straw(seed):
 
 
 reset()
-for s in range(4):
+for s in range(6):
     export(f"straw_{s}", [straw(700 + s)])
 print("[blender] done")

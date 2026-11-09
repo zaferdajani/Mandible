@@ -48,6 +48,7 @@ public static partial class WorldBuilder
         var twigs = PlaceTwigs(w, deco);
         if (firstNest) { w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3)); w.IndexObstacles(); }
         var ao = ComputeAO(hf, rocks);
+        if (firstNest) PondWet(hf, ao);
 
         BuildTerrainMesh(w, ao);
         BuildSkirt(w);
@@ -913,7 +914,7 @@ public static partial class WorldBuilder
         var mat = Mat(w, Shaders.Pebble);
         bool Clear(Vector2 p, float pad)
         {
-            if (hf.Bilinear(hf.Leaf, p.X, p.Y) > 0.05f || w.Blocked(p, pad)) return false;
+            if (hf.Bilinear(hf.Leaf, p.X, p.Y) > 0.05f || w.Blocked(p, pad) || w.FirstNest && InPond(p, 1f)) return false;
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < 2.2f) return false;
             return true;
         }

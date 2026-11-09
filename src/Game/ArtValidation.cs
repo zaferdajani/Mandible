@@ -68,7 +68,7 @@ public static class ArtValidation
                 var carried = k.Sim.Mission.NextStraw?.Pos ?? Expedition.BridgeSite;
                 k.Camera.SetYaw(0.2f, true); k.Camera.JumpTo(carried, 40); await Shot("k2-straw-crew");
                 k.Camera.PitchOverride = 50; k.Camera.SetYaw(0.15f, true); k.Camera.JumpTo(carried + new Vector2(1, 0), 11); await Shot("k2-straw-crew-close"); k.Camera.PitchOverride = 0;
-                k = await Jump(5, 5, 7f);
+                k = await Jump(5, 6, 4f);
                 k.Camera.SetYaw(0.3f, true); k.Camera.JumpTo(p + new Vector2(-7, 0), 40); await Shot("k3-straw-bridge");
                 k.Camera.PitchOverride = 45; k.Camera.SetYaw(0.5f, true); k.Camera.JumpTo(p + new Vector2(-4.5f, 1), 15); await Shot("k3-straw-bridge-close"); k.Camera.PitchOverride = 0;
             }

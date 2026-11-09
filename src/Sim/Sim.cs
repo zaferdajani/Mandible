@@ -995,7 +995,7 @@ public sealed partial class Sim
         {
             if (think) a.Target = FindEnemy(a.Pos, a.Team, st.Reach + 2.5f, Config.Flies(a.Type) || Config.Ranged(a.Type), a.Layer, Config.Flies(a.Type));
             if (a.Target >= 0 && Ants[a.Target].Alive) TryBite(i, a.Target, st);
-            if (Mode != GameMode.Lanes) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f); // in Lane War her guardians are her only protection
+            if (Mode != GameMode.Lanes && a.Team < 2) a.Hp = Mathf.Min(a.MaxHp, a.Hp + dt * 5f); // the island queen is dying: no healing // in Lane War her guardians are her only protection
             var walk = a.Team < 2 ? QueenWalk(ref a) : Vector2.Zero;
             if (walk.LengthSquared() > 0.01f)
             {
@@ -1441,7 +1441,7 @@ public sealed partial class Sim
         if (!t.Alive) return;
         if (t.Type == AntType.Queen && QueenShielded(t.Team)) { t.HitFlash = 0.4f; return; }
         // chitin: heroes and wild bugs shrug off a share of every blow; a beetle behind its shell wall most of it
-        float armor = Config.Of(t.Type).Armor + (t.BlockT > 0 ? (t.BlockArmor > 0 ? t.BlockArmor : Config.ShellWallArmor) : 0f);
+        float armor = Config.DefenceAt(t.Type, t.Level) + (t.BlockT > 0 ? (t.BlockArmor > 0 ? t.BlockArmor : Config.ShellWallArmor) : 0f);
         if (t.HasteT > 0) armor += t.GuardArmor; // Trail Blaze: the line holds
         if (t.MarkT > 0) dmg *= t.MarkMul; // Scout Swarm: marked
         if (armor > 0) dmg *= 1f - Mathf.Min(armor, 0.75f);
@@ -1455,7 +1455,7 @@ public sealed partial class Sim
         if (t.Type == AntType.Queen)
         {
             Events.Add(new SimEvent { Kind = EvKind.QueenHit, Pos = t.Pos, Team = t.Team });
-            Col[t.Team].QueenAlarm = 4f;
+            if (t.Team < 2) Col[t.Team].QueenAlarm = 4f; // level 1's island queen is wild
         }
         else if (t.Team < 2 && (attacker < 0 || Ants[attacker].Team != Config.Wild || t.Type != AntType.Worker))
             Events.Add(new SimEvent { Kind = EvKind.UnderAttack, Pos = t.Pos, Team = t.Team });

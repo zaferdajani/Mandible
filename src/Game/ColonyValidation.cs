@@ -119,8 +119,22 @@ public static class ColonyValidation
             }
             Until(s, () => s.Mission.Stage == ExpeditionStage.Fragment, 5, "five straws make the bridge");
             Check(s.Mission.Constrain(wet).DistanceTo(wet) < 0.01f, "The bridge does not carry ants over the water");
+            // the island queen lives: wounded but mutated; alone an ant dies, together the squad kills her
+            Check(s.Mission.QueenAlive(s) && s.Mission.GlandId < 0, "The island queen is not alive, or her gland is free before she falls");
+            int qid = s.Mission.IslandQueen;
+            Check(Config.DefenceAt(AntType.Queen, Expedition.QueenLevel) > Config.DefenceAt(AntType.Queen, 1) && Config.HpMul(AntType.Major, 3) > Config.HpMul(AntType.Worker, 3), "The combat scale does not grow with level, or by type");
+            var squad = Units(s, AntType.Soldier);
+            int squadBefore = squad.Count;
+            Check(squadBefore >= 3, $"Too few soldiers left for the island queen: {squadBefore}");
+            float fightFrom = s.Time;
+            s.CmdAttack(squad, qid);
+            Until(s, () => !s.Mission.QueenAlive(s), 150, "Burr's soldiers cross and kill the island queen together");
+            int squadAfter = Units(s, AntType.Soldier).Count;
+            GD.Print($"[campaign-test] island queen fight: {s.Time - fightFrom:0}s, soldiers {squadBefore} -> {squadAfter}");
+            Check(squadAfter < squadBefore, "The mutated queen killed nobody: she does not fight back");
+            Until(s, () => s.Mission.GlandId >= 0, 5, "her gland can be carved once she falls");
             var gland = s.MutagenById(s.Mission.GlandId);
-            Check(gland != null && !gland.Home, "No gland in the dead queen");
+            Check(gland != null && !gland.Home, "No gland in the island queen");
             int mutagenBefore = c.Mutagen;
             crew = Units(s, AntType.Worker);
             s.CmdExtract(crew.GetRange(0, Math.Min(3, crew.Count)), gland);
