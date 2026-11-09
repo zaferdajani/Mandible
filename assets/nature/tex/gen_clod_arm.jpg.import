@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d428s0cpl428"
-path.s3tc="res://.godot/imported/straw_01_arm.jpg-477956b4eb3c13e099e9150d4315f4e3.s3tc.ctex"
-path.etc2="res://.godot/imported/straw_01_arm.jpg-477956b4eb3c13e099e9150d4315f4e3.etc2.ctex"
+uid="uid://b4vhvrtiuv8k1"
+path.s3tc="res://.godot/imported/gen_clod_arm.jpg-488ebf3c81f9c76dfc0f2983b33c65dc.s3tc.ctex"
+path.etc2="res://.godot/imported/gen_clod_arm.jpg-488ebf3c81f9c76dfc0f2983b33c65dc.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/nature/tex/straw_01_arm.jpg"
-dest_files=["res://.godot/imported/straw_01_arm.jpg-477956b4eb3c13e099e9150d4315f4e3.s3tc.ctex", "res://.godot/imported/straw_01_arm.jpg-477956b4eb3c13e099e9150d4315f4e3.etc2.ctex"]
+source_file="res://assets/nature/tex/gen_clod_arm.jpg"
+dest_files=["res://.godot/imported/gen_clod_arm.jpg-488ebf3c81f9c76dfc0f2983b33c65dc.s3tc.ctex", "res://.godot/imported/gen_clod_arm.jpg-488ebf3c81f9c76dfc0f2983b33c65dc.etc2.ctex"]
 
 [params]
 

@@ -11,7 +11,6 @@ are resized to 512-2048 px (`assets/nature/tex`, `assets/nature/ground`) and imp
 
 | Asset | Source | Use | Authors |
 |---|---|---|---|
-| Bamboo Veneer | [bamboo_veneer](https://polyhaven.com/a/bamboo_veneer) | texture: the straws' fibres (`straw_01_*`, on the Blender straws of `tools/blender/straw_models.py`) | Jenelle van Heerden (All) |
 | Bark Debris 01 | [bark_debris_01](https://polyhaven.com/a/bark_debris_01) | model | Greg Zaal (photography), Jenelle van Heerden (modeling) |
 | Boulder 01 | [boulder_01](https://polyhaven.com/a/boulder_01) | model | Rico Cilliers (All) |
 | Croissant | [croissant](https://polyhaven.com/a/croissant) | model | Greg Zaal (Processing), Dario Barresi (Scanning) |
@@ -76,3 +75,9 @@ decimated and recoloured, and their limbs replaced.
 ## Fonts
 
 Cinzel: SIL Open Font License, see `assets/fonts/Cinzel-OFL.txt`.
+
+## Generated meshes
+
+Level 1's straws (`gen_straw`) and soil clods (`gen_clod`): reference images made with Higgsfield `gpt_image_2_5`, turned into
+textured PBR meshes with Higgsfield `image_to_3d` (Meshy), 2026-11-09, converted by `tools/blender/glb_to_asset.py` and cut to
+budget by `tools/asset-process.gd`. Made for this project; no third-party licence.

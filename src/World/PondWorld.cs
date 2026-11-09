@@ -73,7 +73,17 @@ public static partial class WorldBuilder
 
         var dress = new NatureScatter.Dresser(w, rng);
         // the island: damp soil, pebbles of every size half sunk in it, a few clumps at the waterline
-        for (int i = 0; i < 120; i++)
+        // the island and the waterline are heaped with damp clods (a generated scan, kind "clod"), half sunk, clustered
+        var clods = NatureAssets.Kind("clod");
+        for (int i = 0; clods.Count > 0 && i < 95; i++)
+        {
+            bool shore = i >= 50;
+            var p = shore ? c + MathX.Dir(rng.R(0, Mathf.Tau)) * (Expedition.WaterR + rng.R(-0.8f, 1.6f)) : c + rng.InDisk(Expedition.IslandR + 0.5f);
+            if (!shore && p.DistanceTo(c + new Vector2(-0.2f, 0.6f)) < 2.2f) continue; // the queen's own ground
+            if (shore && Mathf.Abs(p.Y - c.Y) < 2f && p.X < c.X) continue;              // the bridge's landing
+            dress.Place(dress.Pick(clods), p, rng.R(0.25f, 0.95f) * (rng.F() < 0.15f ? 1.6f : 1), rng.R(0.15f, 0.45f), 0.5f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.8f, 1.1f));
+        }
+        for (int i = 0; i < 50; i++)
         {
             var p = c + rng.InDisk(Expedition.IslandR + 0.6f);
             float r = p.DistanceTo(c);

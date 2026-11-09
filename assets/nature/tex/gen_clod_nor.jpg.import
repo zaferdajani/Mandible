@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d3q06j1xhs5ji"
-path.s3tc="res://.godot/imported/straw_01_nor.jpg-e2e7c54d892d02736f2db403e13b4fd3.s3tc.ctex"
-path.etc2="res://.godot/imported/straw_01_nor.jpg-e2e7c54d892d02736f2db403e13b4fd3.etc2.ctex"
+uid="uid://cuud7epyx3mry"
+path.s3tc="res://.godot/imported/gen_clod_nor.jpg-92435c6e982bc2ec2c8dc7f95887fd71.s3tc.ctex"
+path.etc2="res://.godot/imported/gen_clod_nor.jpg-92435c6e982bc2ec2c8dc7f95887fd71.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/nature/tex/straw_01_nor.jpg"
-dest_files=["res://.godot/imported/straw_01_nor.jpg-e2e7c54d892d02736f2db403e13b4fd3.s3tc.ctex", "res://.godot/imported/straw_01_nor.jpg-e2e7c54d892d02736f2db403e13b4fd3.etc2.ctex"]
+source_file="res://assets/nature/tex/gen_clod_nor.jpg"
+dest_files=["res://.godot/imported/gen_clod_nor.jpg-92435c6e982bc2ec2c8dc7f95887fd71.s3tc.ctex", "res://.godot/imported/gen_clod_nor.jpg-92435c6e982bc2ec2c8dc7f95887fd71.etc2.ctex"]
 
 [params]
 

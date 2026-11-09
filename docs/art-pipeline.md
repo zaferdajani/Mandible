@@ -357,3 +357,9 @@ K3 art 3 3 3 3 3 4, read 2. Not passed. The blockers that remain are structural:
 tubes at this mesh fidelity (need a scanned or generated straw mesh with split fibres); the island and yard soil is the
 shared terrain material, flat next to the targets' crumbly clods; the water lacks a refraction/caustic/meniscus look;
 black worker ants vanish in their own shadow at play zoom.
+
+Gate round 3 on K1-K3, 2026-11-09 (generated meshes: Higgsfield image_to_3d straw and soil clods from reference images,
+`tools/blender/glb_to_asset.py`): K1 art 2 2 3 2 3 3, read 4 (pass); K2 art 3 3 3 3 4 4, read 2; K3 art 2 2 3 2 3 3, read 2.
+Not passed. New blocker: one clod mesh and one straw mesh repeat (need 4-5 generated variants of each, clods lighter
+than near-black). Still open: the shared yard terrain reads smooth next to the targets' crumb soil (a terrain-wide
+issue, not the pond's); the water has no reflections of what stands in it; black ants vanish in shadow at play zoom.

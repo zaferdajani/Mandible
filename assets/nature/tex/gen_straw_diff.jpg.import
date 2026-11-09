@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ks087yhabl4o"
-path.s3tc="res://.godot/imported/straw_01_diff.jpg-4f0c92c4b4e33a676aa2b61069a17816.s3tc.ctex"
-path.etc2="res://.godot/imported/straw_01_diff.jpg-4f0c92c4b4e33a676aa2b61069a17816.etc2.ctex"
+uid="uid://ds5w52v2odyrs"
+path.s3tc="res://.godot/imported/gen_straw_diff.jpg-1334a0ab5f5de21dd4515b83f6424d1a.s3tc.ctex"
+path.etc2="res://.godot/imported/gen_straw_diff.jpg-1334a0ab5f5de21dd4515b83f6424d1a.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/nature/tex/straw_01_diff.jpg"
-dest_files=["res://.godot/imported/straw_01_diff.jpg-4f0c92c4b4e33a676aa2b61069a17816.s3tc.ctex", "res://.godot/imported/straw_01_diff.jpg-4f0c92c4b4e33a676aa2b61069a17816.etc2.ctex"]
+source_file="res://assets/nature/tex/gen_straw_diff.jpg"
+dest_files=["res://.godot/imported/gen_straw_diff.jpg-1334a0ab5f5de21dd4515b83f6424d1a.s3tc.ctex", "res://.godot/imported/gen_straw_diff.jpg-1334a0ab5f5de21dd4515b83f6424d1a.etc2.ctex"]
 
 [params]
 

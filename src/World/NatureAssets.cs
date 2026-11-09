@@ -85,7 +85,7 @@ public static class NatureAssets
     public static Material MaterialFor(string src)
     {
         if (_mats.TryGetValue(src, out var m)) return m;
-        var tex = src.StartsWith("straw_") ? "straw_01" : src; // every Blender straw wears the one fibre set
+        var tex = src;
         var s = new StandardMaterial3D
         {
             AlbedoTexture = Texture($"tex/{tex}_diff"),

@@ -12,22 +12,27 @@ public sealed class StrawProps
     public const float Thick = 0.3f;
     readonly GameSession _g;
     readonly Node3D _root = new() { Name = "Straws" };
-    readonly List<MeshInstance3D> _nodes = new();
+    readonly List<Node3D> _nodes = new();
     readonly List<Vector3> _lift = new();
 
     public StrawProps(GameSession g) { _g = g; g.AddChild(_root); }
 
     /// One straw mesh scaled to the sim's length, its length along local +X.
-    public static MeshInstance3D Make(int variant)
+    /// The generated straw scan (kind "straw"), its length along the holder's +X. The scan is a thick reed: it is
+    /// thinned across to about 1:20, a grass culm's build. Each variant rolls it about its length and may turn it end for end, so
+    /// the split sheath and the frayed tip never sit the same way twice, and wears its own shade of dead grass.
+    public static Node3D Make(int variant)
     {
         var kind = NatureAssets.Kind("straw");
         if (kind.Count == 0) return null;
         var p = kind[variant % kind.Count];
-        float s = Expedition.StrawLength / p.Size.X;
-        // each straw its own shade of dead grass: some fresh gold, some bleached, some weathered brown
+        float s = Expedition.StrawLength / p.Size.X, thin = 0.55f;
         var mat = (StandardMaterial3D)p.Material.Duplicate();
         mat.AlbedoColor = Tones[variant % Tones.Length];
-        return new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = mat, Scale = Vector3.One * s };
+        var local = new Basis(Vector3.Up, variant % 2 == 1 ? Mathf.Pi : 0) * new Basis(Vector3.Right, variant * 1.9f) * Basis.FromScale(new Vector3(s, s * thin, s * thin));
+        var holder = new Node3D();
+        holder.AddChild(new MeshInstance3D { Mesh = p.Mesh, MaterialOverride = mat, Basis = local, Position = new Vector3(0, p.Size.Y * s * thin * 0.5f, 0) - local * new Vector3(0, p.Size.Y * 0.5f, 0) }); // rolled about its own axis, resting on the ground
+        return holder;
     }
 
     static readonly Color[] Tones =
@@ -64,7 +69,7 @@ public sealed class StrawProps
                 float lift = s.HoldCount >= Expedition.StrawCrew ? 0.22f : s.HoldCount > 0 ? 0.08f : 0f;
                 at = new Vector3(s.Pos.X, hf.Sample(s.Pos.X, s.Pos.Y) - 0.06f + lift, s.Pos.Y);
             }
-            var target = new Transform3D(new Basis(Vector3.Up, -s.Heading).Scaled(n.Scale), at);
+            var target = new Transform3D(new Basis(Vector3.Up, -s.Heading), at);
             n.GlobalTransform = n.IsInsideTree() && _lift[i] != Vector3.Zero ? n.GlobalTransform.InterpolateWith(target, k) : target;
             _lift[i] = at;
         }
