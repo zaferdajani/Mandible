@@ -101,7 +101,7 @@ faint violet-green mutagen veins; the owner rejected those in the game on 2026-1
 gaster tip); the Marshal with three wing pairs and chitin wing-cases. `REVIEW-generals.jpg` holds all six
 (`j-general-*.jpg`). Higgsfield `gpt_image_2_5`, quality high, 16:9, one round.
 
-## K. Level 1's teamwork lesson (pond, straws, bridge, dead queen) — pending approval
+## K. Level 1's teamwork lesson (pond, straws, bridge, dead queen)
 
 | Target | File |
 | --- | --- |
@@ -109,7 +109,7 @@ gaster tip); the Marshal with three wing pairs and chitin wing-cases. `REVIEW-ge
 | K2. A crew of workers carrying one straw to the water | `k2-straw-crew.jpg` |
 | K3. The finished five-straw bridge; workers carve the gland from the dead queen | `k3-straw-bridge.jpg` |
 
-Status: **pending the owner's approval** (2026-11-08). Known flaws: in K2 the ants walk on the straw instead of
+Status: **K1-K3 approved by the owner on 2026-11-09** ("Approve all three"). Notes for the build: in K2 the ants walk on the straw instead of
 gripping it from beside it (the game has them grip it, as in K3's crossing pose); K3's gland is green where the
 mutation targets (H) are violet breathing toward green.
 
