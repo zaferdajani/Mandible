@@ -21,12 +21,14 @@ public sealed class StrawProps
     /// The generated straw scan (kind "straw"), its length along the holder's +X. The scan is a thick reed: it is
     /// thinned across to about 1:20, a grass culm's build. Each variant rolls it about its length and may turn it end for end, so
     /// the split sheath and the frayed tip never sit the same way twice, and wears its own shade of dead grass.
-    public static Node3D Make(int variant)
+    public static Node3D Make(int variant, bool carried = true)
     {
-        var kind = NatureAssets.Kind("straw");
+        // the carried and bridged straws are the clean culms; the one with a leaf still on lies loose on the shore
+        var kind = NatureAssets.Kind("straw").FindAll(k => !carried || Mathf.Max(k.Size.Y, k.Size.Z) < k.Size.X * 0.2f);
         if (kind.Count == 0) return null;
         var p = kind[variant % kind.Count];
-        float s = Expedition.StrawLength / p.Size.X, thin = 0.55f;
+        float s = Expedition.StrawLength / p.Size.X;
+        float thin = Mathf.Clamp(Thick / (Mathf.Min(p.Size.Y, p.Size.Z) * s), 0.25f, 1f); // every scan to the same girth
         var mat = (StandardMaterial3D)p.Material.Duplicate();
         mat.AlbedoColor = Tones[variant % Tones.Length];
         var local = new Basis(Vector3.Up, variant % 2 == 1 ? Mathf.Pi : 0) * new Basis(Vector3.Right, variant * 1.9f) * Basis.FromScale(new Vector3(s, s * thin, s * thin));

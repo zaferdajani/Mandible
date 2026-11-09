@@ -363,3 +363,10 @@ Gate round 3 on K1-K3, 2026-11-09 (generated meshes: Higgsfield image_to_3d stra
 Not passed. New blocker: one clod mesh and one straw mesh repeat (need 4-5 generated variants of each, clods lighter
 than near-black). Still open: the shared yard terrain reads smooth next to the targets' crumb soil (a terrain-wide
 issue, not the pond's); the water has no reflections of what stands in it; black ants vanish in shadow at play zoom.
+
+Gate round 4 on K1-K3, 2026-11-09 (3 generated straw scans, 4 generated clod scans, every straw the same girth, the
+leafy straw only loose on the shore): K1 art 3 2 3 2 3 3, read 3; K2 art 3 3 2 3 4 4, read 2; K3 art 2 3 3 2 3 3,
+read 2. Not passed; no real movement since round 2. The blockers every reviewer repeats are outside the props: the
+water (no reflections of the straws or sky, no meniscus; the phone renderer has no screen-space reflections), the
+shared yard terrain (smooth next to the targets' crumb soil), and black ants lost in their own shadow at play zoom.
+Four rounds of prop work did not move those; they need the terrain and water work done for the whole yard.

@@ -111,7 +111,7 @@ public static partial class WorldBuilder
         // loose straws the wind left round the far shore and on the bank, beside the five the colony can carry
         for (int i = 0; i < 7; i++)
         {
-            var straw = StrawProps.Make(i);
+            var straw = StrawProps.Make(i, false);
             if (straw == null) break;
             float a = rng.R(-2.2f, 2.2f) + (i % 2 == 0 ? 0 : Mathf.Pi * 0.5f);
             var p = c + MathX.Dir(a) * rng.R(Expedition.WaterR + 2.5f, Expedition.ShoreR + 4);
