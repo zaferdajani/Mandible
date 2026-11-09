@@ -1,6 +1,8 @@
 # Mandible: notes for Claude sessions
 
-Ant-war RTS, Godot 4.7.2 .NET (C#), repo github.com/zaferdajani/Mandible, checkout D:\Mandible.
+Ant-war RTS, Godot 4.7.2 .NET (C#), private repo github.com/zaferdajani/Mandible, checkout D:\Mandible.
+Builds are published to the PUBLIC downloads-only repo github.com/zaferdajani/Mandible-releases (the updater reads it);
+never put source there. Release links point to Mandible-releases.
 Read this instead of re-surveying the codebase. Keep it short and current.
 
 ## Token budget (owner's rule)
@@ -23,11 +25,11 @@ Read this instead of re-surveying the codebase. Keep it short and current.
 
 ## Release recipe (only when the owner asks)
 Bump `src/Game/Updater.cs` Version, commit, tag vX, push main + tag; run `macos-build.yml` and `ios-build.yml`
-(`/d/Tools/gh/bin/gh.exe workflow run ... --ref vX`); `git worktree add D:/MandibleBuilds/src-X vX`, import, export
+(`/d/Tools/gh/bin/gh.exe workflow run ... --ref vX`; private repo: macOS minutes count 10x against the free Actions quota); `git worktree add D:/MandibleBuilds/src-X vX`, import, export
 "Windows Desktop" and "Android" (JAVA_HOME=D:\Tools\jdk17, keystore env vars, see past releases). If export says
 "Failed to build project", create `D:/GodotData/mono/build_logs/<hash>_ExportRelease` (hash from a --verbose export).
 Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Android.apk / Mandible-iOS-unsigned.ipa
-(the updater looks for them). Then `powershell -File tools/updatetest.ps1`. End every reply with the release link.
+(the updater looks for them). Publish with `gh release create vX -R zaferdajani/Mandible-releases ...` (not the code repo). Then `powershell -File tools/updatetest.ps1`. End every reply with the release link.
 
 ## Architecture in one screen
 - Deterministic 30 Hz lockstep sim (`src/Sim`, DMath only, no Mathf trig in sim). Player actions go through `Cmd`

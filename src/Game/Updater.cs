@@ -19,8 +19,8 @@ namespace Mandible;
 public partial class Updater : Node
 {
     public const string Version = "0.12.1";
-    const string Api = "https://api.github.com/repos/zaferdajani/Mandible/releases/latest";
-    public const string Page = "https://github.com/zaferdajani/Mandible/releases/latest";
+    const string Api = "https://api.github.com/repos/zaferdajani/Mandible-releases/releases/latest";
+    public const string Page = "https://github.com/zaferdajani/Mandible-releases/releases/latest"; // builds live in a public downloads repo; the code repo is private
 
     public enum Phase { Idle, Checking, UpToDate, Available, Downloading, Installing, Failed }
     public Phase State { get; private set; } = Phase.Idle;
