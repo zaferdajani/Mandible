@@ -1166,8 +1166,29 @@ void fragment() {
     float facing2 = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
     float refl = clamp(pow(1.0 - facing2, 3.0) * 0.4 + 0.08 * broad * broad + 0.3 * max(wn.x + wn.z - 0.2, 0.0), 0.0, 0.18) * smoothstep(0.05, 0.6, thick);
     col *= mix(0.72, 1.0, smoothstep(0.0, 0.3, thick)); // the wet meniscus darkens the mud at the waterline
+    // what stands in it: a short screen-space march along the reflected ray (the phone renderer has no SSR), so the
+    // straws of the bridge, the banks and the queen show upside down in the water, broken by the ripples
+    vec3 rn = normalize(NORMAL + (VIEW_MATRIX * vec4(wn.x, 0.0, wn.z, 0.0)).xyz * 0.35);
+    vec3 rd = reflect(normalize(VERTEX), rn);
+    vec3 rp = VERTEX;
+    vec3 mirror = sky * 0.9;
+    float got = 0.0;
+    for (int i = 0; i < 28; i++) {
+        rp += rd * (0.25 + float(i) * 0.06);
+        vec4 c = PROJECTION_MATRIX * vec4(rp, 1.0);
+        vec2 uv = c.xy / c.w * 0.5 + 0.5;
+        if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) break;
+        float dz = texture(depth_tex, uv).r;
+        vec4 sv = INV_PROJECTION_MATRIX * vec4(uv * 2.0 - 1.0, dz, 1.0);
+        sv.xyz /= sv.w;
+        if (sv.z > rp.z && sv.z - rp.z < 1.2) { mirror = textureLod(screen_tex, uv, 0.0).rgb; got = 1.0; break; }
+    }
+    float shine = mix(0.04, 0.4, got) * smoothstep(0.05, 0.6, thick);
+    col = mix(col, mirror, max(shine, refl * 0.4));
+    // the meniscus: a thin bright line where the water climbs the mud, then the wet dark band above it (terrain AO)
+    float lip = smoothstep(0.0, 0.012, thick) * (1.0 - smoothstep(0.025, 0.08, thick));
     ALBEDO = vec3(0.0);
-    EMISSION = mix(col, sky * 0.9, refl);
+    EMISSION = col + sky * 0.3 * lip;
     ROUGHNESS = 0.04;
     SPECULAR = 0.5;
     METALLIC = 0.0;

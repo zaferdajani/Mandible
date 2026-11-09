@@ -370,3 +370,11 @@ read 2. Not passed; no real movement since round 2. The blockers every reviewer 
 water (no reflections of the straws or sky, no meniscus; the phone renderer has no screen-space reflections), the
 shared yard terrain (smooth next to the targets' crumb soil), and black ants lost in their own shadow at play zoom.
 Four rounds of prop work did not move those; they need the terrain and water work done for the whole yard.
+
+Gate round 5 on K1-K3, 2026-11-10 (water: a screen-space reflection march so the bridge, banks and grass mirror in the
+pond, a bright meniscus line at the waterline; ground: a lumpier island and 320 small crumbs from the clod scans):
+K1 art 3 2 3 2 3 3, read 3; K2 art 3 2 2 3 3 3, read 2; K3 art 2 2 3 2 3 3, read 2. Not passed. The reviewers now
+contradict each other round to round (straws "too thick" and "too thin"; "no reflections" though they show), and the
+scores have sat at 2-3 since round 2: the reviewers judge a play-zoom RTS render against macro photographs. The
+readability fails are steady and specific: black soldiers and workers read as specks at play zoom, the carried straw
+does not stand out from ground litter, and the shore straws read as debris.

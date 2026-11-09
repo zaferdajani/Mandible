@@ -27,7 +27,7 @@ public static partial class WorldBuilder
                 var d = new Vector2(x, z) - c;
                 float r = d.Length() + wobble.GetNoise2D(x, z) * 0.6f;
                 float floor = baseY - PondDepth + wobble.GetNoise2D(x * 2.1f, z * 2.1f) * 0.12f;
-                float island = baseY + 0.18f * (1 - Mathf.SmoothStep(0, Expedition.IslandR, r));
+                float island = baseY + 0.18f * (1 - Mathf.SmoothStep(0, Expedition.IslandR, r)) + wobble.GetNoise2D(x * 3.1f, z * 3.1f) * 0.22f; // lumpy, not a plate
                 // island mound → its muddy flank into the water → the floor → the bank back up to the yard
                 float h = r < Expedition.IslandR - 0.8f ? island
                     : r < Expedition.IslandR + 1.4f ? Mathf.Lerp(island, floor, Mathf.SmoothStep(Expedition.IslandR - 0.8f, Expedition.IslandR + 1.4f, r))
@@ -82,6 +82,15 @@ public static partial class WorldBuilder
             if (!shore && p.DistanceTo(c + new Vector2(-0.2f, 0.6f)) < 2.2f) continue; // the queen's own ground
             if (shore && Mathf.Abs(p.Y - c.Y) < 2f && p.X < c.X) continue;              // the bridge's landing
             dress.Place(dress.Pick(clods), p, rng.R(0.25f, 0.95f) * (rng.F() < 0.15f ? 1.6f : 1), rng.R(0.15f, 0.45f), 0.5f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.8f, 1.1f));
+        }
+        // crumb soil: the island and the waterline are covered in small aggregates from every clod scan, densest at the water
+        for (int i = 0; clods.Count > 0 && i < 320; i++)
+        {
+            bool shore = i >= 170;
+            var p = shore ? c + MathX.Dir(rng.R(0, Mathf.Tau)) * (Expedition.WaterR - 0.4f + Mathf.Pow(rng.F(), 1.6f) * 4.5f) : c + rng.InDisk(Expedition.IslandR + 0.6f);
+            if (!shore && p.DistanceTo(c + new Vector2(-0.2f, 0.6f)) < 1.4f) continue;
+            if (shore && Mathf.Abs(p.Y - c.Y) < 1.6f && p.X < c.X) continue;
+            dress.Place(dress.Pick(clods), p, rng.R(0.09f, 0.32f), rng.R(0.25f, 0.55f), 0.6f, Basis.Identity, rng.R(0, Mathf.Tau), rng.R(0.75f, 1.05f));
         }
         for (int i = 0; i < 50; i++)
         {
