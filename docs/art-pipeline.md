@@ -343,3 +343,10 @@ colony's own model at the near detail, the Matron's acid from her real gaster ti
 Gate on the generals at level 10 (art, out of 5: anatomy, primitives, eyes, material, light, palette), before the
 veins were removed: Warlord 2 2 1 2 3 2, Matron 2 1 1 2 3 2, Marshal 2 2 1 2 2 3; play readability 3. Not passed.
 12/12 self-tests and --savetest pass; High 35-49 fps, Low 60.
+
+Gate round 1 on level 1's pond (K1-K3), 2026-11-09, `MANDIBLE_ART_ONLY=k --art-capture` (art: repetition, primitives,
+scale, material, light, palette): K1 pond 3 2 3 2 3 3, read 3; K2 straw crew 3 3 3 3 4 4, read 2; K3 bridge 3 2 2 3 3 4,
+read 2. Not passed. Main blockers: straws too uniform and smooth (no fibre or split detail at play scale) and too similar;
+the bridge does not read as spanning shore to island; water still reads milky and flat; island soil smooth, no clods or wet
+edge; the crew merges into one dark clump; the dead queen too small to read at play zoom; glass tube shows a refraction
+smear at the screen edge. Chain test passes.

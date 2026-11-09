@@ -18,6 +18,7 @@ public partial class GameSession : Node3D
     public Guidance Guide;
     public MutagenGlow Glow;
     public MutagenProps Props;
+    public StrawProps Straws;
     public FogOfWar Fog;
     public RtsCamera Camera;
     public Hud Hud;
@@ -87,6 +88,7 @@ public partial class GameSession : Node3D
         Ants.Gore = Gore;
         Interior = new NestInterior(this);
         if (Campaign) { Glow = new MutagenGlow(this); Props = new MutagenProps(this); }
+        if (World.FirstNest) Straws = new StrawProps(this);
         Ants.Brood = Interior;
         var nestPos = World.Nests[Local.Me].Pos;
         Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
@@ -866,6 +868,7 @@ public partial class GameSession : Node3D
         Interior.Update(Fog, NestView, _alpha);
         Glow?.Update(dt);
         Props?.Update(dt);
+        Straws?.Update(dt);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
         Ants.ShowCollect = Hud?.CommandHud?.RemainsPage == true && Sim.Col[Local.Me].Remains == RemainsOrder.Haul;

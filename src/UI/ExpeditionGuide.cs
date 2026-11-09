@@ -44,10 +44,14 @@ public partial class ExpeditionGuide : PanelContainer
         // the founding's numbers and its one button live in their own panel, top centre (FoundingPanel)
         if (m.Episode == 1) Game.Hud.AddPanel(new FoundingPanel { Game = Game });
     }
+    /// Art captures (ArtValidation) render the world without the guide's arrows and rings.
+    public static bool Silent;
+
     public override void _Process(double delta)
     {
         var m = Game.Sim.Mission;
         if (m == null) return;
+        if (Silent) { if (_guiding) Game.Guide.Clear(); _guiding = false; return; }
         _heading.Text = m.Title;
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();

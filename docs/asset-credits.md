@@ -11,6 +11,7 @@ are resized to 512-2048 px (`assets/nature/tex`, `assets/nature/ground`) and imp
 
 | Asset | Source | Use | Authors |
 |---|---|---|---|
+| Bamboo Veneer | [bamboo_veneer](https://polyhaven.com/a/bamboo_veneer) | texture: the straws' fibres (`straw_01_*`, on the Blender straws of `tools/blender/straw_models.py`) | Jenelle van Heerden (All) |
 | Bark Debris 01 | [bark_debris_01](https://polyhaven.com/a/bark_debris_01) | model | Greg Zaal (photography), Jenelle van Heerden (modeling) |
 | Boulder 01 | [boulder_01](https://polyhaven.com/a/boulder_01) | model | Rico Cilliers (All) |
 | Croissant | [croissant](https://polyhaven.com/a/croissant) | model | Greg Zaal (Processing), Dario Barresi (Scanning) |

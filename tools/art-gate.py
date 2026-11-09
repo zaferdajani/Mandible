@@ -50,6 +50,14 @@ VIEWS = {
                "Each ant reads as an ant (head, body, legs) and not as a dot or a blob; the black and the red colonies "
                "are told apart at a glance; soldiers and majors read larger than workers; the ants stand out from the "
                "soil and the litter."),
+    # level 1's teamwork lesson (targets K1-K3)
+    "k1-pond": ("k1-pond-island.jpg", "level 1's rain pond: a dirt island with a dead pale queen ant of another strain and a second broken glass tube, straws on the shore",
+                "A player sees at once that water blocks the way to an island; the dead queen and the glass tube on the island are visible; "
+                "the straws on the shore read as loose objects, not as part of the ground."),
+    "k2-straw-crew": ("k2-straw-crew.jpg", "a crew of worker ants carrying one long straw toward the pond",
+                      "The straw reads as one long object; the ants holding it are visible along it; a player can tell the crew carries it together."),
+    "k3-straw-bridge": ("k3-straw-bridge.jpg", "a finished bridge of five straws from the shore to the island, workers crossing to the dead queen",
+                        "The bridge reads as straws laid side by side across the water from shore to island; the ants and the dead queen on the island are visible."),
     "f-fog-of-war": ("f-fog-of-war.jpg", "level start under fog of war",
                      "Ground never seen is black, ground seen before is dimmed, ground in sight is clear: the three "
                      "are told apart; the ants and the trail inside the visible area read; the edge is soft, not a hard cut."),

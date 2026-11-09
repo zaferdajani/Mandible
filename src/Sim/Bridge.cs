@@ -50,7 +50,7 @@ public sealed partial class Expedition
         var dir = r > 0.001f ? dp / r : new Vector2(-1, 0);
         Try(Pond + dir * Mathf.Clamp(r, WaterR, ShoreR));
         Try(Pond + dir * Mathf.Min(r, IslandR));
-        if (bridged) Try(new Vector2(Mathf.Clamp(p.X, Pond.X - WaterR - 1, Pond.X), Mathf.Clamp(p.Y, Pond.Y - 1.6f, Pond.Y + 1.6f)));
+        if (bridged) Try(new Vector2(Mathf.Clamp(p.X, Pond.X - WaterR - 1, Pond.X), Mathf.Clamp(p.Y, Pond.Y - 1f, Pond.Y + 1f)));
         return best;
     }
     public Vector2 Constrain(Vector2 p) => Constrain(p, Bridged);
@@ -117,6 +117,39 @@ public sealed partial class Sim
             m.Straws.Add(new Straw { Id = i, Pos = Expedition.StrawSpots[i], Heading = Expedition.StrawTurns[i] });
     }
 
+    /// The plank: straight across the water, side by side with the ones already laid.
+    void Lay(Straw s)
+    {
+        var m = Mission;
+        s.Laid = true;
+        s.Heading = 0;
+        s.Pos = new Vector2(Expedition.Pond.X - (Expedition.WaterR + Expedition.IslandR) * 0.5f, Expedition.Pond.Y + (m.StrawsLaid - 2) * 0.45f);
+        m.StrawsLaid++;
+        Events.Add(new SimEvent { Kind = EvKind.StrawLaid, Pos = s.Pos, Team = 0, Tier = m.StrawsLaid });
+    }
+
+    /// Art capture only (ArtValidation, targets K1-K3): jumps level 1 to its bridge with `laid` planks down and sends
+    /// `crew` workers, set down beside it, to the next straw (or across to the gland once the bridge is whole).
+    public void ArtBridge(int laid, int crew)
+    {
+        BeginBridge();
+        for (int k = 0; k < laid && k < Mission.Straws.Count; k++) Lay(Mission.Straws[k]);
+        if (Mission.Bridged) TickBridge(0);
+        var ids = new List<int>();
+        for (int i = 0; i < High && ids.Count < crew; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type == AntType.Worker) ids.Add(i);
+        Straw next = null; // the farthest straw from the water, so the frame catches the crew on the way
+        foreach (var s in Mission.Straws) if (!s.Laid && (next == null || s.Pos.X < next.Pos.X)) next = s;
+        foreach (int id in ids)
+        {
+            ref var a = ref Ants[id];
+            var p = next != null ? next.Pos + new Vector2(Rng.R(-3.5f, 0.5f), Rng.R(-1.2f, 1.2f)) : Expedition.BridgeSite + new Vector2(Rng.R(-4f, 3f), Rng.R(-0.6f, 0.6f));
+            a.Pos = a.PrevPos = a.Anchor = a.Goal = Mission.Constrain(p);
+            a.Layer = 0;
+        }
+        if (next != null) CmdStraw(ids, next);
+        else CmdExtract(ids, MutagenById(Mission.GlandId));
+    }
+
     /// Straws held by a full crew slide toward the bridge site; one that arrives is laid as the next plank.
     void TickBridge(float dt)
     {
@@ -132,12 +165,7 @@ public sealed partial class Sim
             float d = to.Length(), step = speed * dt;
             s.Heading += MathX.AngleDiff(s.Heading, to.AngleD()) * Mathf.Min(1f, 1.5f * dt);
             if (d > 1.2f + step) { s.Pos += to / d * step; continue; }
-            // the plank: straight across the water, side by side with the ones already laid
-            s.Laid = true;
-            s.Heading = 0;
-            s.Pos = new Vector2(Expedition.Pond.X - (Expedition.WaterR + Expedition.IslandR) * 0.5f, Expedition.Pond.Y + (m.StrawsLaid - 2) * 0.5f);
-            m.StrawsLaid++;
-            Events.Add(new SimEvent { Kind = EvKind.StrawLaid, Pos = s.Pos, Team = 0, Tier = m.StrawsLaid });
+            Lay(s);
         }
         if (!m.Bridged) return;
         // the bridge holds: the dead queen's gland waits on the island (a story beat, no mutagen in the reserve)
