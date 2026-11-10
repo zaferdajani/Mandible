@@ -107,7 +107,7 @@ public sealed partial class Sim
         {
             float off = (k + 1) / 2 * 0.35f * (k % 2 == 0 ? 1 : -1);
             var p = ClampMap(nest + MathX.Dir(toYard + off) * Config.MiddenDist);
-            if (Mission?.Confined == true) p = Expedition.Constrain(p);
+            if (Mission?.Confined == true) p = Mission.Constrain(p);
             if (W.Blocked(p, 2.5f)) continue;
             float clear = c.Founded ? p.DistanceTo(NestPoint(team, p)) : 99f;
             if (clear > bestClear + 0.5f) { best = p; bestClear = clear; }
@@ -509,7 +509,7 @@ public sealed partial class Sim
             if (l < rr && l > 1e-4f) p = o.P + off / l * rr;
         }
         p = ClampMap(p);
-        if (Mission?.Confined == true) p = Expedition.Constrain(p);
+        if (Mission?.Confined == true) p = Mission.Constrain(p);
         f.Pos = p;
         f.Heading += MathX.AngleDiff(f.Heading, dir.AngleD() + DMath.Pi) * Mathf.Min(1, dt * 1.5f); // it comes rear first, the jaws pulling at its head
     }

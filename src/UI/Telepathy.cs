@@ -310,6 +310,9 @@ public partial class Telepathy : Control
                     ExpeditionStage.Store => "l1_incubator",
                     ExpeditionStage.RaiseWorkers => "l1_store",
                     ExpeditionStage.RaiseSoldiers => "l1_workers",
+                    ExpeditionStage.Bridge => "l1_bridge",
+                    ExpeditionStage.Fragment => "l1_island",
+                    ExpeditionStage.Complete => "l1_taste",
                     _ => "l1_done",
                 });
             }
@@ -319,7 +322,7 @@ public partial class Telepathy : Control
         if (!_won && Game.Sim.Winner == Local.Me)
         {
             _won = true;
-            if (m.Episode != 1) Say($"close_{m.Episode}", urgent: true);
+            if (m.Episode != 1) Say($"close_{m.Episode}", urgent: true); else Say("l1_done"); // after her taste of the gland
         }
         if ((_foodCheck -= dt) <= 0)
         {

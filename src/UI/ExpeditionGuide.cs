@@ -44,10 +44,14 @@ public partial class ExpeditionGuide : PanelContainer
         // the founding's numbers and its one button live in their own panel, top centre (FoundingPanel)
         if (m.Episode == 1) Game.Hud.AddPanel(new FoundingPanel { Game = Game });
     }
+    /// Art captures (ArtValidation) render the world without the guide's arrows and rings.
+    public static bool Silent;
+
     public override void _Process(double delta)
     {
         var m = Game.Sim.Mission;
         if (m == null) return;
+        if (Silent) { if (_guiding) Game.Guide.Clear(); _guiding = false; return; }
         _heading.Text = m.Title;
         _body.Text = Settings.Mobile ? ForTouch(m.Instruction) : m.Instruction;
         Arrange();
@@ -71,6 +75,26 @@ public partial class ExpeditionGuide : PanelContainer
             {
                 guiding = true;
                 Game.Guide.Show(Expedition.Clearing, "NEST SITE", ""); // the panel at the top carries the button and the words
+            }
+            else if (m.Stage == ExpeditionStage.Bridge && m.NextStraw is { } straw)
+            {
+                // a straw on the shore until a crew has one; then the water's edge where it is laid
+                guiding = true;
+                if (straw.HoldCount >= Expedition.StrawCrew)
+                    Game.Guide.Show(Expedition.BridgeSite, $"BRIDGE · {m.StrawsLaid}/{Expedition.StrawGoal}", "Keep at least two workers on the straw; more carry it faster");
+                else
+                    Game.Guide.Show(straw.Pos, "STRAW · CARRY TOGETHER", Settings.Mobile ? "Tap Workers, then the straw: two or more carry it to the water" : "Two or more workers (F3), then right-click: they carry it to the water");
+            }
+            else if (m.Stage == ExpeditionStage.Fragment && m.QueenAlive(Game.Sim))
+            {
+                guiding = true;
+                Game.Guide.Show(m.QueenAt, "MUTATED QUEEN · ATTACK TOGETHER", Settings.Mobile ? "Tap Army, then tap her. Alone, any ant dies" : "Soldiers (F2), then right-click her. Alone, any ant dies");
+            }
+            else if (m.Stage == ExpeditionStage.Fragment && Game.Sim.MutagenById(m.GlandId) is { Home: false } gland)
+            {
+                guiding = true;
+                if (gland.Carried) Game.Guide.Show(Game.Sim.NestEntrance(Local.Me), "THE QUEEN", "The gland is heavy: its carrier walks slowly home");
+                else Game.Guide.Show(gland.Pos, "THE QUEEN'S GLAND", Settings.Mobile ? "Tap Workers, then the glowing gland on the island" : "Workers (F3), then right-click the glowing gland on the island");
             }
         }
         if (!guiding && _guiding) Game.Guide.Clear();
@@ -146,6 +170,9 @@ public partial class ExpeditionGuide : PanelContainer
     {
         ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
         ("right-click the food clearing", "tap the food clearing"),
+        ("Select two or more workers (F3) and right-click a straw", "Tap Workers, then tap a straw"),
+        ("(F3, then right-click the glowing gland)", "(tap Workers, then tap the glowing gland)"),
+        ("(F2, then right-click her)", "(tap Army, then tap her)"),
         ("Press F3 to select workers, then click Dig entrance below.", "Tap Workers to select them, then tap Dig entrance below."),
         ("Press N, choose Brood Chamber, then click beside the royal chamber.", "Tap Build, choose Brood Chamber, then tap beside the royal chamber."),
         ("Choose Storage and click beside a connected room.", "Choose Storage and tap beside a connected room."),

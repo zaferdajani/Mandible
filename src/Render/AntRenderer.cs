@@ -149,6 +149,9 @@ public sealed class AntRenderer
         // stag beetle: mahogany wing cases, dark head, deep red-brown jaws (head colour x0.6 in the shader)
         [AntType.StagBeetle] = new[] { new Color(0.08f, 0.03f, 0.015f), new Color(0.42f, 0.11f, 0.04f), new Color(0.30f, 0.09f, 0.03f), new Color(0.07f, 0.03f, 0.015f) },
         [AntType.Wasp] = new[] { new Color(0.025f, 0.022f, 0.018f), new Color(0.85f, 0.58f, 0.04f), new Color(0.9f, 0.62f, 0.05f), new Color(0.72f, 0.43f, 0.06f) },
+        // level 1's island queen: another lab strain, pale amber (target K1)
+        [AntType.Queen] = new[] { new Color(0.62f, 0.38f, 0.16f), new Color(0.55f, 0.32f, 0.13f), new Color(0.86f, 0.66f, 0.38f), new Color(0.6f, 0.4f, 0.2f) },
+        [AntType.Worker] = new[] { new Color(0.66f, 0.42f, 0.18f), new Color(0.58f, 0.35f, 0.14f), new Color(0.82f, 0.6f, 0.32f), new Color(0.62f, 0.42f, 0.2f) },
     };
 
     /// The metal every hero wears: gold for the garden legion, scarlet lacquer for the fire swarm.
@@ -158,6 +161,7 @@ public sealed class AntRenderer
     {
         [AntType.Beetle] = new Color(0.3f, 0.75f, 0.6f), [AntType.Spider] = new Color(0.88f, 0.82f, 0.68f),
         [AntType.StagBeetle] = new Color(0.9f, 0.55f, 0.22f), [AntType.Wasp] = new Color(0.98f, 0.78f, 0.12f),
+        [AntType.Queen] = new Color(0.95f, 0.8f, 0.5f), [AntType.Worker] = new Color(0.95f, 0.8f, 0.5f),
     };
 
     readonly Dictionary<(int, AntType), Batch> _wings = new();
@@ -175,7 +179,8 @@ public sealed class AntRenderer
         for (int team = 0; team < 3; team++)
             for (int t = 0; t < 13; t++)
             {
-                if ((team == Config.Wild) != Config.IsBug((AntType)t)) continue;
+                // the wild side draws the bugs, plus level 1's island queen (another strain) and her dead workers
+                if ((team == Config.Wild) != (Config.IsBug((AntType)t) || team == Config.Wild && (AntType)t is AntType.Queen or AntType.Worker)) continue;
                 var mesh = AntMesh.Build((AntType)t, false, team);
                 var mat = AntMat(shader, team, (AntType)t, false);
                 var dmat = AntMat(shader, team, (AntType)t, true);
@@ -284,7 +289,7 @@ public sealed class AntRenderer
             m.SetShaderParameter("head_color", c[1]);
             m.SetShaderParameter("gaster_color", c[2]);
             m.SetShaderParameter("leg_color", c[3]);
-            m.SetShaderParameter("pattern", type switch { AntType.Spider => 2, AntType.Wasp => 3, AntType.StagBeetle => 4, _ => 1 });
+            m.SetShaderParameter("pattern", type switch { AntType.Spider => 2, AntType.Wasp => 3, AntType.StagBeetle => 4, AntType.Queen or AntType.Worker => 0, _ => 1 });
             m.SetShaderParameter("irid", type switch { AntType.Beetle => 0.9f, AntType.StagBeetle => 0.2f, _ => 0f });
             m.SetShaderParameter("accent", BugAccent[type]);
         }

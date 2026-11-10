@@ -38,21 +38,24 @@ public static partial class WorldBuilder
         RockDips(hf, rocks);
         // the first nest is founded during play: its site starts as plain ground, with no crater dug yet
         if (!firstNest) Crater(hf, w.Nests[0].Pos);
+        else PondBasin(hf);
         Thatch(hf, w.Nests[1].Pos);
         hf.SnapshotGround();
+        if (firstNest) PondDeck(hf);
 
         w.IndexObstacles();
         var leaves = PlaceLeaves(w, deco, rocks);
         var twigs = PlaceTwigs(w, deco);
         if (firstNest) { w.Obstacles.RemoveAll(o => Expedition.Contains(o.P, o.R + 3)); w.IndexObstacles(); }
         var ao = ComputeAO(hf, rocks);
+        if (firstNest) PondWet(hf, ao);
 
         BuildTerrainMesh(w, ao);
         BuildSkirt(w);
         foreach (var l in leaves) BuildLeaf(w, l);
         BuildTwigs(w, deco, twigs);
         BuildNestDressing(w, deco);
-        if (firstNest) BuildExpedition(w, deco);
+        if (firstNest) { BuildExpedition(w, deco); BuildPond(w, deco); }
         else { PlaceFood(w, rng); PlaceCamps(w, rng); }
         BuildGrass(w, deco); // after the food, so no grass grows over a pile and hides it
         w.IndexObstacles();
@@ -245,6 +248,7 @@ public static partial class WorldBuilder
         {
             if (p.X < 20 || p.Y < 20 || p.X > S - 20 || p.Y > S - 20) return false;
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < len * 0.6f + 16) return false;
+            if (w.FirstNest && InPond(p, len * 0.6f + 6)) return false;
             foreach (var r in rocks) if (p.DistanceTo(r.P) < r.R + len * 0.55f) return false;
             foreach (var l in list) if (p.DistanceTo(l.P) < (l.Len + len) * 0.42f) return false;
             return true;
@@ -349,7 +353,7 @@ public static partial class WorldBuilder
             if (p.X + p.Y > S) continue;
             bool bad = false;
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < 50) bad = true;
-            if (p.DistanceTo(Center) < 30) bad = true;
+            if (p.DistanceTo(Center) < 30 || w.FirstNest && InPond(p, 62)) bad = true;
             if (bad) continue;
             float len = rng.R(26, 55), yaw = rng.R(0, Mathf.Tau), rad = rng.R(0.7f, 1.3f);
             for (int m = 0; m < 2; m++)
@@ -476,7 +480,7 @@ public static partial class WorldBuilder
         {
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < n.Radius + 4) return true;
             foreach (var f in w.Food) if (p.DistanceTo(f.Pos) < f.Radius + 1.5f) return true;
-            if (firstNest && Expedition.Contains(p, 1.5f)) return true;
+            if (firstNest && (Expedition.Contains(p, 1.5f) || InPond(p, 3))) return true;
             foreach (var r in rocks) if (p.DistanceTo(r.P) < r.R * 0.9f) return true;
             return false;
         }
@@ -672,7 +676,7 @@ public static partial class WorldBuilder
         while (clumps < (int)(34 * Settings.Density) && tries++ < 2000)
         {
             var c = new Vector2(rng.R(20, S - 20), rng.R(20, S - 20));
-            if (c.X + c.Y > S || !FarFromNests(c, 34) || !FarFromNests(Mirror(c), 34) || c.DistanceTo(Center) < 22) continue;
+            if (c.X + c.Y > S || !FarFromNests(c, 34) || !FarFromNests(Mirror(c), 34) || c.DistanceTo(Center) < 22 || w.FirstNest && InPond(c, 4)) continue;
             if (hf.Bilinear(hf.Leaf, c.X, c.Y) > 0.1f) continue;
             float rad = rng.R(2.5f, 6.5f);
             int count = (int)(rad * rad * 0.8f);
@@ -910,7 +914,7 @@ public static partial class WorldBuilder
         var mat = Mat(w, Shaders.Pebble);
         bool Clear(Vector2 p, float pad)
         {
-            if (hf.Bilinear(hf.Leaf, p.X, p.Y) > 0.05f || w.Blocked(p, pad)) return false;
+            if (hf.Bilinear(hf.Leaf, p.X, p.Y) > 0.05f || w.Blocked(p, pad) || w.FirstNest && InPond(p, 1f)) return false;
             foreach (var n in w.Nests) if (p.DistanceTo(n.Pos) < 2.2f) return false;
             return true;
         }

@@ -54,9 +54,32 @@ public static class Config
     public const float WaspFloor = 115f;    // no wasp lair this close to a starting nest (the owner's rule: no predators at the start)
     public static float CruiseAlt(AntType t) => t == AntType.Wasp ? 5f : t == AntType.Flyer ? 3.6f : t == AntType.Marshal ? 4.4f : 0f;
 
-    /// Per-level growth: warriors +16% hp / +14% bite per level, heroes +12% per level, wild bugs grow faster.
-    public static float HpMul(AntType t, int level) => 1 + (level - 1) * (IsBug(t) ? 0.4f : IsHero(t) ? 0.12f : 0.16f);
-    public static float DmgMul(AntType t, int level) => 1 + (level - 1) * (IsBug(t) ? 0.28f : IsHero(t) ? 0.12f : 0.14f);
+    /// The combat scale (owner, 2026-11-09): every character has its own attack (Damage), defence (Armor, the share of
+    /// each blow its chitin shrugs off) and HP, and each grows with its level at that character's own rate. Per level:
+    /// HP and attack in fractions of the level-1 value, defence in absolute armour points (capped at 75% in Damage).
+    /// Workers barely harden; soldiers grow evenly; majors grow into walls; gunners and flyers into killers; the queen
+    /// toughens; wild bugs grow fastest (they level rarely); generals grow slowly over ten levels.
+    public readonly record struct Growth(float Hp, float Atk, float Def);
+    public static Growth GrowthOf(AntType t) => t switch
+    {
+        AntType.Worker => new(0.12f, 0.08f, 0.01f),
+        AntType.Soldier => new(0.16f, 0.15f, 0.025f),
+        AntType.Major => new(0.2f, 0.12f, 0.035f),
+        AntType.Queen => new(0.15f, 0.1f, 0.03f),
+        AntType.Flyer => new(0.12f, 0.18f, 0.015f),
+        AntType.Gunner => new(0.1f, 0.2f, 0.01f),
+        AntType.Beetle => new(0.4f, 0.22f, 0.03f),
+        AntType.Spider => new(0.35f, 0.32f, 0.01f),
+        AntType.StagBeetle => new(0.4f, 0.25f, 0.03f),
+        AntType.Wasp => new(0.35f, 0.3f, 0.02f),
+        AntType.Warlord => new(0.12f, 0.1f, 0.02f),
+        AntType.Matron => new(0.1f, 0.14f, 0.01f),
+        _ => new(0.1f, 0.13f, 0.015f), // Sky Marshal
+    };
+    public static float HpMul(AntType t, int level) => 1 + (level - 1) * GrowthOf(t).Hp;
+    public static float DmgMul(AntType t, int level) => 1 + (level - 1) * GrowthOf(t).Atk;
+    /// Defence at a level: the type's armour plus its growth (Damage caps the total at 75%).
+    public static float DefenceAt(AntType t, int level) => Of(t).Armor + System.Math.Max(0, level - 1) * GrowthOf(t).Def;
     public static float SizeMul(AntType t, int level) => 1 + (level - 1) * (IsBug(t) ? 0.07f : IsHero(t) ? 0.025f : 0.05f);
 
     /// Queen level a hero first becomes available at; every queen level above that hatches it stronger.
@@ -79,6 +102,8 @@ public static class Config
     // Every hero and wild bug has three things a player can read at a glance: how it attacks,
     // how it defends, and one signature special. The numbers here are the ones the sim uses.
     public const float WarlordCleave = 0.5f;        // share of each bite dealt to everyone around the victim
+    // the colony castes' chitin (the combat scale): workers and gunners wear none
+    public const float SoldierArmor = 0.05f, MajorArmor = 0.12f, QueenArmor = 0.15f, FlyerArmor = 0.03f;
     public const float WarlordArmor = 0.3f;
     public const float WarCryBite = 1.3f;           // allies' bite multiplier (+3% a level)
     public const float WarCryShock = 1.0f;          // the roar itself hits everyone within WarCryShockR for one bite
@@ -147,8 +172,8 @@ public static class Config
     public static string StatLine(AntType t)
     {
         var st = Of(t);
-        string ar = st.Armor > 0 ? $"  ·  Armour {st.Armor * 100:0}%" : "";
-        return $"HP {st.Hp:0}  ·  Bite {st.Damage:0.#} / {st.Cooldown:0.##}s{ar}  ·  Speed {st.Speed:0.#}{(Ranged(t) ? "  ·  ranged" : "")}{(Flies(t) ? "  ·  flies" : "")}";
+        string ar = st.Armor > 0 ? $"  ·  Defence {st.Armor * 100:0}%" : "";
+        return $"HP {st.Hp:0}  ·  Attack {st.Damage:0.#} / {st.Cooldown:0.##}s{ar}  ·  Speed {st.Speed:0.#}{(Ranged(t) ? "  ·  ranged" : "")}{(Flies(t) ? "  ·  flies" : "")}";
     }
 
     /// XP granted for killing a unit of this type and level.
@@ -182,14 +207,14 @@ public static class Config
     public static readonly UnitStats[] Stats =
     {
         new() { Name = "Worker", Hp = 24, Damage = 2.2f, Cooldown = 0.7f, Speed = 7.2f, Reach = 0.9f, Aggro = 4.5f, Sight = 11, Size = 1.0f, Cost = 15, BuildTime = 1.6f, CorpseFood = 3, Pop = 1 },
-        new() { Name = "Soldier", Hp = 72, Damage = 6.5f, Cooldown = 0.6f, Speed = 7.6f, Reach = 1.25f, Aggro = 13, Sight = 13, Size = 1.45f, Cost = 35, BuildTime = 3f, CorpseFood = 6, Pop = 1 },
-        new() { Name = "Major", Hp = 270, Damage = 19f, Cooldown = 0.9f, Speed = 5.2f, Reach = 1.8f, Aggro = 13, Sight = 14, Size = 2.15f, Cost = 100, BuildTime = 6.5f, CorpseFood = 18, Pop = 3 },
-        new() { Name = "Queen", Hp = 3200, Damage = 30f, Cooldown = 0.7f, Speed = 0f, Reach = 3.2f, Aggro = 7, Sight = 30, Size = 3.4f, Cost = 0, BuildTime = 0, CorpseFood = 80, Pop = 0 },
+        new() { Name = "Soldier", Hp = 72, Damage = 6.5f, Cooldown = 0.6f, Speed = 7.6f, Reach = 1.25f, Aggro = 13, Sight = 13, Size = 1.45f, Armor = SoldierArmor, Cost = 35, BuildTime = 3f, CorpseFood = 6, Pop = 1 },
+        new() { Name = "Major", Hp = 270, Damage = 19f, Cooldown = 0.9f, Speed = 5.2f, Reach = 1.8f, Aggro = 13, Sight = 14, Size = 2.15f, Armor = MajorArmor, Cost = 100, BuildTime = 6.5f, CorpseFood = 18, Pop = 3 },
+        new() { Name = "Queen", Hp = 3200, Damage = 30f, Cooldown = 0.7f, Speed = 0f, Reach = 3.2f, Aggro = 7, Sight = 30, Size = 3.4f, Armor = QueenArmor, Cost = 0, BuildTime = 0, CorpseFood = 80, Pop = 0 },
         new() { Name = "Ground Beetle", Hp = 290, Armor = BeetleArmor, Damage = 15f, Cooldown = 0.9f, Speed = 6.6f, Reach = 1.5f, Aggro = 12, Sight = 10, Size = 2.4f, Cost = 0, BuildTime = 0, CorpseFood = 40, Pop = 0 },
         new() { Name = "Wolf Spider", Hp = 240, Armor = SpiderArmor, Damage = 21f, Cooldown = 0.7f, Speed = 11.5f, Reach = 1.8f, Aggro = 15, Sight = 12, Size = 3.1f, Cost = 0, BuildTime = 0, CorpseFood = 35, Pop = 0 },
         new() { Name = "Stag Beetle", Hp = 800, Armor = StagArmor, Damage = 36f, Cooldown = 1.0f, Speed = 5.6f, Reach = 2.6f, Aggro = 14, Sight = 12, Size = 4.0f, Cost = 0, BuildTime = 0, CorpseFood = 160, Pop = 0 },
         new() { Name = "Hunting Wasp", Hp = 240, Armor = WaspArmor, Damage = 27f, Cooldown = 1.15f, Speed = 12.5f, Reach = 1.7f, Aggro = 17, Sight = 15, Size = 3.0f, Cost = 0, BuildTime = 0, CorpseFood = 45, Pop = 0 },
-        new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
+        new() { Name = "Flying Ant", Hp = 60, Damage = 7f, Cooldown = 0.55f, Speed = 11f, Reach = 1.5f, Aggro = 14, Sight = 18, Size = 1.35f, Armor = FlyerArmor, Cost = 60, BuildTime = 4.5f, CorpseFood = 7, Pop = 2 },
         new() { Name = "Acid Gunner", Hp = 55, Damage = 6f, Cooldown = 1.0f, Speed = 7f, Reach = 7f, Aggro = 13, Sight = 14, Size = 1.3f, Cost = 50, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Warlord", Hp = 820, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },

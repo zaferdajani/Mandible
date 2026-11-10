@@ -69,14 +69,14 @@ public partial class FoundingPanel : PanelContainer
     public override void _Process(double delta)
     {
         var m = Game.Sim.Mission;
-        bool show = m is { Episode: 1 } && m.Stage is ExpeditionStage.Provision or ExpeditionStage.DigEntrance or ExpeditionStage.RoyalChamber;
+        bool show = m is { Episode: 1 } && m.Stage is ExpeditionStage.Provision or ExpeditionStage.DigEntrance or ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
         Visible = show;
         if (!show) return;
         var sim = Game.Sim;
         var c = sim.Col[Local.Me];
         bool stocking = m.Stage is ExpeditionStage.Provision or ExpeditionStage.DigEntrance;
         _food.Visible = _remains.Visible = stocking;
-        _dig.Visible = m.Stage == ExpeditionStage.RoyalChamber;
+        _dig.Visible = m.Stage is ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
         _button.Visible = m.Stage == ExpeditionStage.DigEntrance;
         if (stocking)
         {
@@ -97,6 +97,16 @@ public partial class FoundingPanel : PanelContainer
         {
             _title.Text = "THE SITE IS READY";
             _hint.Text = "Press the button: the workers at the clearing dig the shaft and the royal chamber.";
+        }
+        else if (m.Stage == ExpeditionStage.Bridge)
+        {
+            int crew = m.NextStraw?.HoldCount ?? 0;
+            _title.Text = "BRIDGE THE WATER";
+            _dig.Value = (float)m.StrawsLaid / Expedition.StrawGoal;
+            _digText.Text = $"STRAWS LAID  {m.StrawsLaid} / {Expedition.StrawGoal}" + (crew > 0 ? $"   ·   {crew} worker{(crew == 1 ? "" : "s")} on the straw" + (crew < Expedition.StrawCrew ? ": it needs two" : "") : "");
+            _hint.Text = Settings.Touch
+                ? "A straw is too long for one ant. Tap Workers, then tap a straw: two or more carry it, and more carry it faster."
+                : "A straw is too long for one ant. Workers (F3), then right-click a straw: two or more carry it, and more carry it faster.";
         }
         else
         {

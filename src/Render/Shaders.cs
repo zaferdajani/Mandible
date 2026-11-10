@@ -1124,6 +1124,79 @@ void fragment() {
 }
 ";
 
+    /// Level 1's rain pond (target K1): clear tea-brown water over its mud. The colour comes from how much water lies
+    /// over the floor at each pixel (depth texture), so the shallows show the mud plainly and the middle reads deeper;
+    /// two drifting ripple normals catch the sun and the sky. Refracted, never a flat painted sheet.
+    public const string Pond = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_always, cull_back, specular_schlick_ggx;
+uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
+uniform sampler2D ripple_a : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D ripple_b : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform vec2 centre;
+uniform float island_r = 5.6;
+uniform float shore_r = 15.4;
+uniform vec3 tea : source_color = vec3(0.42, 0.27, 0.11);
+uniform vec3 sky : source_color = vec3(0.92, 0.9, 0.84);
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+    float r = length(wpos.xz - centre);
+    if (r < island_r || r > shore_r) discard; // the square sheet's corners lie under the banks anyway
+    vec2 u1 = wpos.xz * 0.09 + TIME * vec2(0.010, 0.006);
+    vec2 u2 = wpos.xz * 0.21 - TIME * vec2(0.007, 0.012);
+    vec3 n = normalize((texture(ripple_a, u1).rgb - 0.5) + (texture(ripple_b, u2).rgb - 0.5) * 0.6 + vec3(0.0, 0.0, 1.5));
+    NORMAL_MAP = n * 0.5 + 0.5;
+    NORMAL_MAP_DEPTH = 0.2;
+    // how much water lies between this surface and the mud under it
+    float d = texture(depth_tex, SCREEN_UV).r;
+    vec4 v = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, d, 1.0);
+    v.xyz /= v.w;
+    float thick = max(VERTEX.z - v.z, 0.0);
+    vec2 bend = n.xy * 0.012 * smoothstep(0.0, 0.6, thick);
+    vec3 under = textureLod(screen_tex, SCREEN_UV + bend, 0.0).rgb;
+    float absorb = 1.0 - exp(-thick * 0.9);
+    // clear water: the mud shows through, a little darker and warmer; only the middle goes to tea
+    vec3 col = mix(under * vec3(0.86, 0.74, 0.56), tea * 0.75, absorb * 0.7);
+    // the sky in it: from an RTS camera the Fresnel term alone is a few percent, so the reflection is driven by the
+    // ripples' tilt, broken into the drifting pale patches a puddle shows from above
+    vec3 wn = normalize(vec3(n.x, n.z, n.y));
+    float broad = smoothstep(0.3, 0.9, texture(ripple_a, wpos.xz * 0.008 + TIME * 0.002).r);
+    float facing2 = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+    float refl = clamp(pow(1.0 - facing2, 3.0) * 0.4 + 0.08 * broad * broad + 0.3 * max(wn.x + wn.z - 0.2, 0.0), 0.0, 0.18) * smoothstep(0.05, 0.6, thick);
+    col *= mix(0.72, 1.0, smoothstep(0.0, 0.3, thick)); // the wet meniscus darkens the mud at the waterline
+    // what stands in it: a short screen-space march along the reflected ray (the phone renderer has no SSR), so the
+    // straws of the bridge, the banks and the queen show upside down in the water, broken by the ripples
+    vec3 rn = normalize(NORMAL + (VIEW_MATRIX * vec4(wn.x, 0.0, wn.z, 0.0)).xyz * 0.35);
+    vec3 rd = reflect(normalize(VERTEX), rn);
+    vec3 rp = VERTEX;
+    vec3 mirror = sky * 0.9;
+    float got = 0.0;
+    for (int i = 0; i < 28; i++) {
+        rp += rd * (0.25 + float(i) * 0.06);
+        vec4 c = PROJECTION_MATRIX * vec4(rp, 1.0);
+        vec2 uv = c.xy / c.w * 0.5 + 0.5;
+        if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) break;
+        float dz = texture(depth_tex, uv).r;
+        vec4 sv = INV_PROJECTION_MATRIX * vec4(uv * 2.0 - 1.0, dz, 1.0);
+        sv.xyz /= sv.w;
+        if (sv.z > rp.z && sv.z - rp.z < 1.2) { mirror = textureLod(screen_tex, uv, 0.0).rgb; got = 1.0; break; }
+    }
+    float shine = mix(0.04, 0.4, got) * smoothstep(0.05, 0.6, thick);
+    col = mix(col, mirror, max(shine, refl * 0.4));
+    // the meniscus: a thin bright line where the water climbs the mud, then the wet dark band above it (terrain AO)
+    float lip = smoothstep(0.0, 0.012, thick) * (1.0 - smoothstep(0.025, 0.08, thick));
+    ALBEDO = vec3(0.0);
+    EMISSION = col + sky * 0.3 * lip;
+    ROUGHNESS = 0.04;
+    SPECULAR = 0.5;
+    METALLIC = 0.0;
+    // the waterline: the sheet fades into the mud over the last few millimetres instead of cutting a hard edge
+    ALPHA = smoothstep(0.0, 0.08, thick);
+}
+";
+
     public const string Ring = @"
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;

@@ -93,10 +93,12 @@ void fragment() {
     // ---------------------------------------------------------------- the web and the queen wasp (H1), the gland (H2)
     (Node3D, Node3D, Node3D, StandardMaterial3D) MakeSite(MutagenSource m)
     {
-        var web = Load("web");
-        var wasp = Load("queen_wasp");
+        bool wild = m.From == AntType.Wasp; // level 1's dead queen lies in the world (PondWorld): only her gland is drawn here
+        var web = wild ? Load("web") : null;
+        var wasp = wild ? Load("queen_wasp") : null;
         var gland = Load("gland");
-        if (web == null || wasp == null || gland == null) return (null, null, null, null);
+        if (wild && (web == null || wasp == null) || gland == null) return (null, null, null, null);
+        if (!wild) return (null, null, GlandOnly(m, gland), null);
         var silk = Mat(SilkShader);
         var dew = Mat(DewShader);
         var plain = Matter(0.75f);
@@ -139,6 +141,26 @@ void fragment() {
         return (web, wasp, gland, glow);
     }
 
+    /// The dead queen's gland on level 1's island: the same amber flesh and breathing violet-green core as H2.
+    Node3D GlandOnly(MutagenSource m, Node3D gland)
+    {
+        var glow = new StandardMaterial3D
+        {
+            VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 0.18f, Metallic = 0f, MetallicSpecular = 0.7f,
+            BacklightEnabled = true, Backlight = new Color(0.7f, 0.4f, 0.15f), AlbedoColor = new Color(1f, 0.78f, 0.45f),
+        };
+        var core = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(0.62f, 0.42f, 1f),
+            EmissionEnabled = true, Emission = new Color(0.62f, 0.42f, 1f), EmissionEnergyMultiplier = 1f,
+        };
+        Dress(gland, n => n.Contains("core") ? core : glow);
+        foreach (var c in gland.FindChildren("*", "MeshInstance3D", true, false)) if (!c.Name.ToString().Contains("core")) ((MeshInstance3D)c).Layers = SkinLayer;
+        _cores[m.Id] = core;
+        _root.AddChild(gland);
+        return gland;
+    }
+
     public void Update(float dt)
     {
         var sim = _g.Sim;
@@ -146,11 +168,11 @@ void fragment() {
         float pulse = 0.5f + 0.5f * Mathf.Sin(_t * 2.4f);
         foreach (var m in sim.Mutagens)
         {
-            if (m.From != AntType.Wasp) continue;
+            if (m.From is not (AntType.Wasp or AntType.Queen)) continue;
             if (!_sites.TryGetValue(m.Id, out var s)) _sites[m.Id] = s = MakeSite(m);
-            if (s.web == null) continue;
+            if (s.gland == null) continue;
             bool seen = _g.Fog == null || _g.Fog.Visible(m.Pos) || m.Carried;
-            s.web.Visible = _g.Fog == null || _g.Fog.Explored(new Vector2(s.web.Position.X, s.web.Position.Z));
+            if (s.web != null) s.web.Visible = _g.Fog == null || _g.Fog.Explored(new Vector2(s.web.Position.X, s.web.Position.Z));
             s.gland.Visible = !m.Home && seen;
             // a radiance inside the amber, never a lamp; from play zoom the sun would drown it, so it carries a little further there
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
@@ -159,7 +181,9 @@ void fragment() {
             var hue = new Color(0.62f, 0.42f, 1f).Lerp(new Color(0.55f, 1f, 0.62f), 0.25f + 0.25f * Mathf.Sin(_t * 0.9f));
             if (_cores.TryGetValue(m.Id, out var coreMat)) { coreMat.AlbedoColor = hue * (0.4f + 0.3f * pulse); coreMat.Emission = hue; coreMat.EmissionEnergyMultiplier = (0.15f + 0.25f * pulse) * (1 + 3f * zoom); } // never so bright it blooms to white
             // in her gaster until it is cut free; then in its carrier's jaws, or on the ground where it fell
-            if (!m.Free)
+            if (!m.Free && s.wasp == null)
+                s.gland.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(0.4f, 0.6f, 0)).Scaled(Vector3.One * 1.5f), _g.World.HF.Point(m.Pos, 0.5f)); // swelling out of her split gaster
+            else if (!m.Free)
             {
                 s.gland.GlobalTransform = s.wasp.GlobalTransform * new Transform3D(Basis.Identity.Scaled(Vector3.One * 0.7f), new Vector3(-0.3f, 0.45f, -0.32f));
             }

@@ -46,6 +46,40 @@ public static class ArtValidation
                 return sum / 25f;
             }
 
+            // K: level 1's teamwork lesson (targets K1-K3). MANDIBLE_ART_ONLY=k renders only these.
+            async Task Pond()
+            {
+                async Task<GameSession> Jump(int laid, int crew, float run)
+                {
+                    app.StartEpisode(1); var s = app.Session;
+                    s.Hud.CloseBriefing(); s.Hud.Visible = false; s.Fog.RevealAll = true; s.Camera.UserControl = false;
+                    ExpeditionGuide.Silent = true;
+                    s.Sim.ArtBridge(laid, crew);
+                    await app.ToSignal(app.GetTree().CreateTimer(run), SceneTreeTimer.SignalName.Timeout);
+                    s.SetPaused(true);
+                    foreach (var st in s.Sim.Mission.Straws) GD.Print($"[art-capture] straw {st.Id} at {st.Pos} laid {st.Laid} held {st.HoldCount}");
+                    for (int i = 0; i < s.Sim.High; i++) { var a = s.Sim.Ants[i]; if (a.Alive && a.Team == 0 && a.Type == AntType.Worker) GD.Print($"[art-capture] worker {i} at {a.Pos} layer {a.Layer} straw {a.StrawP1} state {a.State}"); }
+                    return s;
+                }
+                var p = Expedition.Pond;
+                var k = await Jump(2, 5, 2.6f);
+                k.Camera.SetYaw(0.35f, true); k.Camera.JumpTo(p + new Vector2(-8, 2), 44); await Shot("k1-pond");
+                k.Camera.PitchOverride = 48; k.Camera.SetYaw(0.6f, true); k.Camera.JumpTo(p + new Vector2(-3, 1), 15); await Shot("k1-pond-close"); k.Camera.PitchOverride = 0;
+                var carried = k.Sim.Mission.NextStraw?.Pos ?? Expedition.BridgeSite;
+                k.Camera.SetYaw(0.2f, true); k.Camera.JumpTo(carried, 40); await Shot("k2-straw-crew");
+                k.Camera.PitchOverride = 50; k.Camera.SetYaw(0.15f, true); k.Camera.JumpTo(carried + new Vector2(1, 0), 11); await Shot("k2-straw-crew-close"); k.Camera.PitchOverride = 0;
+                k = await Jump(5, 6, 4f);
+                k.Camera.SetYaw(0.3f, true); k.Camera.JumpTo(p + new Vector2(-7, 0), 40); await Shot("k3-straw-bridge");
+                k.Camera.PitchOverride = 45; k.Camera.SetYaw(0.5f, true); k.Camera.JumpTo(p + new Vector2(-4.5f, 1), 15); await Shot("k3-straw-bridge-close"); k.Camera.PitchOverride = 0;
+            }
+            if (OS.GetEnvironment("MANDIBLE_ART_ONLY") == "k")
+            {
+                await Pond();
+                GD.Print("[art-capture] PASS pond views captured");
+                app.GetTree().Quit(0);
+                return;
+            }
+
             // A, F: level 1 as it opens: the broken tube, the trail, and black everywhere nobody has walked
             app.StartEpisode(1); var g = app.Session;
             g.Hud.CloseBriefing(); g.SetPaused(true); g.Hud.Visible = false;
@@ -66,6 +100,8 @@ public static class ArtValidation
             Settings.Gfx = Settings.Quality.Low; g.ApplyQuality();
             g.Camera.SetYaw(0, true); g.Camera.JumpTo(Expedition.Start + new Vector2(12, 0), 44); await Shot("a-opening-low", 3f);
             Settings.Gfx = Settings.Quality.High; g.ApplyQuality();
+
+            await Pond();
 
             // B, E: the yard and its food at a normal play zoom, after the colony has foraged for a while so workers are
             // on the trails and at the piles (everything revealed so the frame is judged on its art, not the fog)

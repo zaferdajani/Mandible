@@ -343,3 +343,43 @@ colony's own model at the near detail, the Matron's acid from her real gaster ti
 Gate on the generals at level 10 (art, out of 5: anatomy, primitives, eyes, material, light, palette), before the
 veins were removed: Warlord 2 2 1 2 3 2, Matron 2 1 1 2 3 2, Marshal 2 2 1 2 2 3; play readability 3. Not passed.
 12/12 self-tests and --savetest pass; High 35-49 fps, Low 60.
+
+Gate round 1 on level 1's pond (K1-K3), 2026-11-09, `MANDIBLE_ART_ONLY=k --art-capture` (art: repetition, primitives,
+scale, material, light, palette): K1 pond 3 2 3 2 3 3, read 3; K2 straw crew 3 3 3 3 4 4, read 2; K3 bridge 3 2 2 3 3 4,
+read 2. Not passed. Main blockers: straws too uniform and smooth (no fibre or split detail at play scale) and too similar;
+the bridge does not read as spanning shore to island; water still reads milky and flat; island soil smooth, no clods or wet
+edge; the crew merges into one dark clump; the dead queen too small to read at play zoom; glass tube shows a refraction
+smear at the screen edge. Chain test passes.
+
+Gate round 2 on K1-K3, 2026-11-09 (living island queen, thinner fluted straws with tones, clearer water, wet AO band,
+litter kept off the island): K1 art 3 2 3 2 3 3, read 3; K2 art 3 2 3 2 3 4, read 2;
+K3 art 3 3 3 3 3 4, read 2. Not passed. The blockers that remain are structural: the straws still read as smooth code
+tubes at this mesh fidelity (need a scanned or generated straw mesh with split fibres); the island and yard soil is the
+shared terrain material, flat next to the targets' crumbly clods; the water lacks a refraction/caustic/meniscus look;
+black worker ants vanish in their own shadow at play zoom.
+
+Gate round 3 on K1-K3, 2026-11-09 (generated meshes: Higgsfield image_to_3d straw and soil clods from reference images,
+`tools/blender/glb_to_asset.py`): K1 art 2 2 3 2 3 3, read 4 (pass); K2 art 3 3 3 3 4 4, read 2; K3 art 2 2 3 2 3 3, read 2.
+Not passed. New blocker: one clod mesh and one straw mesh repeat (need 4-5 generated variants of each, clods lighter
+than near-black). Still open: the shared yard terrain reads smooth next to the targets' crumb soil (a terrain-wide
+issue, not the pond's); the water has no reflections of what stands in it; black ants vanish in shadow at play zoom.
+
+Gate round 4 on K1-K3, 2026-11-09 (3 generated straw scans, 4 generated clod scans, every straw the same girth, the
+leafy straw only loose on the shore): K1 art 3 2 3 2 3 3, read 3; K2 art 3 3 2 3 4 4, read 2; K3 art 2 3 3 2 3 3,
+read 2. Not passed; no real movement since round 2. The blockers every reviewer repeats are outside the props: the
+water (no reflections of the straws or sky, no meniscus; the phone renderer has no screen-space reflections), the
+shared yard terrain (smooth next to the targets' crumb soil), and black ants lost in their own shadow at play zoom.
+Four rounds of prop work did not move those; they need the terrain and water work done for the whole yard.
+
+Gate round 5 on K1-K3, 2026-11-10 (water: a screen-space reflection march so the bridge, banks and grass mirror in the
+pond, a bright meniscus line at the waterline; ground: a lumpier island and 320 small crumbs from the clod scans):
+K1 art 3 2 3 2 3 3, read 3; K2 art 3 2 2 3 3 3, read 2; K3 art 2 2 3 2 3 3, read 2. Not passed. The reviewers now
+contradict each other round to round (straws "too thick" and "too thin"; "no reflections" though they show), and the
+scores have sat at 2-3 since round 2: the reviewers judge a play-zoom RTS render against macro photographs. The
+readability fails are steady and specific: black soldiers and workers read as specks at play zoom, the carried straw
+does not stand out from ground litter, and the shore straws read as debris.
+
+**K1-K3 accepted by the owner on 2026-11-10 ("Accept them")** after seeing the round-5 frames beside their targets
+(`docs/art-targets/frames-k1-pond.jpg`, `frames-k2-straw-crew.jpg`, `frames-k3-straw-bridge.jpg`), overriding the
+automated gate. Known weak points kept on record: black ants read as specks at play zoom (an ant-renderer issue for every
+level), the carried straw is close in tone to ground litter, and the island soil is smoother than the target's.

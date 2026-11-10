@@ -100,3 +100,23 @@ mutated lab strain: armoured heads, serrated tusked jaws, thorns, plated spurred
 faint violet-green mutagen veins; the owner rejected those in the game on 2026-11-07, so they are not built); the Matron's gaster a glass bladder with a glowing acid sac (spray only from the
 gaster tip); the Marshal with three wing pairs and chitin wing-cases. `REVIEW-generals.jpg` holds all six
 (`j-general-*.jpg`). Higgsfield `gpt_image_2_5`, quality high, 16:9, one round.
+
+## K. Level 1's teamwork lesson (pond, straws, bridge, dead queen)
+
+| Target | File |
+| --- | --- |
+| K1. The pond: dirt island, dead queen of another lab strain, second broken tube, straws on the shore | `k1-pond-island.jpg` |
+| K2. A crew of workers carrying one straw to the water | `k2-straw-crew.jpg` |
+| K3. The finished five-straw bridge; workers carve the gland from the dead queen | `k3-straw-bridge.jpg` |
+
+Status: **K1-K3 approved by the owner on 2026-11-09** ("Approve all three"). Notes for the build: in K2 the ants walk on the straw instead of
+gripping it from beside it (the game has them grip it, as in K3's crossing pose); K3's gland is green where the
+mutation targets (H) are violet breathing toward green.
+
+**Generation record:** Higgsfield `generate_image`, model `gpt_image_2_5`, 16:9, 2026-11-08, 3 images, one round.
+Prompts: macro nature-documentary photograph, warm late-afternoon light, warm earthy palette with no grey; (K1) a
+plate-sized rain puddle with a three-ant-length dirt island, a dead pale amber queen on her side beside a cracked
+half-sunk glass test tube, worker ants at the waterline, dry golden grass straws on the shore; (K2) five dark brown
+workers carry one straw eight ant-lengths long toward a tea-brown puddle, one or two straws already reaching out over
+the water; (K3) a bridge of five straws side by side from the shore to the island, workers crossing, two of them pulling
+a small glowing gland out of the dead queen's abdomen.

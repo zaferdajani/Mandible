@@ -11,6 +11,9 @@ l1_incubator	queen	queen1	Warm. The eggs will hatch now. Next we need a store, s
 l1_store	queen	queen1	The store is ready. Now give me workers. Four more pairs of jaws, and the colony will start to feed itself.
 l1_workers	queen	queen1	They hatch hungry and go straight to work. Now the colony needs a squad that answers only to you.
 l1_done	queen	queen1	Listen to them. Hundreds of heartbeats, and every one of them is ours. You did well, my chosen.
+l1_bridge	queen	queen1	Something calls from across the water. Another queen from the glass, and she is still. No ant swims: carry the straws together, many jaws to each, and lay them over.
+l1_island	queen	queen1	She lives. Another queen from the glass, and the glass changed her as it changed me. Her children are dead around her, and she will fight. Go together, and bring me what is in her.
+l1_taste	queen	queen1	Bitter, and burning... I know this taste. The glass put it in us. There is more of it out there, in the woods. I can feel it pulling.
 open_5	queen	queen1	Rain has passed, and the grass is full of sweet things. Burr wants a squad of his own. Fill the galleries before the sky breaks again.
 close_5	queen	queen1	The larder is full. But a dead ant lies in the wet grass. She is red, and she has a sting. Remember that scent.
 open_6	queen	queen1	The rotting log is full of hunters, and they smell my brood. Raise majors. Their jaws can break what soldiers cannot.

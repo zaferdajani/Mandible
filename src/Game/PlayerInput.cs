@@ -647,6 +647,14 @@ public partial class PlayerInput : Node
 
     public void CommandAt(Vector2 world, bool attack) => Issue(world, null, attack);
 
+    /// How far a click is from a straw's stalk (it is long and thin, so the centre alone is a poor target).
+    static float StrawDistance(Straw s, Vector2 p)
+    {
+        var dir = MathX.Dir(s.Heading);
+        float t = Mathf.Clamp((p - s.Pos).Dot(dir), -Expedition.StrawLength * 0.5f, Expedition.StrawLength * 0.5f);
+        return p.DistanceTo(s.Pos + dir * t);
+    }
+
     void Issue(Vector2 world, Vector2? screen, bool attack, bool rightClick = false)
     {
         Prune();
@@ -682,6 +690,19 @@ public partial class PlayerInput : Node
         }
         if (!attack && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
         {
+            // level 1's bridge: a straw on the shore, too long for one ant (the workers carry it together)
+            if (Sim.Mission is { Stage: ExpeditionStage.Bridge } bm)
+                foreach (var sw in bm.Straws)
+                {
+                    if (sw.Laid || StrawDistance(sw, world) > 1.6f) continue;
+                    var sc = Cmd.Units(CmdKind.Straw, Local.Me, Selection, Sim);
+                    sc.FoodId = sw.Id;
+                    Game.Issue(sc);
+                    Game.Ants.Ack(Selection, sw.Pos);
+                    Game.Effects.Marker(Game.World.HF.Point(sw.Pos), new Color(1f, 0.85f, 0.45f));
+                    Game.Audio.Ui("ui_click");
+                    return;
+                }
             // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
             foreach (var mg in Sim.Mutagens)
             {

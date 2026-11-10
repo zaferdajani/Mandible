@@ -85,14 +85,15 @@ public static class NatureAssets
     public static Material MaterialFor(string src)
     {
         if (_mats.TryGetValue(src, out var m)) return m;
+        var tex = src;
         var s = new StandardMaterial3D
         {
-            AlbedoTexture = Texture($"tex/{src}_diff"),
+            AlbedoTexture = Texture($"tex/{tex}_diff"),
             AlbedoColor = Warm.TryGetValue(src, out var c) ? c : Colors.White,
             VertexColorUseAsAlbedo = true, // MultiMesh instance colour: each stone a little different
-            NormalEnabled = true, NormalTexture = Texture($"tex/{src}_nor"),
-            RoughnessTexture = Texture($"tex/{src}_arm"), RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Green,
-            AOEnabled = true, AOTexture = Texture($"tex/{src}_arm"), AOTextureChannel = BaseMaterial3D.TextureChannel.Red,
+            NormalEnabled = true, NormalTexture = Texture($"tex/{tex}_nor"),
+            RoughnessTexture = Texture($"tex/{tex}_arm"), RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Green,
+            AOEnabled = true, AOTexture = Texture($"tex/{tex}_arm"), AOTextureChannel = BaseMaterial3D.TextureChannel.Red,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
         };
         if (src.StartsWith("grass"))
