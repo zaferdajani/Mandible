@@ -378,3 +378,8 @@ contradict each other round to round (straws "too thick" and "too thin"; "no ref
 scores have sat at 2-3 since round 2: the reviewers judge a play-zoom RTS render against macro photographs. The
 readability fails are steady and specific: black soldiers and workers read as specks at play zoom, the carried straw
 does not stand out from ground litter, and the shore straws read as debris.
+
+**K1-K3 accepted by the owner on 2026-11-10 ("Accept them")** after seeing the round-5 frames beside their targets
+(`docs/art-targets/frames-k1-pond.jpg`, `frames-k2-straw-crew.jpg`, `frames-k3-straw-bridge.jpg`), overriding the
+automated gate. Known weak points kept on record: black ants read as specks at play zoom (an ant-renderer issue for every
+level), the carried straw is close in tone to ground litter, and the island soil is smoother than the target's.
