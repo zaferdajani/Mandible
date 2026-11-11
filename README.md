@@ -22,7 +22,7 @@ Workers now visibly hold the food they collect: crumbs, berries, sugar, seeds or
 
 ## Download
 
-Windows, macOS (universal), Android and iOS builds: see the [latest release](https://github.com/zaferdajani/Mandible-releases/releases/latest).
+Windows, macOS (universal), Android and iOS builds: see the [latest release](https://github.com/zaferdajani/Mandible/releases/latest).
 
 - **macOS:** unzip, then right-click Mandible.app and choose *Open* the first time (it is not notarised by Apple).
 - **iOS:** sideload the unsigned IPA with Sideloadly or AltStore.
