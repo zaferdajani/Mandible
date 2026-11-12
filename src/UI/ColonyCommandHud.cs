@@ -588,7 +588,7 @@ public partial class ColonyCommandHud : Control
     void UpdateRoomLabels()
     {
         foreach (var entry in _labels) entry.Value.Visible = false;
-        if (!Game.NestView || Game.Camera?.Cam == null) return;
+        if (!Game.NestView || Game.Camera?.Cam == null || !Game.Sim.Col[Local.Me].Founded) return; // nothing below is shown until the nest is founded
         var sim = Game.Sim; var home = Game.World.Nests[Local.Me].Pos;
         float scale = Flexible ? Mathf.Max(1, _cardsBlock.Scale.X * 0.9f) : _canvas.Scale.X;
         var screen = new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size);

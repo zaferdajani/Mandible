@@ -574,6 +574,8 @@ uniform sampler2D pher_tex : filter_linear, repeat_disable;
 uniform float pher_view = 0.25;
 uniform vec2 entrance_a = vec2(-1000.0);
 uniform vec2 entrance_b = vec2(-1000.0);
+uniform vec3 spoil = vec3(-1000.0, -1000.0, 0.0); // the founding nest's spoil heap: centre (xz) and how much is dug (0..1)
+uniform float spoil_dir = 0.0;
 uniform int detail = 1; // graphics tier: 0 phones (base and hollow sets only), 1 and up every ground set
 uniform sampler2D g_base_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D g_base_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -677,6 +679,33 @@ void fragment() {
     // excavated sand around the black colony's nest: the same soil, sifted paler
     vec3 sand = baseC * vec3(1.18, 1.12, 1.02) * (0.85 + 0.3 * g2);
     col = mix(col, sand, vcol.g);
+    // the founders' tumulus: every grain they carry up is dropped beside the hole, a crescent of pale loose pellets
+    // that grows with the dig, heaped on the downhill side and thin on the other (NestInterior.SpoilAngle)
+    float spoilR = length(uv - spoil.xy);
+    float spoilM = 0.0;
+    vec2 spoilTilt = vec2(0.0);
+    if (spoil.z > 0.001 && spoilR < 9.0) {
+        vec2 sd = (uv - spoil.xy) / max(spoilR, 0.001);
+        float facing = 0.5 + 0.5 * dot(sd, vec2(cos(spoil_dir), sin(spoil_dir)));
+        float reach = 1.4 + (1.2 + 3.6 * facing * facing) * pow(spoil.z, 0.6);
+        float edge = spoilR + (g2 - 0.5) * 0.7;
+        spoilM = (1.0 - smoothstep(reach - 0.5, reach + 0.15, edge)) * smoothstep(1.1, 1.3, spoilR) * min(1.0, spoil.z * 2.5);
+        // a low ridge: rising from the hole's lip, cresting, falling away at the foot; its slopes catch and lose the sun
+        float k = clamp((spoilR - 1.15) / max(reach - 1.15, 0.3), 0.0, 1.0);
+        float slope = cos(k * 3.14159) * (0.4 + 0.6 * facing) * min(1.0, spoil.z * 2.5);
+        spoilTilt = -sd * slope * spoilM * 0.9;
+        // loose pellets, each a grain of subsoil: some damp and dark, some already dried pale on top
+        vec2 gc = floor(uv * 7.0);
+        float gr = fract(sin(dot(gc, vec2(12.9898, 78.233))) * 43758.5453);
+        float gd = length(fract(uv * 7.0) - 0.5);
+        float grain = (1.0 - smoothstep(0.22, 0.38, gd)) * step(0.35, gr);
+        float pellets = texture(g_base_a, uv * 1.7 + 0.21).b;
+        // subsoil brought up from below: damper, darker and warmer than the sun-dried crust it is dropped on
+        vec3 heap = baseC * vec3(0.8, 0.6, 0.4) * (0.75 + 0.5 * pellets);
+        heap = mix(heap, baseC * mix(vec3(0.62, 0.42, 0.26), vec3(1.15, 1.02, 0.85), step(0.7, gr)), grain * 0.7);
+        col = mix(col, heap, spoilM * 0.95);
+        col *= 1.0 - 0.22 * smoothstep(0.0, 0.5, spoilM) * (1.0 - smoothstep(0.5, 1.0, spoilM)); // the heap's loose foot casts a little shade
+    }
     // pine thatch mound of the red colony
     vec3 thatch = mix(vec3(0.20, 0.11, 0.05), vec3(0.36, 0.20, 0.09), g2) * (0.7 + 0.4 * n2);
     col = mix(col, thatch, vcol.b);
@@ -691,6 +720,7 @@ void fragment() {
     // the photographed relief on top of the broad undulations of the land
     vec2 nm = (nmT.xy - 0.5) * (detail > 0 ? 1.0 : 0.7) + (fineN.xy - 0.5) * 0.9 + (macroN.xy - 0.5) * 1.3 * macro + (texture(normal_a, uv * 0.11).xy - 0.5) * 0.6;
     nm = mix(nm, nm * 0.3, vcol.b); // the thatch is needles, not sand
+    nm += spoilTilt; // the founders' spoil heap
     NORMAL_MAP = normalize(vec3(nm, 0.5)) * 0.5 + 0.5;
     NORMAL_MAP_DEPTH = detail > 0 ? 1.4 : 1.0;
     float ph = texture(pher_tex, uv / map_size).r;

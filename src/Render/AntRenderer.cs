@@ -378,6 +378,25 @@ public sealed class AntRenderer
             // a fresh callow: first out of its cocoon, then retracing its real path a moment behind until it catches up
             var callow = Brood != null && a.Team == Local.Me ? Brood.Callow(i, a, ref ip, ref ih) : default;
             int layer = callow.Active ? callow.Layer : a.Layer;
+            // a founder digging the first nest: down the hole, then up with a sand pellet in its jaws, out to the heap
+            // beside the entrance to drop it, and back. Render only; the sim keeps the digger at the hole
+            bool spoilRun = false, spoilCarry = false;
+            if (a.Type == AntType.Worker && a.State == AntState.Dig && layer == 0 && !sim.Col[a.Team].Founded && sim.Royal(a.Team) is { } dig)
+            {
+                var nest = sim.W.Nests[a.Team].Pos;
+                if (ip.DistanceTo(nest) < 3f)
+                {
+                    float phase = Mathf.PosMod(sim.Time * 0.2f + a.Serial * 0.618f, 1f);
+                    float t = phase < 0.5f ? phase * 2 : 2 - phase * 2;
+                    float ang = NestInterior.SpoilAngle + (Mathf.PosMod(a.Serial * 0.377f, 1f) - 0.5f) * 1.7f;
+                    float reach = 1.4f + (1.2f + 3.6f * Mathf.Pow(0.5f + 0.5f * Mathf.Cos(ang - NestInterior.SpoilAngle), 2)) * Mathf.Pow(0.15f + 0.85f * dig.Progress, 0.6f);
+                    var dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+                    ip = nest + dir * (0.75f + t * (reach - 1.0f));
+                    ih = phase < 0.5f ? ang : ang + Mathf.Pi;
+                    spoilRun = true;
+                    spoilCarry = phase > 0.03f && phase < 0.5f;
+                }
+            }
             var n = hf.Normal(ip.X, ip.Y);
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
             var b = Orient(up, ih, st.Size);
@@ -399,6 +418,7 @@ public sealed class AntRenderer
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
             if (callow.Active) amp = callow.Amp;
+            if (spoilRun) amp = 0.85f;
             float camDist = camPos.DistanceTo(o);
             // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
             // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
@@ -421,6 +441,7 @@ public sealed class AntRenderer
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (a.Root > 0)
                 _cocoons.Add(Orient(up, ih, size * 1.05f), o + up * (0.13f * size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
+            if (spoilCarry) _cargo[(int)FoodKind.Crumb].Add(b, o, data); // a pellet of sand: the crumb's mesh, its earthy colour
             if (a.Carrying && a.Type == AntType.Worker)
             {
                 if (a.Burying)

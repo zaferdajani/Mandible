@@ -419,6 +419,10 @@ public sealed partial class NestInterior
         return m;
     }
 
+    /// Which way the founders heap their spoil from the hole (radians, world xz), and how far it reaches when complete.
+    public const float SpoilAngle = 0.55f, SpoilReach = 3.2f;
+    float _spoilShown = -1;
+
     public void Update(FogOfWar fog, bool nestView, float alpha)
     {
         _refresh -= 1f / 60f;
@@ -439,7 +443,17 @@ public sealed partial class NestInterior
             bool dugInto = col.Founded || royal != null;
             _mouthLight[team].Visible = dugInto;
             _mouth[team].Visible = _mouthShadow[team].Visible = false; // the hole opens straight into the hub bowl: no shaft hangs in the pit
-            _plug[team].Visible = !col.Founded && royal != null;
+            _plug[team].Visible = false; // founding reads as real excavation: an open hole and the spoil heap, not a lump sinking in
+            if (team == 0 && _g.World.FirstNest)
+            {
+                // the tumulus: the sand the founders carry up grows into a crescent beside the hole (terrain shader, `spoil`)
+                float spoil = col.Founded ? 1f : royal != null ? 0.15f + 0.85f * dug : 0f;
+                if (Mathf.Abs(spoil - _spoilShown) > 0.005f)
+                {
+                    _spoilShown = spoil;
+                    foreach (var m in _g.World.TerrainMaterials) { m.SetShaderParameter("spoil", new Vector3(nestPos.X, nestPos.Y, spoil)); m.SetShaderParameter("spoil_dir", SpoilAngle); }
+                }
+            }
             if (dugInto != _holeCut[team])
             {
                 // the terrain's own hole at the entrance opens with the dig, not before
@@ -447,7 +461,8 @@ public sealed partial class NestInterior
                 foreach (var m in _g.World.TerrainMaterials) m.SetShaderParameter(team == 0 ? "entrance_a" : "entrance_b", dugInto ? nestPos : new Vector2(-1000, -1000));
             }
             if (!col.Founded) { _plug[team].Position = new Vector3(0, 0.25f - dug * 1.1f, 0); _plug[team].Scale = new Vector3(1 - dug * 0.6f, 1, 1 - dug * 0.6f); }
-            bool shown = mine && _open > 0.001f;
+            // nothing is drawn below until the nest is founded: a half-dug royal chamber seen through the roof read as a sack
+            bool shown = mine && _open > 0.001f && col.Founded;
             _excavation[team].Visible = shown;
             if (shown)
             {

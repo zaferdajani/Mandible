@@ -801,7 +801,7 @@ public partial class GameSession : Node3D
 
     void UpdateGlass(float dt)
     {
-        _glass = Mathf.MoveToward(_glass, NestView ? 1 : 0, dt * 3);
+        _glass = Mathf.MoveToward(_glass, NestView && Sim.Col[Local.Me].Founded ? 1 : 0, dt * 3); // the founders' dig is seen from above
         var nest = World.Nests[Local.Me].Pos;
         // the earth opens only over the galleries and rooms, never over the plain ground around them; the
         // ground dressing (pebbles, straw, thatch) shares the cut, so nothing hovers over an opened gallery
