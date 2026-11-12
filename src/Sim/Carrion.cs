@@ -17,6 +17,10 @@ public sealed partial class Sim
     /// Burial, dragging, morale and the midden run in skirmish, Lane War and multiplayer. The campaign's levels were
     /// tuned on a colony that eats its own dead and forages between fights, and keeps that.
     public bool CarrionRules => Mission == null;
+    /// Level 1's founders drag the beetle whole to the founding clearing, the way real ants bring prey home, and cut it up there.
+    bool FounderDrag(FoodSource f, int team) => team == 0 && f.Team == Config.Wild && Mission is { Episode: 1, Stage: ExpeditionStage.Provision };
+    /// Where a team drags a carcass: the midden for its own dead, the founding clearing in Level 1, else the nest mouth.
+    Vector2 HaulDest(FoodSource f, int team, bool bury) => bury ? Midden(team) : FounderDrag(f, team) ? Expedition.Clearing : NestEntrance(team);
 
     /// The organic economy: other creatures' remains go into the organic reserve, the queen ascends on it, every brood
     /// needs a little and the founders need it. Everywhere outside the campaign, and in the campaign from the chapter
@@ -153,9 +157,9 @@ public sealed partial class Sim
     Vector2 AtCarcass(int i, ref Ant a, FoodSource f, UnitStats st, ref float speedMul)
     {
         bool bury = f.Team == a.Team && CarrionRules;
-        int need = CarrionRules ? Config.HaulNeed(f.AntType) : 0;
+        int need = CarrionRules || FounderDrag(f, a.Team) ? Config.HaulNeed(f.AntType) : 0;
         // drag it whole: big enough to need a team, not yet home, and not already in the jaws of the other colony
-        var dest = bury ? Midden(a.Team) : NestEntrance(a.Team);
+        var dest = HaulDest(f, a.Team, bury);
         if (need > 0 && f.Layer == 0 && !f.Hauled && f.Pos.DistanceTo(dest) <= Config.HaulArrive + f.Radius) Arrive(f, a.Team, bury);
         if (!f.Alive) return Vector2.Zero;
         bool haul = need > 0 && f.Layer == 0 && !f.Hauled
@@ -469,6 +473,14 @@ public sealed partial class Sim
     void Arrive(FoodSource f, int team, bool bury)
     {
         f.Hauled = true;
+        if (FounderDrag(f, team))
+        {
+            // home at the clearing: the founders butcher it on the spot and the whole body goes into the site's stock
+            StoreRemains(Col[team], f.AntType, f.Amount);
+            f.Amount = 0;
+            Events.Add(new SimEvent { Kind = EvKind.Pickup, Pos = f.Pos, Team = team, Type = f.AntType, FoodP1 = f.Id + 1 });
+            return;
+        }
         if (!bury) return;
         Mourn(Col[team], 2);
         f.Amount = 0;
@@ -480,8 +492,8 @@ public sealed partial class Sim
         int need = Config.HaulNeed(f.AntType);
         if (need == 0 || f.HaulCount < need || f.Hauled) return;
         int team = f.HaulTeam;
-        bool bury = f.Team == team;
-        var dest = bury ? Midden(team) : NestEntrance(team);
+        bool bury = f.Team == team && CarrionRules;
+        var dest = HaulDest(f, team, bury);
         var to = dest - f.Pos;
         float d = to.Length();
         if (d <= Config.HaulArrive + f.Radius) { Arrive(f, team, bury); return; }

@@ -84,14 +84,18 @@ public partial class FoundingPanel : PanelContainer
             _food.Value = food / Config.FoundFood;
             _remains.Value = org / Config.FoundOrganic;
             _foodText.Text = $"FOOD  {food:0} / {Config.FoundFood:0}" + (food >= Config.FoundFood ? "   ✓" : "");
-            _remainsText.Text = $"REMAINS  {org:0} / {Config.FoundOrganic:0}" + (org >= Config.FoundOrganic ? "   ✓" : "");
+            _remainsText.Text = $"PROTEIN (REMAINS)  {org:0} / {Config.FoundOrganic:0}" + (org >= Config.FoundOrganic ? "   ✓" : "");
         }
         if (m.Stage == ExpeditionStage.Provision)
         {
             _title.Text = "STOCK THE NEST SITE";
-            _hint.Text = m.RemainsLeft
-                ? (Settings.Touch ? "Workers are gathering seeds. Tap Workers, then tap the beetle's remains to carry them here too." : "Workers gather seeds by themselves. Send some to the beetle's remains: Workers (F3), then right-click the remains.")
-                : "Workers are gathering. When both bars are full, you can dig the nest.";
+            int need = Config.HaulNeed(AntType.Beetle);
+            string drag = !m.RemainsLeft ? "" : m.RemainsCrew >= need ? $"\n{m.RemainsCrew} workers are dragging the beetle home: {m.RemainsToGo:0} paces to go"
+                : m.RemainsCrew > 0 ? $"\n{m.RemainsCrew} of {need} workers on the beetle: it needs {need} to move" : "";
+            _hint.Text = "A queen founds her nest only where food and protein are stored. " + m.StockNeeded + "." + drag + "\n"
+                + (!m.RemainsLeft ? "Workers are gathering. When both bars are full, you can dig the nest."
+                   : Settings.Touch ? "Workers fetch seeds themselves. Tap Workers, then tap the beetle: four or more drag it here whole."
+                   : "Workers fetch seeds themselves. Send them to the beetle: Workers (F3), then right-click it. Four or more drag it here whole.");
         }
         else if (m.Stage == ExpeditionStage.DigEntrance)
         {

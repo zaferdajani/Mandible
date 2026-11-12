@@ -20,6 +20,8 @@ public sealed partial class Expedition
     public int StockFood, StockOrganic;
     public Vector2 RemainsPos;
     public bool RemainsLeft;
+    public int RemainsCrew; // workers gripping the beetle right now (shown live; not part of the sim state)
+    public float RemainsToGo; // how far the beetle still has to be dragged to the clearing
     public const int WorkerGoal = 4, SoldierGoal = 6;
     public static readonly Vector2 Start = new(48, 256), Ambush = new(88, 256), Clearing = new(144, 256);
 
@@ -44,9 +46,10 @@ public sealed partial class Expedition
     {
         ExpeditionStage.ClearTrail => "Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it. Its shell is hard, so attack together.",
         ExpeditionStage.EscortQueen => "With your attackers selected, right-click the food clearing. The queen and workers follow them along the protected trail.",
-        ExpeditionStage.Provision => "A queen can only found her nest where the colony has stocked both food and remains: everything the tube held was lost in the fall. "
-            + "The two bars at the top show what the site still needs. "
-            + (RemainsLeft ? "Workers gather seeds by themselves; send some to the beetle's remains (F3, then right-click them)." : "Workers are gathering: wait for both bars to fill."),
+        ExpeditionStage.Provision => "Why wait? A queen won't found a nest until the site holds food and protein for her first brood, and the fall lost everything the tube held. "
+            + StockNeeded + ". "
+            + (RemainsLeft ? "Workers fetch seeds by themselves. The protein is the beetle Burr's soldiers killed: send workers to it (F3, then right-click the body). It is too heavy for one ant: four or more drag it home whole."
+                           : "Workers are gathering: the nest can be dug as soon as both bars are full."),
         ExpeditionStage.DigEntrance => "The site is stocked. Press DIG THE NEST at the top (or Enter): the workers at the clearing dig the shaft and the royal chamber.",
         ExpeditionStage.RoyalChamber => "Workers are excavating. The queen will enter the royal chamber as soon as it is ready.",
         ExpeditionStage.Incubator => "Press N, choose Brood Chamber, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
@@ -60,6 +63,20 @@ public sealed partial class Expedition
             : "She is dead. Send workers to her body (F3, then right-click the glowing gland): they carve it out, and one carries it home to the queen.",
         _ => "Level complete. Sweet Rain is now open on the colony map; Skirmish lets you try the complete roster now.",
     };
+    public const float SeedFood = 6f; // what one seed brings in the campaign (Config.FoodValue)
+    /// What the founding site still lacks, in plain words: "Still needed: 3 more seeds and the beetle's body".
+    public string StockNeeded
+    {
+        get
+        {
+            int seeds = Mathf.CeilToInt(Mathf.Max(0, Config.FoundFood - StockFood) / SeedFood);
+            float org = Mathf.Max(0, Config.FoundOrganic - StockOrganic);
+            var parts = new List<string>();
+            if (seeds > 0) parts.Add($"{seeds} more seed{(seeds == 1 ? "" : "s")}");
+            if (org > 0) parts.Add(RemainsLeft ? "the beetle's body" : $"{Mathf.CeilToInt(org)} more remains");
+            return parts.Count == 0 ? "The site is stocked" : "Still needed: " + string.Join(" and ", parts);
+        }
+    }
     public Vector2 Marker => Episode > 1 ? MarkerPos : Stage switch
     {
         ExpeditionStage.ClearTrail => Ambush,
@@ -168,9 +185,9 @@ public sealed partial class Sim
         if (Mission.Stage == ExpeditionStage.Provision)
         {
             Mission.StockFood = (int)c.Food; Mission.StockOrganic = (int)c.Organic;
-            var remains = BestRemains(0, Expedition.Ambush, 40f);
+            var remains = BestRemains(0, Expedition.Ambush, 70f); // reaches the clearing: the beetle is tracked all the way home
             Mission.RemainsLeft = remains != null && !remains.Hauled;
-            if (remains != null) Mission.RemainsPos = remains.Pos;
+            if (remains != null) { Mission.RemainsPos = remains.Pos; Mission.RemainsCrew = remains.HaulCount; Mission.RemainsToGo = Mathf.Max(0, remains.Pos.DistanceTo(Expedition.Clearing) - Config.HaulArrive - remains.Radius); }
             // the founders fetch the beetle themselves while the site lacks remains: half the workers haul, half gather seeds
             // (a player who orders it sooner only speeds it up; nobody gets stuck on a step the game never explained)
             if (remains != null && c.Organic < Config.FoundOrganic && Ticks % 30 == 0)

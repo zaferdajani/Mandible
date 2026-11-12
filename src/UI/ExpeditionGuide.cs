@@ -69,7 +69,7 @@ public partial class ExpeditionGuide : PanelContainer
             else if (m.Stage == ExpeditionStage.Provision && m.RemainsLeft)
             {
                 guiding = true;
-                Game.Guide.Show(m.RemainsPos, "BEETLE REMAINS", Settings.Mobile ? "Tap Workers, then the remains: carry them to the clearing" : "Workers (F3), then right-click: carry them to the clearing");
+                Game.Guide.Show(m.RemainsPos, "THE BEETLE · PROTEIN", Settings.Mobile ? "Tap Workers, then the beetle: four or more drag it to the clearing" : "Workers (F3), then right-click: four or more drag it to the clearing");
             }
             else if (m.Stage == ExpeditionStage.DigEntrance)
             {
@@ -170,6 +170,7 @@ public partial class ExpeditionGuide : PanelContainer
     {
         ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
         ("right-click the food clearing", "tap the food clearing"),
+        ("(F3, then right-click the body)", "(tap Workers, then tap the body)"),
         ("Select two or more workers (F3) and right-click a straw", "Tap Workers, then tap a straw"),
         ("(F3, then right-click the glowing gland)", "(tap Workers, then tap the glowing gland)"),
         ("(F2, then right-click her)", "(tap Army, then tap her)"),

@@ -63,7 +63,7 @@ public static class Levels
     {
         new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "The hunt, remains, founding and workers", Rival = RivalKind.None,
             Blurb = "The tube is broken. Hunt the beetle in the grass alley, stock a clearing with seeds and its remains, and found the Glass Queen's nest.",
-            Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 3f, "Lose no more than 3 ants") } },
+            Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 8f, "Lose no more than 8 ants") } },
         new() { Id = 2, Season = 1, Name = "The Foraging Season", Novelty = "The first queen kill: Ashling, and her glowing body", Rival = RivalKind.Young, RivalFood = 0.35f,
             Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, the red raiders' queen.",
             Stars = new[] { (StarGoal.Time, 1080f, Under(18)), (StarGoal.AllSteps, 0f, "Finish every step before the queen falls") } },

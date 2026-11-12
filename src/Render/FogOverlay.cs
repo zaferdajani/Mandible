@@ -16,12 +16,19 @@ uniform sampler2D fow_tex : hint_default_white, filter_linear, repeat_disable;
 uniform sampler2D noise_b : filter_linear_mipmap, repeat_enable;
 uniform float map_size = 320.0;
 uniform float remembered = 0.36; // how bright ground seen before (but not now) stays
+uniform float xray_on = 0.0;       // build view: the yard's soil is a translucent roof (GameSession.UpdateGlass)
+uniform float net_ground_y = 0.0;  // ...and the ground level at the nest
 void vertex() { POSITION = vec4(VERTEX.xy * 2.0, 1.0, 1.0); }
 void fragment() {
     float d = texture(depth_tex, SCREEN_UV).r;
     vec4 v = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, d, 1.0);
     v.xyz /= v.w;
     vec3 wp = (INV_VIEW_MATRIX * vec4(v.xyz, 1.0)).xyz;
+    // the roof draws in the transparent pass and leaves no depth: through it the buffer holds the rooms below, or nothing
+    // at all, which once put the whole yard off the map (all black). Read the fog where the view ray meets the surface.
+    vec3 eye = INV_VIEW_MATRIX[3].xyz;
+    if (xray_on > 0.001 && wp.y < net_ground_y - 0.3 && eye.y > net_ground_y)
+        wp = eye + (wp - eye) * ((eye.y - net_ground_y) / max(eye.y - wp.y, 1e-4));
     // break the frontier: two octaves of the yard's cell noise push the lookup a couple of units either way
     vec2 j = (texture(noise_b, wp.xz * 0.045).rg - 0.5) * 2.0 + (texture(noise_b, wp.xz * 0.17 + 0.37).rg - 0.5) * 0.5;
     vec2 f = texture(fow_tex, (wp.xz + j) / map_size).rg;

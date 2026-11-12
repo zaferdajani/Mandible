@@ -314,16 +314,18 @@ public partial class MainMenu : CanvasLayer
         if (latest.Count > 0) items.Add(($"Continue  ·  {latest[0].Label}", () => App.LoadSave(latest[0].Slot)));
         items.Add(("Campaign", OpenCampaign));
         if (latest.Count > 0) items.Add(("Load game", OpenLoad));
-        _main = Column(items.Concat(new (string, System.Action)[] {
-            ("Skirmish · all castes unlocked", () => App.StartSkirmish()),
-            ("Colony War", () => { _lanes = false; PickRace(); }),
-            ("Lane War  ·  generals", () => { _lanes = true; PickRace(); }),
-            ("Multiplayer", () => { _main.Visible = false; OpenLobby(); }),
+        items.Add(("Skirmish · all castes unlocked", () => App.StartSkirmish()));
+        items.Add(("Colony War", () => { _lanes = false; PickRace(); }));
+        items.Add(("Lane War  ·  generals", () => { _lanes = true; PickRace(); }));
+        items.Add(("Multiplayer", () => { _main.Visible = false; OpenLobby(); }));
+        var options = new System.Collections.Generic.List<(string, System.Action)> {
             ("Field Guide", ShowGuide),
             ($"Graphics: {Settings.Gfx}", OpenGraphics),
             (DisplayLabel(), ToggleDisplay),
-            (Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)"), CycleVolume),
-            ("Quit", () => GetTree().Quit()) }).ToArray());
+            (Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)"), CycleVolume) };
+        if (!Settings.Mobile) options.Add(("Quit", () => GetTree().Quit())); // phones leave from the OS (iOS forbids a quit button)
+        // play on the left, guide and settings on the right: one long list ran off the bottom of the screen
+        _main = Columns(items.ToArray(), options.ToArray());
         _diff = Column(
             ("Easy  ·  a gentle colony", () => Start(Difficulty.Easy)),
             ("Normal  ·  a fair war", () => Start(Difficulty.Normal)),
@@ -392,7 +394,7 @@ public partial class MainMenu : CanvasLayer
         if (Settings.Mobile) return;
         Settings.Fullscreen = !Settings.Fullscreen;
         Settings.ApplyDisplay(save: true);
-        foreach (var n in _main.GetChildren())
+        foreach (var n in MainButtons())
             if (n is Button b && b.Text.StartsWith("Display")) b.Text = DisplayLabel();
     }
 
@@ -407,7 +409,7 @@ public partial class MainMenu : CanvasLayer
     void RefreshVolumeLabel()
     {
         if (_main == null) return;
-        foreach (var n in _main.GetChildren())
+        foreach (var n in MainButtons())
             if (n is Button b && b.Text.StartsWith("Sound")) b.Text = Settings.VolumeLabel() + (Settings.Mobile ? "" : "  (- / =)");
     }
 
@@ -456,7 +458,7 @@ public partial class MainMenu : CanvasLayer
                 b.Text = (q == Settings.Gfx ? "●  " : "") + q;
                 b.AddThemeColorOverride("font_color", q == Settings.Gfx ? UiTheme.Gold : UiTheme.Ink);
             }
-            foreach (var n in _main.GetChildren())
+            foreach (var n in MainButtons())
                 if (n is Button mb && mb.Text.StartsWith("Graphics")) mb.Text = $"Graphics: {Settings.Gfx}";
         }
         foreach (Settings.Quality q in System.Enum.GetValues<Settings.Quality>())
@@ -587,20 +589,41 @@ public partial class MainMenu : CanvasLayer
         _root.AddChild(_lobby);
     }
 
+    /// The main menu: two columns side by side under the title, both hanging from the same top line.
+    Control Columns((string, System.Action)[] left, (string, System.Action)[] right)
+    {
+        var h = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        h.AddThemeConstantOverride("separation", 28);
+        UiTheme.Place(h, 0.5f, 0, 0.5f, 0, -400, 380, 400, 820);
+        foreach (var items in new[] { left, right })
+        {
+            var v = new VBoxContainer();
+            v.AddThemeConstantOverride("separation", 12);
+            foreach (var (label, act) in items) v.AddChild(MenuButton(label, act));
+            h.AddChild(v);
+        }
+        _root.AddChild(h);
+        return h;
+    }
+
+    System.Collections.Generic.IEnumerable<Node> MainButtons() => _main.GetChildren().SelectMany(c => c.GetChildren());
+
+    Button MenuButton(string label, System.Action act)
+    {
+        var b = new Button { Text = label, CustomMinimumSize = new Vector2(380, 52) };
+        b.AddThemeFontSizeOverride("font_size", 20);
+        b.AddThemeFontOverride("font", UiTheme.Title);
+        b.Pressed += () => { App.Audio.Ui("ui_click"); act(); };
+        b.MouseEntered += () => App.Audio.Ui("ui_hover");
+        return b;
+    }
+
     Control Column(params (string, System.Action)[] items)
     {
         var v = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         v.AddThemeConstantOverride("separation", 12);
         UiTheme.Place(v, 0.5f, 0, 0.5f, 0, -190, 380, 190, 820);
-        foreach (var (label, act) in items)
-        {
-            var b = new Button { Text = label, CustomMinimumSize = new Vector2(380, 52) };
-            b.AddThemeFontSizeOverride("font_size", 20);
-            b.AddThemeFontOverride("font", UiTheme.Title);
-            b.Pressed += () => { App.Audio.Ui("ui_click"); act(); };
-            b.MouseEntered += () => App.Audio.Ui("ui_hover");
-            v.AddChild(b);
-        }
+        foreach (var (label, act) in items) v.AddChild(MenuButton(label, act));
         _root.AddChild(v);
         return v;
     }

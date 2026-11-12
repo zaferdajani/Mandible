@@ -104,6 +104,15 @@ public static class SaveValidation
         PlayOpeningOrders(s, 14);
         await Ticks(s, 300);
         await Shot("3-digging");
+        // the owner's 0.13 playtest: build view (N) while the nest is still being dug turned the whole yard black
+        s.SetNestView(true);
+        await Frames(30);
+        await Shot("4-digging-nest-view");
+        s.SetNestView(false);
+        await Until(() => s.Sim.Mission.Stage == ExpeditionStage.Incubator, 18000);
+        s.SetNestView(true);
+        await Frames(30);
+        await Shot("5-founded-nest-view");
         app.GetTree().Quit();
     }
 

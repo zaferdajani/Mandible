@@ -49,7 +49,10 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   story-only gland (Units 0) from the dead queen is carried home. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
 - Combat scale: per-type attack/defence/HP with per-type growth per level (`Config.GrowthOf`, `DefenceAt`); table in
   `docs/combat-scale.md` (regenerate when numbers change). Changing it needs the full campaign test.
-- Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying.
+- Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying. Level 1's founders drag the
+  beetle whole to the clearing (`FounderDrag`); it is stored when it arrives.
+- Fog of war is one screen pass that rebuilds world positions from depth (`FogOverlay.cs`). Anything drawn in the
+  transparent pass (the build-view roof, `Shaders.TerrainRoof`) is not in that depth: the pass projects such pixels to the ground.
 - Startup/menu: `Main.cs` (`Swap` builds sessions behind `LoadingCurtain`; phones use a still menu backdrop),
   graphics tiers and render scale in `Settings.cs`, applied in `GameSession.ApplyQuality`.
 
