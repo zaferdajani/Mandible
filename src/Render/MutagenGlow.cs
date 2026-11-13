@@ -44,6 +44,8 @@ shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
 uniform float t = 0.0;
 uniform float strength = 1.0;
+uniform float patch_ = 0.0;   // 1 while the core is still in the carcass: the ruptured patch's veins radiate round it
+uniform sampler2D veins : source_color, filter_linear_mipmap;
 uniform vec3 col : source_color = vec3(0.72, 0.55, 1.0);
 uniform vec3 hot : source_color = vec3(0.7, 1.0, 0.75);
 void vertex() {
@@ -59,8 +61,14 @@ void fragment() {
     float corona = exp(-r * r * 7.0) * (0.25 + 0.2 * beat);
     float rays = pow(max(0.0, sin(a * 6.0 + t * 0.6) * sin(a * 3.0 - t * 0.4)), 6.0) * exp(-r * 3.2) * 0.35 * strength / 3.0;
     vec3 c = mix(col, hot, clamp(heart * 1.4 + 0.3 * sin(t * 0.9), 0.0, 1.0));
-    ALBEDO = c;
-    ALPHA = clamp((heart + corona + rays) * (0.35 + 0.22 * strength), 0.0, 1.0) * smoothstep(1.0, 0.7, r);
+    // the veins: the generated vein map, slowly turning, throbbing outward from the centre with the beat
+    float ang = t * 0.05;
+    vec2 q = mat2(vec2(cos(ang), -sin(ang)), vec2(sin(ang), cos(ang))) * p * (1.15 - 0.25 * patch_);
+    vec4 v = texture(veins, q * 0.5 + 0.5);
+    float wave = 0.6 + 0.4 * sin(r * 9.0 - t * (2.0 + strength));
+    float vein = v.a * wave * patch_ * (0.45 + 0.25 * strength);
+    ALBEDO = mix(c, v.rgb, clamp(vein * 1.5, 0.0, 1.0));
+    ALPHA = clamp((heart + corona + rays) * (0.35 + 0.22 * strength) * (1.0 - 0.4 * patch_) + vein, 0.0, 1.0) * smoothstep(1.0, 0.7, r);
 }
 ";
     readonly Dictionary<int, MeshInstance3D> _halos = new();
@@ -68,9 +76,55 @@ void fragment() {
     {
         if (_halos.TryGetValue(id, out var h)) return h;
         var mat = new ShaderMaterial { Shader = Shaders.Get(HaloShader), RenderPriority = 21 };
+        if (ResourceLoader.Exists(VeinPath)) mat.SetShaderParameter("veins", GD.Load<Texture2D>(VeinPath));
         h = new MeshInstance3D { Mesh = new QuadMesh { Size = Vector2.One }, MaterialOverride = mat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         _root.AddChild(h);
         return _halos[id] = h;
+    }
+
+    // ---- target M1: the ruptured patch. Glowing veins (a generated vein map, assets/mutation/core/veins.png) projected
+    // down onto the body and the soil round the gland while it is still in the carcass; their reach and fire follow
+    // the core's strength. Target M2: once carved free the gland is the radiating core, a generated faceted organic
+    // seed (assets/mutation/core/core.glb, Meshy image-to-3D from the approved target), its heart and veins glowing.
+    const string CorePath = "res://assets/mutation/core/core.glb", VeinPath = "res://assets/mutation/core/veins.png";
+    readonly Dictionary<int, Decal> _veins = new();
+    readonly Dictionary<int, (Node3D node, StandardMaterial3D mat)> _coreMeshes = new();
+    float _coreScale = -1;
+
+    Decal Veins(int id)
+    {
+        if (_veins.TryGetValue(id, out var d)) return d;
+        if (!ResourceLoader.Exists(VeinPath)) return _veins[id] = null;
+        var tex = GD.Load<Texture2D>(VeinPath);
+        d = new Decal { TextureAlbedo = tex, TextureEmission = tex, Modulate = new Color(1, 1, 1), AlbedoMix = 0.35f, UpperFade = 0.3f, LowerFade = 0.3f, CullMask = ~0u };
+        _root.AddChild(d);
+        return _veins[id] = d;
+    }
+
+    (Node3D node, StandardMaterial3D mat) CoreMesh(int id)
+    {
+        if (_coreMeshes.TryGetValue(id, out var c)) return c;
+        if (!ResourceLoader.Exists(CorePath)) return _coreMeshes[id] = (null, null);
+        var node = GD.Load<PackedScene>(CorePath).Instantiate<Node3D>();
+        StandardMaterial3D mat = null;
+        foreach (var n in node.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            var mi = (MeshInstance3D)n;
+            var src = mi.GetActiveMaterial(0) as StandardMaterial3D;
+            // the scan's own colours, made to glow from within: bright texels (the heart, the veins) emit most
+            mat ??= new StandardMaterial3D
+            {
+                AlbedoTexture = src?.AlbedoTexture, Roughness = 0.25f, MetallicSpecular = 0.7f,
+                EmissionEnabled = true, EmissionTexture = src?.AlbedoTexture, EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply,
+                RimEnabled = true, Rim = 0.6f, RimTint = 0.8f,
+            };
+            mi.MaterialOverride = mat;
+            mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            mi.Layers = MutagenProps.SkinLayer; // the core's own light falls on the jaws and soil, not back on itself
+            if (_coreScale < 0) { var aabb = mi.GetAabb(); _coreScale = 1f / Mathf.Max(0.001f, aabb.GetLongestAxisSize()); }
+        }
+        _root.AddChild(node);
+        return _coreMeshes[id] = (node, mat);
     }
 
     /// How hard a core of this strength radiates (1 dim, 2 strong, 3 a queen's blaze).
@@ -109,7 +163,8 @@ void fragment() {
                 _root.AddChild(node);
                 _sources[m.Id] = s = (node, light, body);
             }
-            bool seen = _g.Fog == null || _g.Fog.Visible(m.Pos) || m.Carried;
+            // a radiating core shows wherever the colony sees it or feels it (the sixth sense), as its gland prop does
+            bool seen = _g.Fog == null || _g.Fog.Visible(m.Pos) || m.Carried || sim.Senses(Local.Me, m) || _g.Fog.Explored(m.Pos);
             s.node.Visible = !m.Home && seen;
             if (m.Home) continue;
             // never inside a mesh: a light at zero distance blows its neighbours out to white
@@ -122,14 +177,42 @@ void fragment() {
             // from play zoom the sun drowns a small light: the pool on the soil grows as the camera pulls back
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
             s.light.OmniRange = (m.Free ? 2.4f : 2.6f) * (0.75f + 0.25f * rad) * (1 + 0.9f * zoom);
-            s.light.LightEnergy = (0.3f + 0.4f * pulse) * rad * (1 + 2.5f * zoom);
+            s.light.LightEnergy = (0.45f + 0.55f * pulse) * rad * (1 + 2.5f * zoom); // a pool of light on the carrier's head and the soil
             // the core's halo: on the body it marks the ruptured patch; carved out it radiates in the carrier's jaws,
             // and it grows with the camera's distance so the core stays readable from play zoom
+            var veins = Veins(m.Id);
+            if (veins != null)
+            {
+                // the ruptured patch: veins spread over the body while the gland is in it, brighter and wider for a stronger core
+                veins.Visible = s.node.Visible && !m.Free;
+                float span = (1.6f + 0.8f * m.Strength) * (1 + 0.5f * zoom);
+                veins.Size = new Vector3(span, 3.5f, span);
+                veins.Position = s.node.Position + Vector3.Down * 0.3f; // centred on the gland: on the island queen's body, or round the wasp up in her web
+                veins.RotationDegrees = new Vector3(0, m.Id * 47f, 0);
+                veins.EmissionEnergy = (0.5f + 0.9f * pulse) * rad * (1 + 1.5f * zoom);
+            }
+            var cm = CoreMesh(m.Id);
+            if (cm.node != null)
+            {
+                cm.node.Visible = s.node.Visible && m.Free;
+                if (m.Free)
+                {
+                    // seed-sized in the jaws, swelling a little with the camera's distance so it reads at play zoom
+                    float size = (0.42f + 0.07f * m.Strength) * (1 + 1.8f * zoom) * _coreScale;
+                    var at = _g.World.HF.Point(m.Pos, m.Carried ? 0.55f : 0.3f);
+                    cm.node.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(0, -m.Heading + Mathf.Pi / 2, 0.25f)).Scaled(Vector3.One * size), at);
+                    cm.mat.EmissionEnergyMultiplier = (0.8f + 1.4f * pulse) * rad;
+                }
+            }
             var halo = Halo(m.Id);
             halo.Visible = s.node.Visible;
-            halo.Position = s.node.Position + Vector3.Down * (m.Free ? 0.55f : 0.9f);
-            halo.Scale = Vector3.One * (m.Free ? 1.1f : 0.8f) * (0.7f + 0.3f * rad) * (1 + 1.6f * zoom);
+            halo.Position = s.node.Position + Vector3.Down * (m.Free ? 0.55f : 1.25f);
+            // drawn just in front of the body toward the eye, so the gaster or the jaws never hide the light inside them
+            var eye = _g.GetViewport().GetCamera3D();
+            if (eye != null) halo.Position += (eye.GlobalPosition - halo.Position).Normalized() * (m.Free ? 0.4f : 0.9f);
+            halo.Scale = Vector3.One * (m.Free ? 1.3f : 2.4f + 0.8f * m.Strength) * (0.7f + 0.3f * rad) * (1 + 2.4f * zoom); // never a lost dot at play zoom
             var hm = (ShaderMaterial)halo.MaterialOverride;
+            hm.SetShaderParameter("patch_", m.Free ? 0f : 1f);
             hm.SetShaderParameter("t", _t + m.Id);
             hm.SetShaderParameter("strength", (float)m.Strength); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
             // the sixth sense: a faint ring of disturbed air spreads from a source the colony feels, even through the fog

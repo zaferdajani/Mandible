@@ -69,11 +69,11 @@ public static class MutationCapture
             sim.Mission.Fixed = Mutation.Stinger;
             sim.Col[0].Mutations &= ~(int)Mutation.Stinger;
             gs.Camera.PitchOverride = 38;
-            gs.Camera.JumpTo(home - toward * 10, 70);
+            gs.Camera.JumpTo(home - toward * 6, 58);
             await Wait(0.8f);
             // called outside a tick, its event would be cleared before the frame reads it: hand it to the session directly
             if (sim.Mutate(0, Mutation.Stinger)) gs.MutationMoment(sim.Events[^1]);
-            await Shot("queen-beam", 1.1f);
+            await Shot("queen-beam", 0.7f);
             gs.Camera.PitchOverride = 0;
 
             // ---- H3: the royal nursery, the larva's bed and the heap of food half piled

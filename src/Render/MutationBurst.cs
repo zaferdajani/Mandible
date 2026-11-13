@@ -13,7 +13,7 @@ public sealed class MutationBurst
     // a soft, broken ring that races outward and thins as it goes, with a faint inner wash
     const string ShockShader = @"
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, depth_test_disabled, cull_disabled, shadows_disabled; // over the nest mound, which rises above the flat ring
 uniform float t = 0.0;
 uniform float power = 1.0;
 uniform vec3 col : source_color = vec3(0.6, 0.25, 1.0);
@@ -28,15 +28,15 @@ void fragment() {
     float wake = smoothstep(front, front - 0.35, r) * smoothstep(0.0, front, r) * 0.18;
     float broken = 0.7 + 0.3 * sin(a * 13.0 + t * 7.0) * sin(a * 5.0 - t * 3.0);
     float fade = (1.0 - t) * (1.0 - t);
-    ALBEDO = mix(col, hot, band * 0.6);
-    ALPHA = clamp((band * broken + wake) * fade * (0.45 + 0.15 * power), 0.0, 1.0) * smoothstep(1.0, 0.94, r);
+    ALBEDO = mix(col, hot, smoothstep(front - 0.02, front + 0.04, r) * 0.0 + smoothstep(0.6, 1.0, band) * 0.7);
+    ALPHA = clamp((band * broken * 1.4 + wake) * fade * (0.5 + 0.15 * power), 0.0, 0.9) * smoothstep(1.0, 0.94, r);
 }
 ";
 
     // cracks in the soil (cell edges of a jittered grid) that light up as the wave passes and cool to nothing
     const string CrackShader = @"
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, depth_test_disabled, cull_disabled, shadows_disabled;
 uniform float t = 0.0;
 uniform float seed = 0.0;
 uniform vec3 col : source_color = vec3(0.6, 0.25, 1.0);
@@ -62,7 +62,7 @@ void fragment() {
     float glow = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.25, 1.0, t));
     float flicker = 0.85 + 0.15 * sin(TIME * 23.0 + r * 30.0);
     ALBEDO = mix(col, hot, 0.35 + 0.4 * (1.0 - r));
-    ALPHA = clamp(edge * lit * glow * flicker * 0.75, 0.0, 1.0);
+    ALPHA = clamp(edge * lit * glow * flicker * 0.95, 0.0, 0.95);
 }
 ";
 
@@ -74,8 +74,8 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 uniform float t = 0.0;
 uniform float height = 90.0;
 uniform float gain = 1.0;
-uniform vec3 col : source_color = vec3(0.5, 0.22, 0.95);
-uniform vec3 hot : source_color = vec3(0.32, 0.95, 0.5);
+uniform vec3 col : source_color = vec3(0.7, 0.08, 0.9);
+uniform vec3 hot : source_color = vec3(0.25, 1.0, 0.15);
 varying float v_h;
 varying float v_a;
 void vertex() { v_h = VERTEX.y / height + 0.5; v_a = atan(VERTEX.z, VERTEX.x); }
@@ -88,7 +88,7 @@ void fragment() {
     float sky = 1.0 - smoothstep(0.35, 1.0, v_h) * 0.85;
     float streak = 0.6 + 0.4 * sin(v_a * 7.0 + v_h * 40.0 - TIME * 9.0) * sin(v_a * 3.0 - v_h * 13.0 - TIME * 5.0);
     float life = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.55, 1.0, t));
-    ALBEDO = mix(col, hot, clamp(pow(core, 3.0) * 0.8 + 0.15 * sin(TIME * 2.0 + v_h * 6.0), 0.0, 1.0));
+    ALBEDO = mix(col, hot, clamp(pow(core, 4.0) + 0.15 * sin(TIME * 2.0 + v_h * 6.0), 0.0, 1.0)) * 0.85;
     ALPHA = clamp(core * streak * top * foot * sky * life * gain, 0.0, 1.0);
 }
 ";
@@ -152,14 +152,14 @@ void fragment() {
             var cyl = new CylinderMesh { TopRadius = 2.2f, BottomRadius = 2.8f, Height = h, CapTop = false, CapBottom = false, RadialSegments = 24, Rings = 1 };
             fx.Beam = new MeshInstance3D { Mesh = cyl, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = new ShaderMaterial { Shader = Shaders.Get(BeamShader), RenderPriority = 23 } };
             ((ShaderMaterial)fx.Beam.MaterialOverride).SetShaderParameter("height", h);
-            ((ShaderMaterial)fx.Beam.MaterialOverride).SetShaderParameter("gain", 0.9f);
+            ((ShaderMaterial)fx.Beam.MaterialOverride).SetShaderParameter("gain", 0.8f);
             fx.Beam.Position = Vector3.Up * (h / 2);
             fx.Root.AddChild(fx.Beam);
             // a wider, fainter sheath round the core column
             var sheath = new CylinderMesh { TopRadius = 5.5f, BottomRadius = 6.5f, Height = h, CapTop = false, CapBottom = false, RadialSegments = 24, Rings = 1 };
             fx.Glow = new MeshInstance3D { Mesh = sheath, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = new ShaderMaterial { Shader = Shaders.Get(BeamShader), RenderPriority = 23 } };
             ((ShaderMaterial)fx.Glow.MaterialOverride).SetShaderParameter("height", h);
-            ((ShaderMaterial)fx.Glow.MaterialOverride).SetShaderParameter("gain", 0.28f);
+            ((ShaderMaterial)fx.Glow.MaterialOverride).SetShaderParameter("gain", 0.3f);
             fx.Glow.Position = Vector3.Up * (h / 2);
             fx.Root.AddChild(fx.Glow);
         }

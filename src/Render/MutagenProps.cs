@@ -23,7 +23,14 @@ public sealed class MutagenProps
     public const uint SkinLayer = 1u << 10;
 
     /// Where a gland is drawn (its light follows it: up in the web, then in the carrier's jaws).
-    public Vector3? GlandPoint(int id) => _sites.TryGetValue(id, out var s) && s.gland != null ? s.gland.GlobalPosition : null;
+    /// The centre of the gland's visible mesh (the model's origin is not at its middle).
+    public Vector3? GlandPoint(int id)
+    {
+        if (!_sites.TryGetValue(id, out var s) || s.gland == null) return null;
+        foreach (var n in s.gland.FindChildren("*", "MeshInstance3D", true, false))
+            if (n is MeshInstance3D mi && mi.Mesh != null) return mi.GlobalTransform * mi.GetAabb().GetCenter();
+        return s.gland.GlobalPosition;
+    }
 
     // ---------------------------------------------------------------- materials
     const string SilkShader = @"
@@ -173,7 +180,7 @@ void fragment() {
             if (s.gland == null) continue;
             bool seen = _g.Fog == null || _g.Fog.Visible(m.Pos) || m.Carried;
             if (s.web != null) s.web.Visible = _g.Fog == null || _g.Fog.Explored(new Vector2(s.web.Position.X, s.web.Position.Z));
-            s.gland.Visible = !m.Home && seen;
+            s.gland.Visible = !m.Home && seen && !(m.Free && ResourceLoader.Exists("res://assets/mutation/core/core.glb")); // carved free it is the radiating core (MutagenGlow)
             // a radiance inside the amber, never a lamp; from play zoom the sun would drown it, so it carries a little further there
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
             
