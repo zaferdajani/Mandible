@@ -93,6 +93,16 @@ public static class MutationCapture
             gs.Camera.JumpTo(at + new Vector2(0, 2.4f), 11); await Shot("nursery-close", 3f);
             gs.Camera.JumpTo(at, 40); await Shot("nursery", 1.5f);
 
+            // ---- the queen's mutation trees on the result card (a colony with the story rungs and the first shell rung)
+            var plan = new ColonyRoster { Mutations = (int)(Mutation.Stinger | Mutation.RoyalLarva | Mutation.IronChitin | Mutation.WebThrowing), WebRank = 1, Mutagen = 2, Cores = 5, Power = 4 };
+            var layer = new CanvasLayer { Layer = 50 };
+            var dim = new ColorRect { Color = new Color(0, 0, 0, 0.6f) }; dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            var centre = new CenterContainer(); centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            centre.AddChild(new MutationTree(plan, m => plan.Take(m), Mutations.TraitOf(3)));
+            layer.AddChild(dim); layer.AddChild(centre); app.AddChild(layer);
+            await Shot("mutation-tree", 1f);
+            layer.QueueFree();
+
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_mutcap.cfg"));
             CampaignProgress.UsePath("user://campaign.cfg");
             GD.Print("[mutation-capture] PASS");

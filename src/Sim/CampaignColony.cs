@@ -73,7 +73,7 @@ public sealed class ColonyRoster
     public bool Take(Mutation m)
     {
         bool rankUp = m == Mutation.WebThrowing && (Mutations & (int)m) != 0 && WebRank < 3;
-        if (Mutagen < 1 || (Mutations & (int)m) != 0 && !rankUp) return false;
+        if (Mutagen < 1 || !Mandible.Mutations.CanTake(m, Mutations, WebRank)) return false; // the queen climbs her trees in order
         int gain = Mandible.Mutations.CoreTake(Mutagen, Cores);
         Cores = Math.Max(0, Cores - gain);
         Power = Math.Min(Mandible.Mutations.PowerCap, Power + gain);

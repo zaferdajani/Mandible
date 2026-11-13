@@ -889,37 +889,28 @@ public partial class Hud : CanvasLayer
         Game.Audio.Ui("research");
     }
 
-    /// After a queen kill (from the Royal Larva on) her body's mutagen lets the queen choose one of three mutations,
-    /// the dead queen's own trait first. The choice goes into the colony that walks into the next chapter; skipping it
-    /// keeps the mutagen in the reserve for the next card.
+    /// After a chapter (from the Royal Larva on) the queen's mutation trees: every core in the reserve buys one rung,
+    /// climbed in order. The choice goes into the colony that walks into the next chapter; unspent cores stay in the
+    /// reserve for the next chapter's tree.
     int AddMutationChoice(VBoxContainer body, ColonyRoster r, int id, int at)
     {
         if (Levels.NumberOf(id) < Reveal.Mutagen) return at;
         var line = UiTheme.Text($"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}", 15, UiTheme.Bold, new Color(0.86f, 0.78f, 1f));
         line.HorizontalAlignment = HorizontalAlignment.Center;
         body.AddChild(line); body.MoveChild(line, at++);
-        if (r.Mutagen < 1 || Levels.NumberOf(id) < Reveal.RoyalLarva || Levels.IdAt(Levels.NumberOf(id) + 1) <= 0) return at;
-        var head = UiTheme.Text("The queen's body glows. Choose what the colony becomes:", 15, UiTheme.Title, UiTheme.Gold);
-        head.HorizontalAlignment = HorizontalAlignment.Center;
-        body.AddChild(head); body.MoveChild(head, at++);
-        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-        row.AddThemeConstantOverride("separation", 10);
-        var buttons = new System.Collections.Generic.List<Button>();
-        foreach (var m in Mutations.Offer(id, r.Mutations))
+        // the queen's mutation trees: shown whenever there is a next chapter, so the player can plan the climb even
+        // before a core comes home; a taken rung goes into the colony that walks into the next chapter
+        if (Levels.NumberOf(id) < Reveal.RoyalLarva || Levels.IdAt(Levels.NumberOf(id) + 1) <= 0) return at;
+        var tree = new MutationTree(r, m => CampaignProgress.ChooseMutation(id, r, m), Mutations.TraitOf(id));
+        tree.Changed += () =>
         {
-            var b = new Button { Text = $"{Mutations.Name(m)}\n{Mutations.Source(m)}", TooltipText = Mutations.Text(m), CustomMinimumSize = new Vector2(220, Settings.Mobile ? 72 : 58) };
-            b.Pressed += () =>
-            {
-                if (!CampaignProgress.ChooseMutation(id, r, m)) return;
-                foreach (var o in buttons) o.Disabled = true;
-                b.Text = $"{Mutations.Name(m)}\ntaken";
-                line.Text = $"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}";
-                Game.Audio.Ui("research");
-            };
-            buttons.Add(b); row.AddChild(b);
-        }
-        body.AddChild(row); body.MoveChild(row, at++);
-        Grow((Control)body.GetParent().GetParent(), 50);
+            line.Text = $"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}";
+            Game.Audio.Ui("mutate_queen", -6);
+        };
+        var center = new CenterContainer();
+        center.AddChild(tree);
+        body.AddChild(center); body.MoveChild(center, at++);
+        Grow((Control)body.GetParent().GetParent(), 360);
         return at;
     }
 

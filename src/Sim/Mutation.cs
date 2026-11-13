@@ -88,28 +88,57 @@ public static class Mutations
         _ => Mutation.Regrowth,
     };
 
-    /// The three cards a chapter's mutagen offers (fixed for the chapter, so a replay offers the same): the defeated
-    /// queen's trait first, then the next two the colony does not have, in a chapter-seeded order.
+    /// The queen's mutation trees (the owner's design, 2026-11-13): mutation belongs to the queen alone, and her colony
+    /// changes with her. Each tree is climbed in order: a mutation opens once the one below it is taken. The first rung
+    /// of the Bite and the Queen trees is given by the story (the Silk Trap's stingers, Ashling's royal larva); Web
+    /// Throwing is earned from the silk spitter's spinneret and then deepened rank by rank.
+    public readonly struct Tree
+    {
+        public readonly string Name, Line;
+        public readonly Mutation[] Rungs;
+        public Tree(string name, string line, params Mutation[] rungs) { Name = name; Line = line; Rungs = rungs; }
+    }
+
+    public static readonly Tree[] Trees =
+    {
+        new("The Bite", "venom and burning blood", Mutation.Stinger, Mutation.FireBlood, Mutation.AcidBlood),
+        new("The Body", "shell, healing and wing", Mutation.IronChitin, Mutation.Regrowth, Mutation.HornetWings),
+        new("The Queen", "the royal line and the brood", Mutation.RoyalLarva, Mutation.SwiftBrood, Mutation.HungryGut),
+        new("The Spinneret", "silk flung at the sky", Mutation.WebThrowing),
+    };
+
+    /// Story mutations: the chapter gives them, the tree shows them, the player never buys them.
+    public static bool Story(Mutation m) => m is Mutation.Stinger or Mutation.RoyalLarva;
+
+    /// The rung below `m` in its tree (None for a first rung).
+    public static Mutation Below(Mutation m)
+    {
+        foreach (var t in Trees)
+            for (int k = 1; k < t.Rungs.Length; k++) if (t.Rungs[k] == m) return t.Rungs[k - 1];
+        return Mutation.None;
+    }
+
+    /// Whether the queen can take `m` now: not yet taken (Web Throwing: earned and below rank 3), the rung below taken,
+    /// and not a story mutation.
+    public static bool CanTake(Mutation m, int owned, int webRank)
+    {
+        if (Story(m)) return false;
+        if (m == Mutation.WebThrowing) return (owned & (int)m) != 0 && webRank < 3;
+        if ((owned & (int)m) != 0) return false;
+        var below = Below(m);
+        return below == Mutation.None || (owned & (int)below) != 0;
+    }
+
+    /// Everything the queen can take now, the defeated queen's own trait first (her body carries it most strongly).
     public static List<Mutation> Offer(int levelId, int owned, int webRank = 0)
     {
-        var cards = new List<Mutation>();
+        var open = new List<Mutation>();
         var trait = TraitOf(levelId);
-        if ((owned & (int)trait) == 0) cards.Add(trait);
-        var pool = new List<Mutation>();
-        foreach (var m in All)
-        {
-            if (m is Mutation.Stinger or Mutation.RoyalLarva || cards.Contains(m)) continue;
-            // Web Throwing is earned from the silk spitter; once the colony has it, cards can raise its rank (to 3)
-            if (m == Mutation.WebThrowing ? (owned & (int)m) != 0 && webRank < 3 : (owned & (int)m) == 0) pool.Add(m);
-        }
-        var rng = new Rng((uint)(levelId * 7919 + 13));
-        while (cards.Count < 3 && pool.Count > 0)
-        {
-            int k = rng.I(0, pool.Count);
-            cards.Add(pool[k]);
-            pool.RemoveAt(k);
-        }
-        return cards;
+        if (CanTake(trait, owned, webRank)) open.Add(trait);
+        foreach (var t in Trees)
+            foreach (var m in t.Rungs)
+                if (m != trait && CanTake(m, owned, webRank)) open.Add(m);
+        return open;
     }
 
     public static int Count(int bits) { int n = 0; for (int b = bits; b != 0; b &= b - 1) n++; return n; }

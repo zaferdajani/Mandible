@@ -603,6 +603,9 @@ public static class LevelValidation
         Check(offer.Count == 3 && offer[0] == global::Mandible.Mutations.TraitOf(Reveal.RoyalLarvaId) && !offer.Contains(Mutation.Stinger) && !offer.Contains(Mutation.RoyalLarva), "The mutation cards are wrong");
         Check(global::Mandible.Mutations.Offer(Reveal.RoyalLarvaId, LastHarvest.Mutations).SequenceEqual(offer), "The mutation cards change between looks");
         Check(CampaignProgress.ChooseMutation(Reveal.RoyalLarvaId, LastHarvest, offer[0]) && !CampaignProgress.ChooseMutation(Reveal.RoyalLarvaId, LastHarvest, offer[1]), "The choice spent no mutagen, or a second card was taken");
+        // the queen's trees are climbed in order, and the story's rungs are never bought
+        var climb = new ColonyRoster { Mutations = (int)Mutation.Stinger, Mutagen = 3, Cores = 6 };
+        Check(!climb.Take(Mutation.AcidBlood) && !climb.Take(Mutation.RoyalLarva) && climb.Take(Mutation.FireBlood) && climb.Take(Mutation.AcidBlood) && climb.Power == 4, $"The mutation tree let the queen skip a rung, or buy a story rung (power {climb.Power})");
         CampaignProgress.Load();
         int cinder = Levels.IdAt(Reveal.RoyalLarva + 1);
         var intoCinder = CampaignProgress.RosterFor(cinder);
