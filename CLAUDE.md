@@ -23,7 +23,8 @@ Read this instead of re-surveying the codebase. Keep it short and current.
 - Godot import rewrites many `.import` files with LF endings only: discard them (`git checkout -- '*.import'`), never commit.
 
 ## Release recipe (only when the owner asks)
-Bump `src/Game/Updater.cs` Version, commit, tag vX, push main + tag; run `macos-build.yml` and `ios-build.yml`
+Platforms for now (owner, 2026-11-13): **Windows and iOS only**; skip macOS and Android.
+Bump `src/Game/Updater.cs` Version, commit, tag vX, push main + tag; run `ios-build.yml` (and `macos-build.yml` only if the owner asks again)
 (`/d/Tools/gh/bin/gh.exe workflow run ... --ref vX`; private repo: macOS minutes count 10x against the free Actions quota); `git worktree add D:/MandibleBuilds/src-X vX`, import, export
 "Windows Desktop" and "Android" (JAVA_HOME=D:\Tools\jdk17, keystore env vars, see past releases). If export says
 "Failed to build project", create `D:/GodotData/mono/build_logs/<hash>_ExportRelease` (hash from a --verbose export).
