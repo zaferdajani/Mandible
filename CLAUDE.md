@@ -2,8 +2,6 @@
 
 Ant-war RTS, Godot 4.7.2 .NET (C#), public repo github.com/zaferdajani/Mandible (owner's choice, 2026-11-10), checkout D:\Mandible.
 Releases live in this repo only; the updater reads its latest release.
-ONE-TIME, NEXT RELEASE ONLY (then delete this line): also publish it to zaferdajani/Mandible-releases, because 0.13.0
-looks for updates there. After that, Mandible-releases is retired.
 Read this instead of re-surveying the codebase. Keep it short and current.
 
 ## Token budget (owner's rule)
