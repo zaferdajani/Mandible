@@ -956,7 +956,7 @@ public partial class GameSession : Node3D
     bool Audible(Vector2 p) => new Vector2(Camera.Focus.X, Camera.Focus.Z).DistanceTo(p) < Camera.Distance * 1.6f + 20;
 
     /// The queen mutates: the burst at the nest with its column of light into the sky (and, seen from inside the nest, a
-    /// burst in her chamber too), the swell in the sound, and every general of the colony bursts with her.
+    /// burst in her chamber too) and the swell in the sound. Her colony grows stronger with her (Colony.Power).
     public void MutationMoment(SimEvent e)
     {
         float power = Mathf.Max(1, e.Radius);
@@ -968,11 +968,7 @@ public partial class GameSession : Node3D
                 Bursts.Burst(World.HF.Point(Sim.NestEntrance(e.Team)) + new Vector3(room.Offset.X, -NestGeometry.Depth + 0.2f, room.Offset.Y), power, false, false);
             Audio.Ui("mutate_queen", e.Team == Local.Me ? -1 : -8);
         }
-        for (int i = 0; i < Sim.High; i++)
-        {
-            ref var a = ref Sim.Ants[i];
-            if (a.Alive && a.Team == e.Team && Config.IsHero(a.Type) && a.Layer == 0) GeneralBurst(i, power, false);
-        }
+        // mutation belongs to the queen alone (the owner's rule): generals grow by eating remains, not by her cores
     }
 
     /// A general grows stronger: the energy burst around it.
