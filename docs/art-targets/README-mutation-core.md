@@ -22,3 +22,6 @@ Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_6`, 16:9,
 | 2-3 (fixes, not re-scored) | patch 1.5x bigger, veins hotter | core and halo bigger at play zoom, stronger light pool | ring and cracks mixed (not additive) and drawn over the nest mound; beam re-tinted violet with a green heart | |
 
 Still open: the patch is a glow over the body, not a rupture cut into the wasp's cuticle (that would need the wasp model edited); the crack pattern reads a little like a net up close; the beam is fainter than the target against a bright yard.
+
+## N1. The queen's mutation tree screen
+Target `n1-mutation-tree.jpg`, **approved by the owner on 2026-11-13** ("Approve N1, build it"): the trees as ant tunnels in the nest's earth rooted at the queen's chamber, every skill a hexagonal chitin plate with its emblem and name, taken = violet-green, open = amber, locked = dark. Built in `src/UI/MutationTree.cs` from generated art in `assets/ui/mutation/` (background, plate, ten emblems, made with N1 as the reference). Frame: `frames-mutation-tree.jpg`. The build keeps the game's rung order, so Venom Stingers is the root of The Bite (N1 drew that tree upside down).

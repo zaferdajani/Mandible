@@ -901,17 +901,40 @@ public partial class Hud : CanvasLayer
         // the queen's mutation trees: shown whenever there is a next chapter, so the player can plan the climb even
         // before a core comes home; a taken rung goes into the colony that walks into the next chapter
         if (Levels.NumberOf(id) < Reveal.RoyalLarva || Levels.IdAt(Levels.NumberOf(id) + 1) <= 0) return at;
-        var tree = new MutationTree(r, m => CampaignProgress.ChooseMutation(id, r, m), Mutations.TraitOf(id));
-        tree.Changed += () =>
+        var open = new Button { Text = r.Mutagen > 0 ? $"THE QUEEN'S MUTATIONS  ·  {r.Mutagen} CORE{(r.Mutagen > 1 ? "S" : "")} TO SPEND" : "THE QUEEN'S MUTATIONS", CustomMinimumSize = new Vector2(360, Settings.Mobile ? 64 : 50), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
+        open.AddThemeFontOverride("font", UiTheme.Title);
+        open.AddThemeFontSizeOverride("font_size", 16);
+        open.Pressed += () => ShowMutationTree(r, id, () =>
         {
             line.Text = $"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}";
-            Game.Audio.Ui("mutate_queen", -6);
-        };
-        var center = new CenterContainer();
-        center.AddChild(tree);
-        body.AddChild(center); body.MoveChild(center, at++);
-        Grow((Control)body.GetParent().GetParent(), 360);
+            open.Text = r.Mutagen > 0 ? $"THE QUEEN'S MUTATIONS  ·  {r.Mutagen} CORE{(r.Mutagen > 1 ? "S" : "")} TO SPEND" : "THE QUEEN'S MUTATIONS";
+        });
+        body.AddChild(open); body.MoveChild(open, at++);
+        Grow((Control)body.GetParent().GetParent(), 40);
         return at;
+    }
+
+    /// The queen's mutation trees over everything (target N1), closed with the button beneath or Escape.
+    public void ShowMutationTree(ColonyRoster r, int id, System.Action changed = null)
+    {
+        var overlay = new Control { MouseFilter = Control.MouseFilterEnum.Stop };
+        overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.72f) };
+        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        overlay.AddChild(dim);
+        var centre = new CenterContainer();
+        centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        var col = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        col.AddThemeConstantOverride("separation", 10);
+        var tree = new MutationTree(r, m => CampaignProgress.ChooseMutation(id, r, m), Mutations.TraitOf(id));
+        tree.Changed += () => { Game.Audio.Ui("mutate_queen", -6); changed?.Invoke(); };
+        col.AddChild(tree);
+        var close = new Button { Text = "Close", CustomMinimumSize = new Vector2(180, Settings.Mobile ? 56 : 42), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
+        close.Pressed += () => overlay.QueueFree();
+        col.AddChild(close);
+        centre.AddChild(col);
+        overlay.AddChild(centre);
+        AddChild(overlay);
     }
 
     public void Alert(string text, Color? c = null)

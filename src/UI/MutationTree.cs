@@ -1,26 +1,51 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace Mandible;
 
-/// The queen's mutation trees (Mutations.Trees) on the result card: every tree laid out at once, rooted at the bottom
-/// and climbing upward, so the player plans ahead and chooses what the queen becomes. Taken rungs glow violet-green,
-/// open rungs are framed in gold and take one core, locked rungs say what opens them. Mutation belongs to the queen;
-/// the colony changes with her (and the core's strength becomes colony power).
+/// The queen's mutation trees (Mutations.Trees), built to the owner's approved target N1
+/// (docs/art-targets/n1-mutation-tree.jpg): the trees climb as tunnels through the nest's earth from the queen's
+/// chamber, each skill a hexagonal chitin plate holding its emblem, its name beneath. Taken plates glow violet-green and
+/// light the tunnel above them, open plates burn amber and take one core, locked plates lie dark and say what opens
+/// them. Art: assets/ui/mutation (generated from N1). Mutation belongs to the queen; her colony changes with her.
 public sealed partial class MutationTree : PanelContainer
 {
-    static readonly Color Violet = new(0.62f, 0.42f, 1f), Green = new(0.6f, 1f, 0.7f);
+    const string Art = "res://assets/ui/mutation/";
+    static readonly Color Violet = new(0.66f, 0.38f, 1f), Green = new(0.55f, 1f, 0.55f), Amber = new(1f, 0.66f, 0.22f);
     readonly ColonyRoster _r;
     readonly Func<Mutation, bool> _take;
     readonly Mutation _trait;
-    readonly VBoxContainer _body = new();
+    readonly Control _body = new();
     public event Action Changed;
+
+    static readonly Dictionary<string, Texture2D> _tex = new();
+    static Texture2D Tex(string name)
+    {
+        if (_tex.TryGetValue(name, out var t)) return t;
+        string path = Art + name;
+        return _tex[name] = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+    }
+
+    static string Icon(Mutation m) => m switch
+    {
+        Mutation.Stinger => "ic_stinger.png", Mutation.FireBlood => "ic_fireblood.png", Mutation.AcidBlood => "ic_acidblood.png",
+        Mutation.IronChitin => "ic_ironchitin.png", Mutation.Regrowth => "ic_regrowth.png", Mutation.HornetWings => "ic_hornetwings.png",
+        Mutation.RoyalLarva => "ic_royallarva.png", Mutation.SwiftBrood => "ic_swiftbrood.png", Mutation.HungryGut => "ic_hungrygut.png",
+        _ => "ic_webthrowing.png",
+    };
+
+    // light added on top (glows, lit tunnels): additive, never a flat fill
+    static CanvasItemMaterial Add => new() { BlendMode = CanvasItemMaterial.BlendModeEnum.Add };
+
+    float S => Settings.Mobile ? 0.82f : 1f;     // the whole screen scales down on phones
 
     public MutationTree(ColonyRoster r, Func<Mutation, bool> take, Mutation trait)
     {
         _r = r; _take = take; _trait = trait;
-        AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.06f, 0.04f, 0.07f, 0.94f), new Color(0.45f, 0.3f, 0.7f, 0.8f), 1, 10, 16));
-        _body.AddThemeConstantOverride("separation", 10);
+        AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.05f, 0.03f, 0.02f, 1f), new Color(0.55f, 0.36f, 0.16f, 0.9f), 2, 12, 0));
+        CustomMinimumSize = new Vector2(1060, 660) * S;
+        ClipContents = true;
         AddChild(_body);
         Build();
     }
@@ -28,90 +53,128 @@ public sealed partial class MutationTree : PanelContainer
     void Build()
     {
         foreach (var c in _body.GetChildren()) { _body.RemoveChild(c); c.QueueFree(); }
-        var head = UiTheme.Text("THE QUEEN'S MUTATIONS", 20, UiTheme.Title, UiTheme.Gold);
-        head.HorizontalAlignment = HorizontalAlignment.Center;
-        _body.AddChild(head);
-        int take = Mutations.CoreTake(_r.Mutagen, _r.Cores);
-        string power = _r.Mutagen > 0 ? $"the next core gives the colony +{take} power" : "no core in the reserve: bring one home to mutate";
-        var sub = UiTheme.Text($"She consumes a core, and her whole colony changes with her. Climb each tree from its root.\nMUTAGEN {_r.Mutagen}   ·   COLONY POWER {_r.Power}   ·   {power}", 13, UiTheme.Body, UiTheme.Dim);
+        var size = CustomMinimumSize;
+        _body.CustomMinimumSize = size;
+        // the nest's earth: the queen's chamber glowing at the foot, four tunnels rising (generated from N1)
+        if (Tex("tree_bg.jpg") is { } bg)
+            _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = bg, Size = size, StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered, MouseFilter = MouseFilterEnum.Ignore });
+        // a soft shade over the upper soil so the names read, fading out toward the queen's chamber (no hard edge)
+        var fade = new Gradient(); fade.SetColor(0, new Color(0.03f, 0.02f, 0.01f, 0.6f)); fade.SetColor(1, new Color(0.03f, 0.02f, 0.01f, 0f));
+        _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = new GradientTexture2D { Gradient = fade, FillFrom = new Vector2(0, 0), FillTo = new Vector2(0, 1), Width = 4, Height = 64 }, Size = new Vector2(size.X, size.Y * 0.75f), StretchMode = TextureRect.StretchModeEnum.Scale, MouseFilter = MouseFilterEnum.Ignore });
+
+        var title = UiTheme.Text("THE QUEEN'S MUTATIONS", (int)(30 * S), UiTheme.Title, new Color(1f, 0.78f, 0.42f));
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        title.Position = new Vector2(0, 14 * S); title.Size = new Vector2(size.X, 40 * S);
+        title.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
+        title.AddThemeConstantOverride("shadow_offset_y", 2);
+        _body.AddChild(title);
+        var sub = UiTheme.Text("She consumes a core, and her whole colony changes with her. Each tree climbs from its root.", (int)(13 * S), UiTheme.Body, new Color(0.9f, 0.8f, 0.66f));
         sub.HorizontalAlignment = HorizontalAlignment.Center;
+        sub.Position = new Vector2(0, 52 * S); sub.Size = new Vector2(size.X, 20 * S);
         _body.AddChild(sub);
 
-        var cols = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-        cols.AddThemeConstantOverride("separation", Settings.Mobile ? 10 : 18);
-        _body.AddChild(cols);
-        foreach (var t in Mutations.Trees) cols.AddChild(Column(t));
+        int n = Mutations.Trees.Length;
+        float colW = size.X / n;
+        for (int k = 0; k < n; k++) Column(Mutations.Trees[k], colW * (k + 0.5f), size);
+
+        // the legend and the points, bottom corners, as in N1
+        var legend = UiTheme.Text("◆ TAKEN  violet      ◆ OPEN  amber      ◆ LOCKED  dark", (int)(12 * S), UiTheme.Bold, new Color(0.86f, 0.76f, 0.62f));
+        legend.Position = new Vector2(18 * S, size.Y - 30 * S);
+        _body.AddChild(legend);
+        int take = Mutations.CoreTake(_r.Mutagen, _r.Cores);
+        var points = UiTheme.Text($"CORES  {_r.Mutagen}      COLONY POWER  {_r.Power}" + (_r.Mutagen > 0 ? $"  (next core +{take})" : ""), (int)(14 * S), UiTheme.Title, new Color(1f, 0.8f, 0.45f));
+        points.HorizontalAlignment = HorizontalAlignment.Right;
+        points.Position = new Vector2(size.X * 0.45f, size.Y - 32 * S); points.Size = new Vector2(size.X * 0.55f - 18 * S, 24 * S);
+        _body.AddChild(points);
     }
 
-    Control Column(Mutations.Tree t)
+    void Column(Mutations.Tree t, float cx, Vector2 size)
     {
-        var col = new VBoxContainer();
-        col.AddThemeConstantOverride("separation", 0);
-        var name = UiTheme.Text(t.Name.ToUpperInvariant(), 15, UiTheme.Title, UiTheme.Gold);
-        name.HorizontalAlignment = HorizontalAlignment.Center;
-        col.AddChild(name);
-        var line = UiTheme.Text(t.Line, 12, UiTheme.Body, UiTheme.Dim);
+        var head = UiTheme.Text(t.Name.ToUpperInvariant(), (int)(17 * S), UiTheme.Title, new Color(1f, 0.76f, 0.4f));
+        head.HorizontalAlignment = HorizontalAlignment.Center;
+        head.Position = new Vector2(cx - 120 * S, 84 * S); head.Size = new Vector2(240 * S, 24 * S);
+        head.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
+        _body.AddChild(head);
+        var line = UiTheme.Text(t.Line, (int)(11 * S), UiTheme.Body, new Color(0.82f, 0.72f, 0.58f));
         line.HorizontalAlignment = HorizontalAlignment.Center;
-        col.AddChild(line);
-        col.AddChild(new Control { CustomMinimumSize = new Vector2(0, 8) });
-        // the tree grows upward: its last rung on top, its root at the bottom
-        for (int k = t.Rungs.Length - 1; k >= 0; k--)
+        line.Position = new Vector2(cx - 120 * S, 106 * S); line.Size = new Vector2(240 * S, 16 * S);
+        _body.AddChild(line);
+
+        // rungs from the root (bottom) up; the last rung sits nearest the tree's name
+        float bottom = size.Y - 128 * S, step = 158 * S;
+        for (int k = 0; k < t.Rungs.Length; k++)
         {
-            col.AddChild(Rung(t.Rungs[k]));
-            if (k > 0) col.AddChild(Stem((_r.Mutations & (int)t.Rungs[k - 1]) != 0));
+            float cy = bottom - k * step;
+            if (k > 0) Tunnel(cx, cy + step - 48 * S, cy + 82 * S, (_r.Mutations & (int)t.Rungs[k - 1]) != 0);
+            Plate(t.Rungs[k], new Vector2(cx, cy));
         }
-        return col;
+        // the root draws light from the queen's chamber when taken
+        Tunnel(cx, size.Y - 42 * S, bottom + 82 * S, (_r.Mutations & (int)t.Rungs[0]) != 0);
     }
 
-    // the stem between two rungs: lit once the rung below is taken
-    static Control Stem(bool lit)
+    // a tunnel lit violet-green from below once the rung beneath it is taken
+    void Tunnel(float x, float from, float to, bool lit)
     {
-        var box = new CenterContainer { CustomMinimumSize = new Vector2(0, 16) };
-        box.AddChild(new ColorRect { CustomMinimumSize = new Vector2(lit ? 3 : 2, 16), Color = lit ? Violet.Lerp(Green, 0.4f) : new Color(0.35f, 0.3f, 0.28f, 0.7f), MouseFilter = MouseFilterEnum.Ignore });
-        return box;
+        if (!lit) return;
+        var glow = new Line2D { Points = new[] { new Vector2(x, from), new Vector2(x + 3 * S, (from + to) / 2), new Vector2(x, to) }, Width = 9 * S, DefaultColor = Violet with { A = 0.35f }, Material = Add, JointMode = Line2D.LineJointMode.Round };
+        var core = new Line2D { Points = glow.Points, Width = 2.5f * S, DefaultColor = Green with { A = 0.55f }, Material = Add };
+        _body.AddChild(glow); _body.AddChild(core);
     }
 
-    Control Rung(Mutation m)
+    void Plate(Mutation m, Vector2 c)
     {
         bool owned = (_r.Mutations & (int)m) != 0;
         bool open = Mutations.CanTake(m, _r.Mutations, _r.WebRank);
         bool afford = open && _r.Mutagen > 0;
-        string state;
-        Color bg, border, ink;
-        int bw = 1;
-        if (m == Mutation.WebThrowing && owned)
+        bool web = m == Mutation.WebThrowing && owned;
+        var w = new Vector2(112, 98) * S;
+
+        // the glow behind the plate: violet-green for taken, amber for open
+        Color? halo = owned && !afford ? Violet : afford ? Amber : open ? Amber with { A = 0.35f } : null;
+        if (halo is { } hc && Tex("plate.png") is { } pt)
+            _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = pt, Position = c - w * 0.62f, Size = w * 1.24f, StretchMode = TextureRect.StretchModeEnum.Scale, Modulate = hc * new Color(1.6f, 1.6f, 1.6f, 0.9f), Material = Add, MouseFilter = MouseFilterEnum.Ignore });
+
+        var b = new TextureButton
         {
-            state = _r.WebRank >= 3 ? "RANK 3 OF 3" : afford ? $"RANK {_r.WebRank}  ·  DEEPEN: 1 CORE" : $"RANK {_r.WebRank} OF 3";
-            bg = new Color(0.16f, 0.09f, 0.24f); border = afford ? UiTheme.Gold : Violet.Lerp(Green, 0.35f); ink = UiTheme.Ink; bw = afford ? 2 : 1;
-        }
-        else if (owned) { state = "TAKEN"; bg = new Color(0.16f, 0.09f, 0.24f); border = Violet.Lerp(Green, 0.35f); ink = UiTheme.Ink; }
-        else if (afford) { state = "MUTATE  ·  1 CORE"; bg = new Color(0.12f, 0.08f, 0.05f); border = UiTheme.Gold; ink = UiTheme.Ink; bw = 2; }
-        else if (open) { state = "OPEN  ·  NEEDS A CORE"; bg = new Color(0.1f, 0.075f, 0.055f); border = UiTheme.Bronze; ink = UiTheme.Ink; }
-        else if (Mutations.Story(m)) { state = "THE STORY GIVES IT"; bg = new Color(0.07f, 0.055f, 0.045f); border = new Color(0.3f, 0.26f, 0.22f); ink = UiTheme.Dim; }
-        else if (m == Mutation.WebThrowing) { state = "EARNED FROM THE SILK SPITTER"; bg = new Color(0.07f, 0.055f, 0.045f); border = new Color(0.3f, 0.26f, 0.22f); ink = UiTheme.Dim; }
-        else { state = $"AFTER {Mutations.Name(Mutations.Below(m)).ToUpperInvariant()}"; bg = new Color(0.07f, 0.055f, 0.045f); border = new Color(0.3f, 0.26f, 0.22f); ink = UiTheme.Dim; }
-        string mark = m == _trait && open && !owned ? "\n" + "in this queen's blood" : "";
-        var b = new Button
-        {
-            Text = $"{Mutations.Name(m)}\n{state}{mark}",
-            TooltipText = $"{Mutations.Text(m)}\n({Mutations.Source(m)})",
-            CustomMinimumSize = new Vector2(Settings.Mobile ? 168 : 196, Settings.Mobile ? 74 : 62),
-            Disabled = !afford,
-            FocusMode = FocusModeEnum.None,
+            TextureNormal = Tex("plate.png"), IgnoreTextureSize = true, StretchMode = TextureButton.StretchModeEnum.Scale,
+            Position = c - w / 2, Size = w, CustomMinimumSize = w,
+            Disabled = !afford, FocusMode = FocusModeEnum.None,
+            TooltipText = $"{Mutations.Name(m)}\n{Mutations.Text(m)}\n({Mutations.Source(m)})",
+            MouseDefaultCursorShape = afford ? CursorShape.PointingHand : CursorShape.Arrow,
+            Modulate = owned || open ? Colors.White : new Color(0.55f, 0.5f, 0.46f),
         };
-        var box = UiTheme.Box(bg, border, bw, 8, 8);
-        foreach (var s in new[] { "normal", "disabled", "focus" }) b.AddThemeStyleboxOverride(s, box);
-        b.AddThemeStyleboxOverride("hover", UiTheme.Box(bg.Lightened(0.08f), border.Lightened(0.15f), bw, 8, 8));
-        b.AddThemeStyleboxOverride("pressed", UiTheme.Box(bg.Lightened(0.15f), Green, 2, 8, 8));
-        foreach (var c in new[] { "font_color", "font_disabled_color", "font_hover_color", "font_pressed_color" }) b.AddThemeColorOverride(c, ink);
-        b.AddThemeFontOverride("font", UiTheme.Bold);
-        b.AddThemeFontSizeOverride("font_size", 13);
+        _body.AddChild(b);
+        if (Tex(Icon(m)) is { } ic)
+            b.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = ic, Position = w * 0.08f, Size = w * 0.84f, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered, MouseFilter = MouseFilterEnum.Ignore,
+                Modulate = owned ? Colors.White : open ? new Color(1, 0.95f, 0.88f) : new Color(0.42f, 0.38f, 0.34f, 0.85f) });
+        b.MouseEntered += () => { if (afford) b.Scale = Vector2.One * 1.06f; };
+        b.MouseExited += () => b.Scale = Vector2.One;
+        b.PivotOffset = w / 2;
         b.Pressed += () =>
         {
             if (!_take(m)) return;
             Build();
             Changed?.Invoke();
         };
-        return b;
+
+        // the name plaque beneath, and the plate's state
+        string state = web ? (_r.WebRank >= 3 ? "RANK 3 OF 3" : afford ? $"RANK {_r.WebRank}  ·  DEEPEN: 1 CORE" : $"RANK {_r.WebRank} OF 3")
+            : owned ? "TAKEN"
+            : afford ? "MUTATE  ·  1 CORE"
+            : open ? "OPEN  ·  NEEDS A CORE"
+            : Mutations.Story(m) ? "THE STORY GIVES IT"
+            : m == Mutation.WebThrowing ? "FROM THE SILK SPITTER"
+            : $"AFTER {Mutations.Name(Mutations.Below(m)).ToUpperInvariant()}";
+        if (m == _trait && afford) state += "  ·  IN THIS QUEEN'S BLOOD";
+        var plaque = new PanelContainer { Position = new Vector2(c.X - 92 * S, c.Y + w.Y * 0.5f - 2 * S), CustomMinimumSize = new Vector2(184 * S, 0), MouseFilter = MouseFilterEnum.Ignore };
+        plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.09f, 0.05f, 0.03f, 0.88f), owned ? Violet.Lerp(Green, 0.3f) : afford ? Amber : new Color(0.36f, 0.26f, 0.18f), 1, 7, 3));
+        var v = new VBoxContainer(); v.AddThemeConstantOverride("separation", -2);
+        var nm = UiTheme.Text(Mutations.Name(m).ToUpperInvariant(), (int)(12 * S), UiTheme.Title, owned || open ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
+        nm.HorizontalAlignment = HorizontalAlignment.Center;
+        var st = UiTheme.Text(state, (int)(9 * S), UiTheme.Bold, owned ? Green.Lerp(Violet, 0.3f) : afford ? Amber : new Color(0.6f, 0.53f, 0.46f));
+        st.HorizontalAlignment = HorizontalAlignment.Center;
+        v.AddChild(nm); v.AddChild(st);
+        plaque.AddChild(v);
+        _body.AddChild(plaque);
     }
 }
