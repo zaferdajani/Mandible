@@ -36,6 +36,46 @@ void fragment() {
     ALPHA = band * broken * (1.0 - t) * (1.0 - t) * 0.16;
 }
 ";
+    // the radiating core: a camera-facing halo of light (a hot heart, a soft corona and slow faint rays) over the gland,
+    // sized and brightened by the core's strength so a weak core reads dim and a queen's core blazes. Light only: the
+    // core's body (a faceted organic seed, target M2) waits for the owner's approval of docs/art-targets/REVIEW-mutation-core.jpg.
+    const string HaloShader = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float t = 0.0;
+uniform float strength = 1.0;
+uniform vec3 col : source_color = vec3(0.72, 0.55, 1.0);
+uniform vec3 hot : source_color = vec3(0.7, 1.0, 0.75);
+void vertex() {
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+    MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0, 0, 0), vec4(0, length(MODEL_MATRIX[1].xyz), 0, 0), vec4(0, 0, length(MODEL_MATRIX[2].xyz), 0), vec4(0, 0, 0, 1));
+}
+void fragment() {
+    vec2 p = UV * 2.0 - 1.0;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float beat = 0.5 + 0.5 * sin(t * (2.0 + strength));
+    float heart = exp(-r * r * 60.0) * (0.8 + 0.4 * beat);
+    float corona = exp(-r * r * 7.0) * (0.25 + 0.2 * beat);
+    float rays = pow(max(0.0, sin(a * 6.0 + t * 0.6) * sin(a * 3.0 - t * 0.4)), 6.0) * exp(-r * 3.2) * 0.35 * strength / 3.0;
+    vec3 c = mix(col, hot, clamp(heart * 1.4 + 0.3 * sin(t * 0.9), 0.0, 1.0));
+    ALBEDO = c;
+    ALPHA = clamp((heart + corona + rays) * (0.35 + 0.22 * strength), 0.0, 1.0) * smoothstep(1.0, 0.7, r);
+}
+";
+    readonly Dictionary<int, MeshInstance3D> _halos = new();
+    MeshInstance3D Halo(int id)
+    {
+        if (_halos.TryGetValue(id, out var h)) return h;
+        var mat = new ShaderMaterial { Shader = Shaders.Get(HaloShader), RenderPriority = 21 };
+        h = new MeshInstance3D { Mesh = new QuadMesh { Size = Vector2.One }, MaterialOverride = mat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        _root.AddChild(h);
+        return _halos[id] = h;
+    }
+
+    /// How hard a core of this strength radiates (1 dim, 2 strong, 3 a queen's blaze).
+    public static float Radiance(int strength) => strength switch { <= 1 => 0.55f, 2 => 1f, _ => 1.6f };
+
     readonly Dictionary<int, MeshInstance3D> _rings = new();
     MeshInstance3D Ring(int id)
     {
@@ -50,9 +90,11 @@ void fragment() {
     {
         var sim = _g.Sim;
         _t += dt;
-        float pulse = 0.5f + 0.5f * Mathf.Sin(_t * 2.4f);
         foreach (var m in sim.Mutagens)
         {
+            // a stronger core beats faster and harder
+            float pulse = 0.5f + 0.5f * Mathf.Sin(_t * (1.8f + 0.6f * m.Strength) + m.Id);
+            float rad = Radiance(m.Strength);
             if (!_sources.TryGetValue(m.Id, out var s))
             {
                 var node = new Node3D();
@@ -79,8 +121,17 @@ void fragment() {
             // in the web it lights the silk around her; in a carrier's jaws only the ants' heads and the soil beside it
             // from play zoom the sun drowns a small light: the pool on the soil grows as the camera pulls back
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
-            s.light.OmniRange = (m.Free ? 2.4f : 2.6f) * (1 + 0.9f * zoom);
-            s.light.LightEnergy = (0.3f + 0.4f * pulse) * (1 + 2.5f * zoom); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
+            s.light.OmniRange = (m.Free ? 2.4f : 2.6f) * (0.75f + 0.25f * rad) * (1 + 0.9f * zoom);
+            s.light.LightEnergy = (0.3f + 0.4f * pulse) * rad * (1 + 2.5f * zoom);
+            // the core's halo: on the body it marks the ruptured patch; carved out it radiates in the carrier's jaws,
+            // and it grows with the camera's distance so the core stays readable from play zoom
+            var halo = Halo(m.Id);
+            halo.Visible = s.node.Visible;
+            halo.Position = s.node.Position + Vector3.Down * (m.Free ? 0.55f : 0.9f);
+            halo.Scale = Vector3.One * (m.Free ? 1.1f : 0.8f) * (0.7f + 0.3f * rad) * (1 + 1.6f * zoom);
+            var hm = (ShaderMaterial)halo.MaterialOverride;
+            hm.SetShaderParameter("t", _t + m.Id);
+            hm.SetShaderParameter("strength", (float)m.Strength); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
             // the sixth sense: a faint ring of disturbed air spreads from a source the colony feels, even through the fog
             // from play zoom a carried gland keeps a faint, slow ripple under it, so the player can follow it across the yard
             bool sensed = (!m.Carried || zoom > 0.5f) && sim.Senses(Local.Me, m);
@@ -94,6 +145,7 @@ void fragment() {
                 ((ShaderMaterial)ring.MaterialOverride).SetShaderParameter("t", k);
             }
         }
+        float pulseN = 0.5f + 0.5f * Mathf.Sin(_t * 2.4f);
         // the royal larva glows in its nursery; the cocoon throbs harder, faster as it nears bursting
         var c = sim.Col[Local.Me];
         var room = sim.Nursery(Local.Me);
@@ -103,7 +155,7 @@ void fragment() {
         _nursery.Visible = lit && _g.NestView;
         if (!lit) return;
         _nursery.Position = _g.World.HF.Point(sim.NestEntrance(Local.Me)) + new Vector3(room.Offset.X, -NestGeometry.Depth + 1.8f, room.Offset.Y);
-        float beat = c.LarvaStage == 3 ? 0.5f + 0.5f * Mathf.Sin(_t * (3f + 6f * (1 - c.CocoonT / Mathf.Max(1, c.CocoonTime)))) : pulse;
+        float beat = c.LarvaStage == 3 ? 0.5f + 0.5f * Mathf.Sin(_t * (3f + 6f * (1 - c.CocoonT / Mathf.Max(1, c.CocoonTime)))) : pulseN;
         _nursery.LightColor = c.LarvaStage == 3 ? new Color(1f, 0.72f, 0.42f).Lerp(Glow, 0.3f) : Glow.Lerp(Green, 0.4f);
         _nursery.LightEnergy = (c.LarvaStage == 3 ? 0.6f : 0.2f) + beat * (c.LarvaStage == 3 ? 0.6f : 0.15f);
     }

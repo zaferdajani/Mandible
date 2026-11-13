@@ -50,8 +50,8 @@ public partial class MutationStrip : VBoxContainer
         Visible = m != null && m.Chapter >= Reveal.Mutagen;
         if (!Visible) return;
         var c = sim.Col[0];
-        _counts.Text = $"MUTAGEN  {c.Mutagen}   ·   COLONY LEVEL {c.Level}   ·   INSTABILITY {c.Instability}";
-        _counts.TooltipText = "Mutagen: carried home from glowing bodies; the queen consumes it to mutate the colony.\nColony level: every queen or nest master defeated; more room and tougher fighters.\nInstability: every mutation toughens the woods' predators and rival strains.";
+        _counts.Text = $"MUTAGEN  {c.Mutagen}   ·   COLONY LEVEL {c.Level}   ·   POWER +{c.Power * Mathf.RoundToInt(Mutations.PowerHp * 100)}%   ·   INSTABILITY {c.Instability}";
+        _counts.TooltipText = "Mutagen: carried home from glowing bodies; the queen consumes it to mutate the colony.\nColony level: every queen or nest master defeated; more room and tougher fighters.\nPower: the cores the queen consumed make every ant of the colony tougher and harder-biting (a stronger core, more power).\nInstability: every mutation toughens the woods' predators and rival strains.";
         _offer = m.Fixed;
         bool can = _offer != Mutation.None && (c.Mutations & (int)_offer) == 0;
         _card.Visible = can;

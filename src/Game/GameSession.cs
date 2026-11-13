@@ -17,6 +17,7 @@ public partial class GameSession : Node3D
     public Carnage Gore;
     public Guidance Guide;
     public MutagenGlow Glow;
+    public MutationBurst Bursts;
     public MutagenProps Props;
     public StrawProps Straws;
     public FogOfWar Fog;
@@ -83,6 +84,7 @@ public partial class GameSession : Node3D
         Ants = new AntRenderer(this);
         long tAnts = sw.ElapsedMilliseconds;
         Effects = new Effects(this, World.HF);
+        Bursts = new MutationBurst(this, Effects);
         Gore = new Carnage(this, World.HF, Effects);
         Guide = new Guidance(this, World.HF);
         Ants.Gore = Gore;
@@ -875,6 +877,7 @@ public partial class GameSession : Node3D
         Ants.Update(Sim, Camera.Cam, _alpha);
         if (!Demo && Input != null) Guide.Update(Sim, Input.Selection, p => Fog == null || Fog.Visible(p), dt, Camera.Cam.GlobalPosition);
         Effects.Update(_paused ? 0 : dt);
+        Bursts.Update(_paused ? 0 : dt);
         UpdateFood();
         UpdatePheromoneTexture(dt);
         UpdateAudio(dt);
@@ -952,6 +955,37 @@ public partial class GameSession : Node3D
 
     bool Audible(Vector2 p) => new Vector2(Camera.Focus.X, Camera.Focus.Z).DistanceTo(p) < Camera.Distance * 1.6f + 20;
 
+    /// The queen mutates: the burst at the nest with its column of light into the sky (and, seen from inside the nest, a
+    /// burst in her chamber too), the swell in the sound, and every general of the colony bursts with her.
+    public void MutationMoment(SimEvent e)
+    {
+        float power = Mathf.Max(1, e.Radius);
+        var top = World.HF.Point(e.To, 0f);
+        if (Demo || e.Team == Local.Me || Fog == null || Fog.Visible(e.To))
+        {
+            Bursts.Burst(top, power, true, true);
+            if (NestView && Sim.Royal(e.Team) is { } room)
+                Bursts.Burst(World.HF.Point(Sim.NestEntrance(e.Team)) + new Vector3(room.Offset.X, -NestGeometry.Depth + 0.2f, room.Offset.Y), power, false, false);
+            Audio.Ui("mutate_queen", e.Team == Local.Me ? -1 : -8);
+        }
+        for (int i = 0; i < Sim.High; i++)
+        {
+            ref var a = ref Sim.Ants[i];
+            if (a.Alive && a.Team == e.Team && Config.IsHero(a.Type) && a.Layer == 0) GeneralBurst(i, power, false);
+        }
+    }
+
+    /// A general grows stronger: the energy burst around it.
+    public void GeneralBurst(int id, float power, bool sound = true)
+    {
+        ref var a = ref Sim.Ants[id];
+        if (!a.Alive || a.Layer != 0) return;
+        if (!Demo && a.Team != Local.Me && Fog != null && !Fog.Visible(a.Pos)) return;
+        var at = World.HF.Point(a.Pos, 0f);
+        Bursts.Burst(at, power, false, true);
+        if (sound && Audible(a.Pos)) Audio.At("mutate", at, a.Team == Local.Me ? 0 : -6, 0.3f, 0.03f);
+    }
+
     void HandleEvents()
     {
         foreach (var e in Sim.Events)
@@ -985,6 +1019,7 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.Evolve:
+                    if (seen && Config.IsHero(e.Type) && e.Who > 0) GeneralBurst(e.Who - 1, Mathf.Clamp(e.Tier, 1, 3)); // a general's moult: it grows stronger in a burst
                     if (seen)
                     {
                         // the moult: a flare of light over the ant, a ring on the soil, a deep note
@@ -1013,9 +1048,8 @@ public partial class GameSession : Node3D
                     {
                         var mu = (Mutation)e.Tier;
                         Hud.Banner($"The colony mutates: {Mutations.Name(mu)}", Mutations.Text(mu), 6f);
-                        Audio.Ui("victory", -6);
-                        Effects.Marker(wp, new Color(0.78f, 0.6f, 1f), 2.4f);
                     }
+                    MutationMoment(e);
                     break;
                 case EvKind.Cocoon:
                     if (e.Team == Local.Me && !Demo) Hud.Banner("The royal larva spins its cocoon", Sim.Mission?.InCocoon != null ? "Old Burr lay down beside it, and the silk closed over them both. The raids will grow desperate: hold the nursery until it bursts." : "It throbs with light, and the raids will grow desperate. Hold the nursery until it bursts.", 5f);
@@ -1275,6 +1309,9 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.LevelUp:
+                    // a general that reaches a new insignia tier (bronze 1-3, gold 4-7, red-gold 8-10) grows stronger in a burst
+                    if (seen && Config.IsHero(e.Type) && e.Who > 0 && Sim.Ants[e.Who - 1].Alive && AntRenderer.InsigniaTier(Sim.Ants[e.Who - 1].Level) != AntRenderer.InsigniaTier(Sim.Ants[e.Who - 1].Level - 1))
+                        GeneralBurst(e.Who - 1, 1 + AntRenderer.InsigniaTier(Sim.Ants[e.Who - 1].Level));
                     if (!Demo && e.Team == Local.Me && Config.IsHero(e.Type) && e.Who > 0 && Sim.Ants[e.Who - 1].Alive && Sim.AnyLearnable(Sim.Ants[e.Who - 1]))
                     {
                         Hud.Banner($"{Config.Of(e.Type).Name.ToUpperInvariant()}  ·  LEVEL {Sim.Ants[e.Who - 1].Level}", "A new skill point: choose a skill (O)", 3f);

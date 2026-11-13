@@ -139,6 +139,14 @@ public static class Mutations
     public const float WebCooldown = 9f;
     public const int SlotsPerLevel = 4;        // population room each colony level adds
     public const float LevelHp = 0.03f;        // and a little toughness for every caste
+    // the radiating core: each gland's strength (1 weak, 2 strong, 3 a queen's) is the colony-wide power it gives
+    public const float PowerHp = 0.025f, PowerBite = 0.02f; // per point of colony power, for every ant of the colony
+    public const int PowerCap = 16;
+    public const int QueenCore = 2;            // the core in a defeated rival queen's body (the result card's mutagen)
+
+    /// The power one mutation gives: the reserve's cores, averaged and rounded up (a reserve from before the cores
+    /// existed counts each unit as a weak core).
+    public static int CoreTake(int mutagen, int cores) => mutagen < 1 ? 0 : System.Math.Clamp((cores + mutagen - 1) / mutagen, 1, 3);
 }
 
 /// A body that holds mutagen: a gland the workers carve out and carry home. It glows faintly and pulses; the colony
@@ -152,6 +160,7 @@ public sealed class MutagenSource
     public AntType From = AntType.Wasp;   // the body it lies in (rendering)
     public float Work = Mutations.ExtractWork, Done;
     public int Units = 1;
+    public int Strength = 1;              // the core's strength, 1-3: the glow and the colony power it gives
     public int Carrier = -1, CarrierSerial;
     public int Carvers;                   // workers carving this tick
     public bool Home;                     // delivered to the queen's reserve
@@ -164,9 +173,9 @@ public sealed partial class Sim
     public readonly List<MutagenSource> Mutagens = new();
     int _nextMutagen;
 
-    public MutagenSource AddMutagen(Vector2 p, string name, AntType from, float work = Mutations.ExtractWork, int units = 1)
+    public MutagenSource AddMutagen(Vector2 p, string name, AntType from, float work = Mutations.ExtractWork, int units = 1, int strength = 1)
     {
-        var m = new MutagenSource { Id = _nextMutagen++, Pos = p, Name = name, From = from, Work = work, Units = units, Heading = Rng.R(0, DMath.Tau) };
+        var m = new MutagenSource { Id = _nextMutagen++, Pos = p, Name = name, From = from, Work = work, Units = units, Strength = System.Math.Clamp(strength, 1, 3), Heading = Rng.R(0, DMath.Tau) };
         Mutagens.Add(m);
         return m;
     }
@@ -225,14 +234,18 @@ public sealed partial class Sim
         if (m == null || team != 0 || !m.Offers(mu)) return false;
         var c = Col[team];
         if (!c.Alive || c.Mutagen < 1 || (c.Mutations & (int)mu) != 0) return false;
+        int gain = Mutations.CoreTake(c.Mutagen, c.Cores);
+        c.Cores = System.Math.Max(0, c.Cores - gain);
         c.Mutagen--;
+        c.Power = System.Math.Min(Mutations.PowerCap, c.Power + gain);
         c.Mutations |= (int)mu;
         c.Instability++;
         if (mu == Mutation.WebThrowing) c.WebRank = System.Math.Max(c.WebRank, 1);
         m.Mutated++;
         Reapply();
         if (mu == Mutation.RoyalLarva) LayRoyalLarva(team, AntType.Warlord, Mutations.LarvaNeed, Mutations.CocoonTime);
-        Events.Add(new SimEvent { Kind = EvKind.Mutate, Pos = ChamberPos(team, Royal(team)), Team = team, Tier = (int)mu });
+        // the burst rises from the queen's chamber; the sky beam stands over the entrance (To)
+        Events.Add(new SimEvent { Kind = EvKind.Mutate, Pos = ChamberPos(team, Royal(team)), To = NestEntrance(team), Team = team, Tier = (int)mu, Radius = gain });
         return true;
     }
 
@@ -312,6 +325,9 @@ public sealed partial class Sim
         if (a.Team == 1) { a.MaxHp *= 1 + Mutations.RedPerInstability * Col[0].Instability; return; }
         if (a.Team != 0) return;
         var c = Col[0];
+        // the cores the queen consumed: the whole colony, workers included, grows stronger
+        a.MaxHp *= 1 + Mutations.PowerHp * c.Power;
+        a.DmgMul *= 1 + Mutations.PowerBite * c.Power;
         if (!Config.IsWarrior(a.Type)) return;
         a.MaxHp *= 1 + Mutations.LevelHp * (c.Level - 1);
         if (Has(0, Mutation.IronChitin)) a.MaxHp *= 1.15f;
@@ -348,7 +364,7 @@ public sealed partial class Sim
         {
             int sr = t.Serial;
             if (m.Groups[m.FragmentGroup].Exists(g => g.id == id && g.serial == sr))
-                m.Gland = AddMutagen(t.Pos, "the silk spitter's spinneret", AntType.Spider, Mutations.ExtractWork * 0.7f);
+                m.Gland = AddMutagen(t.Pos, "the silk spitter's spinneret", AntType.Spider, Mutations.ExtractWork * 0.7f, 1, 1);
         }
         if (m == null || m.MasterGroup < 0 || t.Team != Config.Wild || t.Level < 4) return; // the master, not its brood
         int serial = t.Serial;
@@ -374,6 +390,7 @@ public sealed partial class Sim
                 // into the queen's reserve: she consumes it when the colony mutates
                 var c = Col[a.Team];
                 c.Mutagen += m.Units;
+                c.Cores += m.Units * m.Strength;
                 c.MutagenGathered += m.Units;
                 m.Home = true; m.Carrier = -1;
                 a.MutaP1 = 0; a.MutaCarry = false; a.State = AntState.Forage;
@@ -588,7 +605,9 @@ public sealed partial class Sim
         c.Instability = roster != null ? System.Math.Max(roster.Instability, Mutations.Count(story)) : Mutations.Count(story);
         c.Level = roster?.Level ?? Levels.StoryLevel(chapter);
         c.Mutagen = roster?.Mutagen ?? 0;
-        if (Mission != null && Mission.Chapter == Reveal.RoyalLarva) c.Mutagen = System.Math.Max(c.Mutagen, 1); // Ashling's body
+        c.Cores = roster?.Cores ?? 0;
+        c.Power = roster?.Power ?? 0;
+        if (Mission != null && Mission.Chapter == Reveal.RoyalLarva && c.Mutagen < 1) { c.Mutagen = 1; c.Cores = System.Math.Max(c.Cores, 3); } // Ashling's body: a blazing core
         if (Has(0, Mutation.RoyalLarva) && Mission?.Chapter != Reveal.RoyalLarva && c.Founded && ChamberOf(0, ChamberKind.Nursery) == null)
             AddChamber(0, ChamberKind.Nursery, Mutations.NurseryWork, true);
         RecountCapacity(c);

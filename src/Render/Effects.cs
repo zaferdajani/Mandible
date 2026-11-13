@@ -6,7 +6,7 @@ namespace Mandible;
 /// CPU particles (dust, hemolymph, crumbs) and command markers, drawn with one MultiMesh.
 public sealed class Effects
 {
-    struct P { public Vector3 Pos, Vel; public float Life, Max, Size, Kind, Grav; }
+    struct P { public Vector3 Pos, Vel; public float Life, Max, Size, Kind, Grav, Seed; }
     readonly List<P> _ps = new();
     readonly Batch _batch;
     readonly Rng _rng = new(99);
@@ -36,8 +36,28 @@ public sealed class Effects
         for (int i = 0; i < count; i++)
         {
             var d = new Vector3(_rng.R(-1, 1), _rng.R(0.3f, 1.2f), _rng.R(-1, 1)).Normalized();
-            _ps.Add(new P { Pos = at, Vel = d * speed * _rng.R(0.4f, 1f), Life = 0, Max = life * _rng.R(0.6f, 1.2f), Size = size * _rng.R(0.6f, 1.3f), Kind = kind, Grav = kind < 0.5f ? 0.6f : 9f });
+            _ps.Add(new P { Pos = at, Vel = d * speed * _rng.R(0.4f, 1f), Life = 0, Max = life * _rng.R(0.6f, 1.2f), Size = size * _rng.R(0.6f, 1.3f), Kind = kind, Grav = kind < 0.5f ? 0.6f : kind is > 10.5f and < 11.5f ? 1.2f : 9f, Seed = _rng.R(0, 1) });
         }
+    }
+
+    /// Flung outward along the ground from `at` (a shockwave's debris): mostly level, a little lift.
+    public void Radial(Vector3 at, int count, float kind, float speed, float size, float life, float lift)
+    {
+        if (_ps.Count > 2500) return;
+        for (int i = 0; i < count; i++)
+        {
+            float a = _rng.R(0, Mathf.Tau);
+            var d = new Vector3(Mathf.Cos(a), _rng.R(0.05f, 0.3f) + lift, Mathf.Sin(a)).Normalized();
+            var start = at + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * _rng.R(0.2f, 2.2f);
+            _ps.Add(new P { Pos = start, Vel = d * speed * _rng.R(0.5f, 1f), Life = 0, Max = life * _rng.R(0.6f, 1.2f), Size = size * _rng.R(0.6f, 1.4f), Kind = kind, Grav = kind > 11.5f ? 3f : kind < 0.5f ? 0.6f : 9f, Seed = _rng.R(0, 1) });
+        }
+    }
+
+    /// One mote drifting upward (the column of light).
+    public void Rise(Vector3 at, float kind, float speed, float size, float life)
+    {
+        if (_ps.Count > 2500) return;
+        _ps.Add(new P { Pos = at, Vel = new Vector3(_rng.R(-0.3f, 0.3f), speed, _rng.R(-0.3f, 0.3f)), Life = 0, Max = life, Size = size, Kind = kind, Grav = -0.5f, Seed = _rng.R(0, 1) });
     }
 
     public void Marker(Vector3 at, Color c, float scale = 1f)
@@ -66,15 +86,15 @@ public sealed class Effects
             p.Life += dt;
             if (p.Life >= p.Max) { _ps[i] = _ps[^1]; _ps.RemoveAt(_ps.Count - 1); continue; }
             p.Vel.Y -= p.Grav * dt;
-            p.Vel *= 1 - dt * (p.Kind < 0.5f ? 2.5f : 0.5f);
+            p.Vel *= 1 - dt * (p.Kind < 0.5f ? 2.5f : p.Kind > 11.5f ? 1.6f : 0.5f);
             p.Pos += p.Vel * dt;
             float g = _hf.Sample(p.Pos.X, p.Pos.Z) + 0.05f;
-            if (p.Pos.Y < g) { p.Pos.Y = g; p.Vel *= 0.3f; }
+            if (p.Pos.Y < g && p.Grav > 0) { p.Pos.Y = g; p.Vel *= 0.3f; }
             _ps[i] = p;
             float t = p.Life / p.Max;
             float alpha = (p.Kind < 0.5f ? 0.55f : 0.9f) * (1 - t) * Mathf.Min(1, p.Life * 12);
             float size = p.Size * (p.Kind < 0.5f ? 1 + t * 1.8f : 1);
-            _batch.Add(Basis.Identity, p.Pos, new Color(alpha, size, p.Kind, 0));
+            _batch.Add(Basis.Identity, p.Pos, new Color(alpha, size, p.Kind, p.Seed));
         }
         _batch.End();
     }

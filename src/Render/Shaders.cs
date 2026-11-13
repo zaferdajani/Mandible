@@ -1581,11 +1581,14 @@ void fragment() {
     float r = length(UV - 0.5) * 2.0;
     float a = (1.0 - smoothstep(0.2, 1.0, r));
     // kinds: 0 dust, 1 hemolymph, 2 gold sparks, 3 silk, 4 acid, 5 venom, 6 shell gleam, 7 scarlet sparks,
-    // 8 amber ant hemolymph, 9 cloudy spider hemolymph, 10 acid vapour
+    // 8 amber ant hemolymph, 9 cloudy spider hemolymph, 10 acid vapour, 11 mutagen sparks, 12 leaf litter
     float k = v_c.z;
     vec3 col = k < 0.5 ? vec3(0.62, 0.52, 0.40) : k < 1.5 ? vec3(0.78, 0.82, 0.30) : k < 2.5 ? vec3(1.0, 0.85, 0.5) : k < 3.5 ? vec3(0.95, 0.95, 0.92)
              : k < 4.5 ? vec3(0.55, 0.98, 0.18) : k < 5.5 ? vec3(0.72, 0.38, 0.95) : k < 6.5 ? vec3(0.45, 0.95, 0.8) : k < 7.5 ? vec3(1.0, 0.42, 0.22)
-             : k < 8.5 ? vec3(0.86, 0.62, 0.16) : k < 9.5 ? vec3(0.82, 0.8, 0.6) : vec3(0.86, 0.92, 0.72);
+             : k < 8.5 ? vec3(0.86, 0.62, 0.16) : k < 9.5 ? vec3(0.82, 0.8, 0.6) : k < 10.5 ? vec3(0.86, 0.92, 0.72)
+             : k < 11.5 ? mix(vec3(0.78, 0.6, 1.0), vec3(0.7, 1.0, 0.78), fract(v_c.w * 7.0)) : mix(vec3(0.52, 0.34, 0.14), vec3(0.74, 0.56, 0.24), fract(v_c.w * 5.0));
+    // 12 leaf litter: a torn flake, not a soft dot
+    if (k > 11.5) { vec2 q = (UV - 0.5) * mat2(vec2(cos(v_c.w * 9.0), -sin(v_c.w * 9.0)), vec2(sin(v_c.w * 9.0), cos(v_c.w * 9.0))); a = 1.0 - smoothstep(0.32, 0.4, abs(q.x) * 1.9 + abs(q.y) * 0.8); }
     ALBEDO = col;
     ALPHA = a * v_c.x;
 }

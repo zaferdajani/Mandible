@@ -204,6 +204,7 @@ public sealed class Colony
     public float Organic = Config.StartOrganic, OrganicGathered, OrganicEaten;
     // mutation (Mutation.cs): the campaign colony only; zero everywhere else
     public int Mutagen, Mutations, Instability, Level = 1, WebRank;
+    public int Cores, Power;              // core strength waiting in the reserve; colony-wide power from consumed cores
     public float MutagenGathered;
     public int LarvaStage;            // 0 none, 1 laid (waiting for the nursery), 2 a larva the nurses feed, 3 a cocoon
     public AntType LarvaHero = AntType.Warlord;
@@ -728,9 +729,9 @@ public sealed partial class Sim
             Mix(c.Founded ? 1u : 0u); Mix(F(c.FoodCap));
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
-            Mix((uint)c.Mutagen); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
+            Mix((uint)c.Mutagen); Mix((uint)c.Cores); Mix((uint)c.Power); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
         }
-        foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
+        foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Strength); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json

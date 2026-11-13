@@ -28,6 +28,7 @@ public sealed class ColonyRoster
     public readonly List<Veteran> Veterans = new();     // veterans, heroes and named ants
     // the mutation track: mutations taken (Mutation bits), mutagen in the reserve, the colony's level and instability
     public int Mutations, Mutagen, Level = 1, Instability, WebRank;
+    public int Cores, Power;                            // core strength in the reserve; colony power from consumed cores
     public int Total { get { int n = Veterans.Count; foreach (int p in Plain) n += p; return n; } }
 
     public string Save()
@@ -39,7 +40,7 @@ public sealed class ColonyRoster
         for (int t = 0; t < Plain.Length; t++) sb.Append(Plain[t]).Append(',');
         sb.Append('|');
         foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(':').Append(v.Skills).Append(';');
-        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability).Append(',').Append(WebRank);
+        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability).Append(',').Append(WebRank).Append(',').Append(Cores).Append(',').Append(Power);
         return sb.ToString();
     }
 
@@ -63,6 +64,7 @@ public sealed class ColonyRoster
             var mu = parts[4].Split(',');
             if (mu.Length >= 4) { r.Mutations = int.Parse(mu[0]); r.Mutagen = int.Parse(mu[1]); r.Level = int.Parse(mu[2]); r.Instability = int.Parse(mu[3]); }
             if (mu.Length >= 5) r.WebRank = int.Parse(mu[4]);
+            if (mu.Length >= 7) { r.Cores = int.Parse(mu[5]); r.Power = int.Parse(mu[6]); }
         }
         return r;
     }
@@ -72,6 +74,9 @@ public sealed class ColonyRoster
     {
         bool rankUp = m == Mutation.WebThrowing && (Mutations & (int)m) != 0 && WebRank < 3;
         if (Mutagen < 1 || (Mutations & (int)m) != 0 && !rankUp) return false;
+        int gain = Mandible.Mutations.CoreTake(Mutagen, Cores);
+        Cores = Math.Max(0, Cores - gain);
+        Power = Math.Min(Mandible.Mutations.PowerCap, Power + gain);
         Mutagen--;
         Mutations |= (int)m;
         Instability++;
@@ -242,9 +247,9 @@ public sealed partial class Sim
     {
         var m = Mission;
         var c0 = Col[0];
-        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability, WebRank = c0.WebRank };
+        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability, WebRank = c0.WebRank, Cores = c0.Cores, Power = c0.Power };
         // a dead queen's body holds mutagen, and every queen or nest master the colony defeats raises its level
-        if (m != null && Winner == Config.Player && !Col[1].Alive && m.EndsWithQueen && chapter >= Reveal.FirstQueenKill) { r.Mutagen++; r.Level++; }
+        if (m != null && Winner == Config.Player && !Col[1].Alive && m.EndsWithQueen && chapter >= Reveal.FirstQueenKill) { r.Mutagen++; r.Cores += Mandible.Mutations.QueenCore; r.Level++; }
         if (m != null) r.Level += m.MastersSlain;
         foreach (var ch in Col[0].Chambers) if (ch.Built) r.Chambers.Add(ch.Kind);
         int named = 0;

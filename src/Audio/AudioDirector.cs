@@ -32,7 +32,7 @@ public partial class AudioDirector : Node
 
         Bank("bite", 5, "bite_");
         Bank("death", 3, "death_");
-        foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat", "levelup", "web", "web_land", "sweep", "sting", "research" })
+        foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat", "levelup", "mutate", "mutate_queen", "web", "web_land", "sweep", "sting", "research" })
             Bank(s, 1, s);
 
         _calm = Loop("music_calm", "Music");

@@ -52,6 +52,30 @@ public static class MutationCapture
             gs.Camera.JumpTo(gland.Pos, 10); await Shot("haul-close", 2f);
             gs.Camera.JumpTo(gland.Pos, 55); await Shot("haul", 1.5f);
 
+            // ---- the radiating core: a queen's core (strength 3) in the carrier's jaws at play zoom; a general's burst;
+            // the queen's mutation with its column of light (targets M2, M3: docs/art-targets/REVIEW-mutation-core.jpg)
+            gland.Strength = 3;
+            gs.SetPaused(false); await Wait(0.3f); gs.SetPaused(true);
+            gs.Camera.JumpTo(gland.Pos, 40); await Shot("core-carried", 1.5f);
+            gs.SetPaused(false);
+            var gAt = haulAt + new Vector2(-10, 4);
+            int general = sim.Spawn(0, AntType.Marshal, gAt, 0);
+            gs.Camera.JumpTo(gAt, 40);
+            await Wait(0.8f);
+            gs.GeneralBurst(general, 2);
+            await Shot("general-burst", 0.45f);
+            await Wait(3f);
+            sim.Col[0].Mutagen = 1; sim.Col[0].Cores = 3;
+            sim.Mission.Fixed = Mutation.Stinger;
+            sim.Col[0].Mutations &= ~(int)Mutation.Stinger;
+            gs.Camera.PitchOverride = 38;
+            gs.Camera.JumpTo(home - toward * 10, 70);
+            await Wait(0.8f);
+            // called outside a tick, its event would be cleared before the frame reads it: hand it to the session directly
+            if (sim.Mutate(0, Mutation.Stinger)) gs.MutationMoment(sim.Events[^1]);
+            await Shot("queen-beam", 1.1f);
+            gs.Camera.PitchOverride = 0;
+
             // ---- H3: the royal nursery, the larva's bed and the heap of food half piled
             app.StartEpisode(Reveal.RoyalLarvaId);
             gs = app.Session; gs.Hud.CloseBriefing();

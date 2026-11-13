@@ -38,7 +38,9 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   (`World.Obstacles`, `W.Blocked`), no pathfinding. No water exists anywhere yet.
 - Campaign: `Levels.cs` (setup + objectives per level id, `Levels.Order` maps ids to numbers), `Expedition` objectives
   and steps, `CampaignColony.cs` (persistent roster, veterans; Burr is tracked by name), `CampaignReveal.cs` (what each
-  chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon).
+  chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon;
+  each gland is a radiating core of `Strength` 1-3 that becomes `Colony.Power`, +hp/bite for every ant, saved in the roster).
+  Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at

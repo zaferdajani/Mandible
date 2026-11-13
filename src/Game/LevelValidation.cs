@@ -489,6 +489,11 @@ public static class LevelValidation
         Check(m.Gland.Home && c.MutagenGathered >= 1, "The gland was not carried home");
         Check(s.Has(0, Mutation.Stinger) && c.Instability == 1 && c.Mutagen == 0, $"The queen did not take the venom stingers (mutations {c.Mutations}, instability {c.Instability}, mutagen {c.Mutagen})");
         Check(m.Stings > 0, "No flyer ever stung after the mutation");
+        // the radiating core: the queen wasp's gland is a strong core (2), and its power reaches every ant, workers included
+        Check(m.Gland.Strength == 2 && c.Power == 2 && c.Cores == 0, $"The core's strength did not become colony power (strength {m.Gland.Strength}, power {c.Power}, cores {c.Cores})");
+        int wk = -1; for (int i = 0; i < s.High && wk < 0; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].Type == AntType.Worker) wk = i;
+        if (wk >= 0) Check(s.Ants[wk].MaxHp >= Config.Of(AntType.Worker).Hp * Config.HpMul(AntType.Worker, s.Ants[wk].Level) * (1 + Mandible.Mutations.PowerHp * 2) * 0.999f, "The colony's power did not toughen its workers");
+        Check(LastHarvest.Power == 2 && ColonyRoster.Load(LastHarvest.Save()).Power == 2, "The colony's power did not walk out of the Silk Trap");
         Check(LastHarvest.Mutations == (int)Mutation.Stinger && LastHarvest.Instability == 1, "The stingers did not walk out of the Silk Trap");
         GD.Print($"[campaign-test] PASS Silk Trap: gland carved and hauled home, stingers taken (stings {m.Stings}), web spider {(m.MastersSlain > 0 ? "slain" : "left alive")}, colony level {LastHarvest.Level}");
         // venom: a stinging flyer's strike keeps burning
@@ -602,8 +607,10 @@ public static class LevelValidation
         int cinder = Levels.IdAt(Reveal.RoyalLarva + 1);
         var intoCinder = CampaignProgress.RosterFor(cinder);
         Check(intoCinder != null && (intoCinder.Mutations & (int)offer[0]) != 0 && intoCinder.Instability == 3 && intoCinder.Mutagen == 0, "The chosen mutation did not reach the next chapter");
+        Check(intoCinder.Power > 2, $"The later cores added no colony power (power {intoCinder.Power})");
         Carry = intoCinder;
         var q = Open(app, cinder, out _);
+        Check(q.Col[0].Power == intoCinder.Power, "The colony's power did not reach Queen Cinder's chapter");
         Check(q.Has(0, offer[0]) && q.Col[0].Instability == 3 && (hemlock == null || q.Col[0].Count[(int)AntType.Warlord] > 0), "Queen Cinder did not begin with the mutation, the instability and the Warlord");
         int wild = -1; for (int i = 0; i < q.High; i++) if (q.Ants[i].Alive && q.Ants[i].Team == Config.Wild) { wild = i; break; }
         if (wild >= 0) Check(q.Ants[wild].MaxHp > Config.Of(q.Ants[wild].Type).Hp * Config.HpMul(q.Ants[wild].Type, q.Ants[wild].Level) * 1.1f, "Instability did not toughen the woods");

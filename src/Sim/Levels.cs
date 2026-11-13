@@ -633,7 +633,7 @@ public sealed partial class Sim
                 GroupBug(g, AntType.Spider, web + away * 6.5f, 4);
                 GroupBug(g, AntType.Spider, web + away * 9 + side * 5, 1);
                 foreach (var (bug, _) in m.Groups[g]) Ants[bug].Home = Ants[bug].Pos; // each keeps to its own strand
-                m.Gland = AddMutagen(web, "the queen wasp's gland", AntType.Wasp);
+                m.Gland = AddMutagen(web, "the queen wasp's gland", AntType.Wasp, Mutations.ExtractWork, 1, 2);
                 m.Fixed = Mutation.Stinger;
                 // the red scouts smell the mutation too: their raid comes once the colony has changed
                 m.WaveFrom = foe + (home - foe).Normalized() * 12;

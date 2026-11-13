@@ -139,7 +139,7 @@ public sealed partial class Sim
         var m = Mission;
         if (m.GlandId >= 0) return;
         if (m.QueenAlive(this)) { m.QueenAt = Ants[m.IslandQueen].Pos; return; }
-        var g = AddMutagen(m.QueenAt + new Vector2(1.3f, 0f), "the island queen's mutagen gland", AntType.Queen, Mutations.ExtractWork, 0);
+        var g = AddMutagen(m.QueenAt + new Vector2(1.3f, 0f), "the island queen's mutagen gland", AntType.Queen, Mutations.ExtractWork, 0, 3);
         m.GlandId = g.Id;
     }
 

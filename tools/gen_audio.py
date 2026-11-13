@@ -562,9 +562,72 @@ def music_battle():
     save("music_battle", loopify(out, L), -6)
 
 
+def _crackle(dur, f0, f1, density0, density1, seed):
+    # electric crackle that rises: ever denser, ever brighter clicks of band-passed noise
+    r = np.random.default_rng(seed)
+    n = int(dur * SR)
+    out = np.zeros(n)
+    t = 0.0
+    while t < dur:
+        k = t / dur
+        dens = density0 + (density1 - density0) * k * k
+        t += r.exponential(1.0 / dens)
+        s = int(t * SR)
+        if s >= n - 400:
+            break
+        ln = int(r.uniform(0.002, 0.012) * SR)
+        f = f0 + (f1 - f0) * k
+        c = bp(r.standard_normal(ln) * np.exp(-np.linspace(0, 6, ln)), f * 0.6, min(f * 1.6, SR / 2 - 100))
+        out[s:s + ln] += c * r.uniform(0.3, 1.0) * (0.4 + 0.6 * k)
+    return out
+
+
+def _thump(dur, f_hi, f_lo):
+    # a deep body blow: a sine falling from f_hi to f_lo with a soft attack and a long tail
+    t = t_axis(dur)
+    f = f_lo + (f_hi - f_lo) * np.exp(-t * 6)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    body = np.sin(ph) + 0.35 * np.sin(2 * ph)
+    return body * np.exp(-t * 1.6) * np.minimum(1, t / 0.012)
+
+
+def mutate():
+    # any mutation: a deep impact under a rising crackle, a violet shimmer on top (2.8 s)
+    n = int(2.8 * SR)
+    out = np.zeros(n)
+    th = _thump(2.4, 95, 38)
+    out[:len(th)] += th * 1.0
+    cr = _crackle(1.6, 900, 5200, 12, 260, 31)
+    s = int(0.15 * SR)
+    out[s:s + len(cr)] += cr * 0.55
+    sh = fm_bell(note("E5"), 1.8, ratio=2.41, index=1.1, decay=0.7) + fm_bell(note("B5"), 1.8, ratio=3.7, index=0.8, decay=0.6) * 0.5
+    s = int(1.1 * SR)
+    out[s:s + len(sh)] += sh[: n - s] * 0.22
+    save("mutate", fade(add_reverb(out, 0.32, 2.2, 0.6, 3500), 0.002, 0.4), -3)
+
+    # the queen mutates: the same blow, then a great swell that rises with the column of light (4 s)
+    n = int(4.2 * SR)
+    out = np.zeros(n)
+    th = _thump(3.0, 80, 31)
+    out[:len(th)] += th * 1.1
+    cr = _crackle(2.4, 700, 6000, 10, 320, 37)
+    s = int(0.1 * SR)
+    out[s:s + len(cr)] += cr * 0.5
+    pad = saw_pad([note(c) for c in ["E2", "B2", "E3", "G#3", "B3"]], 3.6, cutoff=700, detune=0.011)
+    t = t_axis(3.6)
+    swell = np.minimum(1, t / 2.0) ** 2 * np.exp(-np.maximum(0, t - 2.4) * 2.2)
+    pad = lp_tv(pad * swell, 300 + 3200 * np.minimum(1, t / 2.4))
+    s = int(0.3 * SR)
+    out[s:s + len(pad)] += pad[: n - s] * 0.55
+    sh = fm_bell(note("B5"), 2.0, ratio=2.41, index=1.2, decay=0.8) + fm_bell(note("E6"), 2.0, ratio=3.7, index=0.8, decay=0.6) * 0.5
+    s = int(2.2 * SR)
+    out[s:s + len(sh)] += sh[: n - s] * 0.25
+    save("mutate_queen", fade(add_reverb(out, 0.38, 2.8, 0.7, 3200), 0.002, 0.6), -2)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    jobs = [amb_yard, swarm, bites, deaths, small_sfx, ui, alerts, levelup, abilities, music_calm, music_battle]
+    jobs = [amb_yard, swarm, bites, deaths, small_sfx, ui, alerts, levelup, abilities, music_calm, music_battle, mutate]  # mutate last: the shared rng stays as it was for the rest
     only = sys.argv[1:]
     for j in jobs:
         if only and j.__name__ not in only:
