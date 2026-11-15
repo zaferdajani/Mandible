@@ -707,14 +707,14 @@ def fly_hub():
         return c + Vector((math.cos(a) * 2.05 * s, 0.32 * math.sin(a * 2 + k) * wob, math.sin(a) * 1.6 * s - 0.14 * (1 - math.sin(a))))
     for k in range(10):
         off = Vector((rr.uniform(-0.05, 0.05), rr.uniform(-0.22, 0.22), rr.uniform(-0.05, 0.05)))
-        tube(silk, [ring(2 * math.pi * j / 44, 1.0, k) + off for j in range(45)], [rr.uniform(0.008, 0.014)] * 45, sides=3, cap=False)
+        tube(silk, [ring(2 * math.pi * j / 44, 1.0, k) + off for j in range(45)], [rr.uniform(0.016, 0.028)] * 45, sides=4, cap=False)
     for j in range(30):
         a = math.pi + math.pi * (j + 0.5) / 30
-        s = rr.choice((0.05, 0.06, 0.075, 0.1, 0.13))
+        s = rr.choice((0.08, 0.1, 0.12, 0.16, 0.2))
         blob(dew, ring(a) + Vector((rr.uniform(-0.04, 0.04), rr.uniform(-0.2, 0.2), -s * 0.9)), (s, s, s * 1.15), subdiv=2, rough=0.0)
     for j in range(12):
         a = math.pi * (j + 0.5) / 12
-        s = rr.choice((0.04, 0.05, 0.065))
+        s = rr.choice((0.06, 0.08, 0.1))
         blob(dew, ring(a) + Vector((0, rr.uniform(-0.2, 0.2), -s)), (s, s, s * 1.1), subdiv=1, rough=0.0)
     # ties from the ring out into the web
     for k in range(9):
@@ -722,8 +722,8 @@ def fly_hub():
         d = Vector((math.cos(a), 0, math.sin(a)))
         tube(silk, catenary(ring(a), ring(a) + d * rr.uniform(0.8, 1.3), 0.05, 5), [0.007] * 5, sides=3, cap=False)
     # the wrapping: loops of silk thrown round the fly's thorax and legs
-    for k in range(26):
-        centre = c + Vector((rr.uniform(-1.0, 0.2), rr.uniform(0.0, 0.3), rr.uniform(-0.5, 0.5)))
+    for k in range(46):
+        centre = c + Vector((rr.uniform(-1.2, 0.1), rr.uniform(0.0, 0.3), rr.uniform(-0.45, 0.45)))
         axis = Vector((rr.uniform(0.5, 1.0), rr.uniform(-0.4, 0.4), rr.uniform(-0.5, 0.5))).normalized()
         perp = axis.orthogonal().normalized()
         rad = rr.uniform(0.55, 0.95)
@@ -731,7 +731,7 @@ def fly_hub():
         for j in range(12):
             q = Matrix.Rotation(2 * math.pi * j / 11, 3, axis) @ perp
             loop.append(centre + q * rad + Vector((rr.uniform(-0.05, 0.05), rr.uniform(-0.05, 0.05), rr.uniform(-0.05, 0.05))))
-        tube(wrap, loop, [0.008] * 12, sides=3, cap=False)
+        tube(wrap, loop, [rr.uniform(0.014, 0.024)] * 12, sides=4, cap=False)
     ob = obj("hub_silk", silk); paint(ob, lambda p, n: (0.98, 0.9, 0.76))
     ob = obj("hub_wrap", wrap); paint(ob, lambda p, n: (0.96, 0.9, 0.78))
     ob = obj("hub_dew", dew); paint(ob, lambda p, n: (0.9, 0.95, 1.0))

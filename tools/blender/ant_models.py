@@ -38,8 +38,8 @@ OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else ""
 BODY, HEAD, GASTER, EYE = 0, 12, 13, 11
 # what CUSTOM0.y says about a surface (the Ant shader reads it): 1 a seta, and for the mutation units' borrowed
 # anatomy 2 spider silk, 3 beetle shell (uv.x counts its ridges), 4 a wasp's banded gaster (uv.x runs along it),
-# 5 a spider's velvet hair, 6 a fly's red compound eye
-SETA, SILK, SHELL, BANDS, VELVET, FLYEYE = 1.0, 2.0, 3.0, 4.0, 5.0, 6.0
+# 5 a spider's velvet hair, 6 a fly's red compound eye, 7 a spider's simple eye
+SETA, SILK, SHELL, BANDS, VELVET, FLYEYE, SPIDEREYE = 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0
 HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
 
 
@@ -239,7 +239,7 @@ CASTES = {
     # ant with the insect whose core the queen ate; merged() adds the other insect's anatomy to the scanned ant
     "Flyer": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True, merge="fly"),
     "Stinger": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True, merge="wasp"),
-    "WebAnt": dict(H=1.32, M=1.3, G=1.0, T=1.05, L=1.12, eye=0.95, merge="spider", legs8=True),
+    "WebAnt": dict(H=1.32, M=1.3, G=1.0, T=1.05, L=1.24, eye=0.95, merge="spider", legs8=True),
     "Armoured": dict(H=1.85, M=1.6, G=1.05, T=1.1, L=0.95, eye=0.9, groove=0.5, merge="beetle", plated=True),
     "Warlord": dict(H=1.8, M=2.4, G=1.1, T=1.25, L=1.05, eye=0.85, groove=1.0, spines=True, teeth=6, setae=1.6),
     "Matron": dict(H=1.15, M=1.0, G=1.0, T=1.15, L=1.0, eye=1.05, replete=True, setae=1.4),
@@ -536,12 +536,15 @@ def build(species, caste, lod):
             rad = [0.02 * r, 0.018 * r, 0.011, 0.0145, 0.0135, 0.0092, 0.0078, 0.008, 0.0072]
             if plated:
                 # a beetle's legs: broad flattened femora and tibiae, each a plate, the tibia widening to its spurred end
-                rad = [(0.026 * r, 0.026 * r), (0.023 * r, 0.023 * r), (0.015, 0.015), (0.027, 0.017), (0.025, 0.016), (0.014, 0.014), (0.017, 0.011), (0.02, 0.012), (0.013, 0.013)]
+                rad = [(0.03 * r, 0.03 * r), (0.026 * r, 0.026 * r), (0.017, 0.017), (0.036, 0.021), (0.033, 0.02), (0.017, 0.017), (0.022, 0.013), (0.027, 0.014), (0.015, 0.015)]
+            elif hairy:
+                # a spider's legs: stouter than an ant's, swelling at the knee and the ankle
+                rad = [0.022 * r, 0.02 * r, 0.013, 0.019, 0.0175, 0.0155, 0.0115, 0.011, 0.0115]
             if near:
                 pts, rad = resample(pts, rad, 2)
             elif not fine:
                 pts = [hip, troch, fe2, knee, ankle]
-                rad = [0.025 * r, 0.015, (0.025, 0.016), 0.014, 0.013] if plated else [0.019 * r, 0.011, 0.0135, 0.0092, 0.0072]
+                rad = [0.029 * r, 0.017, (0.033, 0.02), 0.017, 0.015] if plated else [0.021 * r, 0.013, 0.0175, 0.0155, 0.0115] if hairy else [0.019 * r, 0.011, 0.0135, 0.0092, 0.0072]
             secs = [(p, rr[0], rr[1]) if isinstance(rr, tuple) else (p, rr, rr) for p, rr in zip(pts, rad)]
             # tarsus: five beads, the first long, the claw segment last
             seglen = [0.4, 0.17, 0.14, 0.12, 0.17] if near else [0.55, 0.45]
@@ -578,11 +581,11 @@ def build(species, caste, lod):
             if hairy and fine:
                 # a spider's leg hair: fine bristles standing off the femur and the tibia
                 hr = random.Random(pid * 31 + i)
-                for a0, b0, cnt in ((troch, knee, 7 if near else 2), (knee, ankle, 8 if near else 3)):
+                for a0, b0, cnt in ((troch, knee, 10 if near else 2), (knee, ankle, 11 if near else 2)):
                     for k in range(cnt):
                         at = a0.lerp(b0, (k + 0.6) / (cnt + 0.4))
                         out = Vector((s * hr.uniform(0.2, 1.0), hr.uniform(0.3, 1.0), hr.uniform(-0.6, 0.6))).normalized()
-                        v, f = cone(at, at + out * hr.uniform(0.022, 0.036) + (b0 - a0).normalized() * 0.012, 0.0012 if near else 0.002, 3)
+                        v, f = cone(at, at + out * hr.uniform(0.028, 0.046) + (b0 - a0).normalized() * 0.014, 0.0017 if near else 0.0028, 3)
                         parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path, seta=SETA))
             for q in parts[first:]:
                 q.leg = (s, along[i], hip.copy(), [x.copy() for x in path])
@@ -945,7 +948,7 @@ def fit(parts, lod, body):
     total = lambda: sum(len(q.t) for q in parts)
     if total() <= budget:
         return
-    hairs = [q for q in parts if q.seta == SETA]
+    hairs = [q for q in parts if q.seta == SETA or getattr(q, "hair", False)]
     random.Random(11).shuffle(hairs)
 
     def thin(limit):
@@ -1050,13 +1053,18 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
             v, f = cone(at - nrm * 0.002, at + d * rnd.uniform(length * 0.65, length), radius, 3)
             out.append(make(v, f, 0, BODY, THORAX_R, seta=SETA))
 
-    def lofted_gaster(length, width, height, peak, droop, rise, n, flag):
-        """A gaster hung from the waist: a stalk, a swell (widest at `peak` of its length) and a tapering tip."""
+    def lofted_gaster(length, width, height, peak, droop, rise, n, flag, stalk=0.0, segs=0):
+        """A gaster hung from the waist: a narrow stalk over the first `stalk` of its length, a swell (widest at `peak`
+        of the rest) and a tapering tip; `segs` tergites, each rear rim standing proud of the next."""
         secs = []
         z0 = waist.z - 0.012
         for i in range(n + 1):
             t = i / n
-            env = math.sin(math.pi * t ** (math.log(0.5) / math.log(peak))) ** 0.75 if 0 < t < 1 else 0.0
+            u = (t - stalk) / (1 - stalk)
+            env = math.sin(math.pi * u ** (math.log(0.5) / math.log(peak))) ** 0.75 if 0 < u < 1 else 0.0
+            if segs and 0.06 < u < 0.94:
+                fr = u * segs - math.floor(u * segs)
+                env *= 1 + 0.07 * (1 - fr) ** 3
             c = Vector((0, waist.y - 0.006 + rise * math.sin(math.pi * t) - droop * t * t, z0 - length * t))
             secs.append((c, 0.012 + width * env, 0.012 + height * env))
         v, f = loft(secs, sides + 2)
@@ -1082,19 +1090,27 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
                 base, nrm = top(s * 0.035, waist.z + 0.2 * span)
                 if base is None:
                     continue
-                knob = base + Vector((s * 0.055, 0.03, -0.035))
-                v, f = loft([(base - nrm * 0.003, 0.0045, 0.0045), (base.lerp(knob, 0.6), 0.003, 0.003), (knob, 0.003, 0.003)], 4)
+                knob = base + Vector((s * 0.075, 0.045, -0.045))
+                v, f = loft([(base - nrm * 0.003, 0.006, 0.006), (base.lerp(knob, 0.6), 0.004, 0.004), (knob, 0.004, 0.004)], 4)
                 out.append(make(v, f, 0, BODY, THORAX_R))
-                v, f = ellipsoid(knob, 0.0095, 0.0095, 0.012, 3, 5, fwd=knob - base)
+                v, f = ellipsoid(knob, 0.016, 0.016, 0.02, 4, 6, fwd=knob - base)
                 out.append(make(v, f, lv, BODY, THORAX_R, membrane_fn=lambda q: 1.0))
             # the bristles of a fly's flight thorax, and a few on the crown
-            bristles(46 if near else 12, waist.z + 0.12 * span, waist.z + 0.92 * span, 0.05, 0.05, 0.0016 if near else 0.003)
+            bristles(70 if near else 16, waist.z + 0.12 * span, waist.z + 0.92 * span, 0.05, 0.065, 0.0022 if near else 0.0036)
             bristles(10 if near else 0, head.z - 0.3 * (head.z - neck.z), head.z + 0.3 * (head.z - neck.z), 0.03, 0.035, 0.0014)
 
     if kind == "wasp":
         # a wasp's gaster: spindle-shaped, hung low from a narrow waist, banded amber and black, tapering to the sting
         n = 16 if near else 10 if not far else 6
-        pr, secs = lofted_gaster(0.4, 0.088, 0.082, 0.36, 0.11, 0.015, n, BANDS)
+        n = 20 if near else 12 if not far else 7
+        pr, secs = lofted_gaster(0.46, 0.09, 0.084, 0.36, 0.12, 0.012, n, BANDS, stalk=0.15, segs=5)
+        # the fine pale hair of a wasp's gaster
+        cand = [k for k, nn in enumerate(pr.n) if nn.y > -0.2 and pr.coord[k][0] > 0.2]
+        for _ in range(50 if near else 0):
+            k = rnd.choice(cand)
+            d = (pr.n[k] + Vector((0, 0.1, -0.8))).normalized()
+            v, f = cone(pr.v[k] - pr.n[k] * 0.002, pr.v[k] + d * rnd.uniform(0.014, 0.024), 0.001, 3)
+            out.append(make(v, f, 0, GASTER, GASTER_R, seta=SETA))
         end = secs[-1][0]
         pts = [end + Vector((0, 0.004, 0.02)), end + Vector((0, -0.028, -0.035)), end + Vector((0, -0.07, -0.045)),
                end + Vector((0, -0.108, -0.022)), end + Vector((0, -0.124, 0.02))]
@@ -1106,49 +1122,54 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
         tip = pts[-1]
         if not far:
             # the bead of venom gathering at its point
-            v, f = ellipsoid(tip + Vector((0, -0.007, 0.003)), 0.0085, 0.0105, 0.0085, 4, 6)
+            v, f = ellipsoid(tip + Vector((0, -0.012, 0.004)), 0.014, 0.018, 0.014, 4, 6)
             out.append(make(v, f, lv, GASTER, GASTER_R, membrane_fn=lambda q: 1.0))
 
     if kind == "spider":
         # a spider's simple eyes: two more pairs on the brow, between and above the ant's own
         hl = head.z - neck.z
-        for x, zf, r in ((0.13, 0.62, 0.07), (0.27, 0.3, 0.058)):
+        for x, zf, r in ((0.13, 0.62, 0.095), (0.29, 0.3, 0.08)):
             for s in (-1, 1):
                 at, nrm = top(s * x * hw, head.z + zf * hl)
                 if at is None:
                     continue
-                v, f = ellipsoid(at - nrm * r * hw * 0.25, r * hw, r * hw, r * hw * 0.75, 3 if not near else 4, 6 if not far else 4, fwd=nrm, up=Vector((0, 0, 1)))
+                v, f = ellipsoid(at - nrm * r * hw * 0.1, r * hw, r * hw, r * hw * 0.85, 3 if not near else 4, 6 if not far else 4, fwd=nrm, up=Vector((0, 0, 1)))
                 out.append(make(v, f, lv, EYE, HEAD_R))
+                out[-1].seta = SPIDEREYE
         # a spider's abdomen where the gaster was: a soft hairy ovoid
         n = 14 if near else 9 if not far else 6
-        pr, secs = lofted_gaster(0.37, 0.118, 0.108, 0.5, 0.02, 0.035, n, VELVET)
+        pr, secs = lofted_gaster(0.4, 0.122, 0.112, 0.5, 0.02, 0.035, n, VELVET, stalk=0.08)
         cand = [k for k, nn in enumerate(pr.n) if nn.y > -0.45]
-        for _ in range(170 if near else 34 if not far else 0):
+        for _ in range(230 if near else 30 if not far else 0):
             k = rnd.choice(cand)
             p0, n0 = pr.v[k], pr.n[k]
             d = (n0 + Vector((0, 0.15, -0.55))).normalized()
             v, f = cone(p0 - n0 * 0.002, p0 + d * rnd.uniform(0.028, 0.05), 0.0012 if near else 0.0026, 3)
-            out.append(make(v, f, 0, GASTER, GASTER_R, seta=SETA))
+            out.append(make(v, f, 0, GASTER, GASTER_R, seta=VELVET))  # dark like the pelt they stand in, not an ant's golden setae
+            out[-1].hair = True
         # spinnerets: a pair and a median one, pale, at its tip
         end = secs[-1][0]
         tip = end + Vector((0, -0.012, -0.02))
-        for dx, dy in ((-0.016, -0.004), (0.016, -0.004), (0.0, -0.02)):
-            a = end + Vector((dx, dy, 0.02))
-            v, f = loft([(a, 0.0105, 0.0105), (a + Vector((dx * 0.4, -0.012, -0.03)), 0.008, 0.008), (a + Vector((dx * 0.7, -0.02, -0.05)), 0.0035, 0.0035)], 5 if not far else 3)
-            out.append(make(v, f, 0, GASTER, GASTER_R, membrane_fn=lambda q: 0.3))
+        for dx, dy in ((-0.024, -0.004), (0.024, -0.004), (0.0, -0.028), (-0.012, 0.016), (0.012, 0.016)):
+            a = end + Vector((dx, dy, 0.03))
+            v, f = loft([(a, 0.016, 0.016), (a + Vector((dx * 0.4, -0.014, -0.045)), 0.0125, 0.0125), (a + Vector((dx * 0.7, -0.024, -0.078)), 0.005, 0.005)], 5 if not far else 3)
+            out.append(make(v, f, 0, GASTER, GASTER_R, membrane_fn=lambda q: 0.5))
         bristles(26 if near else 8 if not far else 0, waist.z + 0.1 * span, waist.z + 0.9 * span, 0.04, 0.035, 0.0013 if near else 0.0026)
         # the net: an orb of silk held ready in the left front leg, to be thrown
         leg = next((q for q in parts if q.part == 1 and getattr(q, "leg", None) and q.leg[1] == 0.0), None)
         if leg is not None:
             path = leg.leg[3]
             ankle, foot = path[3], path[4]
-            c = foot + Vector((0.012, 0.13, 0.06))
+            c = foot + Vector((0.0, 0.165, 0.035))
             ax_u = Vector((0.72, 0.0, 0.69)).normalized()
             ax_v = Vector((-0.1, 1.0, 0.1)).normalized()
-            spokes = 8 if near else 6
-            rings = (0.25, 0.45, 0.64, 0.82, 1.0) if near else (0.4, 0.7, 1.0) if not far else (1.0,)
+            spokes = 10 if near else 5
+            rings = (0.25, 0.45, 0.64, 0.82, 1.0) if near else (0.5, 1.0) if not far else (1.0,)
             r = 0.0009 if near else 0.0018 if not far else 0.0032
-            rim = [c + ax_u * (math.cos(2 * math.pi * k / spokes + 0.3) * 0.13) + ax_v * (math.sin(2 * math.pi * k / spokes + 0.3) * 0.11) for k in range(spokes)]
+            rim = [c + ax_u * (math.cos(2 * math.pi * k / spokes + 0.3) * 0.17) + ax_v * (math.sin(2 * math.pi * k / spokes + 0.3) * 0.15) for k in range(spokes)]
+            # the lowest point of its rim is gathered into the claws of the foot that holds it
+            lowest = min(range(spokes), key=lambda k: rim[k].y)
+            rim[lowest] = foot + Vector((0, 0.012, 0))
             silk = []
             for k in range(spokes):
                 silk.append(strand(c, rim[k], r))
@@ -1157,9 +1178,9 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
                     mid = a.lerp(b, 0.5).lerp(c, 0.1)  # each thread sags toward the hub
                     silk.append(strand(a, mid, r))
                     silk.append(strand(mid, b, r))
-            low = sorted(rim, key=lambda q: q.y)[:2]
-            for q in low:
-                silk.append(strand(q, foot.lerp(ankle, 0.35), r))  # the guy threads its claws hold
+            for k in ((lowest - 1) % spokes, (lowest + 1) % spokes):
+                silk.append(strand(rim[k], foot.lerp(ankle, 0.5), r))  # the guy threads run up the tarsus
+            silk.append(strand(c, foot.lerp(ankle, 0.25), r))
             for v, f in silk:
                 pr = make(v, f, 0, 1, THORAX_R, leg.pivot)
                 pr.w = [0.92] * len(pr.v)
@@ -1179,10 +1200,11 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
                 th = th0 + (th1 - th0) * u
                 dome = math.sin(math.pi * t) ** 0.45 if 0 < t < 1 else 0.0
                 flare = 0.012 * abs(math.cos(th)) ** 2 + 0.03 * abs(2 * u - 1) ** 5
-                grid[key] = max(reach(c, th), 0.03) + 0.003 + (0.007 + flare) * (0.3 + 0.7 * dome)
+                lip = 0.014 * max(abs(2 * u - 1), abs(2 * t - 1)) ** 10  # the raised margin all round the shield
+                grid[key] = max(reach(c, th), 0.03) + 0.003 + (0.007 + flare) * (0.3 + 0.7 * dome) + lip
             return grid[key]
         out.append(shell(lambda t: Vector((0, cy, zA + (zB - zA) * t)), pro_r, th0, th1,
-                         8 if near else 5 if not far else 3, 18 if near else 10 if not far else 6, BODY, THORAX_R, thick=0.008))
+                         10 if near else 6 if not far else 3, 22 if near else 12 if not far else 6, BODY, THORAX_R, thick=0.012))
         # the wing cases: two ridged elytra closed over the abdomen, meeting at the suture
         L0, W, Hh = 0.45, 0.165, 0.135
         zf = waist.z - 0.03

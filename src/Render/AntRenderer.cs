@@ -215,7 +215,7 @@ public sealed class AntRenderer
         {
             var wm = new ShaderMaterial { Shader = wingShader };
             if (type == AntType.Wasp) { wm.SetShaderParameter("tint", new Color(0.82f, 0.62f, 0.3f)); wm.SetShaderParameter("vein", new Color(0.35f, 0.2f, 0.05f)); }
-            if (type == AntType.Flyer) wm.SetShaderParameter("body", 1.35f); // the winged ant's one broad pair (target P1)
+            if (type == AntType.Flyer) wm.SetShaderParameter("body", 1.6f); wm.SetShaderParameter("rest_lift", 0.55f); wm.SetShaderParameter("vein", new Color(0.07f, 0.045f, 0.02f)); // the winged ant's one broad pair (target P1)
             if (type == AntType.Marshal) { wm.SetShaderParameter("tint", new Color(0.95f, 0.85f, 0.6f)); wm.SetShaderParameter("vein", new Color(0.6f, 0.42f, 0.1f)); }
             _wings[(team, type)] = new Batch(root, AntMesh.Wings(type), wm, false, $"Wings{team}_{type}");
             _wings[(team, type)].Node.SortingOffset = 5;

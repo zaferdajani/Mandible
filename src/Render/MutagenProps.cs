@@ -245,7 +245,7 @@ void fragment() {
             // mostly violet, breathing toward green: nothing else in the woods is that colour, so it never reads as food
             var hue = new Color(0.62f, 0.42f, 1f).Lerp(new Color(0.55f, 1f, 0.62f), 0.25f + 0.25f * Mathf.Sin(_t * 0.9f));
             // the fly's veins breathe with its core, and go dark once the core is cut out of it
-            if (_flies.TryGetValue(m.Id, out var flyMat)) { flyMat.Emission = hue.Lerp(Colors.White, 0.45f); flyMat.EmissionEnergyMultiplier = m.Free ? 0.1f : 1.6f + 1.6f * pulse; }
+            if (_flies.TryGetValue(m.Id, out var flyMat)) { flyMat.Emission = hue.Lerp(new Color(0.5f, 1f, 0.55f), 0.45f + 0.35f * Mathf.Sin(_t * 0.9f + 1.5f)).Lerp(Colors.White, 0.3f); flyMat.EmissionEnergyMultiplier = m.Free ? 0.1f : 1.6f + 1.6f * pulse; }
             if (_cores.TryGetValue(m.Id, out var coreMat)) { coreMat.AlbedoColor = hue * (0.4f + 0.3f * pulse); coreMat.Emission = hue; coreMat.EmissionEnergyMultiplier = (0.15f + 0.25f * pulse) * (1 + 3f * zoom); } // never so bright it blooms to white
             // in her gaster until it is cut free; then in its carrier's jaws, or on the ground where it fell
             if (!m.Free && s.wasp == null)

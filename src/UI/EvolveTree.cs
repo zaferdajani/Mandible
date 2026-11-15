@@ -194,7 +194,7 @@ public sealed partial class EvolveTree : PanelContainer
             col++;
         }
 
-        var legend = UiTheme.Text("◆ BOUGHT  violet      ◆ CAN BUY  amber      ◆ LOCKED  dark", (int)(12 * S), UiTheme.Bold, new Color(0.86f, 0.76f, 0.62f));
+        var legend = UiTheme.Text("◆ BOUGHT  violet      ◆ CAN BUY  amber      ◆ LOCKED  dark", (int)(13.5f * S), UiTheme.Bold, new Color(0.86f, 0.76f, 0.62f));
         legend.Position = new Vector2(18 * S, size.Y - 30 * S);
         _body.AddChild(legend);
         var balance = UiTheme.Text($"ORGANIC MATTER  {(int)c.Organic}", (int)(16 * S), UiTheme.Title, new Color(1f, 0.8f, 0.45f));
@@ -211,7 +211,7 @@ public sealed partial class EvolveTree : PanelContainer
         head.Position = new Vector2(cx - colW / 2, 54 * S); head.Size = new Vector2(colW, 22 * S);
         head.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
         _body.AddChild(head);
-        var sub = UiTheme.Text(line, (int)(11 * S), UiTheme.Body, new Color(0.82f, 0.72f, 0.58f));
+        var sub = UiTheme.Text(line, (int)(12.5f * S), UiTheme.Body, new Color(0.92f, 0.82f, 0.68f));
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         sub.Position = new Vector2(cx - colW / 2, 71 * S); sub.Size = new Vector2(colW, 16 * S);
         _body.AddChild(sub);
@@ -251,13 +251,13 @@ public sealed partial class EvolveTree : PanelContainer
         if (press != null) b.Pressed += () => { press(); _game.Audio.Ui("research"); };
 
         // the plaque is as wide as a column allows, so neighbours never touch; its lines are clipped to it
-        state = state.Replace("  ·  ", " · ");
+        state = state.Replace("  ·  ", " · ").Replace(" ORGANIC", " ORG");
         var plaque = new PanelContainer { Position = new Vector2(c.X - 79 * S, c.Y + w.Y * 0.5f - 14 * S), CustomMinimumSize = new Vector2(158 * S, 0), Size = new Vector2(158 * S, 0), ClipContents = true, MouseFilter = MouseFilterEnum.Ignore };
-        plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.09f, 0.05f, 0.03f, 0.88f), afford ? Amber : bought ? Violet.Lerp(Green, 0.3f) : new Color(0.36f, 0.26f, 0.18f), 1, 7, 3));
+        plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(bought && !afford ? new Color(0.13f, 0.07f, 0.2f, 0.94f) : new Color(0.09f, 0.05f, 0.03f, 0.9f), afford ? Amber : bought ? Violet.Lerp(Green, 0.3f) : new Color(0.36f, 0.26f, 0.18f), bought || afford ? 2 : 1, 7, 3));
         var v = new VBoxContainer(); v.AddThemeConstantOverride("separation", -2);
-        var nm = UiTheme.Text(name, (int)(11 * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
+        var nm = UiTheme.Text(name, (int)(12.5f * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
         nm.HorizontalAlignment = HorizontalAlignment.Center; nm.ClipText = true;
-        var st = UiTheme.Text(state, (int)(9 * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
+        var st = UiTheme.Text(state, (int)(11.5f * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
         st.HorizontalAlignment = HorizontalAlignment.Center; st.ClipText = true;
         v.AddChild(nm); v.AddChild(st);
         plaque.AddChild(v);

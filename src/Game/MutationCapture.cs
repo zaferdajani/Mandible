@@ -138,17 +138,21 @@ public static class MutationCapture
         g.SetPaused(true);
         var hf = g.World.HF;
         var home = g.World.Nests[0].Pos;
-        // the flattest open patch of yard within reach of home
-        Vector2 stage = home + new Vector2(30, 0); float best = float.MaxValue;
+        // the units stand with the flank the lens sees toward the sun, so their bodies are lit, not silhouettes
+        var toSun = -(Basis.FromEuler(GameSession.SunAngles * (Mathf.Pi / 180f)) * Vector3.Forward);
+        float heading = Mathf.Atan2(toSun.Z, toSun.X) - Mathf.Pi * 0.5f + 0.75f;
+        var lensSide = new Vector2(toSun.X, toSun.Z).Normalized(); // where the lens stands, seen from the stage
+        // the flattest open patch of yard within reach of home, with the nest behind the lens, not in the picture
+        Vector2 stage = home + lensSide * 30; float best = float.MaxValue;
         for (int k = 0; k < 64; k++)
         {
             var p = home + new Vector2(Mathf.Cos(k * 0.7f), Mathf.Sin(k * 0.7f)) * (22 + k % 4 * 6);
             if (p.X < 30 || p.Y < 30 || p.X > Config.MapSize - 30 || p.Y > Config.MapSize - 30) continue;
+            if ((home - p).Normalized().Dot(lensSide) < 0.5f) continue;
             float rough = 0;
             for (int j = 0; j < 8; j++) { var q = p + new Vector2(Mathf.Cos(j), Mathf.Sin(j)) * 4; rough += Mathf.Abs(hf.Sample(q.X, q.Y) - hf.Sample(p.X, p.Y)) + (hf.Bilinear(hf.H, q.X, q.Y) - hf.Bilinear(hf.Ground, q.X, q.Y)) * 4; }
             if (rough < best) { best = rough; stage = p; }
         }
-        const float heading = 0.35f;
         void Clear() { for (int i = 0; i < sim.High; i++) { ref var a = ref sim.Ants[i]; if (a.Alive && a.Pos.DistanceTo(stage) < 16) a.Alive = false; } }
         var lens = new Camera3D { Fov = 38, Near = 0.02f, Far = 300 };
         if (g.Camera.Cam.Attributes is CameraAttributesPractical pa)

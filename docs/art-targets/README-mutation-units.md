@@ -43,9 +43,9 @@ The approved P3 and P4 were generated to answer the review and were not re-score
 - Rebuild the units: `blender --background --factory-startup --python tools/blender/ant_models.py -- <bin> Flyer Stinger WebAnt Armoured`
   (needs the specimen bodies, `ANT_BODIES`), then `godot --headless --path . --script res://tools/ant-bake.gd -- <bin> res://assets/ants`.
   `tools/blender/ant_look.py` renders a look sheet of the baked meshes.
-- Budgets (triangles, near / mid / far), each inside the caste it grew from (`BUDGET`, `fit()`): black winged 10646 / 4933 / 2446, black stinger
-  10692 / 4866 / 2398, black web ant 10699 / 3284 / 2260, black armoured 10657 / 4195 / 2561; the red colony's are within the same limits
-  except the red web ant's mid mesh, 31 triangles over 3295. Metadata `neck`, `gaster_tip`, `waist` as on every caste.
+- Budgets (triangles, near / mid / far), each inside the caste it grew from (`BUDGET`, `fit()`): black winged 10622 / 5161 / 2446, black stinger
+  10637 / 5207 / 2412, black web ant 10687 / 3293 / 2284, black armoured 10637 / 4295 / 2561; red winged 10558 / 4664 / 4211, red stinger
+  10619 / 4712 / 2489, red web ant 10696 / 3290 / 1816, red armoured 10567 / 3230 / 1819. All inside their limits. Metadata `neck`, `gaster_tip`, `waist` as on every caste.
 - The borrowed anatomy is marked per vertex in CUSTOM0.y (1 seta, 2 silk, 3 shell, 4 wasp bands, 5 velvet, 6 fly eye) and coloured by the Ant
   shader; no material differs from the caste's own.
 - Eight legs and the gait: the shader walks three leg slots a side in two alternating groups, so the web ant's fourth leg shares the second
@@ -60,19 +60,28 @@ The approved P3 and P4 were generated to answer the review and were not re-score
 Unit art scores: brief, merge, primitives, material, light, palette. Fly art: repetition, primitives, scale, material, light, palette.
 Tree art: layout, emblems, states, material, palette, legibility.
 
-| View | Round 1 | Round 2 (after fixes) | What the reviewers name |
-| --- | --- | --- | --- |
-| P1 winged ant, art | 2 2 1 2 2 3 fail | not re-run | the black body is a silhouette with stick legs; wings faint; halteres and bristles too small to see |
-| P2 stinger ant, art | 2 3 2 2 2 3 fail | not re-run | gaster reads as a smooth banded ellipsoid; waist and venom bead not seen; black body a silhouette |
-| P3 web ant, art | 2 2 2 2 3 3 fail | not re-run | the net reads as a white icon beside the leg, not held; extra eyes and spinnerets not seen; legs sticks |
-| P4 armoured ant, art | 2 2 2 2 3 3 fail | not re-run | shield has no rim; legs do not read as plated; head a dark mass |
-| Units at play zoom, read | 3 fail | 3 fail | web ants and plain ants alike at this size; bronze domes low in contrast on the soil |
-| P5 fly, art | 2 2 3 2 2 2 fail | not re-run | daylight, not the target's dusk; web threads even; the fly reads smooth and violet |
-| P5 fly, read | 3 fail | not re-run | wrapping and beads faint; no green in the glow; ground webs compete with the hanging web |
-| P6 tree, art | 3 3 3 3 4 2 fail | 3 4 4 4 5 3 fail | columns hold one or two plates, the target three; small text |
-| P6 tree, read (phone size) | 3 fail | 3 fail | status lines and sub-captions tiny at phone size; bought and affordable differ mainly by rim colour |
+| View | Round 1 | Round 2 | Round 3 (second art pass) | What the round-3 reviewer names |
+| --- | --- | --- | --- | --- |
+| P1 winged ant, art | 2 2 1 2 2 3 | not run | 2 2 2 2 3 3 fail | wings read as a faint ghost; halteres and bristles not seen; eye a red blob |
+| P2 stinger ant, art | 2 3 2 2 2 3 | not run | 2 2 2 2 3 3 fail | waist and wings not read; sting short; legs sticks |
+| P3 web ant, art | 2 2 2 2 3 3 | not run | 2 2 1 2 3 3 fail | net reads as a white overlay, not held; gaster a grey ball; head not readable |
+| P4 armoured ant, art | 2 2 2 2 3 3 | not run | 2 2 1 2 3 3 fail | shield reads as an angular card; wing-case ridges faint; legs not plated |
+| Units at play zoom, read | 3 | 3 | 3 fail | the kinds are now told apart, but stingers read as wasps and web ants as spiders; bronze weak on the soil |
+| P5 fly, art | 2 2 3 2 2 2 | not run | 3 2 3 2 2 2 fail | daylight, not the target's dusk; abdomen smooth and violet; beads evenly spaced |
+| P5 fly, read | 3 | not run | **4 pass** | ring could be more clearly beaded; glow could be stronger |
+| P6 tree, art | 3 3 3 3 4 2 | 3 4 4 4 5 3 | 3 4 4 3 4 3 fail | most columns hold one plate, the target three; tunnels above the plates read as thin lines |
+| P6 tree, read (phone size) | 3 | 3 | 3 fail | locked emblems dark; headings and plate lines still small; bought and affordable differ mainly in the label |
 
-After round 2 the tree's title strip was moved clear of the top edge and the web ant's gaster darkened again (round 2 had made it cream);
-those two changes are not scored. Known and not fixed: the black colony's bodies read as near-silhouettes in every close frame (the ant
-renderer's look for every caste, outside this build); plate text on the tree is 9-11 px at phone scale; the Sky Marshal still uses the
-torn male gaster.
+All scores fail unless marked. Round 2 re-ran three checks after fixes to the tree's footer and states and to play-zoom contrast.
+
+The second art pass (owner: "Another art pass", 2026-11-15) changed: stouter spider legs swelling at knee and ankle with longer hair; the net
+enlarged and its rim gathered into the foot that holds it; larger amber simple eyes and five spinnerets; the wasp gaster hung on a
+stalk with tergite lips, fine hair and a larger venom bead; larger halteres and stouter bristles; a rimmed, thicker pronotum shield and
+broader leg plates; resting wings raised off the back (`rest_lift`) with darker veins; thicker ring rope, larger dew beads and more wrapping
+on the fly, its glow breathing to green; larger text and a violet label for bought plates on the tree; the unit frames shot with the lit
+flank toward the lens. One check moved to a pass (the fly's readability); the art scores stayed at 1-3, as in every earlier gate in
+`docs/art-pipeline.md`, and the reviewers now pull in opposite directions (bronze too dark and too weak; web ants too pale and not pale enough).
+
+Known and not fixed: resting wings still flutter, so a frame can catch them low; the web ant's net is thin white strands with no
+translucency; plate text on the tree is 11-12 px at phone scale; the tree shows as many plates as the rules have nodes (one to three a
+column); P5's rupture is not modelled; the Sky Marshal still uses the torn male gaster.
