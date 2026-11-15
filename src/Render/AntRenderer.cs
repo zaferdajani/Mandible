@@ -414,6 +414,29 @@ public sealed class AntRenderer
                 b = new Basis(b.X.Normalized(), -0.07f * Brood.LayPulse(a.Team)) * b; // she lifts her head as the gaster presses an egg out
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
+            if (a.Root > 0) amp = 0.35f; // struggling in silk
+            if (callow.Active) amp = callow.Amp;
+            if (spoilRun) amp = 0.85f;
+            float camDist = camPos.DistanceTo(o);
+            // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
+            // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
+            float show = PlayScale(camDist), size = st.Size * show;
+            if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
+            var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
+            if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
+            data.A += 4 * callow.Pale;
+            // a Brood Call summons is a callow: pale and soft at first, darkening as its cuticle hardens
+            if (a.Summoned && !callow.Active) data.A += 4 * Mathf.RoundToInt(15 * Mathf.Clamp(0.85f - 0.8f * (a.Level - 1 + a.HardenT / Skills.HardenEvery) / Mathf.Max(1, a.SummonCap - 1), 0.05f, 0.85f));
+            int look = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team; // a borrowed ant keeps its own colony's body
+            var farBatch = _far[look, (int)a.Type];
+            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[look, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
+            if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
+            else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
+            else _live[look, (int)a.Type].Add(b, o, data);
+            if (a.CharmP1 > 0)
+                _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
+            if (flies && _wings.TryGetValue((look, a.Type), out var wb))
+                wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
             if (spoilCarry) _cargo[(int)FoodKind.Crumb].Add(b, o, data); // a pellet of sand: the crumb's mesh, its earthy colour
             if (a.Carrying && a.Type == AntType.Worker)
             {
