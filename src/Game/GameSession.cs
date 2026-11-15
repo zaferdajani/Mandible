@@ -13,6 +13,7 @@ public partial class GameSession : Node3D
     public World World;
     public Sim Sim;
     public AntRenderer Ants;
+    public SilkWorks Silk;
     public Effects Effects;
     public Carnage Gore;
     public Guidance Guide;
@@ -92,6 +93,8 @@ public partial class GameSession : Node3D
         if (Campaign) { Glow = new MutagenGlow(this); Props = new MutagenProps(this); }
         if (World.FirstNest) Straws = new StrawProps(this);
         Ants.Brood = Interior;
+        Silk = new SilkWorks(this);
+        Ants.Silk = Silk;
         var nestPos = World.Nests[Local.Me].Pos;
         Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
         BuildLighting();
@@ -902,6 +905,7 @@ public partial class GameSession : Node3D
         Interior.Update(Fog, NestView, _alpha);
         Glow?.Update(dt);
         Props?.Update(dt);
+        Silk?.Update(dt);
         Straws?.Update(dt);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
@@ -1090,6 +1094,7 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.WebShot:
                     if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
+                    if (seen && e.Team < 2) Silk?.Fling(World.HF.Point(e.Pos, 0.6f), World.HF.Point(e.To, 2.2f)); // a soldier's thread up to the flyer
                     break;
                 case EvKind.SpinneryDone:
                     if (e.Team == Local.Me && !Demo) Hud.Banner("The spinnery stands", "The silk ants live above ground now and lay trap webs on the approaches. Press K over a spot to re-aim one.", 5f);

@@ -165,7 +165,8 @@ public sealed class AntRenderer
     };
 
     readonly Dictionary<(int, AntType), Batch> _wings = new();
-    readonly Batch _cocoons, _webs, _blobs, _pools;
+    readonly Batch _cocoons, _pools;
+    internal SilkWorks Silk; // webs, trap webs and the spinnery; its silk ants are drawn with ours
 
     readonly Batch _pips;
     readonly Node3D _labelRoot;
@@ -205,9 +206,6 @@ public sealed class AntRenderer
         var silk = AntMesh.Silk();
         var silkMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Silk) };
         _cocoons = new Batch(root, silk, silkMat, true, "Cocoons");
-        _blobs = new Batch(root, silk, silkMat, true, "WebShots");
-        var webMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Web) };
-        _webs = new Batch(root, new PlaneMesh { Size = Vector2.One }, webMat, false, "Webs");
         var poolMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pool) };
         _pools = new Batch(root, new PlaneMesh { Size = Vector2.One }, poolMat, false, "AcidPools");
         _pools.Node.SortingOffset = 2;
@@ -344,7 +342,7 @@ public sealed class AntRenderer
         foreach (var cargo in _pieceCargo) cargo.Begin();
         _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin(); _drops.Begin(); _collectRing.Begin(); _queuedRing.Begin();
         foreach (var w in _wings.Values) w.Begin();
-        _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
+        _cocoons.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camUp = cam.GlobalTransform.Basis.Y.Normalized();
@@ -416,31 +414,6 @@ public sealed class AntRenderer
                 b = new Basis(b.X.Normalized(), -0.07f * Brood.LayPulse(a.Team)) * b; // she lifts her head as the gaster presses an egg out
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
-            if (a.Root > 0) amp = 0.35f; // struggling in silk
-            if (callow.Active) amp = callow.Amp;
-            if (spoilRun) amp = 0.85f;
-            float camDist = camPos.DistanceTo(o);
-            // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
-            // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
-            float show = PlayScale(camDist), size = st.Size * show;
-            if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
-            var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
-            if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
-            data.A += 4 * callow.Pale;
-            // a Brood Call summons is a callow: pale and soft at first, darkening as its cuticle hardens
-            if (a.Summoned && !callow.Active) data.A += 4 * Mathf.RoundToInt(15 * Mathf.Clamp(0.85f - 0.8f * (a.Level - 1 + a.HardenT / Skills.HardenEvery) / Mathf.Max(1, a.SummonCap - 1), 0.05f, 0.85f));
-            int look = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team; // a borrowed ant keeps its own colony's body
-            var farBatch = _far[look, (int)a.Type];
-            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[look, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
-            if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
-            else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
-            else _live[look, (int)a.Type].Add(b, o, data);
-            if (a.CharmP1 > 0)
-                _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
-            if (flies && _wings.TryGetValue((look, a.Type), out var wb))
-                wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
-            if (a.Root > 0)
-                _cocoons.Add(Orient(up, ih, size * 1.05f), o + up * (0.13f * size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (spoilCarry) _cargo[(int)FoodKind.Crumb].Add(b, o, data); // a pellet of sand: the crumb's mesh, its earthy colour
             if (a.Carrying && a.Type == AntType.Worker)
             {
@@ -607,28 +580,6 @@ public sealed class AntRenderer
             var no = new Vector3(nest.X, hf.Sample(nest.X, nest.Y) + 0.3f, nest.Y);
             _collectRing.Add(Basis.FromScale(new Vector3(r * 2, 1, r * 2)), no, new Color(0.95f, 0.62f, 0.22f, 0.65f));
         }
-        foreach (var z in sim.Webs)
-        {
-            if (!VisibleToPlayer(z.Pos)) continue;
-            float fade = Mathf.Clamp(z.Life / 1.2f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 5f + 0.2f, 0, 1);
-            var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
-            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(fade, 0, 0, 0));
-        }
-        // INTERIM (awaiting the owner's approval of targets S1-S3, docs/art-targets/README-silk.md): trap webs and the
-        // spinnery are drawn with the old flat decal so the mechanic can be played; the modelled silk replaces all three.
-        foreach (var z in sim.Traps)
-        {
-            if (z.Team != Local.Me && !VisibleToPlayer(z.Pos)) continue;
-            float grow = Mathf.Clamp(z.Age * 0.8f, 0.15f, 1f) * (0.55f + 0.15f * z.Charges);
-            var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
-            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f * grow, 1, z.R * 2.3f * grow)), wo, new Color(1, 0, 0, 0));
-        }
-        foreach (var c in sim.Col)
-        {
-            if (c.SpinState == 0 || (c.Team != Local.Me && !VisibleToPlayer(c.SpinPos))) continue;
-            float sz = 7f * Mathf.Lerp(0.3f, 1f, c.SpinDone);
-            _webs.Add(Basis.FromScale(new Vector3(sz, 1, sz)), new Vector3(c.SpinPos.X, hf.Sample(c.SpinPos.X, c.SpinPos.Y) + 0.14f, c.SpinPos.Y), new Color(1, 0, 0, 0));
-        }
         foreach (var z in sim.Pools)
         {
             if (!VisibleToPlayer(z.Pos) && z.Team != Local.Me) continue;
@@ -636,13 +587,8 @@ public sealed class AntRenderer
             var po = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.1f, z.Pos.Y);
             _pools.Add(new Basis(Vector3.Up, z.Pos.Y * 1.3f) * Basis.FromScale(new Vector3(z.R * 2.4f, 1, z.R * 2.4f)), po, new Color(fade, (z.Pos.X * 0.37f) % 1f, 0, 0));
         }
-        foreach (var (from, to, t) in sim.WebShots())
-        {
-            var p = from.Lerp(to, t);
-            var wo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 1.2f + 4f * t * (1 - t) * 3f, p.Y);
-            _blobs.Add(Basis.FromScale(Vector3.One * 1.6f), wo, new Color(0.95f, 0, 0, 0));
-        }
         Brood?.DrawNurses(this);
+        Silk?.DrawAnts(this);
         foreach (var b in _live) b?.End();
         foreach (var b in _close) b?.End();
         foreach (var b in _far) b?.End();
@@ -652,7 +598,7 @@ public sealed class AntRenderer
         foreach (var cargo in _pieceCargo) cargo.End();
         _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End(); _drops.End(); _collectRing.End(); _queuedRing.End();
         foreach (var w in _wings.Values) w.End();
-        _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
+        _cocoons.End(); _pools.End();
     }
 
     /// Each level a general gains warms its seal and halo one step: aged bronze, brass, gold, red-gold, and at the top a
