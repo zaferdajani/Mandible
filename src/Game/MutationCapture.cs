@@ -266,6 +266,17 @@ public static class MutationCapture
         await shot("units-walk-1", 0.25f);
         await shot("units-walk-2", 0.12f);
         g.SetPaused(true);
+        // the dead: a stinger (left) keeps its banded gaster and sting beside a winged ant (right)
+        Clear();
+        int ds = sim.Spawn(0, AntType.Flyer, stage - side * 0.9f, heading); sim.Ants[ds].Sting = true;
+        int dw = sim.Spawn(0, AntType.Flyer, stage + side * 0.9f, heading);
+        sim.Damage(ds, 1e6f, -1); sim.Damage(dw, 1e6f, -1);
+        g.SetPaused(false);
+        g.Camera.JumpTo(stage, 7);
+        await shot("units-dead", 3.5f);
+        int deadStingers = 0; foreach (var f in sim.W.Food) if (f.Alive && f.Kind == FoodKind.Corpse && f.Sting) deadStingers++;
+        GD.Print($"[mutation-capture] dead stingers lying as stingers: {deadStingers}  {(deadStingers == 1 ? "PASS" : "FAIL")}");
+        g.SetPaused(true);
         lens.QueueFree();
     }
 }

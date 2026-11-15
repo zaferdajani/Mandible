@@ -16,7 +16,7 @@ public sealed class Carnage
 
     struct Drop { public Vector3 Pos, Vel; public float Size, Life, Max, Floor, Grav; public int Kind, StainKind; public bool Stains; }
     struct Blot { public Vector3 Pos; public float R, Born, Life, Seed; public int Kind; }
-    struct Bit { public Vector3 Pos; public float Heading, Born, Size; public int Team, Mask; public AntType Type; public bool Flip; }
+    struct Bit { public Vector3 Pos; public float Heading, Born, Size; public int Team, Mask; public AntType Type; public bool Flip, Sting; }
     sealed class Piece { public int Mask; public Vector3 Off; public float Yaw, Raise; public bool Flip; }
     sealed class Look { public readonly List<Piece> Pieces = new(); public float Born; public Vector2 Shown; public bool Placed, Whole = true; }
 
@@ -169,7 +169,7 @@ public sealed class Carnage
         _bits.Add(new Bit
         {
             Pos = new Vector3(a.Pos.X + fling.X, floor, a.Pos.Y + fling.Y), Heading = _rng.R(0, Mathf.Tau), Born = _now, Size = a.Size,
-            Team = a.Team, Type = a.Type, Mask = All & ~part,
+            Team = a.Team, Type = a.Type, Mask = All & ~part, Sting = a.Sting,
         });
         Spray(at, away, Budget(5), 3f, 0.13f * Mathf.Sqrt(a.Size), a.Type, floor, 0.7f);
     }
@@ -323,7 +323,7 @@ public sealed class Carnage
             var n = _hf.Normal(b.Pos.X, b.Pos.Z);
             float sink = Mathf.Max(0, t - 38f) / 7f * 0.12f * b.Size; // drawn down into the soil at last
             var basis = AntRenderer.Orient(n, b.Heading, b.Size);
-            ants.AddDead(b.Team, b.Type, basis, b.Pos + n * (-0.05f * b.Size - sink), DeadData(k * 7 + 3, b.Born, b.Mask));
+            ants.AddDead(b.Team, b.Type, basis, b.Pos + n * (-0.05f * b.Size - sink), DeadData(k * 7 + 3, b.Born, b.Mask), b.Sting);
         }
     }
 
@@ -343,7 +343,9 @@ public sealed class Carnage
             if (!look.Placed || look.Shown.DistanceSquaredTo(f.Pos) > 25) { look.Shown = f.Pos; look.Placed = true; }
             else look.Shown = look.Shown.Lerp(f.Pos, 0.25f);
             var p = look.Shown;
-            float s = f.Radius / 0.45f;
+            // a killed ant's carcass has no radius in the sim (Sim.Kill: the assignment sits behind a comment, and the tuned levels
+            // were balanced that way), so it is drawn at its caste's size
+            float s = f.Radius > 0 ? f.Radius / 0.45f : Config.Of(f.AntType).Size;
             if (look.Whole) s *= Mathf.Lerp(0.6f, 1f, f.Amount / f.Max); // eaten from inside, it shrinks
             float floor = Floor(sim, f.Layer, p);
             var n = f.Layer == 0 ? _hf.Normal(p.X, p.Y) : Vector3.Up;
@@ -357,7 +359,7 @@ public sealed class Carnage
                 var b = AntRenderer.Orient(n, f.Heading + pc.Yaw, s);
                 if (pc.Flip) b = new Basis(-b.X, -b.Y, b.Z);
                 var o = new Vector3(p.X, floor, p.Y) + frame * pc.Off + n * (pc.Raise * s);
-                ants.AddDead(f.Team, f.AntType, b, o, DeadData(f.Id * 5 + k, look.Born, pc.Mask));
+                ants.AddDead(f.Team, f.AntType, b, o, DeadData(f.Id * 5 + k, look.Born, pc.Mask), f.Sting);
             }
         }
         // forget the looks of carcasses that are gone

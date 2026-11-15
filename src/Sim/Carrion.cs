@@ -176,7 +176,7 @@ public sealed partial class Sim
         }
         a.Carrying = true;
         a.CarryKind = FoodKind.Corpse;
-        a.CarryType = f.AntType;
+        a.CarryType = f.AntType; a.CarrySting = f.Sting;
         a.CarryTeam = f.Team;
         a.State = AntState.Return;
         a.FoodTarget = null;
@@ -281,7 +281,7 @@ public sealed partial class Sim
                 // husk of one load keeps the wings, sting, gland or plates until a worker is sent for it. The husk is a body
                 // of its own, so the carcass ends for its foragers exactly as it always has.
                 if (f.Part != 0 && Mission != null && f.Layer == 0)
-                    list.Add(new FoodSource { Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = f.Pos, Amount = 1, Max = f.Max, Radius = f.Radius, Team = f.Team, AntType = f.AntType, Heading = f.Heading, Age = f.Age, Part = f.Part, Husk = true });
+                    list.Add(new FoodSource { Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = f.Pos, Amount = 1, Max = f.Max, Radius = f.Radius, Team = f.Team, AntType = f.AntType, Sting = f.Sting, Heading = f.Heading, Age = f.Age, Part = f.Part, Husk = true });
                 f.Part = 0;
                 f.Amount = 0;
             }

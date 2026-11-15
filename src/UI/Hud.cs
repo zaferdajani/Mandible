@@ -11,9 +11,9 @@ public partial class Hud : CanvasLayer
     Label _food, _pop, _clock, _alert, _selTitle, _selDetail, _hint;
     HBoxContainer _selIcons;
     ProgressBar _selHp;
-    readonly Button[] _prod = new Button[11];
-    readonly Control[] _prodLock = new Control[11]; // one per ProdKind
-    readonly Label[] _heroStatus = new Label[11];
+    readonly Button[] _prod = new Button[12];
+    readonly Control[] _prodLock = new Control[12]; // one per ProdKind
+    readonly Label[] _heroStatus = new Label[12];
     readonly Button[] _res = new Button[4]; // one per Upgrade
     PanelContainer _heroPanel;
     readonly Label[] _resTier = new Label[4], _resCost = new Label[4];

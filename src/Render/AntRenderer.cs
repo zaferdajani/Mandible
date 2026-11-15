@@ -375,7 +375,7 @@ public sealed class AntRenderer
     /// The sim turns faster than any leg could follow; the drawn heading trails it by a step or two.
     static float TurnRate(AntType t) => t switch
     {
-        AntType.Spider => 3.4f, AntType.Beetle => 2.6f, AntType.StagBeetle => 2.0f, AntType.Queen => 3.0f,
+        AntType.Spider => 3.4f, AntType.Beetle => 2.6f, AntType.StagBeetle => 2.0f, AntType.Queen => 3.0f, AntType.Scorpion => 2.4f,
         AntType.Major or AntType.Armoured or AntType.Warlord or AntType.Matron => 4.5f,
         AntType.Wasp => 4.0f, AntType.Marshal => 4.5f, AntType.Flyer => 6.0f,
         _ => 7.0f,
@@ -638,7 +638,7 @@ public sealed class AntRenderer
                     body = new Basis(-body.X, -body.Y, body.Z);
                     var fwd = new Vector3(Mathf.Cos(ih), 0, Mathf.Sin(ih));
                     var dead = Config.HaulNeed(a.CarryType) == 0 && !Config.IsBug(a.CarryType) ? a.CarryType : AntType.Worker;
-                    AddDead(a.CarryTeam, dead, body, o + fwd * (size * 0.5f) + up * (size * 0.3f), new Color(3.25f, NeutralLook, 0, 0));
+                    AddDead(a.CarryTeam, dead, body, o + fwd * (size * 0.5f) + up * (size * 0.3f), new Color(3.25f, NeutralLook, 0, 0), a.CarrySting);
                 }
                 else if (a.CarryKind == FoodKind.Corpse)
                     // a piece of the carcass: a head, a gaster or a bundle of legs, in the chitin it came from
@@ -742,7 +742,7 @@ public sealed class AntRenderer
             var b = Orient(n, f.Heading, s);
             b = new Basis(-b.X, -b.Y, b.Z);
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
-            BatchOf(_dead, _stingDead, f.Team, f.AntType).Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
+            BatchOf(_dead, _stingDead, f.Team, f.AntType, f.Sting).Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
         // Living Bridge: workers of the colony lying head to tail across the span, legs locked
         foreach (var br in sim.Bridges)
@@ -862,9 +862,9 @@ public sealed class AntRenderer
     }
 
     /// A dead body or a piece of one (Carnage): the colony's or the bug's own dead material.
-    internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data)
+    internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data, bool stinger = false)
     {
-        var batch = BatchOf(_dead, _stingDead, Math.Clamp(team, 0, 2), type);
+        var batch = BatchOf(_dead, _stingDead, Math.Clamp(team, 0, 2), type, stinger);
         // the dead are drawn as large as the living around them
         float show = PlayScale(_camPos.DistanceTo(o));
         batch?.Add(show > 1.001f ? new Basis(b.X * show, b.Y * show, b.Z * show) : b, o, data);

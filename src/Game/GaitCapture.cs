@@ -32,7 +32,7 @@ public static class GaitCapture
             var stage = home + side * 24 + along * 8; // open ground beside the mound
             gs.Camera.PitchOverride = 68;
             string only = System.Environment.GetEnvironmentVariable("MANDIBLE_GAIT_ONLY");
-            bool all = true;
+            bool all = true; int unchecked_ = 0;
 
             foreach (AntType type in Enum.GetValues<AntType>())
             {
@@ -112,18 +112,22 @@ public static class GaitCapture
                     if (f >= 40) Follow(since);
                     if (since > 0.01f) since = 0;
                 }
-                bool ok = flies
+                // the scorpions are a scan with no leg parts: their legs cycle by their own shader's rule, so there are no
+                // foot rest positions to hold against the ground. Their turn is checked; their feet are NOT, and the line says so
+                bool scan = ScorpionModel.Is(type);
+                if (scan) { unchecked_++; GD.Print($"[selftest] gait {type}: scanned body, feet NOT CHECKED (legs cycle by shader rule, not planted), seen turning at most {fastest:0.0} rad/s  {(fastest < 10f ? "turn ok" : "FAIL")}"); all &= fastest < 10f; }
+                bool ok = scan || (flies
                     ? bank > 0.04f && fastest < 8.5f
-                    : n > 0 && planted && turnSteps == n * 2 && lifted.Count == n * 2 && turnDrift < 0.3f * size && drift < 0.12f * size && fastest < 10f;
+                    : n > 0 && planted && turnSteps == n * 2 && lifted.Count == n * 2 && turnDrift < 0.3f * size && drift < 0.12f * size && fastest < 10f);
                 sim.Col[0].Founded = founded;
                 all &= ok;
-                GD.Print(flies
+                if (!scan) GD.Print(flies
                     ? $"[selftest] gait {type}: flyer, leans {bank:0.00} rad into the turn, seen turning at most {fastest:0.0} rad/s  {(ok ? "PASS" : "FAIL")}"
                     : $"[selftest] gait {type}: {n * 2} legs{(planted ? "" : " NOT on planted feet")}, turn {turnSteps} stepped drift {turnDrift / size:0.000}, walk {lifted.Count} stepped drift {drift / size:0.000} body lengths, seen turning at most {fastest:0.0} rad/s  {(ok ? "PASS" : "FAIL")}");
                 sim.Ants[id].Pos = home - along * 30 + side * (int)type * 3; sim.Ants[id].PrevPos = sim.Ants[id].Pos; // off the stage
                 sim.CmdMove(new List<int> { id }, sim.Ants[id].Pos, false);
             }
-            GD.Print("[gait-capture] " + (all ? "PASS" : "FAIL"));
+            GD.Print("[gait-capture] " + (all ? "PASS" : "FAIL") + (unchecked_ > 0 ? $" ({unchecked_} scanned bodies: feet not checked)" : ""));
             app.GetTree().Quit(all ? 0 : 1);
         }
         catch (Exception e) { GD.PushError("[gait-capture] FAIL " + e); app.GetTree().Quit(1); }

@@ -60,7 +60,7 @@ public struct Ant
     public bool Feasting;             // a hero eating at a carcass
     public float FeastT;
     public AntType CarryType;         // what the carried carcass piece came from (rendering)
-    public int CarryTeam;
+    public int CarryTeam; public bool CarrySting; // CarrySting: the carried carcass was a stinger (rendering only, not in the checksum)
     public byte PartP1;               // a body part (Part + 1) taken from a carcass, in her jaws until she is home (Parts.cs)
     public bool Sting;                // a winged ant that hatched with a wasp's sting: a stinger (venom, harder bite)
     public bool FeastOrder;           // sent to eat the remains in FoodTarget
@@ -1565,7 +1565,7 @@ public sealed partial class Sim
         var carcass = new FoodSource
         {
             Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating Radius = t.Size * 0.45f,
-            Team = t.Team, AntType = t.Type, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
+            Team = t.Team, AntType = t.Type, Sting = t.Sting, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
             Part = t.PartP1 != 0 ? t.PartP1 : BodyParts.Of(t.Type), // its own part, or the one a worker was carrying home
         };
         if (carcass.Alive) { W.Food.Add(carcass); if (killer >= 0) ClaimKill(killer, carcass); }

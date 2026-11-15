@@ -24,6 +24,7 @@ public sealed class FoodSource
     // corpse data
     public int Team = Config.Wild; // whose body it was (a carcass with no owner counts as a wild bug)
     public AntType AntType;
+    public bool Sting;                // the dead ant was a stinger (rendering only: never read by the sim, not in the checksum)
     public float Heading;
     public float Age;
     // carcasses (Carrion.cs): where it lies, who drags it, what a feasting hero has taken from it
