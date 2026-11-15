@@ -21,6 +21,7 @@ public struct Ant
     public FoodKind CarryKind;
     public float Gait, Wander, Think, Deposit, Cooldown, AttackAnim, HitFlash, Stuck, DamagedT;
     public bool Selected;
+    public bool Dormant;              // level 1's opening: stunned by the fall or trapped; takes no orders, sees and fights nothing, until a nestmate wakes it (Expedition.cs)
     public float Height; // cached ground height for rendering
     public int Level;
     public float Xp, MaxHp, Size, DmgMul;
@@ -92,7 +93,8 @@ public struct Ant
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
     SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
-    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost }
+    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost,
+    Woke, QueenFreed } // level 1's opening: a stunned nestmate joins (HatchP1 = its id + 1); the queen is dug out of the tube
 
 public struct SimEvent
 {
@@ -585,7 +587,7 @@ public sealed partial class Sim
     // ------------------------------------------------------------------ commands
     public void CmdMove(List<int> ids, Vector2 p, bool attack, int layer = 0)
     {
-        if (Mission?.Confined == true && layer == 0) p = Mission.Constrain(p);
+        if (Mission?.Confined == true && layer == 0) p = Mission.Constrain(Mission.Gate(p));
         if (layer > 0 && (layer > 2 || !Col[layer - 1].Founded)) layer = 0; // no such underground yet
         float spacing = 0;
         foreach (int id in ids) spacing = Mathf.Max(spacing, Ants[id].Size);
@@ -720,7 +722,7 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
+            Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
             Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1);
         }
         foreach (var c in Col)
@@ -732,7 +734,7 @@ public sealed partial class Sim
             Mix((uint)c.Mutagen); Mix((uint)c.Cores); Mix((uint)c.Power); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
         }
         foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Strength); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
-        if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
+        if (Mission != null) { Mix((uint)Mission.Stage); Mix(F(Mission.Dug)); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -797,7 +799,7 @@ public sealed partial class Sim
         for (int t = 0; t < c.Count.Length; t++) c.PopUsed += c.Count[t] * Config.Stats[t].Pop;
         c.QueenAlarm -= dt;
         // the queen's own body reserves: a trickle that lets even a starved colony raise new workers
-        if (c.Alive && c.Count[(int)AntType.Worker] < 8) { c.Food += 0.6f * dt; }
+        if (c.Alive && c.Count[(int)AntType.Worker] < 8 && Mission?.QueenTrapped != true) { c.Food += 0.6f * dt; } // not while level 1's workers are still shut in the tube
         c.SugarT = Mathf.Max(0, c.SugarT - dt);
         c.JuiceT = Mathf.Max(0, c.JuiceT - dt);
         c.ProteinT = Mathf.Max(0, c.ProteinT - dt);
@@ -928,7 +930,7 @@ public sealed partial class Sim
                 for (int j = Hash.Head[z * Hash.N + x]; j >= 0; j = Hash.Next[j])
                 {
                     ref var b = ref Ants[j];
-                    if (!b.Alive || b.Team == team || b.Layer != layer) continue;
+                    if (!b.Alive || b.Team == team || b.Layer != layer || b.Dormant) continue;
                     if (Config.Predator(b.Type) ? !flier && Airborne(b) : !air && b.Alt > 2.2f) continue;
                     float d = p.DistanceSquaredTo(b.Pos);
                     // prefer fighters over workers, workers over the queen when at equal range
@@ -969,6 +971,7 @@ public sealed partial class Sim
     void TickAnt(int i, float dt)
     {
         ref var a = ref Ants[i];
+        if (a.Dormant) { a.Speed = 0; return; } // out cold: nothing happens to it until it is woken
         var st = Config.Of(a.Type);
         a.Cooldown -= dt;
         a.Think -= dt;
@@ -1487,7 +1490,7 @@ public sealed partial class Sim
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);
         var c = t.Team < 2 ? Col[t.Team] : null;
-        if (c != null) { if (!t.Guardian && !t.Summoned) c.Count[(int)t.Type]--; if (!t.Summoned) c.Lost++; }
+        if (c != null) { if (!t.Guardian && !t.Summoned && !t.Dormant) c.Count[(int)t.Type]--; if (!t.Summoned) c.Lost++; }
         else WildCount--;
         if (killer >= 0 && Ants[killer].Team < 2)
         {
@@ -1755,7 +1758,7 @@ public sealed partial class Sim
         }
         pos = ClampMap(pos);
         float moved = pos.DistanceTo(a.Pos);
-        a.Pos = Mission?.Confined == true && a.Layer == 0 ? Mission.Constrain(pos) : pos;
+        a.Pos = Mission?.Confined == true && a.Layer == 0 ? Mission.Constrain(a.Team == 0 ? Mission.Gate(pos) : pos) : pos;
         a.Gait = (a.Gait + moved / (0.55f * a.Size)) % 1f;
         a.Height = W.HF.Sample(pos.X, pos.Y);
     }

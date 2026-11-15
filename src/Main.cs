@@ -108,6 +108,7 @@ public partial class Main : Node
         foreach (var a in args) if (a == "--savetest") SaveValidation.Run(this);
         foreach (var a in args) if (a.StartsWith("--menu-shot=")) _ = MenuShot(a["--menu-shot=".Length..]);
         foreach (var a in args) if (a.StartsWith("--founding-capture=")) SaveValidation.FoundingCapture(this, a["--founding-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--opening-capture=")) SaveValidation.OpeningCapture(this, a["--opening-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--bake-heroes=")) _ = HeroStudio.Bake(this, a["--bake-heroes=".Length..]);
     }
 

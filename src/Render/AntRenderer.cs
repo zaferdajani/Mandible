@@ -84,6 +84,10 @@ public sealed class AntRenderer
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
     float _now, _lastNow = -1;
+    /// Level 1's opening: a stunned ant was just woken (GameSession, EvKind.Woke): it kicks upright and shakes off the sand.
+    public void Woke(int id) { if (id >= 0) _wokeAt[id] = _now; }
+    readonly Dictionary<int, float> _wokeAt = new();
+    const float WakeTime = 0.9f;
     /// Set by PlayerInput every frame: the ant under the cursor and where the cursor meets the ground.
     public int Hovered = -1;
     public Vector3 Cursor;
@@ -405,6 +409,25 @@ public sealed class AntRenderer
             // underground ants stand on the gallery floor at their depth below the mound
             float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.FloorDepth(ip - sim.W.Nests[layer - 1].Pos);
             if (layer > 0) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
+            // level 1's opening: the stunned lie on their sides, half sunk in the sand they spilled with; the trapped
+            // queen lies under the pile and rises as it is dug away; a woken ant kicks itself upright
+            float lie = a.Dormant ? 1f : _wokeAt.Count > 0 && _wokeAt.TryGetValue(i, out float wokeAt) && _now - wokeAt < WakeTime ? 1f - (_now - wokeAt) / WakeTime : 0f;
+            if (a.Type != AntType.Soldier) lie = 0; // the queen and her workers are shut in the tube, on their feet
+            if (lie > 0)
+            {
+                float side = (a.Serial & 1) == 0 ? 1f : -1f;
+                float roll = side * (1.25f * lie * lie + (a.Dormant ? 0f : Mathf.Sin((1f - lie) * 30f) * 0.35f * lie));
+                b = new Basis(b.Z.Normalized(), roll) * b;
+                gy += (0.16f * Mathf.Sin(lie * Mathf.Pi) - 0.05f * lie * lie) * st.Size; // a hop as it rights itself
+            }
+            // inside the broken tube an ant stands on its sand bed, level, at its true size; it steps down at the mouth
+            float inTube = sim.W.FirstNest && layer == 0 && a.Team == 0 ? Expedition.TubeAlong(ip) : -1f;
+            if (inTube >= 0)
+            {
+                float k = 1f - Mathf.SmoothStep(Expedition.TubeLength - 0.3f, Expedition.TubeLength + 1.4f, inTube);
+                gy = Mathf.Lerp(gy, sim.W.TubeFloor, k);
+                if (k > 0.5f) { up = Vector3.Up; b = Orient(up, ih, st.Size); }
+            }
             if (callow.Active)
             {
                 // rising out of the split cocoon head first, legs unfolding as it straightens
@@ -417,12 +440,15 @@ public sealed class AntRenderer
             var o = new Vector3(ip.X, gy + 0.02f + ialt + hover, ip.Y);
             float amp = Mathf.Clamp(a.Speed / Mathf.Max(0.1f, st.Speed), 0, 1);
             if (a.Root > 0) amp = 0.35f; // struggling in silk
+            if (a.Dormant) amp = a.Type == AntType.Queen ? 0f : a.Type == AntType.Worker ? 0.12f + 0.2f * Mathf.Max(0f, Mathf.Sin(sim.Time * 0.7f + a.Serial * 1.3f)) // shut in: restless on the spot
+                : Mathf.Max(0f, Mathf.Sin(sim.Time * 0.9f + a.Serial * 1.7f) - 0.86f) * 2.2f; // out cold: a leg twitches now and then
+            else if (lie > 0) amp = 1f;
             if (callow.Active) amp = callow.Amp;
             if (spoilRun) amp = 0.85f;
             float camDist = camPos.DistanceTo(o);
             // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
             // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
-            float show = PlayScale(camDist), size = st.Size * show;
+            float show = inTube >= 0 && inTube < Expedition.TubeLength ? 1f : PlayScale(camDist), size = st.Size * show; // true to life inside the glass: it must fit
             if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
@@ -764,11 +790,14 @@ public sealed class AntRenderer
 
         // where it looks, by what matters most: an order, the cursor, its prey, its load, its food, its road, its post, you
         bool hovered = i == Hovered;
-        int pose = a.State == AntState.Hold ? 1 : hovered ? 2 : 0;
+        bool stunned = a.Dormant && a.Type == AntType.Soldier, shutIn = a.Dormant && !stunned;
+        int pose = a.Dormant ? 0 : a.State == AntState.Hold ? 1 : hovered ? 2 : 0;
         Vector2? at = null;
         float wantYaw = 0, wantPitch = 0;
         bool direct = false;
-        if (r.HasLookAt && _now < r.LookUntil) { at = r.LookAt; wantPitch = -0.1f; }
+        if (stunned) { direct = true; wantYaw = (a.Serial & 2) == 0 ? 0.4f : -0.4f; wantPitch = -0.3f; } // head down, still
+        else if (shutIn) { at = Expedition.Mouth; wantPitch = 0.05f; } // those in the tube watch its stopped mouth
+        else if (r.HasLookAt && _now < r.LookUntil) { at = r.LookAt; wantPitch = -0.1f; }
         else if (hovered && HasCursor) { at = new Vector2(Cursor.X, Cursor.Z); wantPitch = -0.05f; }
         else if (a.State == AntState.Engage && sim.Valid(a.Target, a.TargetSerial))
         {

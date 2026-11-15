@@ -108,7 +108,7 @@ public partial class GameSession : Node3D
         var outward = (home - new Vector2(Config.MapSize, Config.MapSize) * 0.5f).Normalized();
         Camera.JumpTo(home - outward * 14, 62);
         Camera.SetYaw(Mathf.Atan2(outward.X, outward.Y), true);
-        if (TutorialMode) { Camera.JumpTo(Expedition.Start + new Vector2(12, 0), 44); Camera.SetYaw(0, true); }
+        if (TutorialMode) { Camera.JumpTo(Expedition.Wake + new Vector2(-3.5f, 0), 24); Camera.SetYaw(0, true); } // old Burr alone, the first stunned soldier just in view
 
         _pherPx = new byte[Sim.Ph.N * Sim.Ph.N];
         _pherImg = Image.CreateFromData(Sim.Ph.N, Sim.Ph.N, false, Image.Format.R8, _pherPx);
@@ -155,7 +155,7 @@ public partial class GameSession : Node3D
                 Hud.AddPanel(new ExpeditionGuide { Game = this });
                 Telepathy = new Telepathy { Game = this };
                 Hud.AddPanel(Telepathy);
-                Hud.Alert(TutorialMode ? Settings.Mobile ? "Level 1: tap Army to select the attackers" : "Level 1: select the attackers with F2" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
+                Hud.Alert(TutorialMode ? Settings.Mobile ? "Level 1: tap Burr, then tap the ground to walk" : "Level 1: click Burr, then right-click the ground to walk" : $"Level {Levels.NumberOf(Episode)}: {CampaignEpisodes.Name(Episode)}", UiTheme.Gold);
                 var beat = Comic.For(Episode);
                 if (beat != null && (ForceStory || !CampaignProgress.StorySeen(Episode) && !App.TestRun))
                 {
@@ -865,6 +865,7 @@ public partial class GameSession : Node3D
         WatchFrameRate(delta);
         StepSimulation((float)delta);
         Input?.Prune();
+        if (World.Trap != null) World.Trap.Dug = Sim.Mission is { Episode: 1 } tm ? tm.Dug / 100f : 1f;
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);
@@ -1035,6 +1036,23 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.MutagenDropped:
                     if (e.Team == Local.Me && !Demo) Hud.Alert("The carrier fell: the gland lies on the ground. Send workers to take it up.", new Color(0.85f, 0.7f, 1f));
+                    break;
+                case EvKind.Woke:
+                {
+                    // a stunned nestmate shakes off the sand and joins
+                    if (e.Type != AntType.Soldier) break; // the workers walk out of the tube with the queen (QueenFreed)
+                    Ants.Woke(e.HatchP1 - 1);
+                    Effects.Burst(World.HF.Point(e.Pos, 0.3f), 10, 2, 2.5f, 0.2f, 0.8f);
+                    if (e.Team == Local.Me && !Demo && Sim.Mission is { } wm)
+                    {
+                        Hud.Alert($"A soldier wakes and joins Burr  ·  {wm.Joined}/{wm.Strays}", UiTheme.Gold);
+                        Audio.Ui("spawn", -4);
+                    }
+                    break;
+                }
+                case EvKind.QueenFreed:
+                    Effects.Burst(World.HF.Point(e.Pos, 0.6f), 30, 2, 4f, 0.3f, 1.2f);
+                    if (e.Team == Local.Me && !Demo) { Hud.Banner("The tube is open", "The queen and her workers walk out. Lead them down the alley to the clearing.", 4.5f); Audio.Ui("research", -2); }
                     break;
                 case EvKind.MutagenHome:
                     if (e.Team == Local.Me && !Demo) { Hud.Banner("Mutagen in the reserve", "The queen can consume it now: the mutation card is on the objectives.", 4.5f); Audio.Ui("research"); }

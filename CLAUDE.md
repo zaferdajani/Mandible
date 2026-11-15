@@ -44,10 +44,15 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   a core gives the queen a NEW UNIT; organic matter levels up queen and generals through the evolve tree. The code still
   has the old model (`Colony.Power` from core `Strength`, `Mutations.Trees` of trait picks, generals' XP from their own eating):
   rework it to the doc, do not extend it. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
-- Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
+- Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (Alone → Gather → ClearTrail → FreeQueen → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at
-  (200,256), its shore and island; the water opens only once the bridge is built). Bridge/Fragment is the teamwork
+  (200,256), its shore and island; the water opens only once the bridge is built). The opening (`TickOpening`): old Burr wakes alone at
+  `Expedition.Wake`; his 5 soldiers lie stunned along the alley (`Ant.Dormant`: no orders, no sight, untargetable, not in
+  `Colony.Count`) and wake when an awake ant comes within `WakeRadius`; the alley west of `GateX` is closed until all are
+  woken. The queen and the workers are alive INSIDE the tube (`InTube`, also Dormant; nothing lies on them, owner's rule);
+  its mouth is stopped with cotton and sand (`QueenTrap.cs`) and is dug open by every awake ant within `DigRadius` of `DigSite` (`Dug`, `DigRate`).
+  `Sim.SkipOpening()` for tests and captures that start later. Bridge/Fragment is the teamwork
   lesson in `Bridge.cs`: a straw needs 2+ workers (`CmdKind.Straw`, `Ant.StrawP1`), 5 laid make the bridge, then a
   story-only gland (Units 0) from the dead queen is carried home. UI: `ExpeditionGuide.cs` (objective card + guide arrows), `FoundingPanel.cs` (top panel with bars).
 - Combat scale: per-type attack/defence/HP with per-type growth per level (`Config.GrowthOf`, `DefenceAt`); table in

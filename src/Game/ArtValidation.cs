@@ -80,26 +80,28 @@ public static class ArtValidation
                 return;
             }
 
-            // A, F: level 1 as it opens: the broken tube, the trail, and black everywhere nobody has walked
+            // A, F: level 1 as it opens: old Burr alone on the trail, black everywhere nobody has walked, and (last, with the fog lifted) the broken tube
             app.StartEpisode(1); var g = app.Session;
             g.Hud.CloseBriefing(); g.SetPaused(true); g.Hud.Visible = false;
             await Shot("a-opening", 3.5f);
-            g.Camera.PitchOverride = 50; g.Camera.SetYaw(0.5f, true); g.Camera.JumpTo(new Vector2(43, 255), 12); await Shot("a-opening-close"); g.Camera.PitchOverride = 0;
             // the fog as the player first meets it: the level's own opening camera, a little wider
-            g.Camera.SetYaw(0, true); g.Camera.JumpTo(Expedition.Start + new Vector2(16, 0), 52);
+            g.Camera.SetYaw(0, true); g.Camera.JumpTo(Expedition.Wake + new Vector2(-10, 0), 52);
             var fog = await Shot("f-fog-of-war");
-            float trail = Luma(fog, g, Expedition.Start + new Vector2(14, 0));
-            float unknown = Luma(fog, g, Expedition.Start + new Vector2(26, -34));
+            float trail = Luma(fog, g, Expedition.Wake + new Vector2(-6, 0));
+            float unknown = Luma(fog, g, Expedition.Wake + new Vector2(-20, -34));
             float clearing = Luma(fog, g, Expedition.Clearing);
             GD.Print($"[art-capture] fog luma: trail {trail:F3}, unknown {unknown:F3}, clearing {clearing:F3}");
             Check("fog: ground nobody has seen is black", unknown >= 0 && unknown < 0.02f);
             Check("fog: the trail is not black", trail > 0.08f);
             Check("fog: the clearing stays unknown until the queen reaches it", clearing < 0 || clearing < 0.02f);
             // the edge of the known, close: where the trail meets the dark
-            g.Camera.PitchOverride = 55; g.Camera.SetYaw(0.3f, true); g.Camera.JumpTo(Expedition.Start + new Vector2(22, -6), 18); await Shot("f-fog-of-war-close"); g.Camera.PitchOverride = 0;
+            g.Camera.PitchOverride = 55; g.Camera.SetYaw(0.3f, true); g.Camera.JumpTo(Expedition.Wake + new Vector2(-9, -6), 18); await Shot("f-fog-of-war-close"); g.Camera.PitchOverride = 0;
             Settings.Gfx = Settings.Quality.Low; g.ApplyQuality();
-            g.Camera.SetYaw(0, true); g.Camera.JumpTo(Expedition.Start + new Vector2(12, 0), 44); await Shot("a-opening-low", 3f);
+            g.Camera.SetYaw(0, true); g.Camera.JumpTo(Expedition.Wake + new Vector2(-5, 0), 30); await Shot("a-opening-low", 3f);
             Settings.Gfx = Settings.Quality.High; g.ApplyQuality();
+            // the tube lies in the dark until the colony reaches it: lift the fog for its close-up
+            g.Fog.RevealAll = true;
+            g.Camera.PitchOverride = 50; g.Camera.SetYaw(0.5f, true); g.Camera.JumpTo(new Vector2(43, 255), 12); await Shot("a-opening-close", 1.5f); g.Camera.PitchOverride = 0;
 
             await Pond();
 

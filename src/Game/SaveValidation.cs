@@ -64,14 +64,66 @@ public static class SaveValidation
         var army = new System.Collections.Generic.List<int>();
         var workers = new System.Collections.Generic.List<int>();
         for (int i = 0; i < s.Sim.High; i++)
-            if (s.Sim.Ants[i].Alive && s.Sim.Ants[i].Team == Local.Me)
+            if (s.Sim.Ants[i].Alive && s.Sim.Ants[i].Team == Local.Me && !s.Sim.Ants[i].Dormant)
             {
                 if (Config.IsWarrior(s.Sim.Ants[i].Type)) army.Add(i);
                 else if (s.Sim.Ants[i].Type == AntType.Worker) workers.Add(i);
             }
-        if (step == 0 && army.Count > 0) { var c = Cmd.Units(CmdKind.AttackMove, Local.Me, army, s.Sim); c.P = Expedition.Ambush + new Vector2(4, 0); s.Issue(c); }
-        if (step == 12 && army.Count > 0) { var c = Cmd.Units(CmdKind.Move, Local.Me, army, s.Sim); c.P = Expedition.Clearing + new Vector2(6, 2); s.Issue(c); }
-        if (step >= 14 && step % 5 == 4 && workers.Count > 0) s.Issue(Cmd.Units(CmdKind.Entrance, Local.Me, workers, s.Sim));
+        // the opening the player's way: Burr walks to each stunned soldier, they kill the beetle, then everyone digs the queen out
+        var m = s.Sim.Mission;
+        void Go(CmdKind kind, Vector2 p) { if (army.Count == 0) return; var c = Cmd.Units(kind, Local.Me, army, s.Sim); c.P = p; s.Issue(c); }
+        if (m.Stage <= ExpeditionStage.Gather) { int next = m.NextStray(s.Sim); if (next >= 0) Go(CmdKind.Move, s.Sim.Ants[next].Pos); }
+        else if (m.Stage == ExpeditionStage.ClearTrail) Go(CmdKind.AttackMove, Expedition.Ambush + new Vector2(4, 0));
+        else if (m.Stage == ExpeditionStage.FreeQueen) Go(CmdKind.Move, Expedition.Start + new Vector2(2, 0));
+        else if (m.Stage == ExpeditionStage.EscortQueen) Go(CmdKind.Move, Expedition.Clearing + new Vector2(6, 2));
+        else if (step % 5 == 4 && workers.Count > 0) s.Issue(Cmd.Units(CmdKind.Entrance, Local.Me, workers, s.Sim));
+    }
+
+    /// --opening-capture=<dir>: Level 1's opening played the player's way, with a frame of each beat: Burr alone, a
+    /// stunned soldier waking as he reaches her, the colony digging the queen out, and the queen free.
+    public static async void OpeningCapture(Main app, string dir)
+    {
+        _app = app;
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        await Frames(10);
+        app.StartEpisode(1);
+        await Frames(3);
+        var s = app.Session;
+        s.Hud?.CloseBriefing();
+        var m = s.Sim.Mission;
+        async Task Shot(string name, Vector2 at, float dist, int settle = 25)
+        {
+            s.FastForward = 0; s.Camera.JumpTo(at, dist);
+            await Frames(settle);
+            await app.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            app.GetViewport().GetTexture().GetImage().SavePng($"{dir}/{name}.png");
+            GD.Print($"[opening-capture] {name}: stage {m.Stage}, woken {m.Joined}/{m.Strays}, dug {m.Dug:0}%, diggers {m.Diggers}");
+        }
+        async Task Play(System.Func<bool> done, int maxTicks)
+        {
+            int end = s.Sim.Ticks + maxTicks, step = 0;
+            while (!done() && s.Sim.Ticks < end) { PlayOpeningOrders(s, step++); await Ticks(s, 30); }
+        }
+        await Frames(90);
+        await Shot("1-burr-alone", Expedition.Wake + new Vector2(-3.5f, 0), 24);
+        // Burr walks up to the first stunned soldier: the frame catches her kicking upright, the next one still out cold
+        int first = m.NextStray(s.Sim);
+        var lay = s.Sim.Ants[first].Pos;
+        s.Camera.JumpTo(lay + new Vector2(-1.5f, 1), 17);
+        PlayOpeningOrders(s, 0);
+        for (int i = 0; i < 600 && m.Joined == 0; i++) await Frames(1);
+        await Shot("2-waking-a-stray", lay + new Vector2(-1.5f, 1), 17, 14);
+        await Play(() => m.Stage == ExpeditionStage.ClearTrail, 3000);
+        await Shot("2b-soldiers-gathered", s.Sim.Ants[m.Leader].Pos, 28);
+        await Play(() => m.Stage == ExpeditionStage.FreeQueen, 6000);
+        await Play(() => m.Dug > 2, 3000);
+        await Shot("3a-dig-begins", Expedition.InTube(9.5f, 0.8f), 19);
+        await Play(() => m.Dug > 45, 6000);
+        await Shot("3-digging-out-the-queen", Expedition.InTube(9.5f, 0.8f), 19);
+        await Play(() => m.Stage == ExpeditionStage.EscortQueen, 6000);
+        await Shot("4-walking-out", Expedition.InTube(12f, 0.5f), 20, 70);
+        GD.Print(m.Stage == ExpeditionStage.EscortQueen ? "[opening-capture] DONE" : $"[opening-capture] FAIL: stuck at {m.Stage}");
+        app.GetTree().Quit(m.Stage == ExpeditionStage.EscortQueen ? 0 : 1);
     }
 
     /// --founding-capture=<dir>: Level 1 played to each founding step (stocking, ready to dig, digging) with a frame of each.
@@ -84,7 +136,7 @@ public static class SaveValidation
         await Frames(3);
         var s = app.Session;
         s.Hud?.CloseBriefing();
-        PlayOpeningOrders(s, 0);
+        s.Sim.SkipOpening(); // the founding's frames start with the queen free and the beetle down
         async Task Until(System.Func<bool> done, int maxTicks) { int end = s.Sim.Ticks + maxTicks; while (!done() && s.Sim.Ticks < end) await Ticks(s, 30); }
         async Task Shot(string name)
         {

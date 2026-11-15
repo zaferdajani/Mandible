@@ -436,7 +436,7 @@ public partial class PlayerInput : Node
 
     void SetSelection(List<int> ids, bool add = false)
     {
-        ids = WithSquads(ids);
+        ids = WithSquads(ids).FindAll(id => !Sim.Ants[id].Dormant); // the stunned and the trapped take no orders
         if (Game.Lanes) ids = ids.FindAll(id => Config.IsHero(Sim.Ants[id].Type)); // only the hero takes orders
         if (!add)
         {
@@ -500,7 +500,7 @@ public partial class PlayerInput : Node
         for (int i = 0; i < Sim.High; i++)
         {
             ref var a = ref Sim.Ants[i];
-            if (!a.Alive || (a.Team == Local.Me) != own) continue;
+            if (!a.Alive || (a.Team == Local.Me) != own || own && a.Dormant) continue;
             if (!own && Game.Fog != null && !Game.Fog.Visible(a.Pos)) continue;
             if (!OnScreen(i, out var sp)) continue;
             float scale = Mathf.Clamp(60f / Cam.Distance, 0.6f, 3f) * Config.Of(a.Type).Size;

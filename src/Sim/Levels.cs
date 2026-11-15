@@ -62,7 +62,7 @@ public static class Levels
     static readonly LevelInfo[] _all =
     {
         new() { Id = 1, Season = 0, Name = "The First Nest", Novelty = "The hunt, remains, founding and workers", Rival = RivalKind.None,
-            Blurb = "The tube is broken. Hunt the beetle in the grass alley, stock a clearing with seeds and its remains, and found the Glass Queen's nest.",
+            Blurb = "The tube is broken and old Burr wakes alone. Gather the scattered colony, hunt the beetle in the grass alley, dig open the tube the Glass Queen is shut in, and found her nest.",
             Stars = new[] { (StarGoal.Time, 540f, Under(9)), (StarGoal.Lost, 8f, "Lose no more than 8 ants") } },
         new() { Id = 2, Season = 1, Name = "The Foraging Season", Novelty = "The first queen kill: Ashling, and her glowing body", Rival = RivalKind.Young, RivalFood = 0.35f,
             Blurb = "Dig a store, win the aphid herd, drive off a lair raid and end Ashling, the red raiders' queen.",
@@ -117,7 +117,7 @@ public static class Levels
         1 => new[]
         {
             "The Giant never noticed. His batch of lab tubes slipped from the backpack, struck the stones by the path and burst. One label read: Lasius niger, strain M-7. Do not release.",
-            "Out of the spilled sand climbed the Glass Queen, old Burr and his soldiers, and a handful of workers, with nothing left to eat. A ground beetle blocks the grass alley: bring it down, and its remains will feed the nest. A queen can only found her home where her workers have stocked both food and remains.",
+            "Old Burr, the tube's eldest soldier, was thrown clear and comes to alone. His nestmates lie stunned along the grass alley, and from inside the broken tube, its mouth stopped with cotton and sand, the Glass Queen is calling, faint and far off. Wake them, bring down the ground beetle that blocks the way, and dig the tube open together. Its remains will feed the nest: a queen can only found her home where her workers have stocked both food and remains.",
         },
         5 => new[]
         {

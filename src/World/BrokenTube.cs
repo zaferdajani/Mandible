@@ -26,10 +26,10 @@ public static partial class WorldBuilder
         edgeGlass.Rim = 0.45f;
 
         // the closed half: lying on its side in the grass beside the alley, its broken mouth toward the path
-        var tubeAt = new Vector2(33f, 253.6f);
-        float yaw = 0.18f;
+        var tubeAt = Expedition.TubeAt; // the sim keeps the queen and her workers inside it (Expedition.InTube)
+        float yaw = Expedition.TubeYaw;
         var dir = MathX.Dir(yaw);
-        float lenA = 12.5f;
+        float lenA = Expedition.TubeLength;
         var a0 = tubeAt;
         var root = new Node3D { Position = new Vector3(a0.X, hf.Sample(a0.X, a0.Y) + TubeR * 0.92f, a0.Y), Rotation = new Vector3(0.03f, -yaw, 0.05f) };
         w.Root.AddChild(root);
@@ -121,6 +121,10 @@ public static partial class WorldBuilder
             fallen.SetInstanceCustomData(i, new Color(i * 3 % 16, 128 * 256 + 128, 0, 0));
         }
         w.Root.AddChild(new MultiMeshInstance3D { Multimesh = fallen, MaterialOverride = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), Config.Player, AntType.Worker, true), Name = "FallenAnts" });
+
+        // the mouth is stopped with a cotton plug and packed sand: the soldiers dig it open from outside (QueenTrap.cs)
+        w.TubeFloor = root.Position.Y - inner * 0.96f * 0.35f + 0.03f; // the top of the sand bed the queen and workers stand on
+        BuildQueenTrap(w, cotton, damp, root, inner);
     }
 
     /// A jagged break line: the tube's length lost at each angle around it, in sharp piecewise steps.

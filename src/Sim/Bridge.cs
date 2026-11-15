@@ -58,6 +58,9 @@ public sealed partial class Expedition
         Try(Pond + dir * Mathf.Clamp(r, WaterR, ShoreR));
         Try(Pond + dir * Mathf.Min(r, IslandR));
         if (bridged) Try(new Vector2(Mathf.Clamp(p.X, Pond.X - WaterR - 1, Pond.X), Mathf.Clamp(p.Y, Pond.Y - 1f, Pond.Y + 1f)));
+        // the inside of the broken tube, from its sand bed to the mouth: the queen and her workers walk out of it
+        var td = TubeDir; var tq = p - TubeAt;
+        Try(InTube(Mathf.Clamp(tq.X * td.X + tq.Y * td.Y, TubeBed, TubeLength), Mathf.Clamp(-tq.X * td.Y + tq.Y * td.X, -1.15f, 1.15f)));
         return best;
     }
     public Vector2 Constrain(Vector2 p) => Constrain(p, Bridged);

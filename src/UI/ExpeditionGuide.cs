@@ -60,11 +60,23 @@ public partial class ExpeditionGuide : PanelContainer
         if (m.Episode == 1)
         {
             int beetle = m.Guards.Count > 0 && Game.Sim.Ants[m.Guards[0]].Alive ? m.Guards[0] : -1;
-            if (m.Stage == ExpeditionStage.ClearTrail && beetle >= 0)
+            if (m.Stage <= ExpeditionStage.Gather && m.NextStray(Game.Sim) is >= 0 and int stray)
+            {
+                guiding = true;
+                Game.Guide.Show(Game.Sim.Ants[stray].Pos, m.Stage == ExpeditionStage.Alone ? "A STUNNED SOLDIER · WALK TO HER" : $"STUNNED SOLDIER · {m.Joined}/{Expedition.SoldierSpots.Length} WOKEN",
+                    Settings.Mobile ? "Tap Burr, then tap the ground beside her: she wakes when he reaches her" : "Click Burr, then right-click the ground beside her: she wakes when he reaches her");
+            }
+            else if (m.Stage == ExpeditionStage.FreeQueen)
+            {
+                guiding = true;
+                Game.Guide.Show(Expedition.DigSite, $"THE TUBE'S MOUTH · DIG TOGETHER · {(int)m.Dug}%",
+                    m.Diggers == 1 ? "One ant alone is very slow: bring everyone" : Settings.Mobile ? "Tap Army, then tap here: ants at the mouth dig it open" : "Soldiers (F2), then right-click here: ants at the mouth dig it open");
+            }
+            else if (m.Stage == ExpeditionStage.ClearTrail && beetle >= 0)
             {
                 guiding = true;
                 Game.Guide.Show(Game.Sim.Ants[beetle].Pos, "GROUND BEETLE · ATTACK",
-                    Settings.Mobile ? "Tap Army, then tap the beetle. Workers wait behind the queen until it is dead" : "Soldiers (F2), then right-click it. Workers wait behind the queen until it is dead");
+                    Settings.Mobile ? "Tap Army, then tap the beetle. Its shell is hard: all six together" : "Soldiers (F2), then right-click it. Its shell is hard: all six together");
             }
             else if (m.Stage == ExpeditionStage.Provision && m.RemainsLeft)
             {
@@ -169,6 +181,8 @@ public partial class ExpeditionGuide : PanelContainer
     static readonly (string, string)[] TouchWords =
     {
         ("Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it.", "Tap Army to select Burr's soldiers. A ground beetle blocks the alley: tap it, or tap Attack and then the ground beyond it."),
+        ("Click Burr to select him, then right-click the ground to walk.", "Tap Burr to select him, then tap the ground to walk."),
+        ("(F2, then right-click it)", "(tap Army, then tap it)"),
         ("right-click the food clearing", "tap the food clearing"),
         ("(F3, then right-click the body)", "(tap Workers, then tap the body)"),
         ("Select two or more workers (F3) and right-click a straw", "Tap Workers, then tap a straw"),

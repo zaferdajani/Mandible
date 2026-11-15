@@ -69,14 +69,14 @@ public partial class FoundingPanel : PanelContainer
     public override void _Process(double delta)
     {
         var m = Game.Sim.Mission;
-        bool show = m is { Episode: 1 } && m.Stage is ExpeditionStage.Provision or ExpeditionStage.DigEntrance or ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
+        bool show = m is { Episode: 1 } && m.Stage is ExpeditionStage.FreeQueen or ExpeditionStage.Provision or ExpeditionStage.DigEntrance or ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
         Visible = show;
         if (!show) return;
         var sim = Game.Sim;
         var c = sim.Col[Local.Me];
         bool stocking = m.Stage is ExpeditionStage.Provision or ExpeditionStage.DigEntrance;
         _food.Visible = _remains.Visible = stocking;
-        _dig.Visible = m.Stage is ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
+        _dig.Visible = m.Stage is ExpeditionStage.FreeQueen or ExpeditionStage.RoyalChamber or ExpeditionStage.Bridge;
         _button.Visible = m.Stage == ExpeditionStage.DigEntrance;
         if (stocking)
         {
@@ -101,6 +101,15 @@ public partial class FoundingPanel : PanelContainer
         {
             _title.Text = "THE SITE IS READY";
             _hint.Text = "Press the button: the workers at the clearing dig the shaft and the royal chamber.";
+        }
+        else if (m.Stage == ExpeditionStage.FreeQueen)
+        {
+            _title.Text = "DIG THE TUBE OPEN";
+            _dig.Value = m.Dug / 100f;
+            _digText.Text = $"MOUTH DUG OPEN  {(int)m.Dug}%   ·   " + (m.Diggers == 0 ? "nobody is digging" : m.Diggers == 1 ? "1 ant digging alone: very slow" : $"{m.Diggers} ants digging together");
+            _hint.Text = Settings.Touch
+                ? "The queen and her workers are shut inside the tube: cotton and packed sand stop its mouth. Tap Army, then tap the mouth: ants beside it dig, and every extra pair of jaws digs faster."
+                : "The queen and her workers are shut inside the tube: cotton and packed sand stop its mouth. Soldiers (F2), then right-click the mouth: ants beside it dig, and every extra pair of jaws digs faster.";
         }
         else if (m.Stage == ExpeditionStage.Bridge)
         {

@@ -9,7 +9,7 @@ public static class ColonyValidation
 {
     static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     static List<int> Units(Sim s, AntType type)
-    { var ids = new List<int>(); for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].Type == type) ids.Add(i); return ids; }
+    { var ids = new List<int>(); for (int i = 0; i < s.High; i++) if (s.Ants[i].Alive && s.Ants[i].Team == 0 && s.Ants[i].Type == type && !s.Ants[i].Dormant) ids.Add(i); return ids; } // the awake ones: the stunned take no orders
     static void Until(Sim sim, Func<bool> done, int seconds, string reason)
     {
         for (int t = 0; t < seconds * 30 && !done(); t++)
@@ -61,9 +61,51 @@ public static class ColonyValidation
             Check(!s.Col[1].Alive && s.Mission.Chapter == 1 && !s.Mission.ShowsHeroes, "Chapter 1 has a red colony or heroes");
             for (int i = 0; i < s.High; i++)
                 if (s.Ants[i].Alive) Check(s.Ants[i].Team != 1 && Reveal.Creature(s.Ants[i].Type) <= 1, $"Chapter 1 has a {s.Ants[i].Type} on the field before its reveal");
+            // the opening: old Burr alone; the stunned take no orders, nothing moved while nobody played, and the alley is closed past the gate
+            var m = s.Mission;
+            int burr = m.Leader, queenId = c.QueenId, beetle = m.Guards[0];
+            Check(m.Stage == ExpeditionStage.Alone && Units(s, AntType.Soldier).Count == 1 && Units(s, AntType.Worker).Count == 0 && s.Ants[queenId].Dormant && m.Joined == 0 && m.Strays == 5 && Expedition.TubeAlong(s.Ants[queenId].Pos) > 0,
+                $"Level 1 did not open with Burr alone ({m.Stage}, {Units(s, AntType.Soldier).Count} soldiers awake, {m.Strays} stunned)");
+            Check(m.Tracked.TryGetValue(burr, out var eldest) && eldest.vet.Name == "Burr", "The ant who wakes alone is not old Burr");
+            int sleeper = m.NextStray(s);
+            var lay = s.Ants[sleeper].Pos;
+            new Cmd { Kind = CmdKind.Move, Team = 0, Ids = new[] { sleeper }, Serials = new[] { s.Ants[sleeper].Serial }, P = Expedition.Clearing }.Apply(s);
+            for (int i = 0; i < 60; i++) s.Tick(1f / 30);
+            Check(s.Ants[sleeper].Dormant && s.Ants[sleeper].Pos == lay && m.Stage == ExpeditionStage.Alone, "A stunned ant obeyed an order");
+            // walking up to a stunned nestmate wakes it
+            s.CmdMove(new List<int> { burr }, lay, false);
+            Until(s, () => m.Stage == ExpeditionStage.Gather, 30, "Burr walks up to a stunned soldier and she wakes");
+            Check(!s.Ants[sleeper].Dormant && m.Joined == 1, "The woken soldier did not join");
+            // sent straight at the beetle, he is stopped at the gate: nobody meets it before the soldiers are gathered
+            s.CmdMove(new List<int> { burr }, Expedition.Ambush + new Vector2(0, 5.5f), false);
+            for (int i = 0; i < 300; i++) s.Tick(1f / 30);
+            Check(s.Ants[burr].Pos.X >= Expedition.GateX - 0.01f && s.Ants[beetle].Hp >= s.Ants[beetle].MaxHp, "Burr could reach the beetle before his soldiers were gathered");
+            for (int n = 0; n < 8 && m.Stage == ExpeditionStage.Gather; n++)
+            {
+                int next = m.NextStray(s);
+                if (next < 0) break;
+                s.CmdMove(new List<int> { burr }, s.Ants[next].Pos, false);
+                int was = m.Joined;
+                Until(s, () => m.Joined > was, 30, $"Burr wakes soldier {was + 1}");
+            }
+            Until(s, () => m.Stage == ExpeditionStage.ClearTrail, 5, "all of Burr's soldiers are awake");
+            for (int i = 0; i < 90; i++) s.Tick(1f / 30); // the woken fall in behind Burr
             var army = Units(s, AntType.Soldier);
-            s.CmdMove(army, Expedition.Ambush, true);
-            Until(s, () => s.Mission.Stage == ExpeditionStage.EscortQueen, 120, "Burr's soldiers clear the beetle from the alley");
+            Check(army.Count == 6 && army.TrueForAll(id => s.Ants[id].Pos.DistanceTo(s.Ants[burr].Pos) < 12), "The woken soldiers did not follow Burr");
+            Check(s.Ants[beetle].Alive && s.Ants[beetle].Hp >= s.Ants[beetle].MaxHp && s.Ants[queenId].Dormant, "The beetle was met before the soldiers were gathered");
+            // the careful player sends the young soldiers in first and old Burr a moment behind them
+            s.CmdMove(army.FindAll(id => id != burr), Expedition.Ambush, true);
+            for (int i = 0; i < 45; i++) s.Tick(1f / 30);
+            s.CmdMove(new List<int> { burr }, Expedition.Ambush, true);
+            Until(s, () => m.Stage == ExpeditionStage.FreeQueen, 120, "Burr's soldiers clear the beetle from the alley");
+            // the queen and her workers are shut inside the tube: one ant alone digs its mouth very slowly, a crew fast; nobody walks in before it is open
+            Check(Expedition.DigRate(1) * 4 <= Expedition.DigRate(2) && Expedition.DigRate(8) > Expedition.DigRate(4), "Digging the queen out is not a job for many jaws");
+            s.CmdMove(Units(s, AntType.Soldier), Expedition.Start + new Vector2(2, 0), false);
+            Until(s, () => m.Dug > 0, 60, "the colony reaches the broken tube and starts to dig");
+            Check(s.Ants[queenId].Dormant && s.Ants[queenId].Pos == Expedition.QueenCell && Units(s, AntType.Worker).Count == 0, "The queen or her workers left the tube before its mouth was dug open");
+            Check(Units(s, AntType.Soldier).TrueForAll(id => Expedition.TubeAlong(s.Ants[id].Pos) < Expedition.TubeLength), "A soldier walked into the stopped tube");
+            Until(s, () => m.Stage == ExpeditionStage.EscortQueen, 120, "the soldiers dig the tube's mouth open together");
+            Check(!s.Ants[queenId].Dormant && Units(s, AntType.Worker).Count == Config.StartWorkers && m.Diggers >= 3, $"The tube was opened without a crew, or the workers stayed in ({Units(s, AntType.Worker).Count} workers out, {m.Diggers} digging)");
             s.CmdMove(Units(s, AntType.Soldier), Expedition.Clearing + new Vector2(8, 0), false);
             Until(s, () => s.Mission.Stage == ExpeditionStage.Provision, 150, "queen and workers reach the food clearing");
             // the opening: the site needs both food and the hunt's remains before the queen can found her nest
@@ -127,6 +169,8 @@ public static class ColonyValidation
             int squadBefore = squad.Count;
             Check(squadBefore >= 3, $"Too few soldiers left for the island queen: {squadBefore}");
             float fightFrom = s.Time;
+            s.CmdAttack(squad.FindAll(id => id != burr), qid);
+            for (int i = 0; i < 45; i++) s.Tick(1f / 30);
             s.CmdAttack(squad, qid);
             Until(s, () => !s.Mission.QueenAlive(s), 150, "Burr's soldiers cross and kill the island queen together");
             int squadAfter = Units(s, AntType.Soldier).Count;
