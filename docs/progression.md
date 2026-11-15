@@ -84,6 +84,9 @@ There are two progressions. They use different things and give different rewards
   4 flies in the spider lair; The Hornet Mother, its spiders and wasps, and 8 flies in the silk spitter's hollow; The
   Dry Spell, 8 beetles (asks for 3 armoured ants); Wings and Acid, a guarded web with 10 flies and 4 dead hornets
   (asks for 6 winged ants, two broods).
+- Skirmish and multiplayer: four dead flies lie beside each of the two fly's cores and in the two spider lairs nearest
+  each colony (24 on the map at most, six broods). Once the queen lays winged ants and no hunter stands by them, the
+  carcass crews carry them home, one worker a fly. Stings, glands and plates come from the lairs' wasps, spiders and beetles.
 - Parts in store go with the colony to the following levels (the roster). The ants a level starts with cost nothing.
 - The rival colony and the skirmish AI obey the same rule (the queue check is shared).
 

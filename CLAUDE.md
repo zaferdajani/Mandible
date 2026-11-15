@@ -53,7 +53,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   Campaign only: a carcass that crumbles with its part still in it leaves a **husk** (`FoodSource.Husk`: a separate one-load body that never
   rots; foragers and eaters ignore it, so old levels play as before), and `PartErrands` sends foragers for parts only while the objective is
   a hatch that is short of them. There is no fly creature: wings come from dead flies a spider caught (`AddRemains`, `AddLarder`; they use
-  the wasp's carcass until the fly has a body). The Dry Spell tips over if ordinary foraging changes at all: keep husks invisible to it.
+  the wasp's carcass until the fly has a body). Skirmish: `SeedSkirmishCores` lays 4 flies by each fly core and in the 2 spider lairs
+  nearest each nest; `Recruit` fetches a husk (one worker, no dragging) when the queen uses its part and no hunter is within 24. The Dry Spell tips over if ordinary foraging changes at all: keep husks invisible to it.
 - Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): a colony whose queen has the spider's core (`Mutation.Web`, `Sim.HasSilk`)
   builds on the surface from **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
   `WantsStraw`, never counted as food). Building: a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + `SilkRank` = 1 + the Spinneret node, placed within `SilkReach` of the mound):

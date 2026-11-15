@@ -193,6 +193,22 @@ public static class CarrionValidation
                 int plain = -plain0, stingers = -stingers0;
                 for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == 0 && sim.Ants[i].Type == AntType.Flyer) { if (sim.Ants[i].Sting) stingers++; else plain++; }
                 Check(stingers == 2 && plain == four - 2, $"Two stings must make two stingers and two plain winged ants (hatched {stingers} and {plain})");
+                // skirmish wings: dead flies lie in the lairs; once no hunter stands by them and the queen lays winged ants,
+                // the carcass crews bring the wings home one husk a worker
+                int flies = 0; foreach (var f in sim.W.Food) if (f.Husk && f.Part == (byte)Part.Wings + 1) flies++;
+                Check(flies >= 2 * Sim.SkirmishFlies, $"The skirmish map holds too few dead flies for both colonies ({flies})");
+                pc.Parts[(int)Part.Wings] = 0;
+                var web = Clear(home + outv * 20 - perp * 14);
+                for (int k = 0; k < 4; k++) sim.AddRemains(web + MathX.Dir(k * 1.57f) * 2f, AntType.Wasp, Part.Wings);
+                int guard = sim.Spawn(Config.Wild, AntType.Spider, web + new Vector2(3, 0), 0);
+                sim.Ants[guard].Home = sim.Ants[guard].Pos; sim.Ants[guard].State = AntState.Hold;
+                for (int k = 0; k < 20 * 30; k++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Wings] == 0 || !sim.Ants[guard].Alive, "Workers were sent for the flies while the spider still stood over them");
+                if (sim.Ants[guard].Alive) sim.Damage(guard, 99999, -1);
+                int wingTicks = 0;
+                for (; wingTicks < 150 * 30 && pc.Parts[(int)Part.Wings] < 4; wingTicks++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Wings] >= 4, $"The carcass crews did not bring the four flies' wings home ({pc.Parts[(int)Part.Wings]})");
+                GD.Print($"[carrion-test] skirmish wings: {flies} dead flies on the map; four by a dead spider came home in {wingTicks / 30f:0}s");
                 GD.Print($"[carrion-test] parts: the spider's silk gland came home in {ticks / 30f:0}s; a brood costs one part for each ant, a cancelled brood gives them back, a sting in store makes a winged ant a stinger");
             }
 

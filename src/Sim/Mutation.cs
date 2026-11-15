@@ -350,12 +350,32 @@ public sealed partial class Sim
             used.Add(best);
             Cores.Add(new MutationCore { Id = _nextCore++, Pos = best.Pos + perp * 2.5f, Name = "a fly's core", From = AntType.Wasp, Gives = Mutation.Winged, Heading = best.Facing });
         }
+        // wings (docs/progression.md 1c): the game has no living fly, so every winged ant's wings come from dead flies.
+        // Four lie beside each fly's core (one brood) and four in the two spider lairs nearest each colony (the spiders'
+        // catch), guarded by what lives there: six broods' worth on the whole map at most, so wings stay scarce.
+        var larders = new List<Camp>(used);
+        foreach (var nest in new[] { n0, n1 })
+            for (int pick = 0; pick < 2; pick++)
+            {
+                Camp best = null; float bd = float.MaxValue;
+                foreach (var camp in W.Camps)
+                {
+                    if (larders.Contains(camp) || !System.Array.Exists(camp.Bugs, b => b.type == AntType.Spider)) continue;
+                    float d = camp.Pos.DistanceTo(nest);
+                    if (d < bd) { bd = d; best = camp; }
+                }
+                if (best != null) larders.Add(best);
+            }
+        foreach (var camp in larders)
+            for (int k = 0; k < SkirmishFlies; k++) AddRemains(camp.Pos + MathX.Dir(camp.Facing + 0.6f + k * DMath.Tau / SkirmishFlies) * 5.2f, AntType.Wasp, Part.Wings, k * 1.3f);
     }
+    public const int SkirmishFlies = 4;
 
     void ClearSkirmishCores()
     {
         Cores.Clear(); _nextCore = 0;
         for (int i = 0; i < High; i++) Ants[i].CoreP1 = 0;
+        W.Food.RemoveAll(f => f.Husk); // the skirmish's dead flies: a campaign level places its own
     }
 
     /// Marks a living creature as the keeper of a core: when it dies the core lies in its body.

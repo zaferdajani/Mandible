@@ -135,7 +135,7 @@ public sealed partial class Sim
     Vector2 AtCarcass(int i, ref Ant a, FoodSource f, UnitStats st, ref float speedMul)
     {
         bool bury = f.Team == a.Team && CarrionRules;
-        int need = CarrionRules || FounderDrag(f, a.Team) ? Config.HaulNeed(f.AntType) : 0;
+        int need = f.Husk ? 0 : CarrionRules || FounderDrag(f, a.Team) ? Config.HaulNeed(f.AntType) : 0; // a dried husk is light: one worker carries it
         // drag it whole: big enough to need a team, not yet home, and not already in the jaws of the other colony
         var dest = HaulDest(f, a.Team, bury);
         if (need > 0 && f.Layer == 0 && !f.Hauled && f.Pos.DistanceTo(dest) <= Config.HaulArrive + f.Radius) Arrive(f, a.Team, bury);
@@ -319,8 +319,10 @@ public sealed partial class Sim
             float d = f.Pos.DistanceTo(nest);
             float value = RemainsValue(f);
             bool known = d <= radius || d <= Config.RecruitRange && Seen(team, f.Pos);
-            if (claimed || eaten || value < 1.5f || !known) { f.Queued &= ~bit; continue; }
-            queue.Add((value / (20f + d), f));
+            // a husk is worth fetching only for its part: when the queen lays the unit it pays for, and no hunter stands by it
+            bool part = f.Husk && UsesPart(c, f.Part) && !HunterNear(team, f.Pos, PartErrandClear);
+            if (claimed || eaten || (f.Husk ? !part : value < 1.5f) || !known) { f.Queued &= ~bit; continue; }
+            queue.Add(((value + (part ? 30f : 0f)) / (20f + d), f));
         }
         if (queue.Count == 0) return;
         queue.Sort((x, y) => x.score != y.score ? y.score.CompareTo(x.score) : x.f.Id.CompareTo(y.f.Id));
@@ -438,7 +440,7 @@ public sealed partial class Sim
 
     void Drag(FoodSource f, float dt)
     {
-        int need = Config.HaulNeed(f.AntType);
+        int need = f.Husk ? 0 : Config.HaulNeed(f.AntType);
         if (need == 0 || f.HaulCount < need || f.Hauled) return;
         int team = f.HaulTeam;
         bool bury = f.Team == team && CarrionRules;

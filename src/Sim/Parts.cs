@@ -109,6 +109,23 @@ public sealed partial class Sim
     /// (within recruiting range of the nest, or in sight of one of its ants) and has no hunter near it. At every other
     /// time the campaign's foragers take only the remains they find near home, as they always have (far remains are
     /// the player's to send workers to); outside the campaign the carcass crews of Recruit bring parts in.
+    /// Whether the queen lays a unit that is paid with this part (+1).
+    bool UsesPart(Colony c, byte partP1) => partP1 != 0 && (c.Mutations & (int)((Part)(partP1 - 1) switch
+    {
+        Part.Wings => Mutation.Winged, Part.Sting => Mutation.Stinger, Part.Gland => Mutation.Web, _ => Mutation.Armoured,
+    })) != 0;
+
+    /// A living fighter or hunter of another side within r of p on the surface.
+    bool HunterNear(int team, Vector2 p, float r)
+    {
+        for (int i = 0; i < High; i++)
+        {
+            ref var a = ref Ants[i];
+            if (a.Alive && a.Team != team && a.Layer == 0 && !a.Dormant && a.Type != AntType.Worker && a.Pos.DistanceSquaredTo(p) < r * r) return true;
+        }
+        return false;
+    }
+
     const float PartErrandClear = 24f; // wider than any hunter's aggro (a wasp's is 17)
 
     void PartErrands(Colony c)
