@@ -466,7 +466,7 @@ public partial class PlayerInput : Node
     string VoiceOf(int id)
     {
         ref var a = ref Sim.Ants[id];
-        bool silk = a.Type == AntType.Soldier && a.Team >= 0 && a.Team < Sim.Col.Length && Sim.Col[a.Team].WebRank > 0;
+        bool silk = false; // web ants are their own caste now (docs/progression.md); AudioDirector.VoiceOf gives them the silk call
         return AudioDirector.VoiceOf(a.Type, silk);
     }
 

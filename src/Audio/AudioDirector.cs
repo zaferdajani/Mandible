@@ -129,20 +129,21 @@ public partial class AudioDirector : Node
     AudioStreamPlayer _voice;
     readonly Dictionary<string, int> _lastTake = new();
 
-    /// The voice of each creature (no speech: every kind has its own call). Silk = soldiers of a web-throwing colony.
+    /// The voice of each creature (no speech: every kind has its own call). Silk = web ants (and silk-spun soldiers).
     public static string VoiceOf(AntType t, bool silk = false) => t switch
     {
         AntType.Queen => "queen", AntType.Worker => "worker", AntType.Soldier => silk ? "silk" : "soldier",
         AntType.Major => "major", AntType.Flyer => "flyer", AntType.Gunner => "gunner", AntType.Warlord => "warlord",
         AntType.Matron => "matron", AntType.Marshal => "marshal", AntType.Beetle => "beetle",
-        AntType.StagBeetle => "stag", AntType.Spider => "spider", AntType.Wasp => "wasp", _ => "worker",
+        AntType.StagBeetle => "stag", AntType.Spider => "spider", AntType.Wasp => "wasp",
+        AntType.WebAnt => "silk", AntType.Armoured => "major", _ => "worker", // armoured ants borrow the major's call until they have their own
     };
 
     /// Who answers for a mixed selection: the highest rank speaks, once.
     public static int VoiceRank(AntType t) => t switch
     {
         AntType.Queen => 9, AntType.Marshal => 8, AntType.Matron => 7, AntType.Warlord => 6, AntType.Major => 5,
-        AntType.Gunner => 4, AntType.Flyer => 3, AntType.Soldier => 2, _ => 1,
+        AntType.Gunner => 4, AntType.Armoured => 4, AntType.Flyer => 3, AntType.WebAnt => 3, AntType.Soldier => 2, _ => 1,
     };
 
     /// A creature's call ("voc_x" clicked, "ack_x" ordered). One voice at a time, never the same take twice running;
