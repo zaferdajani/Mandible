@@ -62,6 +62,8 @@ public sealed class World
 {
     public uint Seed;                 // the map seed (the middle prize draws its own sequence from it)
     public bool FirstNest;
+    public QueenTrap Trap;            // level 1: the cotton plug and packed sand that stop the tube's mouth (render only)
+    public float TubeFloor;           // level 1: the height of the sand bed inside the broken tube
     public Heightfield HF;
     public readonly List<Obstacle> Obstacles = new();
     public readonly List<FoodSource> Food = new();

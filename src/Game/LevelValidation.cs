@@ -729,6 +729,7 @@ public static class LevelValidation
             app.StartEpisode(1); var g = app.Session;
             g.Hud.CloseBriefing(); g.SetPaused(true);
             await Shot("opening", 3);
+            g.Fog.RevealAll = true; // the tube lies in the dark until the colony reaches it
             g.Camera.SetYaw(0.5f, true); g.Camera.JumpTo(new Vector2(44, 255), 18); await Shot("mouth-close", 2);
             g.Camera.SetYaw(-0.9f, true); g.Camera.JumpTo(new Vector2(38, 255), 24); await Shot("tube-side", 2);
             g.Camera.SetYaw(2.6f, true); g.Camera.JumpTo(new Vector2(46, 258), 30); await Shot("from-alley", 2);
@@ -795,14 +796,16 @@ public static class LevelValidation
             await Wait(1);
             Check(!app.Session.Hud.StoryOpen && app.Session.Hud.BriefingOpen, "The comic did not hand over to the briefing");
             app.Session.Hud.CloseBriefing(); app.Session.SetPaused(true);
+            await Shot("L04-level1-burr-alone", 3);
+            app.Session.Fog.RevealAll = true; // the tube lies in the dark until the colony reaches it
             app.Session.Camera.JumpTo(Expedition.Start + new Vector2(-4, 0), 26);
-            await Shot("L04-level1-tube", 3);
+            await Shot("L04-level1-tube", 2);
             app.Session.Camera.JumpTo(new Vector2(82, 256), 44);
             await Shot("L04-level1-alley", 2);
             // the opening's new stage: the beetle is down and the founders stock the clearing with seeds and its remains
             {
                 var s1 = app.Session.Sim; var m1 = s1.Mission;
-                foreach (int g in m1.Guards) s1.Slay(g);
+                s1.SkipOpening();
                 int qid = s1.Col[0].QueenId;
                 s1.Ants[qid].Pos = s1.Ants[qid].PrevPos = Expedition.Clearing + new Vector2(-3, 0);
                 app.Session.SetPaused(false);

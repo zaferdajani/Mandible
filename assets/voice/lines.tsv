@@ -1,4 +1,8 @@
 id	speaker	profile	text
+l1_alone	queen	queen1	...Burr. Old one. You hear me. Good. The glass broke, and I am shut inside it with my daughters. Rise. My soldiers are near you. Find them.
+l1_gather	queen	queen1	...They are not dead. Only stunned. Touch them, and they will rise for you.
+l1_trapped	queen	queen1	It falls. Now come to me. The mouth of the glass is stopped with cotton and sand, and the air in here is thin. Dig, all of you. One pair of jaws will not move this.
+l1_near	queen	queen1	Closer. I feel your feet on the glass. Dig.
 l1_wake	queen	queen1	Be still, my chosen. The glass is broken, and we are free. Feel them? Every ant in this sand moves when you think it.
 l1_beetle	queen	queen1	A ground beetle holds our road. Its shell is hard. Send Burr's soldiers together, and do not let it reach my workers.
 l1_beetle_dead	queen	queen1	It falls. Good. Now lead us on to the clearing, and keep the trail between us and the grass.

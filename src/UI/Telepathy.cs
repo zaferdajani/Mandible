@@ -265,6 +265,11 @@ public partial class Telepathy : Control
             if (_queue.Count > 0 && !blocked) _holdLeft = Mathf.Min(_holdLeft, 0.35f); // the next line follows quickly
         }
         bool show = _cur != null || _holdLeft > 0;
+        // level 1's opening: trapped under the glass, her voice is faint from far off and clears as the colony nears her
+        float clear = Game.Sim.Mission is { QueenTrapped: true } trapped && (_cur == null || _cur.Speaker == "queen") ? 0.35f + 0.65f * Nearness(trapped) : 1f;
+        _clear = Mathf.MoveToward(_clear, clear, dt * 0.8f);
+        _text.Modulate = new Color(1, 1, 1, 0.45f + 0.55f * _clear);
+        _voice.VolumeDb = Mathf.Lerp(-16f, 0f, _clear);
         _panelA = Mathf.MoveToward(_panelA, show ? 1 : 0, dt / (show ? 0.25f : 0.6f));
         _panel.Modulate = new Color(1, 1, 1, _panelA);
         _panel.Visible = _panelA > 0.01f;
@@ -286,7 +291,7 @@ public partial class Telepathy : Control
             if (Game.Hud.Blocking) return; // after the story and the briefing
             _started = true;
             bool fresh = Game.Sim.Time < 3f;
-            if (m.Episode == 1) { _stageSeen = fresh ? -1 : (int)m.Stage; if (fresh) Say("l1_wake"); }
+            if (m.Episode == 1) _stageSeen = fresh ? -1 : (int)m.Stage;
             else if (fresh) Say($"open_{m.Episode}");
         }
         if (m.Episode == 1)
@@ -298,11 +303,15 @@ public partial class Telepathy : Control
                 // a stage the player finished before she got to it is not worth saying any more: only the newest stage's line waits
                 var keep = new List<string>(_queue);
                 _queue.Clear();
-                foreach (var q in keep) if (q == "l1_wake" || !q.StartsWith("l1_")) _queue.Enqueue(q);
+                foreach (var q in keep) if (q == "l1_alone" || !q.StartsWith("l1_")) _queue.Enqueue(q);
                 Say(m.Stage switch
                 {
+                    // trapped under the glass she calls from far off; freed, she speaks as she always will
+                    ExpeditionStage.Alone => "l1_alone",
+                    ExpeditionStage.Gather => "l1_gather",
                     ExpeditionStage.ClearTrail => "l1_beetle",
-                    ExpeditionStage.EscortQueen => "l1_beetle_dead",
+                    ExpeditionStage.FreeQueen => "l1_trapped",
+                    ExpeditionStage.EscortQueen => "l1_wake",
                     ExpeditionStage.Provision => "l1_clearing",
                     ExpeditionStage.DigEntrance => "l1_stocked",
                     ExpeditionStage.RoyalChamber => "l1_digging",
@@ -316,6 +325,7 @@ public partial class Telepathy : Control
                     _ => "l1_done",
                 });
             }
+            if (m.Stage == ExpeditionStage.FreeQueen && m.Dug < 50 && Nearness(m) > 0.75f) Say("l1_near");
             // the remains are the one step players miss: remind them once if they lie untouched
             if (m.Stage == ExpeditionStage.Provision && m.RemainsLeft && (_remainsWait += dt) > 30f) Say("l1_remains");
         }
@@ -330,6 +340,17 @@ public partial class Telepathy : Control
             var c = Game.Sim.Col[Local.Me];
             if (c.Founded && c.Food < 3 && Game.Sim.Time > 120) Bark("bark_low_food", 150);
         }
+    }
+
+    float _clear = 1f;
+    /// How near the colony's awake ants are to the trapped queen: 0 at the far end of the alley, 1 beside the tube.
+    float Nearness(Expedition m)
+    {
+        var s = Game.Sim;
+        float best = float.MaxValue;
+        for (int i = 0; i < s.High; i++)
+            if (s.Ants[i].Alive && s.Ants[i].Team == Local.Me && !s.Ants[i].Dormant) best = Mathf.Min(best, s.Ants[i].Pos.DistanceTo(Expedition.DigSite));
+        return Mathf.Clamp(1f - (best - 8f) / (Expedition.Wake.X - Expedition.DigSite.X - 8f), 0f, 1f);
     }
 
     /// Called by GameSession for every simulation event.

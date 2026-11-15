@@ -52,7 +52,7 @@ public sealed class Cmd
     {
         var ids = new List<int>(Ids.Length);
         for (int i = 0; i < Ids.Length; i++)
-            if (sim.Valid(Ids[i], Serials[i]) && sim.Ants[Ids[i]].Team == Team && (sim.Mode != GameMode.Lanes || Config.IsHero(sim.Ants[Ids[i]].Type)))
+            if (sim.Valid(Ids[i], Serials[i]) && sim.Ants[Ids[i]].Team == Team && !sim.Ants[Ids[i]].Dormant && (sim.Mode != GameMode.Lanes || Config.IsHero(sim.Ants[Ids[i]].Type)))
                 ids.Add(Ids[i]); // in Lane War only the hero takes orders
         switch (Kind)
         {

@@ -69,7 +69,7 @@ public sealed class FogOfWar
             for (int i = 0; i < sim.High; i++)
             {
                 ref var a = ref sim.Ants[i];
-                if (!a.Alive || a.Team != Local.Me) continue;
+                if (!a.Alive || a.Team != Local.Me || a.Dormant) continue; // the stunned and the trapped see nothing
                 Stamp(a.Pos, Config.Of(a.Type).Sight);
             }
             foreach (var z in sim.Scouts) if (z.Team == Local.Me) Stamp(z.Pos, z.R + 3f); // Scout Swarm
@@ -78,6 +78,9 @@ public sealed class FogOfWar
             // the opening's first target stays in sight so it can be seen, clicked and attacked from the start
             if (sim.Mission is { Episode: 1, Stage: ExpeditionStage.ClearTrail } m)
                 foreach (int id in m.Guards) if (sim.Ants[id].Alive) Stamp(sim.Ants[id].Pos, 7);
+            // likewise the next stunned nestmate to walk to, and then the tube where the queen lies
+            if (sim.Mission is { Episode: 1, Stage: <= ExpeditionStage.Gather } o && o.NextStray(sim) is >= 0 and int stray) Stamp(sim.Ants[stray].Pos, 4.5f);
+            if (sim.Mission is { Episode: 1, Stage: ExpeditionStage.FreeQueen }) Stamp(Expedition.InTube(8, 0), 11); // the whole tube and those shut inside it
         }
         float k = Mathf.Min(1, dt * 5);
         for (int i = 0; i < _vis.Length; i++)

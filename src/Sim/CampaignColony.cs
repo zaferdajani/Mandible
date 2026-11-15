@@ -103,10 +103,8 @@ public sealed partial class Sim
         {
             if (chapter == 1)
             {
-                // the tube's eldest soldier: the one nearest the queen
-                int burr = -1;
-                for (int i = 0; i < High; i++)
-                    if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type == AntType.Soldier && (burr < 0 || Ants[i].Pos.DistanceTo(Ants[Col[0].QueenId].Pos) < Ants[burr].Pos.DistanceTo(Ants[Col[0].QueenId].Pos))) burr = i;
+                // the tube's eldest soldier: the one who comes to alone after the fall (Expedition.Leader)
+                int burr = m.Leader;
                 if (burr >= 0) m.Tracked[burr] = (Ants[burr].Serial, new Veteran { Type = AntType.Soldier, Level = 1, Joined = 1, Name = "Burr" });
             }
             m.Roster = new ColonyRoster();
