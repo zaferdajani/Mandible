@@ -136,6 +136,13 @@ class Piece:
             for j in range(nv - 1):
                 self.face((grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]))
 
+    def card(self, fn, nu=12, nv=12):
+        """A surface that carries one whole photographed web: uv runs 0..1 across it."""
+        grid = [[self.v(Vector(fn(i / (nu - 1), j / (nv - 1))), (1, 1, 1, SHEET), (i / (nu - 1), j / (nv - 1))) for j in range(nv)] for i in range(nu)]
+        for i in range(nu - 1):
+            for j in range(nv - 1):
+                self.face((grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]))
+
     def lash(self, p, rad, turns=3):
         """Silk wound round a stem where a rope is tied."""
         pts = [Vector(p) + Vector((math.cos(a) * rad, math.sin(a) * rad, (a / (2 * math.pi * turns) - 0.5) * rad * 3.2))
@@ -250,7 +257,17 @@ def tent(k):
             base = a.lerp(b, v)
             q = h.lerp(base, lo + (hi - lo) * u)
             return q + Vector((0, 0, -0.07 * math.sin(v * math.pi) * math.sin(u * math.pi)))
-        p.sheet(fn, 5, 5, kind=0.6)
+        pass  # the gauze is the photographed snare on the card below
+    card = Piece(270 + k)
+    ph = k * 2.1
+
+    def dome(u, v):
+        x, y = (u - 0.5) * 2.5, (v - 0.5) * 2.5
+        d = math.sqrt(x * x + y * y) / 1.25
+        z = 0.44 * max(0.0, 1 - d ** 1.6) + 0.05 * noise.noise(Vector((x * 1.7 + ph, y * 1.7, ph))) * max(0.0, 1 - d)
+        return (x, y, max(z, 0.03))
+    card.card(dome, 13, 13)
+    card.finish(f"tent_{'abc'[k]}_card")
     p.finish(f"tent_{'abc'[k]}_silk")
     stems.finish(f"tent_{'abc'[k]}_stem")
 
@@ -282,7 +299,9 @@ def hammock(k):
         q.z = q.z * (1 - belly) + 0.1 * belly
         q.y += (v - 0.5) * 0.5 * math.sin(u * math.pi)
         return q
-    silk.sheet(fn, 12, 8)
+    card = Piece(370 + k)
+    card.card(lambda u, v: Vector(fn(u * 1.06 - 0.03, v * 1.12 - 0.06)), 14, 10)
+    card.finish(f"hammock_{'ab'[k]}_card")
     # the edge ropes and the cross ties that carry the sheet
     for a, b in ((la, ra), (lb, rb)):
         silk.rope(a, b, sag=0.22, rad=0.026, n=10, beads=0.22)
