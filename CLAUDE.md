@@ -39,10 +39,11 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   (`World.Obstacles`, `W.Blocked`), no pathfinding. No water exists anywhere yet.
 - Campaign: `Levels.cs` (setup + objectives per level id, `Levels.Order` maps ids to numbers), `Expedition` objectives
   and steps, `CampaignColony.cs` (persistent roster, veterans; Burr is tracked by name), `CampaignReveal.cs` (what each
-  chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon;
-  each gland is a radiating core of `Strength` 1-3 that becomes `Colony.Power`, +hp/bite for every ant, saved in the roster).
-  Mutation is the queen's alone: `Mutations.Trees` (climbed in order, `CanTake`), shown by `src/UI/MutationTree.cs` (target N1) from the
-  result card; generals rank up only by eating (XP -> skill points). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+  chapter reveals), `Mutation.cs` (cores: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon),
+  `src/UI/MutationTree.cs` (tree screen, target N1). PROGRESSION RULES ARE IN `docs/progression.md` (owner, 2026-11-15):
+  a core gives the queen a NEW UNIT; organic matter levels up queen and generals through the evolve tree. The code still
+  has the old model (`Colony.Power` from core `Strength`, `Mutations.Trees` of trait picks, generals' XP from their own eating):
+  rework it to the doc, do not extend it. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): with Web Throwing the colony builds on the surface from
   **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
   `WantsStraw`, never counted as food). Building (owner, 2026-11-15): a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + WebRank, placed within `SilkReach` of the mound):
@@ -72,3 +73,4 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
 Real ant behaviour, macro nature-documentary realism, warm palette, no grey, no code-primitive art. Gradual reveal
 (red colony from Act II). Generals (never "heroes" in player text). Old Burr goes into the royal cocoon and becomes
 the Warlord (Hemlock only if Burr fell first). Ground ants cannot hit airborne wasps. Autosave only at milestones.
+Progression: `docs/progression.md` is the only rule (core -> new unit; organic matter -> levels via the evolve tree).
