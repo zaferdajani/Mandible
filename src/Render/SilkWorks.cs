@@ -211,7 +211,17 @@ void fragment() {
                     var box = mi.Mesh.GetAabb();
                     _scanScale = SpinHeight / Mathf.Max(box.Size.Y, 0.001f);
                     _scanOff = new Vector3(-(box.Position.X + box.Size.X / 2), -box.Position.Y, -(box.Position.Z + box.Size.Z / 2));
-                    _spinScan = new Bat(_root, mi.Mesh, null, 12, "spinnery_scan");
+                    // the scan's own texture, warmed and dulled: sunlit silk is honey-cream and soft, never white plastic
+                    Material scanMat = null;
+                    if (mi.Mesh.SurfaceGetMaterial(0) is BaseMaterial3D own)
+                    {
+                        var m = (BaseMaterial3D)own.Duplicate();
+                        m.AlbedoColor = new Color(0.88f, 0.83f, 0.72f);
+                        m.Roughness = 0.9f; m.Metallic = 0; m.MetallicSpecular = 0.1f;
+                        m.BacklightEnabled = true; m.Backlight = new Color(0.2f, 0.15f, 0.08f);
+                        scanMat = m;
+                    }
+                    _spinScan = new Bat(_root, mi.Mesh, scanMat, 12, "spinnery_scan");
                 }
             scan.QueueFree();
         }
