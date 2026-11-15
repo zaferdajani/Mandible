@@ -34,6 +34,14 @@ public partial class AudioDirector : Node
         Bank("death", 3, "death_");
         foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat", "levelup", "mutate", "mutate_queen", "web", "web_land", "sweep", "sting", "research" })
             Bank(s, 1, s);
+        // creature voices (tools/gen_voices.py): three calls when clicked, two when given an order (the kingdom only)
+        foreach (var v in new[] { "queen", "worker", "soldier", "silk", "major", "flyer", "gunner", "warlord", "matron", "marshal", "beetle", "stag", "spider", "wasp" })
+        {
+            Bank("voc_" + v, 3, $"voc_{v}_");
+            Bank("ack_" + v, 2, $"ack_{v}_");
+        }
+        _voice = new AudioStreamPlayer { Bus = "Ui" };
+        AddChild(_voice);
 
         _calm = Loop("music_calm", "Music");
         _battle = Loop("music_battle", "Music");
@@ -116,6 +124,41 @@ public partial class AudioDirector : Node
         p.Stream = bank[0];
         p.VolumeDb = db + Mathf.LinearToDb(SfxVolume);
         p.Play();
+    }
+
+    AudioStreamPlayer _voice;
+    readonly Dictionary<string, int> _lastTake = new();
+
+    /// The voice of each creature (no speech: every kind has its own call). Silk = soldiers of a web-throwing colony.
+    public static string VoiceOf(AntType t, bool silk = false) => t switch
+    {
+        AntType.Queen => "queen", AntType.Worker => "worker", AntType.Soldier => silk ? "silk" : "soldier",
+        AntType.Major => "major", AntType.Flyer => "flyer", AntType.Gunner => "gunner", AntType.Warlord => "warlord",
+        AntType.Matron => "matron", AntType.Marshal => "marshal", AntType.Beetle => "beetle",
+        AntType.StagBeetle => "stag", AntType.Spider => "spider", AntType.Wasp => "wasp", _ => "worker",
+    };
+
+    /// Who answers for a mixed selection: the highest rank speaks, once.
+    public static int VoiceRank(AntType t) => t switch
+    {
+        AntType.Queen => 9, AntType.Marshal => 8, AntType.Matron => 7, AntType.Warlord => 6, AntType.Major => 5,
+        AntType.Gunner => 4, AntType.Flyer => 3, AntType.Soldier => 2, _ => 1,
+    };
+
+    /// A creature's call ("voc_x" clicked, "ack_x" ordered). One voice at a time, never the same take twice running;
+    /// false when there is no such call or one has only just begun (the caller falls back to a plain click).
+    public bool Voice(string key, float db = 0, double gap = 0.3)
+    {
+        if (!_banks.TryGetValue(key, out var bank) || bank.Length == 0) return false;
+        if (!Throttle("voice", gap)) return false;
+        int take = _rng.RandiRange(0, bank.Length - 1);
+        if (bank.Length > 1 && _lastTake.TryGetValue(key, out int last) && take == last) take = (take + 1) % bank.Length;
+        _lastTake[key] = take;
+        _voice.Stream = bank[take];
+        _voice.VolumeDb = db + Mathf.LinearToDb(SfxVolume);
+        _voice.PitchScale = 1 + _rng.RandfRange(-0.04f, 0.04f);
+        _voice.Play();
+        return true;
     }
 
     /// 0 = calm, 1 = full battle.

@@ -453,7 +453,28 @@ public partial class PlayerInput : Node
         SelectedRoom = -1;
         Inspect = -1;
         InspectFood = null;
-        if (ids.Count > 0) Game.Audio.Ui("ui_click", -6);
+        if (ids.Count > 0) Speak(ids, false);
+    }
+
+    /// The selection answers in its own voice: one call for the whole group, from its highest-ranking creature
+    /// (a general before a major before a worker). `order` = the shorter call that acknowledges a command.
+    void Speak(List<int> ids, bool order)
+    {
+        int best = -1, rank = -1;
+        foreach (int id in ids)
+        {
+            int r = AudioDirector.VoiceRank(Sim.Ants[id].Type);
+            if (r > rank) { rank = r; best = id; }
+        }
+        if (best < 0 || !Game.Audio.Voice((order ? "ack_" : "voc_") + VoiceOf(best), order ? -4 : -2))
+            Game.Audio.Ui("ui_click", order ? 0 : -6);
+    }
+
+    string VoiceOf(int id)
+    {
+        ref var a = ref Sim.Ants[id];
+        bool silk = a.Type == AntType.Soldier && a.Team >= 0 && a.Team < Sim.Col.Length && Sim.Col[a.Team].WebRank > 0;
+        return AudioDirector.VoiceOf(a.Type, silk);
     }
 
     public void Prune()
@@ -541,7 +562,12 @@ public partial class PlayerInput : Node
         if (!shift) SetSelection(new List<int>());
         // clicking an enemy or wild bug shows its details
         int other = Pick(screen, false);
-        if (other >= 0) { Inspect = other; InspectSerial = Sim.Ants[other].Serial; Game.Audio.Ui("ui_click", -8); return; }
+        if (other >= 0)
+        {
+            Inspect = other; InspectSerial = Sim.Ants[other].Serial;
+            if (!Game.Audio.Voice("voc_" + VoiceOf(other), -5)) Game.Audio.Ui("ui_click", -8);
+            return;
+        }
         // clicking food shows what it is, how much is left and what it does for the colony
         var food = PickFood(screen);
         if (food != null) { InspectFood = food; Game.Audio.Ui("ui_click", -8); }
@@ -616,7 +642,7 @@ public partial class PlayerInput : Node
     {
         SetSelection(new List<int>());
         NestSelected = true;
-        Game.Audio.Ui("ui_click", -4);
+        if (!Game.Audio.Voice("voc_queen", -2)) Game.Audio.Ui("ui_click", -4); // the mother answers for the nest
         if (jump) Cam.PanTo(Game.World.Nests[Local.Me].Pos);
     }
 
@@ -664,7 +690,7 @@ public partial class PlayerInput : Node
             Game.Issue(new Cmd { Kind = CmdKind.Rally, Team = (byte)Local.Me, P = world });
             Game.Effects.Marker(Game.World.HF.Point(world), new Color(1, 0.8f, 0.3f));
             Game.Hud.Alert("Rally point set", UiTheme.Dim);
-            Game.Audio.Ui("ui_click");
+            if (!Game.Audio.Voice("ack_queen", -4)) Game.Audio.Ui("ui_click");
             return;
         }
         if (Selection.Count == 0) return;
@@ -685,7 +711,7 @@ public partial class PlayerInput : Node
             Game.Issue(ac);
             Game.Ants.Ack(Selection, Sim.Ants[enemy].Pos);
             Game.Effects.Marker(Game.World.HF.Point(Sim.Ants[enemy].Pos), new Color(1, 0.3f, 0.2f));
-            Game.Audio.Ui("ui_click");
+            Speak(Selection, true);
             return;
         }
         if (!attack && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
@@ -700,7 +726,7 @@ public partial class PlayerInput : Node
                     Game.Issue(sc);
                     Game.Ants.Ack(Selection, sw.Pos);
                     Game.Effects.Marker(Game.World.HF.Point(sw.Pos), new Color(1f, 0.85f, 0.45f));
-                    Game.Audio.Ui("ui_click");
+                    Speak(Selection, true);
                     return;
                 }
             // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
@@ -712,7 +738,7 @@ public partial class PlayerInput : Node
                 Game.Issue(xc);
                 Game.Ants.Ack(Selection, mg.Pos);
                 Game.Effects.Marker(Game.World.HF.Point(mg.Pos), new Color(0.78f, 0.6f, 1f));
-                Game.Audio.Ui("ui_click");
+                Speak(Selection, true);
                 return;
             }
         }
@@ -742,7 +768,7 @@ public partial class PlayerInput : Node
                 }
                 Game.Ants.Ack(Selection, food.Pos);
                 Game.Effects.Marker(Game.World.HF.Point(food.Pos), new Color(0.95f, 0.6f, 0.2f));
-                Game.Audio.Ui("ui_click");
+                Speak(Selection, true);
                 return;
             }
             if (food != null && Selection.Exists(i => Sim.Ants[i].Type == AntType.Worker))
@@ -752,7 +778,7 @@ public partial class PlayerInput : Node
                 Game.Issue(gc);
                 Game.Ants.Ack(Selection, food.Pos);
                 Game.Effects.Marker(Game.World.HF.Point(food.Pos), new Color(0.75f, 1f, 0.35f));
-                Game.Audio.Ui("ui_click");
+                Speak(Selection, true);
                 return;
             }
         }
@@ -769,6 +795,6 @@ public partial class PlayerInput : Node
         Game.Issue(mc);
         Game.Ants.Ack(Selection, world);
         Game.Effects.Marker(Game.World.HF.Point(world), attack ? new Color(1, 0.35f, 0.2f) : new Color(0.5f, 1, 0.45f));
-        Game.Audio.Ui("ui_click");
+        Speak(Selection, true);
     }
 }
