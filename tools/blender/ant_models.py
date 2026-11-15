@@ -36,6 +36,10 @@ from mathutils.bvhtree import BVHTree
 OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else ""
 
 BODY, HEAD, GASTER, EYE = 0, 12, 13, 11
+# what CUSTOM0.y says about a surface (the Ant shader reads it): 1 a seta, and for the mutation units' borrowed
+# anatomy 2 spider silk, 3 beetle shell (uv.x counts its ridges), 4 a wasp's banded gaster (uv.x runs along it),
+# 5 a spider's velvet hair, 6 a fly's red compound eye
+SETA, SILK, SHELL, BANDS, VELVET, FLYEYE = 1.0, 2.0, 3.0, 4.0, 5.0, 6.0
 HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
 
 
@@ -49,6 +53,7 @@ class Part:
         self.m = membrane or [0.0] * len(verts)
         self.seta = seta
         self.uv = uv  # texture coordinates into the scanned body's normal map, or None
+        self.coord = None  # per-vertex (u, v) for a shell's ridges or a gaster's bands, where there is no scan
         self.tier = 0  # a general's growth appears from this mutation tier (0 always; 1-3 at hero levels 4, 7, 10)
 
 
@@ -230,7 +235,12 @@ CASTES = {
     "Major": dict(H=1.85, M=1.6, G=1.05, T=1.1, L=0.95, eye=0.9, groove=0.5),
     "Gunner": dict(H=1.05, M=0.85, G=1.4, T=1.0, L=1.0, eye=1.0),
     "Queen": dict(H=1.15, M=1.0, G=1.6, T=1.45, L=0.95, eye=1.3, ocelli=True, flight=True, scars=True),
-    "Flyer": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True),
+    # the mutation units (targets P1-P4, docs/art-targets/README-mutation-units.md): each is one body that merges the
+    # ant with the insect whose core the queen ate; merged() adds the other insect's anatomy to the scanned ant
+    "Flyer": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True, merge="fly"),
+    "Stinger": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True, merge="wasp"),
+    "WebAnt": dict(H=1.32, M=1.3, G=1.0, T=1.05, L=1.12, eye=0.95, merge="spider", legs8=True),
+    "Armoured": dict(H=1.85, M=1.6, G=1.05, T=1.1, L=0.95, eye=0.9, groove=0.5, merge="beetle", plated=True),
     "Warlord": dict(H=1.8, M=2.4, G=1.1, T=1.25, L=1.05, eye=0.85, groove=1.0, spines=True, teeth=6, setae=1.6),
     "Matron": dict(H=1.15, M=1.0, G=1.0, T=1.15, L=1.0, eye=1.05, replete=True, setae=1.4),
     "Marshal": dict(H=1.2, M=1.3, G=1.1, T=1.55, L=0.98, eye=1.5, ocelli=True, flight=True, setae=1.4),
@@ -481,14 +491,32 @@ def build(species, caste, lod):
         (Vector((0.025, -0.03, 0.0)), Vector((0.165, 0.245, 0.04)), Vector((0.265, 0.022, 0.03)), Vector((0.3, 0.003, 0.0))),
         (Vector((0.025, -0.03, -0.012)), Vector((0.16, 0.25, -0.11)), Vector((0.255, 0.022, -0.25)), Vector((0.285, 0.003, -0.32))),
     ]
+    gait = [0, 1, 2]         # which of the shader's three gait slots each leg of a side walks in
+    along = [0.0, 1.0, 2.0]  # where its hip sits along the specimen's three hips
+    if cs.get("legs8"):
+        # a spider's eight: four a side, fanned from straight ahead to straight behind. The shader animates three leg
+        # slots a side in two alternating groups, so the fourth leg walks in the second slot: 0 1 0 1 down the flank
+        hips = [0.092, 0.04, -0.012, -0.05]
+        targets = [
+            (Vector((0.022, -0.03, 0.015)), Vector((0.1, 0.25, 0.2)), Vector((0.16, 0.022, 0.32)), Vector((0.18, 0.003, 0.39))),
+            (Vector((0.025, -0.03, 0.006)), Vector((0.175, 0.265, 0.1)), Vector((0.28, 0.022, 0.13)), Vector((0.315, 0.003, 0.125))),
+            (Vector((0.025, -0.03, -0.006)), Vector((0.18, 0.265, -0.07)), Vector((0.285, 0.022, -0.13)), Vector((0.32, 0.003, -0.15))),
+            (Vector((0.022, -0.03, -0.012)), Vector((0.14, 0.26, -0.17)), Vector((0.215, 0.022, -0.33)), Vector((0.24, 0.003, -0.41))),
+        ]
+        gait = [0, 1, 2, 1]
+        along = [0.0, 0.7, 1.4, 2.0]
+    plated = cs.get("plated", False)
+    hairy = cs.get("legs8", False)
     for s in (-1, 1):
-        for i in range(3):
-            pid = (1 if s > 0 else 4) + i
+        for i in range(len(hips)):
+            pid = (1 if s > 0 else 4) + gait[i]
+            first = len(parts)
             def sx(p):
                 return Vector((p.x * s, p.y, p.z))
             hip = Vector((s * 0.034 * T, BODY_Y - 0.012, hips[i] * T))
-            roots[pid] = hip.copy()
-            build.knees_local[pid] = None
+            own = i < 3 and gait[i] == i
+            if own:
+                roots[pid] = hip.copy()
             tro_off, knee, ankle, foot = targets[i]
             troch = hip + sx(tro_off)
             L2 = L * 1.25
@@ -496,7 +524,8 @@ def build(species, caste, lod):
             ankle = Vector((s * ankle.x * L2, ankle.y, hips[i] * T + (ankle.z - hips[i]) * L2))
             foot = Vector((s * foot.x * L2, foot.y, hips[i] * T + (foot.z - hips[i]) * L2))
             path = [hip, troch, knee, ankle, foot]
-            build.knees_local[pid] = knee.copy()
+            if own:
+                build.knees_local[pid] = knee.copy()
             # coxa to the trochanter: stout; the femur slightly flattened and thickest past its middle
             fe1 = troch.lerp(knee, 0.35) + Vector((0, 0.008, 0))
             fe2 = troch.lerp(knee, 0.7) + Vector((0, 0.006, 0))
@@ -505,19 +534,24 @@ def build(species, caste, lod):
             r = 1.0 + 0.15 * (T - 1)
             pts = [hip, hip.lerp(troch, 0.5), troch, fe1, fe2, knee, ti1, ti2, ankle]
             rad = [0.02 * r, 0.018 * r, 0.011, 0.0145, 0.0135, 0.0092, 0.0078, 0.008, 0.0072]
+            if plated:
+                # a beetle's legs: broad flattened femora and tibiae, each a plate, the tibia widening to its spurred end
+                rad = [(0.026 * r, 0.026 * r), (0.023 * r, 0.023 * r), (0.015, 0.015), (0.027, 0.017), (0.025, 0.016), (0.014, 0.014), (0.017, 0.011), (0.02, 0.012), (0.013, 0.013)]
             if near:
                 pts, rad = resample(pts, rad, 2)
             elif not fine:
-                pts, rad = [hip, troch, fe2, knee, ankle], [0.019 * r, 0.011, 0.0135, 0.0092, 0.0072]
-            secs = [(p, rr, rr) for p, rr in zip(pts, rad)]
+                pts = [hip, troch, fe2, knee, ankle]
+                rad = [0.025 * r, 0.015, (0.025, 0.016), 0.014, 0.013] if plated else [0.019 * r, 0.011, 0.0135, 0.0092, 0.0072]
+            secs = [(p, rr[0], rr[1]) if isinstance(rr, tuple) else (p, rr, rr) for p, rr in zip(pts, rad)]
             # tarsus: five beads, the first long, the claw segment last
             seglen = [0.4, 0.17, 0.14, 0.12, 0.17] if near else [0.55, 0.45]
             acc = 0.0
+            tk = 1.45 if plated else 1.0
             for k, sl in enumerate(seglen):
                 a = ankle.lerp(foot, acc + sl * 0.15)
                 acc += sl
                 b = ankle.lerp(foot, acc)
-                rr = 0.0062 - 0.0006 * k
+                rr = (0.0062 - 0.0006 * k) * tk
                 if near:
                     secs.append((a, rr, rr))
                     secs.append((b, rr * 0.7, rr * 0.7))
@@ -525,14 +559,33 @@ def build(species, caste, lod):
                     secs.append((b, rr, rr))
             v, f = loft(secs, lsides)
             parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path))
+            if plated:
+                parts[-1].seta = SHELL
             if near:
                 # the apical spur of the tibia and the paired tarsal claws
-                v, f = cone(ankle + Vector((0, 0.004, 0)), ankle + (ankle - knee).normalized() * 0.018 + Vector((0, -0.004, 0)), 0.0026, 3)
+                v, f = cone(ankle + Vector((0, 0.004, 0)), ankle + (ankle - knee).normalized() * 0.018 + Vector((0, -0.004, 0)), 0.0026 * tk, 3)
                 parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path))
                 d = (foot - ankle).normalized()
                 for c in (-1, 1):
-                    v, f = cone(foot, foot + d * 0.008 + Vector((c * 0.006, -0.004, 0)), 0.0018, 3)
+                    v, f = cone(foot, foot + d * 0.008 + Vector((c * 0.006, -0.004, 0)), 0.0018 * tk, 3)
                     parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path))
+            if plated and fine:
+                # a row of short spines down the outer edge of each tibia
+                for k in range(3 if near else 2):
+                    at = knee.lerp(ankle, 0.3 + 0.25 * k)
+                    v, f = cone(at, at + Vector((s * 0.02, 0.006, 0.0)) + (ankle - knee).normalized() * 0.012, 0.0045, 3)
+                    parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path))
+            if hairy and fine:
+                # a spider's leg hair: fine bristles standing off the femur and the tibia
+                hr = random.Random(pid * 31 + i)
+                for a0, b0, cnt in ((troch, knee, 7 if near else 2), (knee, ankle, 8 if near else 3)):
+                    for k in range(cnt):
+                        at = a0.lerp(b0, (k + 0.6) / (cnt + 0.4))
+                        out = Vector((s * hr.uniform(0.2, 1.0), hr.uniform(0.3, 1.0), hr.uniform(-0.6, 0.6))).normalized()
+                        v, f = cone(at, at + out * hr.uniform(0.022, 0.036) + (b0 - a0).normalized() * 0.012, 0.0012 if near else 0.002, 3)
+                        parts.append(make(v, f, 0, pid, THORAX_R, (hip.x, hip.z), weight_path=path, seta=SETA))
+            for q in parts[first:]:
+                q.leg = (s, along[i], hip.copy(), [x.copy() for x in path])
 
     # ---- setae: erect hairs over the gaster, thorax and head that catch the light
     if near:
@@ -573,7 +626,8 @@ SCANS = {
     ("lasius", "Matron"): dict(body="lasius_worker", replete=True),
     # (the black queen keeps her modelled body: the Lasius queen scans tried so far did not part cleanly at her
     # broad waist; see docs/art-pipeline.md)
-    ("lasius", "Flyer"): dict(body="lasius_male"),
+    # (the male's scanned gaster is torn open, so the winged ant and the stinger do not use it: the modelled gaster hangs there)
+    ("lasius", "Flyer"): dict(body="lasius_male", own_gaster=True, proc_gaster=True),
     ("lasius", "Marshal"): dict(body="lasius_male", head=1.1),
     ("solenopsis", "Worker"): dict(body="solenopsis_minor"),
     ("solenopsis", "Gunner"): dict(body="solenopsis_minor", gaster=1.25),
@@ -584,6 +638,13 @@ SCANS = {
     ("solenopsis", "Queen"): dict(body="solenopsis_queen"),
     ("solenopsis", "Flyer"): dict(body="solenopsis_queen"),
     ("solenopsis", "Marshal"): dict(body="solenopsis_queen"),
+    # the mutation units: the ant half of each merged body is the caste it grew from
+    ("lasius", "Stinger"): dict(body="lasius_male", own_gaster=True),
+    ("solenopsis", "Stinger"): dict(body="solenopsis_queen", own_gaster=True),
+    ("lasius", "WebAnt"): dict(body="camponotus_minor", own_gaster=True),
+    ("solenopsis", "WebAnt"): dict(body="solenopsis_major", head=0.85, own_gaster=True),
+    ("lasius", "Armoured"): dict(body="camponotus_major", own_gaster=True),
+    ("solenopsis", "Armoured"): dict(body="solenopsis_major", own_gaster=True),
 }
 BODIES = os.environ.get("ANT_BODIES", "D:/Temp/ant-rebuild/bodies")
 LABEL_PART = {0: (HEAD, HEAD_R), 1: (BODY, THORAX_R), 2: (GASTER, GASTER_R), 3: (EYE, HEAD_R)}
@@ -623,8 +684,8 @@ def build_scanned(species, caste, lod):
     for t in tris:
         labs = [rows[i][8] for i in t]
         lab = 3 if labs.count(3) >= 2 else max(set(labs), key=labs.count)
-        if cfg.get("replete") and lab == 2:
-            continue  # a replete's gaster is the modelled, swollen one
+        if (cfg.get("replete") or cfg.get("own_gaster")) and lab == 2:
+            continue  # a replete's gaster is the modelled, swollen one; a wasp's, a spider's or a beetle's is merged()'s
         groups.setdefault(lab, []).append(t)
     parts = []
     for lab, ts in groups.items():
@@ -674,18 +735,36 @@ def build_scanned(species, caste, lod):
                 p.v = [v + d for v in p.v]
                 parts.append(p)
             continue
-        if p.part in targets and p.part in roots:
+        if getattr(p, "leg", None) and CASTES[caste].get("legs8"):
+            # eight legs share the specimen's three hips a side: each hangs where it falls between them
+            side, t, root, path = p.leg
+            hp = [hips[2 * k + (0 if side > 0 else 1)] for k in range(3)]
+            k = min(int(t), 1)
+            d = hp[k].lerp(hp[k + 1], t - k) - root
+            p.v = [v + d for v in p.v]
+            p.pivot = (p.pivot[0] + d.x, p.pivot[1] + d.z)
+            p.leg = (side, t, root + d, [x + d for x in path])
+            parts.append(p)
+        elif p.part in targets and p.part in roots:
             d = targets[p.part] - roots[p.part]
+            if getattr(p, "leg", None):
+                p.leg = (p.leg[0], p.leg[1], p.leg[2] + d, [x + d for x in p.leg[3]])
             p.v = [v + d for v in p.v]
             p.pivot = (p.pivot[0] + d.x, p.pivot[1] + d.z)
             parts.append(p)
-        elif cfg.get("replete") and p.part == GASTER:
+        elif (cfg.get("replete") or cfg.get("proc_gaster")) and p.part == GASTER:
             # the swollen gaster (and its setae) hangs from the scan's waist instead of the modelled one
             p.v = [v + hang for v in p.v]
             parts.append(p)
-    tip = proc_tip + hang if cfg.get("replete") else waist + (Vector(meta["gaster_tip"]) - waist) * gs
+    tip = proc_tip + hang if cfg.get("replete") or cfg.get("proc_gaster") else waist + (Vector(meta["gaster_tip"]) - waist) * gs
     if caste in ("Warlord", "Matron", "Marshal"):
         parts.extend(mutate(parts, species, caste, lod, meta, targets, knees))
+    if CASTES[caste].get("merge"):
+        # the modelled ant's own gaster parts (setae, sting) never came across: merged() makes the new one
+        extra, new_tip = merged(parts, species, caste, lod, meta, cfg, moved)
+        parts.extend(extra)
+        tip = new_tip or tip
+        fit(parts, lod, cfg["body"])
     return parts, neck, tip, Vector(meta["gaster"]), waist
 
 
@@ -816,6 +895,316 @@ def mutate(parts, species, caste, lod, meta, targets, knees):
     return out
 
 
+# ------------------------------------------------------------------------------------------- the mutation units (P1-P4)
+
+# Targets P1-P4 (docs/art-targets/p1-winged-ant.jpg ... p4-armoured-ant.jpg). The ant half of each unit is its caste's
+# real specimen; merged() grows the other insect's anatomy out of it: a fly's eyes, halteres and bristles; a wasp's
+# banded gaster and sting; a spider's extra eyes, hairy gaster, spinnerets and a net of silk held in a front leg (its
+# eight legs come from build()); a beetle's pronotum shield and ridged wing cases (its plated legs come from build()).
+
+# triangles per level of detail (near, mid, far): what the caste each unit grew from already costs on its specimen
+BUDGET = {"lasius_male": (10700, 5221, 4673), "solenopsis_queen": (10700, 4742, 4218), "camponotus_minor": (10700, 3296, 2482),
+          "solenopsis_major": (10700, 3295, 1830), "camponotus_major": (10700, 4384, 3836)}
+
+
+def decimated(part, ratio):
+    """A scanned mass at a lower triangle count, its normal-map coordinates carried along."""
+    me = bpy.data.meshes.new("dec")
+    me.from_pydata([tuple(v) for v in part.v], [], [tuple(t) for t in part.t])
+    layer = me.uv_layers.new(name="uv")
+    for loop in me.loops:
+        layer.data[loop.index].uv = part.uv[loop.vertex_index]
+    for poly in me.polygons:
+        poly.use_smooth = True
+    ob = bpy.data.objects.new("dec", me)
+    bpy.context.scene.collection.objects.link(ob)
+    mod = ob.modifiers.new("dec", "DECIMATE")
+    mod.ratio = ratio
+    ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    m = ev.to_mesh()
+    m.calc_loop_triangles()
+    uv = [None] * len(m.vertices)
+    for loop in m.loops:
+        if uv[loop.vertex_index] is None:
+            uv[loop.vertex_index] = tuple(m.uv_layers[0].data[loop.index].uv)
+    part.v = [v.co.copy() for v in m.vertices]
+    part.n = [v.normal.copy() for v in m.vertices]
+    part.t = [tuple(t.vertices) for t in m.loop_triangles]
+    part.uv = [u or (0.0, 0.0) for u in uv]
+    part.w = [0.0] * len(part.v)
+    part.m = [0.0] * len(part.v)
+    ev.to_mesh_clear()
+    bpy.data.objects.remove(ob)
+    bpy.data.meshes.remove(me)
+
+
+def fit(parts, lod, body):
+    """Keeps a merged body inside its level of detail's budget: a third of the setae may go, then the scanned masses
+    give up triangles (they are the densest part of the mesh), then more setae."""
+    budget = BUDGET[body][("near", "mid", "far").index(lod)]
+    total = lambda: sum(len(q.t) for q in parts)
+    if total() <= budget:
+        return
+    hairs = [q for q in parts if q.seta == SETA]
+    random.Random(11).shuffle(hairs)
+
+    def thin(limit):
+        drop = set()
+        over = total() - budget
+        for q in hairs[:limit]:
+            if over <= 0:
+                break
+            if id(q) in gone:
+                continue
+            over -= len(q.t)
+            drop.add(id(q))
+        gone.update(drop)
+        parts[:] = [q for q in parts if id(q) not in drop]
+
+    gone = set()
+    thin(len(hairs) // 3)
+    over = total() - budget
+    scans = [q for q in parts if q.uv is not None and q.part != EYE]
+    have = sum(len(q.t) for q in scans)
+    if over > 0 and have > 0:
+        ratio = max(0.2, 1 - over / have * 1.06)
+        for q in scans:
+            if len(q.t) > 40:
+                decimated(q, ratio)
+    thin(len(hairs))
+    if total() > budget:
+        print(f"[ants] WARNING: {total() - budget} triangles over the {lod} budget of {budget}")
+
+
+def shell(centre, radius, th0, th1, nz, nth, part, region, ridges=0.0, thick=0.007):
+    """A curved chitin plate with a real edge: a grid along the body (t = 0..1) and round it (u = 0..1 from angle th0
+    to th1, pi/2 straight up). centre(t) is the axis point, radius(t, u) the distance from it."""
+    verts, faces, coord = [], [], []
+    for layer in (0, 1):
+        for i in range(nz + 1):
+            t = i / nz
+            c = centre(t)
+            for j in range(nth + 1):
+                u = j / nth
+                th = th0 + (th1 - th0) * u
+                r = max(radius(t, u) - layer * thick, 0.002)
+                verts.append(c + Vector((math.cos(th) * r, math.sin(th) * r, 0)))
+                coord.append((u * ridges, t))
+    n1 = (nz + 1) * (nth + 1)
+    for i in range(nz):
+        for j in range(nth):
+            a = i * (nth + 1) + j
+            faces.append((a, a + 1, a + nth + 2, a + nth + 1))
+            faces.append((n1 + a, n1 + a + nth + 1, n1 + a + nth + 2, n1 + a + 1))
+    ring = [j for j in range(nth + 1)] + [i * (nth + 1) + nth for i in range(1, nz + 1)] + \
+           [nz * (nth + 1) + j for j in range(nth - 1, -1, -1)] + [i * (nth + 1) for i in range(nz - 1, 0, -1)]
+    for k in range(len(ring)):
+        a, b = ring[k], ring[(k + 1) % len(ring)]
+        faces.append((a, n1 + a, n1 + b, b))
+    vs, ns, ts = subdivided(verts, faces, 0)
+    pr = Part(vs, ns, ts, part, region, seta=SHELL)
+    pr.coord = coord
+    return pr
+
+
+def strand(a, b, r, sides=3):
+    return loft([(a, r, r), (b, r, r)], sides, cap_start=False, cap_end=False)
+
+
+def merged(parts, species, caste, lod, meta, cfg, moved):
+    """The other insect's anatomy on a scanned ant. Returns (new parts, the new gaster tip or None)."""
+    kind = CASTES[caste]["merge"]
+    near, far = lod == "near", lod == "far"
+    sides = {"near": 8, "mid": 6, "far": 5}[lod]
+    lv = 0 if far else 1
+    body = [q for q in parts if q.uv is not None]
+    verts, tris = [], []
+    for q in body:
+        o = len(verts)
+        verts.extend(q.v)
+        tris.extend((a + o, b + o, c + o) for a, b, c in q.t)
+    bvh = BVHTree.FromPolygons(verts, tris)
+    neck, waist = Vector(meta["neck"]), Vector(meta["waist"])
+    head = moved(Vector(meta["head"]), 0)
+    hw = meta["head_width"] * cfg.get("head", 1.0)
+    span = neck.z - waist.z
+    rnd = random.Random(sum(ord(ch) for ch in species + caste))
+    out, tip = [], None
+
+    def top(x, z):
+        hit = bvh.ray_cast(Vector((x, 2.0, z)), Vector((0, -1, 0)), 4.0)
+        return (hit[0], hit[1]) if hit[0] is not None else (None, None)
+
+    def reach(c, th):
+        """How far the body reaches from the axis point c at angle th round it."""
+        d = Vector((math.cos(th), math.sin(th), 0))
+        hit = bvh.ray_cast(c + d, -d, 1.0)
+        return 1.0 - hit[3] if hit[0] is not None else 0.0
+
+    def bristles(count, z0, z1, spread, length, radius):
+        for _ in range(count):
+            at, nrm = top(rnd.uniform(-spread, spread), rnd.uniform(z0, z1))
+            if at is None or nrm.y < 0.2:
+                continue
+            d = (nrm + Vector((0, 0.25, -0.7))).normalized()
+            v, f = cone(at - nrm * 0.002, at + d * rnd.uniform(length * 0.65, length), radius, 3)
+            out.append(make(v, f, 0, BODY, THORAX_R, seta=SETA))
+
+    def lofted_gaster(length, width, height, peak, droop, rise, n, flag):
+        """A gaster hung from the waist: a stalk, a swell (widest at `peak` of its length) and a tapering tip."""
+        secs = []
+        z0 = waist.z - 0.012
+        for i in range(n + 1):
+            t = i / n
+            env = math.sin(math.pi * t ** (math.log(0.5) / math.log(peak))) ** 0.75 if 0 < t < 1 else 0.0
+            c = Vector((0, waist.y - 0.006 + rise * math.sin(math.pi * t) - droop * t * t, z0 - length * t))
+            secs.append((c, 0.012 + width * env, 0.012 + height * env))
+        v, f = loft(secs, sides + 2)
+        pr = make(v, f, lv, GASTER, GASTER_R)
+        pr.seta = flag
+        pr.coord = [(min(1.0, max(0.0, (z0 - q.z) / length)), 0.0) for q in pr.v]
+        out.append(pr)
+        return pr, secs
+
+    if kind in ("fly", "wasp"):
+        # a fly's eyes: two great red domes that take the whole flank of the head
+        for s, e in zip((1, -1), meta["eyes"]):
+            ec = moved(Vector(e), 0)
+            o = Vector((s, 0.18, 0.1)).normalized()
+            c = ec - o * 0.07 * hw + Vector((0, 0.02 * hw, 0.03 * hw))
+            v, f = ellipsoid(c, 0.36 * hw, 0.31 * hw, 0.23 * hw, 6 if near else 4, sides, up=Vector((0, 0, 1)), fwd=o)
+            pr = make(v, f, lv, EYE, HEAD_R)
+            pr.seta = FLYEYE
+            out.append(pr)
+        if not far:
+            # halteres: the fly's second wing pair, shrunk to two knobbed stalks behind the wings
+            for s in (-1, 1):
+                base, nrm = top(s * 0.035, waist.z + 0.2 * span)
+                if base is None:
+                    continue
+                knob = base + Vector((s * 0.055, 0.03, -0.035))
+                v, f = loft([(base - nrm * 0.003, 0.0045, 0.0045), (base.lerp(knob, 0.6), 0.003, 0.003), (knob, 0.003, 0.003)], 4)
+                out.append(make(v, f, 0, BODY, THORAX_R))
+                v, f = ellipsoid(knob, 0.0095, 0.0095, 0.012, 3, 5, fwd=knob - base)
+                out.append(make(v, f, lv, BODY, THORAX_R, membrane_fn=lambda q: 1.0))
+            # the bristles of a fly's flight thorax, and a few on the crown
+            bristles(46 if near else 12, waist.z + 0.12 * span, waist.z + 0.92 * span, 0.05, 0.05, 0.0016 if near else 0.003)
+            bristles(10 if near else 0, head.z - 0.3 * (head.z - neck.z), head.z + 0.3 * (head.z - neck.z), 0.03, 0.035, 0.0014)
+
+    if kind == "wasp":
+        # a wasp's gaster: spindle-shaped, hung low from a narrow waist, banded amber and black, tapering to the sting
+        n = 16 if near else 10 if not far else 6
+        pr, secs = lofted_gaster(0.4, 0.088, 0.082, 0.36, 0.11, 0.015, n, BANDS)
+        end = secs[-1][0]
+        pts = [end + Vector((0, 0.004, 0.02)), end + Vector((0, -0.028, -0.035)), end + Vector((0, -0.07, -0.045)),
+               end + Vector((0, -0.108, -0.022)), end + Vector((0, -0.124, 0.02))]
+        rs = [0.02, 0.016, 0.0115, 0.007, 0.0016]
+        if not far:
+            pts, rs = resample(pts, rs, 2)
+        v, f = loft([(q, r, r) for q, r in zip(pts, rs)], 5 if near else 4, cap_start=True, cap_end=False)
+        out.append(make(v, f, 0, EYE, GASTER_R))
+        tip = pts[-1]
+        if not far:
+            # the bead of venom gathering at its point
+            v, f = ellipsoid(tip + Vector((0, -0.007, 0.003)), 0.0085, 0.0105, 0.0085, 4, 6)
+            out.append(make(v, f, lv, GASTER, GASTER_R, membrane_fn=lambda q: 1.0))
+
+    if kind == "spider":
+        # a spider's simple eyes: two more pairs on the brow, between and above the ant's own
+        hl = head.z - neck.z
+        for x, zf, r in ((0.13, 0.62, 0.07), (0.27, 0.3, 0.058)):
+            for s in (-1, 1):
+                at, nrm = top(s * x * hw, head.z + zf * hl)
+                if at is None:
+                    continue
+                v, f = ellipsoid(at - nrm * r * hw * 0.25, r * hw, r * hw, r * hw * 0.75, 3 if not near else 4, 6 if not far else 4, fwd=nrm, up=Vector((0, 0, 1)))
+                out.append(make(v, f, lv, EYE, HEAD_R))
+        # a spider's abdomen where the gaster was: a soft hairy ovoid
+        n = 14 if near else 9 if not far else 6
+        pr, secs = lofted_gaster(0.37, 0.118, 0.108, 0.5, 0.02, 0.035, n, VELVET)
+        cand = [k for k, nn in enumerate(pr.n) if nn.y > -0.45]
+        for _ in range(170 if near else 34 if not far else 0):
+            k = rnd.choice(cand)
+            p0, n0 = pr.v[k], pr.n[k]
+            d = (n0 + Vector((0, 0.15, -0.55))).normalized()
+            v, f = cone(p0 - n0 * 0.002, p0 + d * rnd.uniform(0.028, 0.05), 0.0012 if near else 0.0026, 3)
+            out.append(make(v, f, 0, GASTER, GASTER_R, seta=SETA))
+        # spinnerets: a pair and a median one, pale, at its tip
+        end = secs[-1][0]
+        tip = end + Vector((0, -0.012, -0.02))
+        for dx, dy in ((-0.016, -0.004), (0.016, -0.004), (0.0, -0.02)):
+            a = end + Vector((dx, dy, 0.02))
+            v, f = loft([(a, 0.0105, 0.0105), (a + Vector((dx * 0.4, -0.012, -0.03)), 0.008, 0.008), (a + Vector((dx * 0.7, -0.02, -0.05)), 0.0035, 0.0035)], 5 if not far else 3)
+            out.append(make(v, f, 0, GASTER, GASTER_R, membrane_fn=lambda q: 0.3))
+        bristles(26 if near else 8 if not far else 0, waist.z + 0.1 * span, waist.z + 0.9 * span, 0.04, 0.035, 0.0013 if near else 0.0026)
+        # the net: an orb of silk held ready in the left front leg, to be thrown
+        leg = next((q for q in parts if q.part == 1 and getattr(q, "leg", None) and q.leg[1] == 0.0), None)
+        if leg is not None:
+            path = leg.leg[3]
+            ankle, foot = path[3], path[4]
+            c = foot + Vector((0.012, 0.13, 0.06))
+            ax_u = Vector((0.72, 0.0, 0.69)).normalized()
+            ax_v = Vector((-0.1, 1.0, 0.1)).normalized()
+            spokes = 8 if near else 6
+            rings = (0.25, 0.45, 0.64, 0.82, 1.0) if near else (0.4, 0.7, 1.0) if not far else (1.0,)
+            r = 0.0009 if near else 0.0018 if not far else 0.0032
+            rim = [c + ax_u * (math.cos(2 * math.pi * k / spokes + 0.3) * 0.13) + ax_v * (math.sin(2 * math.pi * k / spokes + 0.3) * 0.11) for k in range(spokes)]
+            silk = []
+            for k in range(spokes):
+                silk.append(strand(c, rim[k], r))
+                for g in rings:
+                    a, b = c.lerp(rim[k], g), c.lerp(rim[(k + 1) % spokes], g)
+                    mid = a.lerp(b, 0.5).lerp(c, 0.1)  # each thread sags toward the hub
+                    silk.append(strand(a, mid, r))
+                    silk.append(strand(mid, b, r))
+            low = sorted(rim, key=lambda q: q.y)[:2]
+            for q in low:
+                silk.append(strand(q, foot.lerp(ankle, 0.35), r))  # the guy threads its claws hold
+            for v, f in silk:
+                pr = make(v, f, 0, 1, THORAX_R, leg.pivot)
+                pr.w = [0.92] * len(pr.v)
+                pr.seta = SILK
+                out.append(pr)
+
+    if kind == "beetle":
+        cy = Vector(meta["mesosoma"]).y
+        # the pronotum: a broad shield over the front of the thorax, its margins flared like a ground beetle's
+        zA, zB = neck.z + 0.035, neck.z - 0.62 * span
+        th0, th1 = 0.22, math.pi - 0.22
+        grid = {}
+        def pro_r(t, u):
+            key = (round(t, 4), round(u, 4))
+            if key not in grid:
+                c = Vector((0, cy, zA + (zB - zA) * min(max(t, 0.12), 0.95)))
+                th = th0 + (th1 - th0) * u
+                dome = math.sin(math.pi * t) ** 0.45 if 0 < t < 1 else 0.0
+                flare = 0.012 * abs(math.cos(th)) ** 2 + 0.03 * abs(2 * u - 1) ** 5
+                grid[key] = max(reach(c, th), 0.03) + 0.003 + (0.007 + flare) * (0.3 + 0.7 * dome)
+            return grid[key]
+        out.append(shell(lambda t: Vector((0, cy, zA + (zB - zA) * t)), pro_r, th0, th1,
+                         8 if near else 5 if not far else 3, 18 if near else 10 if not far else 6, BODY, THORAX_R, thick=0.008))
+        # the wing cases: two ridged elytra closed over the abdomen, meeting at the suture
+        L0, W, Hh = 0.45, 0.165, 0.135
+        zf = waist.z - 0.03
+        def axis(t):
+            return Vector((0, waist.y - 0.012 + 0.03 * math.sin(math.pi * t) - 0.035 * t * t, zf - L0 * t))
+        e0, e1 = -0.55, math.pi + 0.55
+        def ely_r(t, u):
+            th = e0 + (e1 - e0) * u
+            env = max(math.sin(math.pi * min(max(t, 0.0), 1.0) ** 0.72) ** 0.6 if 0 < t < 1 else 0.0, 0.1)
+            r = env * W * Hh / math.sqrt((Hh * math.cos(th)) ** 2 + (W * math.sin(th)) ** 2)
+            return r * (1 - 0.04 * math.exp(-((th - math.pi / 2) / 0.06) ** 2))
+        out.append(shell(axis, ely_r, e0, e1, 14 if near else 8 if not far else 5, 38 if near else 20 if not far else 12,
+                         GASTER, GASTER_R, ridges=26.0, thick=0.006))
+        # the soft abdomen under them
+        v, f = ellipsoid(axis(0.47) + Vector((0, -0.028, 0)), W * 0.78, Hh * 0.6, L0 * 0.44, 6 if not far else 4, sides)
+        out.append(make(v, f, lv, GASTER, GASTER_R))
+        tip = axis(1.0)
+        bristles(14 if near else 0, zB, waist.z + 0.1 * span, 0.03, 0.03, 0.0013)
+    return out, tip
+
+
+
 def plate(c, R, lat, lon, ext, thick, sides, lv):
     """A curved tergite plate on a sphere of radius R about c: latitude/longitude of its centre (radians-ish),
     angular extent; a thin slab so its rim reads from the side."""
@@ -893,7 +1282,7 @@ def write_bin(path, parts, ao):
     for p, a in zip(parts, ao):
         tan = tangents(p) if p.uv else None
         for k, (v, n) in enumerate(zip(p.v, p.n)):
-            uv = p.uv[k] if p.uv else (0.0, 0.0)
+            uv = p.uv[k] if p.uv else p.coord[k] if p.coord else (0.0, 0.0)
             tg = tan[k] if tan else (1.0, 0.0, 0.0, 1.0)
             vbuf.append((v.x, v.y, v.z, n.x, n.y, n.z, p.part / 255.0, p.w[k], p.region, a[k], uv[0], uv[1],
                          p.pivot[0], p.pivot[1], p.m[k], p.seta, 1.0 if p.uv else 0.0, float(p.tier)) + tuple(tg))

@@ -88,7 +88,7 @@ def main():
     manifest = json.load(open(manifest_path))
     tip = Vector(manifest["lasius_Flyer_near"]["gaster_tip"])
     waist = Vector(manifest["lasius_Flyer_near"].get("waist", [0, 0.14, -0.105]))
-    for name, parts in (("lasius_Flyer_sting", sting(tip)), ("royal_larva", royal_larva()), ("womb_cocoon", womb_cocoon())):
+    for name, parts in (("royal_larva", royal_larva()), ("womb_cocoon", womb_cocoon()))  # the sting is now part of the stinger ant's own body (ant_models.py, target P2):
         ao = am.bake_ao(parts, 16)
         tris = am.write_bin(os.path.join(OUT, name + ".bin"), parts, ao)
         manifest[name] = dict(neck=[0, 0.14, 0.13], gaster_tip=list(tip), gaster_centre=list(tip), waist=list(waist),

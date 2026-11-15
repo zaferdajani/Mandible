@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dnq88f0sgattm"
-path="res://.godot/imported/ic_hornetwings.png-b1c4ae45e0d1a3afa99de6758b0e6885.ctex"
+uid="uid://bua5yegl0qcii"
+path="res://.godot/imported/em_plates.png-16bb01d4258fac8916c3ba09f097e565.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_hornetwings.png"
-dest_files=["res://.godot/imported/ic_hornetwings.png-b1c4ae45e0d1a3afa99de6758b0e6885.ctex"]
+source_file="res://assets/ui/mutation/em_plates.png"
+dest_files=["res://.godot/imported/em_plates.png-16bb01d4258fac8916c3ba09f097e565.ctex"]
 
 [params]
 

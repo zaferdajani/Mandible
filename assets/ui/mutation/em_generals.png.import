@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bcsxjw02ea6x8"
-path="res://.godot/imported/tree_bg.jpg-00380da3ba1b79883fd6a7f5536ce68a.ctex"
+uid="uid://b34v3f3lflp7a"
+path="res://.godot/imported/em_generals.png-5a6e1f00487a4399bb115c00e0a3c76b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/tree_bg.jpg"
-dest_files=["res://.godot/imported/tree_bg.jpg-00380da3ba1b79883fd6a7f5536ce68a.ctex"]
+source_file="res://assets/ui/mutation/em_generals.png"
+dest_files=["res://.godot/imported/em_generals.png-5a6e1f00487a4399bb115c00e0a3c76b.ctex"]
 
 [params]
 

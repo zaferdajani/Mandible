@@ -165,6 +165,13 @@ public sealed class AntRenderer
     };
 
     readonly Dictionary<(int, AntType), Batch> _wings = new();
+    // the stinger ant's body (target P2): what a colony's winged ants are drawn with once its queen has taken the wasp's core
+    readonly Batch[] _stingLive = new Batch[2], _stingFar = new Batch[2], _stingClose = new Batch[2], _stingDead = new Batch[2];
+    Sim _sim;
+
+    /// The batch a creature is drawn in: its caste's, or for a winged ant of a colony with the sting, the stinger's.
+    Batch BatchOf(Batch[,] set, Batch[] sting, int team, AntType type) =>
+        type == AntType.Flyer && team is 0 or 1 && sting[team] != null && _sim != null && _sim.Has(team, Mutation.Stinger) ? sting[team] : set[team, (int)type];
     readonly Batch _cocoons, _webs, _blobs, _pools;
 
     readonly Batch _pips;
@@ -191,6 +198,16 @@ public sealed class AntRenderer
                 var near = team == Config.Wild ? null : AntMesh.Build((AntType)t, false, team, AntMesh.Detail.Near);
                 if (near != null && near != mesh) _close[team, t] = new Batch(root, near, mat, true, $"Close{team}_{t}");
             }
+        for (int team = 0; team < 2; team++)
+        {
+            var mid = AntMesh.Stinger(team, AntMesh.Detail.Mid);
+            if (mid == null) continue;
+            var mat = AntMat(shader, team, AntType.Flyer, false);
+            _stingLive[team] = new Batch(root, mid, mat, true, $"Stinger{team}");
+            _stingDead[team] = new Batch(root, mid, AntMat(shader, team, AntType.Flyer, true), true, $"DeadStinger{team}");
+            if (AntMesh.Stinger(team, AntMesh.Detail.Far) is { } far) _stingFar[team] = new Batch(root, far, mat, false, $"FarStinger{team}");
+            if (AntMesh.Stinger(team, AntMesh.Detail.Near) is { } near) _stingClose[team] = new Batch(root, near, mat, true, $"CloseStinger{team}");
+        }
         ApplyQuality();
         // translucent wings for every flyer, beating in their own batch
         var wingShader = Shaders.Get(Shaders.Wing);
@@ -198,6 +215,7 @@ public sealed class AntRenderer
         {
             var wm = new ShaderMaterial { Shader = wingShader };
             if (type == AntType.Wasp) { wm.SetShaderParameter("tint", new Color(0.82f, 0.62f, 0.3f)); wm.SetShaderParameter("vein", new Color(0.35f, 0.2f, 0.05f)); }
+            if (type == AntType.Flyer) wm.SetShaderParameter("body", 1.35f); // the winged ant's one broad pair (target P1)
             if (type == AntType.Marshal) { wm.SetShaderParameter("tint", new Color(0.95f, 0.85f, 0.6f)); wm.SetShaderParameter("vein", new Color(0.6f, 0.42f, 0.1f)); }
             _wings[(team, type)] = new Batch(root, AntMesh.Wings(type), wm, false, $"Wings{team}_{type}");
             _wings[(team, type)].Node.SortingOffset = 5;
@@ -276,6 +294,11 @@ public sealed class AntRenderer
                 _live[team, t].Node.CastShadow = cast;
                 _dead[team, t].Node.CastShadow = cast;
                 if (_close[team, t] != null) _close[team, t].Node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+                if (type == AntType.Flyer && team < 2 && _stingLive[team] != null)
+                {
+                    _stingLive[team].Node.CastShadow = _stingDead[team].Node.CastShadow = cast;
+                    if (_stingClose[team] != null) _stingClose[team].Node.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+                }
             }
     }
 
@@ -335,7 +358,9 @@ public sealed class AntRenderer
 
     public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
+        _sim = sim;
         foreach (var b in _live) b?.Begin();
+        for (int k = 0; k < 2; k++) { _stingLive[k]?.Begin(); _stingFar[k]?.Begin(); _stingClose[k]?.Begin(); _stingDead[k]?.Begin(); }
         foreach (var b in _close) b?.Begin();
         foreach (var b in _far) b?.Begin();
         foreach (var b in _dead) b?.Begin();
@@ -430,11 +455,11 @@ public sealed class AntRenderer
             // a Brood Call summons is a callow: pale and soft at first, darkening as its cuticle hardens
             if (a.Summoned && !callow.Active) data.A += 4 * Mathf.RoundToInt(15 * Mathf.Clamp(0.85f - 0.8f * (a.Level - 1 + a.HardenT / Skills.HardenEvery) / Mathf.Max(1, a.SummonCap - 1), 0.05f, 0.85f));
             int look = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team; // a borrowed ant keeps its own colony's body
-            var farBatch = _far[look, (int)a.Type];
-            var closeBatch = Settings.Gfx != Settings.Quality.Low ? _close[look, (int)a.Type] : null; // Low keeps phones on the play-zoom mesh
+            var farBatch = BatchOf(_far, _stingFar, look, a.Type);
+            var closeBatch = Settings.Gfx != Settings.Quality.Low ? BatchOf(_close, _stingClose, look, a.Type) : null; // Low keeps phones on the play-zoom mesh
             if (farBatch != null && camDist > FarDist) farBatch.Add(b, o, data);
             else if (closeBatch != null && camDist < CloseDist) closeBatch.Add(b, o, data);
-            else _live[look, (int)a.Type].Add(b, o, data);
+            else BatchOf(_live, _stingLive, look, a.Type).Add(b, o, data);
             if (a.CharmP1 > 0)
                 _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
             if (flies && _wings.TryGetValue((look, a.Type), out var wb))
@@ -555,7 +580,7 @@ public sealed class AntRenderer
             var b = Orient(n, f.Heading, s);
             b = new Basis(-b.X, -b.Y, b.Z);
             var o = new Vector3(f.Pos.X, hf.Sample(f.Pos.X, f.Pos.Y) + 0.24f * s, f.Pos.Y);
-            _dead[f.Team, (int)f.AntType].Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
+            BatchOf(_dead, _stingDead, f.Team, f.AntType).Add(b, o, new Color(0.25f, NeutralLook, 0, 0));
         }
         // Living Bridge: workers of the colony lying head to tail across the span, legs locked
         foreach (var br in sim.Bridges)
@@ -587,7 +612,7 @@ public sealed class AntRenderer
                 var p = z.Pos + MathX.Dir(ang) * (z.R * 0.6f);
                 var fo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 5f + 0.4f * Mathf.Sin(sim.Time * 2f + k), p.Y);
                 var fb = Orient(Vector3.Up, ang + DMath.Pi * 0.5f, Config.Of(AntType.Flyer).Size);
-                _live[z.Team, (int)AntType.Flyer].Add(fb, fo, Pack(k, 0, sim.Time * 3f + k, 0, 0, 1f, false, 0));
+                BatchOf(_live, _stingLive, z.Team, AntType.Flyer).Add(fb, fo, Pack(k, 0, sim.Time * 3f + k, 0, 0, 1f, false, 0));
                 if (_wings.TryGetValue((z.Team, AntType.Flyer), out var swb)) swb.Add(fb, fo, new Color(36f, 1f, 0, 0));
             }
         }
@@ -630,6 +655,7 @@ public sealed class AntRenderer
         foreach (var b in _close) b?.End();
         foreach (var b in _far) b?.End();
         foreach (var b in _dead) b?.End();
+        for (int k = 0; k < 2; k++) { _stingLive[k]?.End(); _stingFar[k]?.End(); _stingClose[k]?.End(); _stingDead[k]?.End(); }
         foreach (var cargo in _cargo) cargo.End();
         foreach (var cargo in _broodCargo) cargo.End();
         foreach (var cargo in _pieceCargo) cargo.End();
@@ -688,7 +714,7 @@ public sealed class AntRenderer
     /// A dead body or a piece of one (Carnage): the colony's or the bug's own dead material.
     internal void AddDead(int team, AntType type, in Basis b, in Vector3 o, in Color data)
     {
-        var batch = _dead[Math.Clamp(team, 0, 2), (int)type];
+        var batch = BatchOf(_dead, _stingDead, Math.Clamp(team, 0, 2), type);
         // the dead are drawn as large as the living around them
         float show = PlayScale(_camPos.DistanceTo(o));
         batch?.Add(show > 1.001f ? new Basis(b.X * show, b.Y * show, b.Z * show) : b, o, data);

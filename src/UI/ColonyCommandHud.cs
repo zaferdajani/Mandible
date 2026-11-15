@@ -47,7 +47,7 @@ public partial class ColonyCommandHud : Control
     static readonly Color Edge = new("a77e32"), Gold = new("f4cd70"), Background = new(0.035f, 0.031f, 0.022f, 0.96f);
     static readonly ChamberKind[] Rooms = { ChamberKind.Brood, ChamberKind.Storage, ChamberKind.Royal, ChamberKind.Wings, ChamberKind.Forge, ChamberKind.Armory, ChamberKind.Silk };
     static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured };
-    static readonly string[] Keys = { "Z", "X", "C", "F", "D" };
+    static readonly string[] Keys = { "Z", "X", "C", "F", "D", "W", "M" }; // one per entry of Units
 
     static T At<T>(T control, float x, float y, float w, float h) where T : Control
     { control.Position = new Vector2(x, y); control.Size = new Vector2(w, h); return control; }

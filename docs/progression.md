@@ -19,6 +19,7 @@ There are two progressions. They use different things and give different rewards
 | Spider | Web ants | Throw silk, spin trap webs, live in the Spinnery above ground |
 | Fly | Winged ants | Flight |
 | Wasp | Stinger ants | The flying ants grow a wasp's venom sting (owner, 2026-11-15: "the flying ants will have stingers then") |
+| Scorpion (to build) | Ground stingers | The wasp's sting upgrades the flying ants only. Ground ants get a sting by defeating a scorpion and taking its stinger (owner, 2026-11-15). Not built: needs the scorpion, its core and an approved body target |
 | Beetle | Armoured ants | Thicker shell: higher armour and defence |
 | Mantis (later) | Mantis ants | A hybrid ant-mantis; needs a newly built body |
 

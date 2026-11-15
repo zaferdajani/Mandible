@@ -81,3 +81,15 @@ Cinzel: SIL Open Font License, see `assets/fonts/Cinzel-OFL.txt`.
 Level 1's straws (`gen_straw`) and soil clods (`gen_clod`): reference images made with Higgsfield `gpt_image_2_5`, turned into
 textured PBR meshes with Higgsfield `image_to_3d` (Meshy), 2026-11-09, converted by `tools/blender/glb_to_asset.py` and cut to
 budget by `tools/asset-process.gd`. Made for this project; no third-party licence.
+
+## Mutation units, the fly and the evolve tree (targets P1-P6, 2026-11-15)
+
+- Winged ant, stinger ant, web ant, armoured ant (`assets/ants/*_Flyer_*`, `*_Stinger_*`, `*_WebAnt_*`, `*_Armoured_*`): the ant half of each body is the
+  Antscan specimen of the caste it grew from (table above: Lasius niger male and Solenopsis invicta alate queen for the winged ant and the stinger,
+  Camponotus japonicus minor and Solenopsis invicta major for the web ant, Camponotus japonicus major and Solenopsis invicta major for the armoured ant;
+  CC BY 4.0). The other insect's anatomy is modelled for this project in `tools/blender/ant_models.py` (`merged()`); no third-party licence.
+- The dead fly (`assets/mutation/fly/fly.glb`, `fly_glow.jpg`): an isolated reference image made with Higgsfield `gpt_image_2_6`, turned into a textured
+  mesh with Higgsfield `image_to_3d` (Meshy), 12,000 triangles, textures cut to 1024 px; the glow map is its colour map with everything but the veins removed.
+  Its silk hub, wrapping and beaded ring (`assets/mutation/fly_hub`) are modelled in `tools/blender/mutation_models.py` (`fly_hub()`). Made for this project.
+- The evolve tree's backdrop and ten emblems (`assets/ui/mutation/evolve_bg.jpg`, `em_*.png`): Higgsfield `gpt_image_2_6`, with the approved target
+  `p6-evolve-tree.jpg` and the earlier emblems as references; the emblem sheet was cut and keyed to transparency. Made for this project.

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbrxouff78bdl"
-path="res://.godot/imported/ic_webthrowing.png-be8d4b29e5569ad017aba397391c5f65.ctex"
+uid="uid://cknbhrs6s00s8"
+path="res://.godot/imported/em_queen.png-21618c8fe767d3c2144f61140e9b0199.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_webthrowing.png"
-dest_files=["res://.godot/imported/ic_webthrowing.png-be8d4b29e5569ad017aba397391c5f65.ctex"]
+source_file="res://assets/ui/mutation/em_queen.png"
+dest_files=["res://.godot/imported/em_queen.png-21618c8fe767d3c2144f61140e9b0199.ctex"]
 
 [params]
 

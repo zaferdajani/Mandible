@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3mvxvr3xw8gj"
-path="res://.godot/imported/ic_swiftbrood.png-fe53c1d74340a95a93cad4bf692fcaf6.ctex"
+uid="uid://bf0t62dtwcso"
+path="res://.godot/imported/fly_Image_0.jpg-02a6e4d50d125ba14b429212ed32e5e3.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "cd12705a92be33bcaf1db6b695362fe6"
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_swiftbrood.png"
-dest_files=["res://.godot/imported/ic_swiftbrood.png-fe53c1d74340a95a93cad4bf692fcaf6.ctex"]
+source_file="res://assets/mutation/fly/fly_Image_0.jpg"
+dest_files=["res://.godot/imported/fly_Image_0.jpg-02a6e4d50d125ba14b429212ed32e5e3.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

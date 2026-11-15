@@ -61,10 +61,17 @@ public static class AntMesh
     }
 
     /// The mutation track's models (tools/blender/brood_models.py, targets H3-H5).
-    /// The venom sting of a mutated black flying ant, in the flying ant's model space: draw it with the same transform,
-    /// instance data and material as the ant (its vertices carry the gaster's part, so it nods and curls with it), and
-    /// set "venom_bands" = 1 on that material for the banded gaster tip. Null if the model is missing.
-    public static ArrayMesh Sting() => LoadExtra("lasius_Flyer_sting");
+    /// The stinger ant (target P2): the winged ant's body with a wasp's banded gaster and sting. A colony whose queen
+    /// has taken the wasp's core draws its winged ants with this body, on the winged ant's own material (the bands, the
+    /// red eyes and the venom bead are in the mesh). Null if the model is missing.
+    public static ArrayMesh Stinger(int team, Detail d)
+    {
+        var mesh = LoadExtra($"{(team == 1 ? "solenopsis" : "lasius")}_Stinger_{d.ToString().ToLowerInvariant()}");
+        if (mesh != null && mesh.HasMeta("gaster_tip")) StingTip[team == 1 ? 1 : 0] = (Vector3)mesh.GetMeta("gaster_tip");
+        return mesh;
+    }
+    /// The point of a colony's sting, in the stinger ant's model space.
+    public static readonly Vector3[] StingTip = { new(0, 0.02f, -0.5f), new(0, 0.02f, -0.5f) };
     /// The royal larva, about 1 unit long with its head at +Z: draw it with RoyalLarvaMaterial at about 4x a larva.
     public static ArrayMesh RoyalLarva() => LoadExtra("royal_larva");
     /// The hero's womb cocoon, about 1 unit long: draw it with WombMaterial, the hero inside it, darker, first.
@@ -103,28 +110,12 @@ public static class AntMesh
 
     /// `far`: the distant-crowd build of a colony caste, drawn once an ant is far enough from the camera that the
     /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
-    /// The caste whose mesh a mutation unit borrows until its own merged body is approved and built.
-    public static AntType? StandIn(AntType t) => t == AntType.WebAnt ? AntType.Soldier : t == AntType.Armoured ? AntType.Major : null;
-
     public static ArrayMesh Build(AntType type, bool far = false, int team = 0, Detail? detail = null)
     {
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
         if (type == AntType.Spider) return Spider();
         if (type == AntType.Wasp) return Wasp();
-        if (StandIn(type) is { } like)
-        {
-            // STAND-IN, not final art: the mutation units' merged bodies (ant + spider, ant + beetle) wait for approved
-            // concept targets (docs/art-pipeline.md, docs/progression.md art rule). Until then they borrow a caste's mesh.
-            var borrowed = Build(like, far, team, detail);
-            int tm = team == 1 ? 1 : 0;
-            if (Neck.TryGetValue(like, out var n0)) Neck[type] = n0;
-            if (NeckOfTeam.TryGetValue((like, tm), out var n1)) NeckOfTeam[(type, tm)] = n1;
-            if (TipOfTeam.TryGetValue((like, tm), out var t1)) TipOfTeam[(type, tm)] = t1;
-            if (WaistOfTeam.TryGetValue((like, tm), out var w1)) WaistOfTeam[(type, tm)] = w1;
-            if (DetailOfTeam.TryGetValue((like, tm), out var d1)) DetailOfTeam[(type, tm)] = d1;
-            return borrowed;
-        }
         var model = Model(type, team == 1 ? 1 : 0, detail ?? (far ? Detail.Far : Detail.Mid));
         if (model != null) return model;
         far = far || detail == Detail.Far;
@@ -633,6 +624,8 @@ public static class AntMesh
             : type == AntType.Marshal
              // the mutant general (target J): a third, smaller pair behind the two an ant has
              ? new[] { (0.09f, 0.82f, 0.17f, 0.2f), (0.04f, 0.6f, 0.13f, 0.36f), (-0.01f, 0.42f, 0.1f, 0.55f) }
+            // the winged ant (target P1) flies on a fly's wings: one broad pair, its hind pair shrunk to halteres
+            : type == AntType.Flyer ? new[] { (0.075f, 0.7f, 0.2f, 0.3f) }
             : new[] { (0.09f, 0.62f, 0.14f, 0.25f), (0.04f, 0.46f, 0.11f, 0.4f) };
         float hy = wasp ? 0.3f : type == AntType.Marshal ? 0.25f : 0.22f;
         foreach (var (hz, len, wid, sweep) in pairs)

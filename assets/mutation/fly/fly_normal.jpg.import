@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cchoca7wu0y5v"
-path="res://.godot/imported/ic_stinger.png-39aa47444584848ba4fec63be26694bc.ctex"
+uid="uid://dixfdequh1adl"
+path="res://.godot/imported/fly_normal.jpg-c3e7a1811371b99f0c41d031c01f54da.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "1bb3887f291b820ae168a2704f8f761a"
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_stinger.png"
-dest_files=["res://.godot/imported/ic_stinger.png-39aa47444584848ba4fec63be26694bc.ctex"]
+source_file="res://assets/mutation/fly/fly_normal.jpg"
+dest_files=["res://.godot/imported/fly_normal.jpg-c3e7a1811371b99f0c41d031c01f54da.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

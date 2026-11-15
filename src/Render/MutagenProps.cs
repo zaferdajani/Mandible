@@ -20,6 +20,9 @@ public sealed class MutagenProps
 
     public MutagenProps(GameSession g) { _g = g; g.AddChild(_root); }
     readonly Dictionary<int, StandardMaterial3D> _cores = new();
+    readonly Dictionary<int, StandardMaterial3D> _flies = new();
+    // the scan's head is at +Z: turned broadside in the web's plane, head a little down; its swollen abdomen is behind
+    static readonly Vector3 FlyPose = new(0.35f, -Mathf.Pi / 2, 0f), FlyGland = new(0f, -0.1f, -0.8f);
     public const uint SkinLayer = 1u << 10;
 
     /// Where a gland is drawn (its light follows it: up in the web, then in the carrier's jaws).
@@ -95,14 +98,53 @@ void fragment() {
         }
     }
 
+    /// Chapter 5's body (target P5): the dead, bloated fly whose core gives the queen her winged ants. Its core is
+    /// stored as a wasp's in the sim (MutationCore.From names a creature that exists); what tells it apart is what it gives.
+    public static bool IsFly(MutationCore m) => m.From == AntType.Wasp && m.Gives == Mutation.Winged;
+    const string FlyPath = Root + "fly/fly.glb";
+
+    /// The fly as a generated scan (Meshy image-to-3D from an isolated reference, docs/asset-credits.md), 3.4 units
+    /// long, its veined abdomen lit from within; null if the model is missing.
+    Node3D LoadFly(out StandardMaterial3D skin)
+    {
+        skin = null;
+        if (!ResourceLoader.Exists(FlyPath)) return null;
+        var node = GD.Load<PackedScene>(FlyPath).Instantiate<Node3D>();
+        var holder = new Node3D { Name = "Fly" };
+        foreach (var n in node.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            var mi = (MeshInstance3D)n;
+            var src = mi.GetActiveMaterial(0) as StandardMaterial3D;
+            // the scan's own surface; fly_glow.jpg is its colour map with everything but the luminous veins taken out, so only they emit
+            var glow = ResourceLoader.Exists(Root + "fly/fly_glow.jpg") ? GD.Load<Texture2D>(Root + "fly/fly_glow.jpg") : src?.AlbedoTexture;
+            if (skin == null)
+            {
+                skin = src != null ? (StandardMaterial3D)src.Duplicate() : new StandardMaterial3D();
+                skin.EmissionEnabled = true; skin.EmissionTexture = glow; skin.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
+                skin.Emission = new Color(0.62f, 0.42f, 1f); skin.EmissionEnergyMultiplier = 0.3f;
+            }
+            mi.MaterialOverride = skin;
+            mi.Layers = SkinLayer; // the core's violet light falls on the silk and the soil, not on the fly's own colours
+            var box = mi.GetAabb();
+            float k = 3.4f / Mathf.Max(0.001f, box.GetLongestAxisSize());
+            node.Scale = Vector3.One * k;
+            node.Position = -box.GetCenter() * k;
+        }
+        holder.AddChild(node);
+        return holder;
+    }
+
     static Node3D Load(string name) => ResourceLoader.Exists(Root + $"{name}/{name}.gltf") ? GD.Load<PackedScene>(Root + $"{name}/{name}.gltf").Instantiate<Node3D>() : null;
 
     // ---------------------------------------------------------------- the web and the queen wasp (H1), the gland (H2)
     (Node3D, Node3D, Node3D, StandardMaterial3D) MakeSite(MutationCore m)
     {
         bool wild = m.From == AntType.Wasp; // level 1's dead queen lies in the world (PondWorld): only her gland is drawn here
+        bool fly = IsFly(m);
         var web = wild ? Load("web") : null;
-        var wasp = wild ? Load("queen_wasp") : null;
+        StandardMaterial3D flySkin = null;
+        var wasp = !wild ? null : fly ? LoadFly(out flySkin) ?? Load("queen_wasp") : Load("queen_wasp");
+        fly &= flySkin != null;
         var gland = Load("gland");
         if (wild && (web == null || wasp == null) || gland == null) return (null, null, null, null);
         if (!wild) return (null, null, GlandOnly(m, gland), null);
@@ -115,7 +157,14 @@ void fragment() {
         var wing = Mat(WingShader);
         if (ResourceLoader.Exists(Root + "queen_wasp/wing_veins.png")) wing.SetShaderParameter("veins", GD.Load<Texture2D>(Root + "queen_wasp/wing_veins.png"));
         var legs = Matter(0.55f);
-        Dress(wasp, n => n.Contains("wing") ? wing : n.Contains("leg") ? legs : body);
+        if (!fly) Dress(wasp, n => n.Contains("wing") ? wing : n.Contains("leg") ? legs : body);
+        else if (Load("fly_hub") is { } hub)
+        {
+            // the hub of silk it hangs in, the loops that wrap it and the beaded ring round it (target P5), in the web's space
+            Dress(hub, n => n.Contains("dew") ? dew : silk);
+            web.AddChild(hub);
+            _flies[m.Id] = flySkin;
+        }
         // the gland: wet amber flesh, a faint violet-green radiance inside that breathes (StandardMaterial3D: its
         // emission energy and colour are driven every frame)
         var glow = new StandardMaterial3D
@@ -140,8 +189,16 @@ void fragment() {
         float face = Mathf.Atan2(home.X - m.Pos.X, home.Y - m.Pos.Y);
         web.Position = _g.World.HF.Point(m.Pos);
         web.Rotation = new Vector3(0, face, 0);
-        wasp.Basis = Basis.FromEuler(new Vector3(-1.45f, 0.1f, -1.25f)).Scaled(Vector3.One * 1.9f); // broadside to the colony, dangling head-down: a queen twice a worker wasp's bulk
-        wasp.Position = new Vector3(1.6f, 7.0f, 0.15f);
+        if (fly)
+        {
+            wasp.Basis = Basis.FromEuler(FlyPose); // broadside to the colony at the hub, head down a little, as a spider leaves its wrapped catch
+            wasp.Position = new Vector3(1.6f, 7.0f, 0.3f);
+        }
+        else
+        {
+            wasp.Basis = Basis.FromEuler(new Vector3(-1.45f, 0.1f, -1.25f)).Scaled(Vector3.One * 1.9f); // broadside to the colony, dangling head-down: a queen twice a worker wasp's bulk
+            wasp.Position = new Vector3(1.6f, 7.0f, 0.15f);
+        }
         web.AddChild(wasp);
         _root.AddChild(web);
         _root.AddChild(gland);
@@ -180,19 +237,24 @@ void fragment() {
             if (s.gland == null) continue;
             bool seen = _g.Fog == null || _g.Fog.Visible(m.Pos) || m.Carried;
             if (s.web != null) s.web.Visible = _g.Fog == null || _g.Fog.Explored(new Vector2(s.web.Position.X, s.web.Position.Z));
-            s.gland.Visible = !m.Home && seen && !(m.Free && ResourceLoader.Exists("res://assets/mutation/core/core.glb")); // carved free it is the radiating core (MutagenGlow)
+            s.gland.Visible = !m.Home && seen && !(_flies.ContainsKey(m.Id) && !m.Free) && // (inside the fly the gland is not seen: the abdomen's veins show where it is)
+                 !(m.Free && ResourceLoader.Exists("res://assets/mutation/core/core.glb")); // carved free it is the radiating core (MutagenGlow)
             // a radiance inside the amber, never a lamp; from play zoom the sun would drown it, so it carries a little further there
             float zoom = Mathf.Clamp((_g.Camera.Distance - 14f) / 46f, 0, 1);
             
             // mostly violet, breathing toward green: nothing else in the woods is that colour, so it never reads as food
             var hue = new Color(0.62f, 0.42f, 1f).Lerp(new Color(0.55f, 1f, 0.62f), 0.25f + 0.25f * Mathf.Sin(_t * 0.9f));
+            // the fly's veins breathe with its core, and go dark once the core is cut out of it
+            if (_flies.TryGetValue(m.Id, out var flyMat)) { flyMat.Emission = hue.Lerp(Colors.White, 0.45f); flyMat.EmissionEnergyMultiplier = m.Free ? 0.1f : 1.6f + 1.6f * pulse; }
             if (_cores.TryGetValue(m.Id, out var coreMat)) { coreMat.AlbedoColor = hue * (0.4f + 0.3f * pulse); coreMat.Emission = hue; coreMat.EmissionEnergyMultiplier = (0.15f + 0.25f * pulse) * (1 + 3f * zoom); } // never so bright it blooms to white
             // in her gaster until it is cut free; then in its carrier's jaws, or on the ground where it fell
             if (!m.Free && s.wasp == null)
                 s.gland.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(0.4f, 0.6f, 0)).Scaled(Vector3.One * 1.5f), _g.World.HF.Point(m.Pos, 0.5f)); // swelling out of her split gaster
             else if (!m.Free)
             {
-                s.gland.GlobalTransform = s.wasp.GlobalTransform * new Transform3D(Basis.Identity.Scaled(Vector3.One * 0.7f), new Vector3(-0.3f, 0.45f, -0.32f));
+                s.gland.GlobalTransform = _flies.ContainsKey(m.Id)
+                    ? s.wasp.GlobalTransform * new Transform3D(Basis.Identity.Scaled(Vector3.One * 0.3f), FlyGland) // inside the swollen abdomen: only its light shows
+                    : s.wasp.GlobalTransform * new Transform3D(Basis.Identity.Scaled(Vector3.One * 0.7f), new Vector3(-0.3f, 0.45f, -0.32f));
             }
             else
             {

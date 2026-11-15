@@ -44,7 +44,10 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   the queen's level is `Upgrade.Queen`, paid in organic matter), `src/UI/EvolveTree.cs` (the tree screen, key P, N1's look).
   PROGRESSION RULES ARE IN `docs/progression.md`; how each chapter uses them (core challenges, the rival's race for a core)
   is `docs/level-design.md` section 5. Mutation units: winged ants = `AntType.Flyer`, stingers = flyers with `Mutation.Stinger`,
-  `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets: not shippable). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+  `WebAnt`, `Armoured`. Their merged bodies (targets P1-P4) are built by `tools/blender/ant_models.py` `merged()` on the castes' scans
+  (`assets/ants/*_{Flyer,Stinger,WebAnt,Armoured}_*.res`; the stinger body is drawn for flyers of a colony with `Mutation.Stinger`, `AntRenderer.BatchOf`);
+  the borrowed anatomy is marked per vertex in CUSTOM0.y (silk, shell, bands, velvet, fly eye) and coloured by the Ant shader. Chapter 5's fly: `MutagenProps.IsFly`,
+  `assets/mutation/fly`, `fly_hub`. Build record: `docs/art-targets/README-mutation-units.md`. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at

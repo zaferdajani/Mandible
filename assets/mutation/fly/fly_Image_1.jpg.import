@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d2k6pwmvuadum"
-path="res://.godot/imported/ic_ironchitin.png-4e1ab77e8fb542a7665f4b63e10c9543.ctex"
+uid="uid://b70cs33wg2ke8"
+path="res://.godot/imported/fly_Image_1.jpg-4e77c58d63bd358d03c048b8d5771b78.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "a56799f7969fe6679cabc9b9774c0b75"
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_ironchitin.png"
-dest_files=["res://.godot/imported/ic_ironchitin.png-4e1ab77e8fb542a7665f4b63e10c9543.ctex"]
+source_file="res://assets/mutation/fly/fly_Image_1.jpg"
+dest_files=["res://.godot/imported/fly_Image_1.jpg-4e77c58d63bd358d03c048b8d5771b78.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

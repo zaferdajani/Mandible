@@ -78,7 +78,6 @@ uniform vec3 waist = vec3(0.0, 0.14, -0.105); // the gaster nods (and curls to s
 // a body made from a real specimen scan (Antscan micro-CT): its sutures, punctures and setae sockets, baked
 uniform sampler2D detail_normal : hint_normal, filter_linear_mipmap, repeat_disable;
 uniform float has_detail = 0.0;
-uniform float venom_bands = 0.0; // a venom flyer (mutation): faint amber bands over the last gaster segments
 uniform vec3 neck = vec3(0.0, 0.14, 0.13);  // the head turns about this model-space point
 varying float v_part;
 varying float v_flash;
@@ -375,6 +374,8 @@ void fragment() {
         // dark warm lenses: a metal-like reflection tinted brown, so the sky does not turn the eye blue
         c = mix(vec3(0.035, 0.028, 0.022), vec3(0.006, 0.005, 0.004), edge); // darker than the head around it
         rough = 0.2; cc = 0.0; metal = 0.55;
+        // a winged ant's eyes are a fly's: great domes of dark red lenses
+        if (v_cus.y > 5.5) { c = mix(vec3(0.34, 0.028, 0.02), vec3(0.07, 0.006, 0.005), edge); metal = 0.3; }
         // the spark of life: the sky caught in the eye, a small bright window that slides over the dome as the head
         // turns (the head group's rotation already moved NORMAL); dimmed underground, where only the lamps are
         vec3 r = reflect(-VIEW, NORMAL);
@@ -403,13 +404,35 @@ void fragment() {
         c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
         rough = mix(rough, 0.18, mem); cc = mix(cc, 0.8, mem);
         BACKLIGHT = mix(BACKLIGHT, vec3(0.9, 0.5, 0.12), mem);
-        if (venom_bands > 0.0 && part == 13.0) {
-            float tipward = smoothstep(waist.z - 0.2, waist.z - 0.36, v_local.z);
-            float band = smoothstep(0.6, 0.8, fract(v_local.z * 14.0));
-            c = mix(c, vec3(0.3, 0.16, 0.04), band * tipward * venom_bands * 0.35);
-        }
         // setae: fine golden hairs that catch the sun
-        if (v_cus.y > 0.5) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
+        float kind = floor(v_cus.y + 0.5);
+        if (kind == 1.0) { c = vec3(0.4, 0.29, 0.15); rough = 0.4; BACKLIGHT = vec3(0.5, 0.35, 0.15); }
+        // the anatomy a mutation unit took from another insect (tools/blender/ant_models.py, merged())
+        if (kind == 2.0) {
+            // spider silk: the web ant's net. Pale threads that carry the light along them
+            c = vec3(0.74, 0.72, 0.66); rough = 0.3; BACKLIGHT = vec3(0.8, 0.76, 0.68);
+            eyeEm += vec3(0.5, 0.47, 0.4) * (0.08 + 0.25 * fres);
+        } else if (kind == 3.0) {
+            // beetle shell: bronze-black plate; over the wing cases uv.x counts the ridges, and the grooves between lie dark
+            float crest = abs(fract(v_uv.x) - 0.5) * 2.0;
+            float groove = smoothstep(0.0, 0.36, crest);
+            vec3 bronze = mix(body_color, vec3(0.3, 0.165, 0.06), 0.8);
+            bronze += vec3(0.16, 0.09, 0.03) * pow(fres, 2.0); // a bright rim, so the dome stands off the soil at play zoom
+            c = bronze * (0.4 + 0.6 * groove) * (0.85 + 0.3 * vnoise(v_local * 90.0));
+            metal = 0.55; rough = 0.3 + 0.2 * (1.0 - groove); cc = 0.35;
+            BACKLIGHT = vec3(0.0);
+        } else if (kind == 4.0) {
+            // a wasp's gaster: amber bands on black, uv.x running from the waist to the sting
+            float tri = abs(fract(v_uv.x * 5.0 + 0.12) - 0.5) * 2.0;
+            float amber = smoothstep(0.42, 0.58, tri) * (1.0 - smoothstep(0.88, 0.95, v_uv.x));
+            c = mix(vec3(0.02, 0.016, 0.012), vec3(0.56, 0.255, 0.025), amber) * (0.85 + 0.3 * hash3(floor(v_local * 260.0)));
+            rough = 0.42; cc = 0.3; BACKLIGHT = vec3(0.5, 0.24, 0.03) * amber;
+        } else if (kind == 5.0) {
+            // a spider's abdomen: matte velvet, each hair a speck, a soft sheen at grazing angles
+            float hair = hash3(floor(v_local * 320.0));
+            c = mix(gaster_color, vec3(0.3, 0.23, 0.17), 0.4) * (0.7 + 0.6 * hair) + vec3(0.05, 0.04, 0.03) * (0.4 + 1.6 * fres); // paler than any ant's gaster
+            rough = 0.9; cc = 0.0; BACKLIGHT = vec3(0.12, 0.08, 0.05);
+        }
     }
     if (part == 14.0) {
         // crests, quills, nozzles, studs and spinnerets: the accent metal, brightest at the tips
@@ -1402,6 +1425,7 @@ shader_type spatial;
 render_mode blend_mix, cull_disabled, depth_draw_never, shadows_disabled;
 uniform vec3 tint : source_color = vec3(0.85, 0.88, 0.9);
 uniform vec3 vein : source_color = vec3(0.12, 0.08, 0.04);
+uniform float body = 1.0; // how solid the membrane reads (a fly's broad wing more than an ant's)
 varying vec2 v_uv;
 varying float v_fly;
 vec3 rot_y(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
@@ -1434,7 +1458,7 @@ void fragment() {
     ROUGHNESS = 0.15;
     SPECULAR = 0.8;
     // a beating wing is a blur
-    ALPHA = mix(0.22, 0.8, veins) * (1.0 - v_fly * 0.45) + fres * 0.15;
+    ALPHA = clamp((mix(0.22, 0.8, veins) * (1.0 - v_fly * 0.45) + fres * 0.15) * body, 0.0, 0.95);
 }
 ";
 
