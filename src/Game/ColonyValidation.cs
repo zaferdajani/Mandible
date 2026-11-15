@@ -195,6 +195,10 @@ public static class ColonyValidation
             // A separate unrestricted simulation verifies the full roster without touching episode gates.
             var other = new Node3D(); app.AddChild(other);
             var sk = new Sim(WorldBuilder.Build(other, 20261031)); sk.BeginSkirmish();
+            // a mutation unit costs a part of its insect (docs/progression.md 1c): locked only by an empty store
+            foreach (var kind in new[] { ProdKind.Flyer, ProdKind.WebAnt, ProdKind.Armoured })
+                Check(sk.CanEnqueue(0, kind) == QueueResult.NoPart, $"Skirmish hatches {kind} without its parts");
+            for (int part = 0; part < BodyParts.Count; part++) sk.Col[0].Parts[part] = 8;
             foreach (var kind in new[] { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured, ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
                 Check(sk.CanEnqueue(0, kind) == QueueResult.Ok, $"Skirmish caste locked: {kind}");
             Check(sk.Col[0].Chambers.Count == 7 && sk.Col[1].Chambers.Count == 7, "Skirmish lacks the seven chamber identities");

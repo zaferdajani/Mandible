@@ -755,6 +755,8 @@ public static class Capture
         app.AddChild(root);
         var world = WorldBuilder.Build(root, seed);
         var sim = new Sim(world);
+        if (OS.GetEnvironment("MANDIBLE_SIM_SKIRMISH") == "1") sim.BeginSkirmish(); // as the Skirmish menu starts a game: developed nests, every core taken
+        var partsHome = new int[2, BodyParts.Count]; var peakOf = new int[2, 3]; // parts brought home, and the most winged / web / armoured ants alive at once
         var ais = new[] { new AIController(sim, 0, a), new AIController(sim, 1, b) };
         const float dt = 1f / 30f;
         var sw = new System.Diagnostics.Stopwatch();
@@ -775,9 +777,16 @@ public static class Capture
             foreach (var e in sim.Events)
             {
                 if (e.Kind is EvKind.WebShot or EvKind.Sweep or EvKind.Sting or EvKind.WarCry or EvKind.AcidBurst or EvKind.DiveBomb or EvKind.Toss or EvKind.Lunge or EvKind.ShellWall) _abilities++;
+                if (e.Kind == EvKind.PartHome && e.Team is 0 or 1) partsHome[e.Team, e.Tier]++;
                 if (e.Kind is EvKind.Pheromone or EvKind.Frenzy or EvKind.Summon or EvKind.Cloud or EvKind.TrailBlaze or EvKind.TalonDive) _skillCasts++;
             }
             sw.Stop();
+            for (int t = 0; t < 2; t++)
+            {
+                peakOf[t, 0] = System.Math.Max(peakOf[t, 0], sim.Col[t].Count[(int)AntType.Flyer]);
+                peakOf[t, 1] = System.Math.Max(peakOf[t, 1], sim.Col[t].Count[(int)AntType.WebAnt]);
+                peakOf[t, 2] = System.Math.Max(peakOf[t, 2], sim.Col[t].Count[(int)AntType.Armoured]);
+            }
             double ms = sw.Elapsed.TotalMilliseconds;
             total += ms; ticks++;
             if (ms > worst) worst = ms;
@@ -849,6 +858,14 @@ public static class Capture
                     foreach (var ch in c.Chambers) if (ch.Digging) parts.Add($"{ch.Kind} {ch.Progress * 100:0}% x{ch.Diggers}");
                     return $"cap {c.FoodCap:0} rooms {c.Chambers.Count} assigned {diggers} [{string.Join(", ", parts)}]";
                 }
+                string Mutants(int t)
+                {
+                    var c = sim.Col[t]; int stingers = 0;
+                    for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == t && sim.Ants[i].Sting) stingers++;
+                    int[] now = { c.Count[(int)AntType.Flyer], c.Count[(int)AntType.WebAnt], c.Count[(int)AntType.Armoured] };
+                    return $"winged {now[0]} (stingers {stingers}, peak {peakOf[t, 0]}) web {now[1]} (peak {peakOf[t, 1]}) armoured {now[2]} (peak {peakOf[t, 2]}) parts in store [{string.Join(",", c.Parts)}] brought home [{partsHome[t, 0]},{partsHome[t, 1]},{partsHome[t, 2]},{partsHome[t, 3]}]";
+                }
+                GD.Print($"[simtest]    mutation units (parts are wings,sting,gland,plates) black: {Mutants(0)} | red: {Mutants(1)}");
                 GD.Print($"[simtest]    digs black: {Digs(c0)} | red: {Digs(c1)}");
                 GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} mutations {c0.Mutations}/{c1.Mutations} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities} skill casts {_skillCasts}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m ants={alive} | black {p.Count[0]}w {p.Count[1]}s {p.Count[2]}m pop {p.PopUsed}/{p.PopCap} food {p.Food:0} gathered {p.Gathered:0} killed {p.Killed} | red {e.Count[0]}w {e.Count[1]}s {e.Count[2]}m pop {e.PopUsed}/{e.PopCap} food {e.Food:0} gathered {e.Gathered:0} killed {e.Killed} | tick avg {total / ticks:0.00}ms worst {worst:0.0}ms");

@@ -152,7 +152,9 @@ public partial class LivePortrait : TextureRect
         m = new Model { Root = new Node3D { Name = $"Portrait{team}_{type}", Visible = false }, Rig = RigOf(type) };
         _vp.AddChild(m.Root);
         var mesh = AntMesh.Build(type, false, team, team == Config.Wild ? null : AntMesh.Detail.Near);
-        m.Body = new Batch(m.Root, mesh, AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, type, false), false, "Body");
+        var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, type, false);
+        mat.SetShaderParameter("leg_count", 0); // a portrait sitter stands at rest: no planted stride, or a foreleg is held out across her face
+        m.Body = new Batch(m.Root, mesh, mat, false, "Body");
         var box = mesh.GetAabb();
         if (type is AntType.Flyer or AntType.Marshal or AntType.Wasp)
         {
