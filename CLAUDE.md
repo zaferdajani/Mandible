@@ -57,10 +57,11 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   in `ColonyCommandHud` (keys K, comma, period: P and M belong to the evolve tree and armoured ants), placement ghost and reach ring in `SilkWorks`.
 - Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
   (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`; art review not passed yet). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
-- Wild walkers' legs (beetle, spider, stag beetle) are render only: `AntRenderer.BugGait` draws the body turning no faster than its legs step
-  (`BugTurnRate`) and advances its own stride with distance and turning; the Ant shader's `bug` branch plants each foot against the body's
-  travel and turn (`stride`, `turn_arc`, travel direction in INSTANCE_CUSTOM.w). The sim's `Heading`/`Gait` are untouched. Ants still use the old
-  hip swing. Check: `--gait-capture=<dir>` (GPU queue; frame sheets + a planted-foot self-test).
+- How creatures step and turn is render only (the sim's `Heading`/`Gait` are untouched): `AntRenderer.TurnOnLegs` draws every body turning no
+  faster than its legs can step (`TurnRate` per type; flyers bank instead), `Stride` advances a render-side gait with distance AND angle turned,
+  and the Ant shader's leg branch plants each foot against the body's travel and turn. Foot rest positions come from each mesh
+  (`AntMesh.LegsOf`); shader uniforms `legs`/`leg_count`/`stride`/`turn_arc`; turn share in INSTANCE_CUSTOM.x (64s), travel direction in .w (2048s).
+  Check: `--gait-capture=<dir>` on the GPU queue (all 15 creatures: turn sheets + a planted-foot self-test; `MANDIBLE_GAIT_ONLY=Spider,Worker`).
 - Creature voices: `tools/gen_voices.py`, `AudioDirector.Voice/VoiceOf/VoiceRank`, `PlayerInput.Speak` (web ants use the "silk" call, armoured ants borrow the major's).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (Alone → Gather → ClearTrail → FreeQueen → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
