@@ -17,11 +17,11 @@ public static class BodyParts
         AntType.Beetle or AntType.StagBeetle => (byte)Part.Plates + 1, _ => 0,
     };
 
-    /// The part (+1) one brood of this kind costs; 0: none (plain castes and generals). Once the queen has the wasp's
-    /// core every winged ant hatches as a stinger, so it costs a sting instead of wings.
+    /// The part (+1) one brood of this kind costs; 0: none (plain castes and generals). A winged ant always costs a
+    /// pair of wings; the sting is extra and never blocks the brood (Sim.StingsFor).
     public static byte Needs(ProdKind k, int mutations) => k switch
     {
-        ProdKind.Flyer => (byte)(((mutations & (int)Mutation.Stinger) != 0 ? (int)Part.Sting : (int)Part.Wings) + 1),
+        ProdKind.Flyer => (byte)Part.Wings + 1,
         ProdKind.WebAnt => (byte)Part.Gland + 1, ProdKind.Armoured => (byte)Part.Plates + 1, _ => 0,
     };
 
@@ -66,6 +66,23 @@ public sealed partial class Sim
     {
         int p = PartNeed(team, k);
         return p == 0 || Col[team].Parts[p - 1] >= PartCount(k);
+    }
+
+    /// Stings a brood of winged ants would take now: with the wasp's core each ant takes one while the store lasts
+    /// and hatches as a stinger; the rest hatch as plain winged ants. A missing sting never blocks the brood.
+    public int StingsFor(int team, ProdKind k)
+    {
+        if (k != ProdKind.Flyer || team is not (0 or 1) || !Has(team, Mutation.Stinger)) return 0;
+        return System.Math.Min(PartCount(k), Col[team].Parts[(int)Part.Sting]);
+    }
+
+    /// Makes a winged ant a stinger (the ants a chapter starts with, tests).
+    public void GiveSting(int id)
+    {
+        ref var a = ref Ants[id];
+        if (!a.Alive || a.Type != AntType.Flyer || a.Sting) return;
+        a.Sting = true;
+        ApplyLevel(ref a);
     }
 
     /// How many of this part the colony has in store.

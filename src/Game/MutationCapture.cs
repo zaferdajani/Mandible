@@ -22,7 +22,7 @@ public static class MutationCapture
             {
                 app.StartEpisode(9); // Wings and Acid: every core taken, so all three mutation units are on the row
                 var hs = app.Session; hs.Hud.CloseBriefing();
-                hs.Sim.Col[0].Parts[(int)Part.Sting] = 2; hs.Sim.Col[0].Parts[(int)Part.Gland] = 3; hs.Sim.Col[0].Parts[(int)Part.Plates] = 0;
+                hs.Sim.Col[0].Parts[(int)Part.Wings] = 6; hs.Sim.Col[0].Parts[(int)Part.Sting] = 2; hs.Sim.Col[0].Parts[(int)Part.Gland] = 3; hs.Sim.Col[0].Parts[(int)Part.Plates] = 0;
                 Run(hs, 30);
                 hs.Hud.CommandHud?.ShowPage(1);
                 await Shot("hatch-parts", 2f);

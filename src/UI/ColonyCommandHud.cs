@@ -31,8 +31,9 @@ public partial class ColonyCommandHud : Control
     ProgressBar _health, _queueProgress;
     readonly List<(Button button, ProdKind kind)> _units = new();
     // the body part a mutation unit costs (docs/progression.md 1c): its icon and how many are in store, on the unit's card
-    readonly List<(ProdKind kind, TextureRect icon, Label count)> _parts = new();
+    readonly List<(ProdKind kind, TextureRect icon, Label count, TextureRect sting, Label stings, Label title)> _parts = new();
     static readonly Dictionary<Part, Texture2D> PartTex = new();
+    static float b_w(Control strip) => ((Control)strip.GetParent()).Size.X - 4; // the strip's inner width
     public static Texture2D PartIcon(Part p)
     {
         if (PartTex.TryGetValue(p, out var t)) return t;
@@ -464,7 +465,15 @@ public partial class ColonyCommandHud : Control
                     var icon = Art(chip, null, 3, 2, 18, 18);
                     var count = Text(chip, "", 2, 1, cw - 10, 20, tight ? 11 : 12);
                     count.HorizontalAlignment = HorizontalAlignment.Center;
-                    _parts.Add((kind, icon, count));
+                    // winged ants: the stings in store too (right half of the strip), once the queen has the wasp's core
+                    TextureRect sting = null; Label stings = null;
+                    if (kind == ProdKind.Flyer)
+                    {
+                        float half = (cw - 6) / 2;
+                        sting = Art(chip, PartIcon(Part.Sting), half + 1, 2, 18, 18);
+                        stings = Text(chip, "", half + 20, 1, half - 22, 20, tight ? 11 : 12);
+                    }
+                    _parts.Add((kind, icon, count, sting, stings, title));
                 }
                 _units.Add((b, kind));
             }
@@ -552,9 +561,14 @@ public partial class ColonyCommandHud : Control
                 var part = (Part)(need - 1); int have = sim.PartsOf(Local.Me, part);
                 int n = Sim.PartCount(k);
                 b.TooltipText += $" · {n} {BodyParts.Name(part, n)}, one for each ant ({have} in store)" + (have < n ? "\n" + BodyParts.Hunt(part) : "");
+                if (k == ProdKind.Flyer && sim.Has(Local.Me, Mutation.Stinger))
+                {
+                    int st = sim.StingsFor(Local.Me, k), stored = sim.PartsOf(Local.Me, Part.Sting);
+                    b.TooltipText += $"\nStings in store: {stored}. " + (st == 0 ? "With none, this brood hatches as plain winged ants. Hunt wasps for stings." : st >= n ? $"This brood takes {n} and hatches as stingers." : $"This brood takes {st}: {st} stinger{(st == 1 ? "" : "s")} and {n - st} plain winged ant{(n - st == 1 ? "" : "s")}.");
+                }
             }
         }
-        foreach (var (k, icon, count) in _parts)
+        foreach (var (k, icon, count, sting, stings, title) in _parts)
         {
             var part = (Part)(sim.PartNeed(Local.Me, k) - 1); int have = sim.PartsOf(Local.Me, part);
             icon.Texture = PartIcon(part);
@@ -562,6 +576,25 @@ public partial class ColonyCommandHud : Control
             count.Text = have > 0 ? $"{have} / {n}" : BodyParts.Lack(part); // in store / what one brood costs
             count.AddThemeColorOverride("font_color", have >= n ? Gold : new Color(1, 0.5f, 0.35f));
             icon.Visible = have > 0; // with none in store the strip is all words: what to hunt
+            if (sting != null)
+            {
+                // wings on the left half, stings on the right; the card's title says what this brood will hatch as
+                bool wasp = sim.Has(Local.Me, Mutation.Stinger) && have > 0;
+                int st = sim.StingsFor(Local.Me, k);
+                sting.Visible = stings.Visible = wasp;
+                // beside the wing icon when the strip is shared, centred across it otherwise
+                count.Position = new Vector2(wasp ? 23 : 2, 1);
+                count.Size = new Vector2(wasp ? b_w(count) / 2 - 22 : b_w(count), count.Size.Y);
+                count.HorizontalAlignment = wasp ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+                if (wasp)
+                {
+                    count.Text = $"{have}/{n}";
+                    stings.Text = $"{sim.PartsOf(Local.Me, Part.Sting)}";
+                    stings.AddThemeColorOverride("font_color", st > 0 ? Gold : new Color(1, 0.5f, 0.35f));
+                    sting.Modulate = new Color(1, 1, 1, st > 0 ? 1f : 0.5f);
+                }
+                title.Text = !sim.Has(Local.Me, Mutation.Stinger) || st == 0 ? Config.ProdName(k) : st >= n ? "Stinger Ant" : $"{st} stinger{(st == 1 ? "" : "s")} of {n}";
+            }
         }
         foreach (var (b, u, status) in _research)
         {

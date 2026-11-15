@@ -47,7 +47,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Body parts (`Parts.cs`, progression.md 1c): every mutation ant hatched costs one part of its insect, so a brood costs its squad size
   (`Sim.PartCount`): `Part` Wings/Sting/Gland/Plates, `Colony.Parts[]` (in the roster, format `p3`), `BodyParts.Needs(ProdKind, mutations)`
-  (a winged ant costs a sting once the queen has the wasp's core). A dead wasp/spider/beetle keeps its part in `FoodSource.Part`; the first
+  (a winged ant always costs wings). Stingers are per ant (`Ant.Sting`, not the colony's flag): with the wasp's core a brood of winged ants
+  also takes up to one sting per ant from the store (`StingsFor`, `ProdItem.StingN`) and that many hatch as stingers; none in store never blocks it. A dead wasp/spider/beetle keeps its part in `FoodSource.Part`; the first
   worker to cut a load takes it (`Ant.PartP1`), stored when she delivers. `CanEnqueue` -> `QueueResult.NoPart`, `CanHatchSilk` -> `SilkResult.NoPart`.
   Campaign only: a carcass that crumbles with its part still in it leaves a **husk** (`FoodSource.Husk`: a separate one-load body that never
   rots; foragers and eaters ignore it, so old levels play as before), and `PartErrands` sends foragers for parts only while the objective is

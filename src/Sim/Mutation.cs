@@ -289,7 +289,7 @@ public sealed partial class Sim
     /// A winged ant's sting (the wasp core): venom that keeps burning after the bite.
     void MutantBite(int i, ref Ant a, ref Ant t, float dmg)
     {
-        if (a.Type != AntType.Flyer || !Has(a.Team, Mutation.Stinger) || !t.Alive || t.Type == AntType.Queen) return;
+        if (a.Type != AntType.Flyer || !a.Sting || !t.Alive || t.Type == AntType.Queen) return;
         float venom = dmg * (Mutations.StingVenom + Evolve.VenomSacVenom * Evo(a.Team, EvoNode.VenomSac));
         float time = Mutations.StingTime + Evolve.LastingVenomTime * Evo(a.Team, EvoNode.LastingVenom);
         Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
@@ -608,6 +608,8 @@ public sealed partial class Sim
         if (Mission != null && Mission.Perks.HasFlag(Perk.Larder)) c.Organic += Levels.LarderOrganic;
         if (roster != null) for (int n = 0; n < c.Evo.Length; n++) c.Evo[n] = roster.Evo[n];
         if (roster != null) for (int n = 0; n < c.Parts.Length; n++) c.Parts[n] = roster.Parts[n];
+        // the winged ants a chapter starts with cost nothing: where the story has already given the wasp's core they are stingers
+        for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team <= 1 && Ants[i].Type == AntType.Flyer && Has(Ants[i].Team, Mutation.Stinger)) GiveSting(i);
         if (Has(0, Mutation.RoyalLarva) && c.Founded && ChamberOf(0, ChamberKind.Nursery) == null)
             AddChamber(0, ChamberKind.Nursery, Mutations.NurseryWork, true);
         if (Has(0, Mutation.Winged) && c.Founded && ChamberOf(0, ChamberKind.Wings) == null) AddChamber(0, ChamberKind.Wings, 60f, true);

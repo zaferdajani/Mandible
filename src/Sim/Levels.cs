@@ -546,14 +546,15 @@ public sealed partial class Sim
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 10), (AntType.Major, 1, 2) } });
                 m.WaveAt = 420; m.WaveGap = 0;
                 {
-                    // every winged ant grows a sting now, and each needs one from a wasp (docs/progression.md 1c). Living
-                    // wasps are no prey for an army that cannot reach the air: the stings lie in a spider's larder on the
-                    // home flank, eight dead hornets, the two broods of four the objective asks for
+                    // every winged ant costs a pair of wings (docs/progression.md 1c): a guarded web on the home flank
+                    // holds ten dead flies, two more than the two broods of four the objective asks for, and four dead
+                    // hornets, so one brood can hatch as stingers. Living wasps are no prey for an army with no web ants.
                     var larder = OpenGround(home + toFoe * 38 + side * 46);
                     ClearAround(larder, 13);
-                    AddLarder("Spider's larder", larder, 3, AntType.Wasp, Part.Sting, 10);
+                    AddLarder("Spider's larder", larder, 3, AntType.Wasp, Part.Wings, 10);
+                    for (int i = 0; i < 4; i++) AddRemains(larder + MathX.Dir(i * 1.57f + 0.2f) * 8.6f, AntType.Wasp, Part.Sting, i * 2.3f);
                 }
-                Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Each winged ant grows a sting and needs one from a wasp: a spider on the flank (the marker) keeps a larder of dead hornets. Kill the spiders and the workers carry the stings home. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
+                Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Each winged ant needs a pair of wings: a spider on the flank (the marker) keeps a larder of dead flies in its web, and a few dead hornets. Kill the spiders and the workers carry the wings home; with a sting in store a winged ant hatches as a stinger. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
                 Add(Expedition.Obj.Group, "Burn the watch posts", "While any watch post stands the red queen cannot be harmed. Strike them one by one (gold rings on the map). Posts left: {0}.", b: -2);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "Her shield is down. Send everything down the red shaft before she raises new guards.");
                 break;
@@ -606,6 +607,9 @@ public sealed partial class Sim
                     GroupBug(sg, AntType.Spider, corner - side * 4, 1);
                     foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
                     for (int k = 0; k < 4; k++) Webs.Add(new WebZone { Pos = corner + MathX.Dir(k * 1.57f + 0.4f) * 6.5f, R = 2.4f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
+                    // the spitter's catch hangs in its hollow: eight dead flies, the wings for two broods of stingers once the
+                    // wasp's core is home (only stingers outlast the Hornet Mother; the stings come from her daughters)
+                    for (int k = 0; k < 8; k++) AddRemains(corner + MathX.Dir(k * 0.785f + 0.1f) * 3.4f, AntType.Wasp, Part.Wings, k * 1.3f);
                     // the Hornet Mother's sentinel, on the road to the paper nest: it carries the wasp's core
                     var post = OpenGround(home.Lerp(W.Nests[1].Pos, 0.5f) + side * 36);
                     ClearAround(post, 12);
@@ -626,7 +630,7 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Group, "Bring down the sentinel", "The Mother's sentinel hangs over the road to the paper nest (the gold ring), and the colony feels a core inside it. Hornets left: {0}.", b: m.SentinelGroup);
                 Add(Expedition.Obj.Extract, "Cut out the wasp's core", "Select workers and right-click the glowing core in the sentinel's body. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The swarm wants its sister back. Distance: {0}.");
-                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Her wounds close as fast as jaws can open them: only venom that keeps burning outlasts her. The paper nest is the gold ring. Hornets left: {0}.", b: 0);
+                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Her wounds close as fast as jaws can open them: only venom that keeps burning outlasts her. Hatch stingers: winged ants laid with wings (the flies in the spitter's hollow) and a sting from a dead hornet in store. The paper nest is the gold ring. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
             case 11: // The Long March

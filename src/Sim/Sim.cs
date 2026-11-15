@@ -62,6 +62,7 @@ public struct Ant
     public AntType CarryType;         // what the carried carcass piece came from (rendering)
     public int CarryTeam;
     public byte PartP1;               // a body part (Part + 1) taken from a carcass, in her jaws until she is home (Parts.cs)
+    public bool Sting;                // a winged ant that hatched with a wasp's sting: a stinger (venom, harder bite)
     public bool FeastOrder;           // sent to eat the remains in FoodTarget
     // general skills (Skills.cs): ranks of Q W E, unspent points, autocast bits, the W and E cooldowns (Q uses AbilityCd)
     public byte Sk0, Sk1, Sk2, Sk3, SkPts, AutoMask; // ranks of the loadout's slots Q W E R
@@ -180,6 +181,7 @@ public sealed class ProdItem
     public ProdKind Kind;
     public float Progress, Time;
     public byte PartP1, PartN;        // the body part (Part + 1) this brood was paid with and how many: given back if it is cancelled
+    public byte StingN;               // stings a brood of winged ants took as well: that many of them hatch as stingers
 }
 
 public sealed class Colony
@@ -691,7 +693,9 @@ public sealed partial class Sim
         byte part = PartNeed(team, kind);
         byte partN = (byte)(part > 0 ? PartCount(kind) : 0);
         if (part > 0) c.Parts[part - 1] -= partN; // one part, one ant: a squad costs one for each
-        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind), PartP1 = part, PartN = partN });
+        byte stingN = (byte)StingsFor(team, kind);
+        c.Parts[(int)Part.Sting] -= stingN;
+        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind), PartP1 = part, PartN = partN, StingN = stingN });
         return QueueResult.Ok;
     }
 
@@ -736,7 +740,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(a.Brood); Mix(a.CoreP1); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1); Mix(a.PartP1);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1); Mix(a.PartP1); Mix(a.Sting ? 1u : 0u);
         }
         foreach (var c in Col)
         {
@@ -774,6 +778,7 @@ public sealed partial class Sim
         c.Food += Config.ProdCost(q.Kind);
         c.Organic += OrganicCost(q.Kind);
         if (q.PartP1 > 0) c.Parts[q.PartP1 - 1] += q.PartN;
+        c.Parts[(int)Part.Sting] += q.StingN;
         c.Spent -= Config.ProdCost(q.Kind);
     }
 
@@ -863,6 +868,7 @@ public sealed partial class Sim
                     if (type == AntType.Soldier) Mission.SoldiersHatched++;
                 }
                 ref var a = ref Ants[id];
+                if (n < item.StingN) GiveSting(id); // the brood's stings go to its first ants
                 if (type != AntType.Worker)
                 {
                     var toCenter = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - nest).Normalized();

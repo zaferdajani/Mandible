@@ -70,16 +70,20 @@ There are two progressions. They use different things and give different rewards
   next carrier. A brood that is cancelled gives its parts back. Web ants raised at the Spinnery cost a gland each too.
 - **A brood is a squad, so it costs one part for each ant in it**: four pairs of wings for four winged ants, four
   glands for four web ants, three sets of plates for three armoured ants.
-- Stingers: once the queen has the wasp's core every winged ant hatches as a stinger, so it costs a sting and no wings.
+- Stingers: a winged ant always costs a pair of wings. Once the queen has the wasp's core, each winged ant laid also
+  takes one sting if one is in store and hatches as a stinger; with no sting it hatches as a plain winged ant, so a
+  missing sting never blocks the brood. A stinger is that ant, not the whole colony: winged ants already alive when
+  the core comes home stay plain. The winged ants a later chapter starts with are stingers.
 - In the campaign a part is never lost to rot: when the carcass crumbles, a dried husk stays and keeps the part until a
   worker is sent for it (right-click it with workers). While a level's objective asks for a mutation unit the colony
   sends for the parts on its own, and the objective marker shows the nearest body that holds one, or the nearest prey.
 - **Flies are not a living creature yet.** Wings come from dead flies a spider has caught: they hang in its web or lie
-  in its lair, and are won by killing the spider. Stings can be found the same way (a spider's larder of dead
-  hornets), because an army with no web ants cannot fight living wasps. STAND-IN until the owner decides on a fly.
+  in its lair, and are won by killing the spider. The dead fly uses the wasp's carcass until it has a body of its
+  own: it needs an approved art target. No living fly is planned.
 - Where each level's parts are: The Silk Trap, 8 flies in the web (the level asks for 4 winged ants); The Royal Larva,
-  4 flies in the spider lair; The Hornet Mother, its spiders and wasps; The Dry Spell, 8 beetles (asks for 3 armoured
-  ants); Wings and Acid, a spider's larder of 10 dead hornets (asks for 6 winged ants, two broods).
+  4 flies in the spider lair; The Hornet Mother, its spiders and wasps, and 8 flies in the silk spitter's hollow; The
+  Dry Spell, 8 beetles (asks for 3 armoured ants); Wings and Acid, a guarded web with 10 flies and 4 dead hornets
+  (asks for 6 winged ants, two broods).
 - Parts in store go with the colony to the following levels (the roster). The ants a level starts with cost nothing.
 - The rival colony and the skirmish AI obey the same rule (the queue check is shared).
 

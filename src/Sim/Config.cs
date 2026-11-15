@@ -263,7 +263,7 @@ public static class Config
         ProdKind.Worker => "Forages on its own, lays food trails and carries corpses home.",
         ProdKind.Soldier => "Fast, aggressive fighter. The backbone of any raid.",
         ProdKind.Major => "Huge-headed crusher. Slow, tough and devastating.\nRequires a Matriarch queen.",
-        ProdKind.Flyer => "Winged ant. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires a fly's mutation core. Each one costs a pair of wings (a sting once the queen has the wasp's core).",
+        ProdKind.Flyer => "Winged ant. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires a fly's mutation core. Each one costs a pair of wings. With the wasp's core each also takes a sting, if one is in store, and hatches as a stinger.",
         ProdKind.WebAnt => "Web ant. Flings silk that pins a flying enemy to the ground, where any ant can bite it. A weak biter.\nRequires a spider's mutation core. Each one costs a spider's silk gland.",
         ProdKind.Armoured => "Armoured ant. A beetle's shell plates: slow, and shrugs off a third of every blow.\nRequires a beetle's mutation core. Each one costs a beetle's shell plates.",
         ProdKind.Gunner => "Sprays formic acid from range. Fragile; keep it behind the soldiers.\nRequires an Empress queen.",

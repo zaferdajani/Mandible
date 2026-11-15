@@ -174,12 +174,26 @@ public static class CarrionValidation
                 Check(pc.Parts[(int)Part.Gland] == 1 && sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.NoPart, "A brood must cost one part for each ant");
                 sim.CancelLast(0);
                 Check(pc.Parts[(int)Part.Gland] == squad + 1, "A cancelled brood did not give its parts back");
+                // stingers: a winged ant always costs wings; with the wasp's core it also takes a sting if one is in store
                 sim.GiveMutation(0, Mutation.Stinger);
-                pc.Parts[(int)Part.Wings] = 8;
-                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "With the wasp's core a winged ant must cost a sting, not wings");
-                pc.Parts[(int)Part.Sting] = Sim.PartCount(ProdKind.Flyer);
-                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.Ok, "Stings in store did not open a brood of stingers");
-                GD.Print($"[carrion-test] parts: the spider's silk gland came home in {ticks / 30f:0}s; a brood costs one part for each ant, a cancelled brood gives them back, stingers cost stings");
+                int four = Sim.PartCount(ProdKind.Flyer);
+                pc.Parts[(int)Part.Sting] = 9; pc.Parts[(int)Part.Wings] = 0;
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "Stings alone must not pay for a winged ant");
+                pc.Parts[(int)Part.Sting] = 0; pc.Parts[(int)Part.Wings] = four * 2;
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.Ok && sim.StingsFor(0, ProdKind.Flyer) == 0, "A missing sting must never block a brood of winged ants");
+                pc.Parts[(int)Part.Sting] = 2;
+                sim.Enqueue(0, ProdKind.Flyer);
+                Check(pc.Parts[(int)Part.Wings] == four && pc.Parts[(int)Part.Sting] == 0 && pc.Queue[^1].StingN == 2, "A brood of winged ants did not take its wings and the two stings in store");
+                sim.CancelLast(0);
+                Check(pc.Parts[(int)Part.Wings] == four * 2 && pc.Parts[(int)Part.Sting] == 2, "A cancelled brood of stingers did not give its wings and stings back");
+                sim.Enqueue(0, ProdKind.Flyer);
+                int plain0 = 0, stingers0 = 0;
+                for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == 0 && sim.Ants[i].Type == AntType.Flyer) { if (sim.Ants[i].Sting) stingers0++; else plain0++; }
+                for (int k = 0; k < 120 * 30 && pc.Queue.Count > 0; k++) sim.Tick(dt);
+                int plain = -plain0, stingers = -stingers0;
+                for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == 0 && sim.Ants[i].Type == AntType.Flyer) { if (sim.Ants[i].Sting) stingers++; else plain++; }
+                Check(stingers == 2 && plain == four - 2, $"Two stings must make two stingers and two plain winged ants (hatched {stingers} and {plain})");
+                GD.Print($"[carrion-test] parts: the spider's silk gland came home in {ticks / 30f:0}s; a brood costs one part for each ant, a cancelled brood gives them back, a sting in store makes a winged ant a stinger");
             }
 
             // Devour the Fallen: only the fire ants' Warlord eats its own kind
