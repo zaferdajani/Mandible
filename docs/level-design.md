@@ -242,6 +242,10 @@ starts, so the sim stays deterministic (they enter `Expedition.Perks` before the
 
 ## 5. Mutation: the second track
 
+> **Superseded 2026-11-15 by [progression.md](progression.md).** A core now gives the queen a new unit (no mutagen
+> reserve, no three cards, no trait picks), and organic matter levels up the queen and generals through the evolve
+> tree. The text below describes the code as it stands until the rework; delete it section by section as the code changes.
+
 The owner's design (2026-11-04). The tube ants are a lab-modified strain, M-7, bred to take up mutagen without limit. The researcher's batch broke with them, and the creatures that fed on the spill carry mutagen in their bodies. That is why this colony can mutate at all, and why the woods grow more dangerous as it does.
 
 Two tracks grow the colony, and they never mix:

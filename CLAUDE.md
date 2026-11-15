@@ -39,10 +39,11 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   (`World.Obstacles`, `W.Blocked`), no pathfinding. No water exists anywhere yet.
 - Campaign: `Levels.cs` (setup + objectives per level id, `Levels.Order` maps ids to numbers), `Expedition` objectives
   and steps, `CampaignColony.cs` (persistent roster, veterans; Burr is tracked by name), `CampaignReveal.cs` (what each
-  chapter reveals), `Mutation.cs` (mutagen glands: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon;
-  each gland is a radiating core of `Strength` 1-3 that becomes `Colony.Power`, +hp/bite for every ant, saved in the roster).
-  Mutation is the queen's alone: `Mutations.Trees` (climbed in order, `CanTake`), shown by `src/UI/MutationTree.cs` (target N1) from the
-  result card; generals rank up only by eating (XP -> skill points). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+  chapter reveals), `Mutation.cs` (cores: `AddMutagen`, `CmdExtract`, carry home, `Mutate`; royal larva/cocoon),
+  `src/UI/MutationTree.cs` (tree screen, target N1). PROGRESSION RULES ARE IN `docs/progression.md` (owner, 2026-11-15):
+  a core gives the queen a NEW UNIT; organic matter levels up queen and generals through the evolve tree. The code still
+  has the old model (`Colony.Power` from core `Strength`, `Mutations.Trees` of trait picks, generals' XP from their own eating):
+  rework it to the doc, do not extend it. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at
@@ -62,3 +63,4 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
 Real ant behaviour, macro nature-documentary realism, warm palette, no grey, no code-primitive art. Gradual reveal
 (red colony from Act II). Generals (never "heroes" in player text). Old Burr goes into the royal cocoon and becomes
 the Warlord (Hemlock only if Burr fell first). Ground ants cannot hit airborne wasps. Autosave only at milestones.
+Progression: `docs/progression.md` is the only rule (core -> new unit; organic matter -> levels via the evolve tree).

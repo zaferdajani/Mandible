@@ -1,7 +1,10 @@
 # Generals: levels 1-10, a shared skill pool, the royal insignia
 
-The heroes are called **generals** in player-facing text. Each general levels from 1 to 10 by **eating remains**
-(organic matter, never kills alone), and every level is a **skill point**. Which skills a general has is data
+> **Levelling rule changed 2026-11-15: see [progression.md](progression.md).** Generals level up from the colony's
+> organic matter balance through the evolve tree. The per-general eating described below is how the code works today
+> and is to be reworked.
+
+The heroes are called **generals** in player-facing text. Each general has levels 1 to 10, and every level is a **skill point**. Which skills a general has is data
 (`data/loadouts.json`, see below); ranks unlock Warcraft III style.
 
 | Slot | Key | Ranks open at | Role |
