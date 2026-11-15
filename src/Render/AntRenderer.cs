@@ -70,6 +70,13 @@ struct RenderAnt
     public bool HasLookAt;
     public float LookUntil;
     public float LastHit, GreetCd;
+    // everything that walks or flies: the heading the body is drawn at, the stride phase its feet are locked to,
+    // the share of that stride spent turning (signed), how hard it is working, and where it stood last frame
+    public float Head, Dh, Rate, Step, Turn, Work, Scale, Bank;
+    public int Way;                   // the way it travels in its own frame, in 64ths of a turn from straight ahead
+    public Vector2 Last;
+    public int Seen, Walker;          // the frames it was last drawn, and last drawn on its planted feet
+    public float SimGait, Fidget, FidgetAge; // legs the sim works while it goes nowhere (digging, struggling)
 }
 
 public sealed class AntRenderer
@@ -83,7 +90,8 @@ public sealed class AntRenderer
     public const float CloseDist = 26f;
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
-    float _now, _lastNow = -1;
+    float _now, _lastNow = -1, _lastGame;
+    int _frame = 1;
     /// Level 1's opening: a stunned ant was just woken (GameSession, EvKind.Woke): it kicks upright and shakes off the sand.
     public void Woke(int id) { if (id >= 0) _wokeAt[id] = _now; }
     readonly Dictionary<int, float> _wokeAt = new();
@@ -315,6 +323,16 @@ public sealed class AntRenderer
             if (detail != null) { m.SetShaderParameter("detail_normal", detail); m.SetShaderParameter("has_detail", 1f); }
         }
         else if (AntMesh.Neck.TryGetValue(type, out var neck)) m.SetShaderParameter("neck", neck);
+        // walkers plant their feet: where each foot rests from its hip, read from the creature's own mesh
+        if (!Config.Flies(type) && AntMesh.LegsOf(type, team) is { Rest.Length: > 0 } legs)
+        {
+            var rest = new Vector3[4];
+            for (int k = 0; k < legs.Rest.Length; k++) rest[k] = legs.Rest[k];
+            m.SetShaderParameter("legs", rest);
+            m.SetShaderParameter("leg_count", legs.Rest.Length);
+            m.SetShaderParameter("stride", legs.Stride);
+            m.SetShaderParameter("turn_arc", legs.Arc);
+        }
         m.SetShaderParameter("dead", dead ? 1f : 0f);
         return m;
     }
@@ -326,6 +344,111 @@ public sealed class AntRenderer
     public static int MutationTier(int level) => level >= 10 ? 3 : level >= 7 ? 2 : level >= 4 ? 1 : 0;
 
     public static float PlayScale(float camDist) => 1f + 0.9f * Mathf.SmoothStep(18f, 45f, camDist);
+
+    /// The fastest a creature's body may be seen to turn (rad/s): what its legs, or its wings, can keep up with.
+    /// The sim turns faster than any leg could follow; the drawn heading trails it by a step or two.
+    static float TurnRate(AntType t) => t switch
+    {
+        AntType.Spider => 3.4f, AntType.Beetle => 2.6f, AntType.StagBeetle => 2.0f, AntType.Queen => 3.0f,
+        AntType.Major or AntType.Armoured or AntType.Warlord or AntType.Matron => 4.5f,
+        AntType.Wasp => 4.0f, AntType.Marshal => 4.5f, AntType.Flyer => 6.0f,
+        _ => 7.0f,
+    };
+    /// The Ant shader's own size for this seed (its `p *= 0.93 + 0.14 * hash1(seed + 0.37)`), so a stride measures true.
+    static float SeedScale(int seed) { float h = Mathf.Sin((seed + 0.37f) * 127.1f + 311.7f) * 43758.5453f; return 0.93f + 0.14f * (h - Mathf.Floor(h)); }
+
+    ref RenderAnt Ra(int i, in Ant a)
+    {
+        ref var r = ref _ra[i];
+        if (r.Serial != a.Serial)
+        {
+            r = default;
+            r.Serial = a.Serial;
+            r.SacT = _rng.R(0, 2);
+            r.LastHit = a.HitFlash;
+        }
+        return ref r;
+    }
+
+    /// No creature turns like a thing on a turntable: the body is drawn turning no faster than its legs can step it
+    /// round (or its wings bank it round). Render only; the sim's heading is untouched. Returns the heading to draw.
+    float TurnOnLegs(int i, in Ant a, Vector2 ip, float ih, float dt)
+    {
+        ref var r = ref Ra(i, a);
+        if (r.Seen != _frame - 1 || ip.DistanceSquaredTo(r.Last) > 36)
+        {
+            r.Head = ih; r.Last = ip; r.Step = a.Gait; r.SimGait = a.Gait; r.Turn = 0; r.Work = 0; r.Bank = 0; r.Fidget = 0;
+        }
+        r.Seen = _frame;
+        float diff = MathX.AngleDiff(r.Head, ih);
+        // far behind, it hurries round as fast as it can step; and at a run its legs are quick already, so it comes round with them
+        float rate = TurnRate(a.Type) * (1f + 0.3f * Mathf.Max(0f, Mathf.Abs(diff) - 1f)) + 3.5f * Mathf.Abs(diff) * Mathf.Clamp(a.Speed / Mathf.Max(0.1f, Config.Of(a.Type).Speed), 0f, 1f);
+        rate = Mathf.Min(rate, TurnRate(a.Type) * 2.4f);
+        r.Dh = Mathf.Clamp(diff, -rate * dt, rate * dt);
+        r.Head += r.Dh;
+        r.Rate = dt > 0 ? Mathf.Abs(r.Dh) / dt : 0;
+        // a flyer leans into its turn
+        float k = 1f - Mathf.Exp(-dt * 6f);
+        r.Bank += (Mathf.Clamp(dt > 0 ? r.Dh / dt * 0.11f : 0f, -0.5f, 0.5f) - r.Bank) * k;
+        return r.Head;
+    }
+
+    /// The stride a walker's planted feet are locked to (see the Ant shader's leg branch): it advances with the ground
+    /// covered and with the angle turned alike, and remembers what share of it is turning and which way the body
+    /// travels in its own frame (ants haul backwards; a spider sidles). `scale` is the drawn size of one body length.
+    void Stride(int i, in Ant a, AntMesh.Legs legs, Vector2 ip, float scale, float dt)
+    {
+        ref var r = ref _ra[i];
+        var step = ip - r.Last;
+        float moved = step.Length();
+        r.Last = ip;
+        r.Scale = scale * SeedScale(a.Serial & 15);
+        r.Walker = _frame;
+        float walk = moved / (legs.Stride * r.Scale), spin = Mathf.Abs(r.Dh) / legs.Arc;
+        float adv = walk + spin;
+        // the sim also works the legs of an ant that goes nowhere (digging, struggling in silk): that passes through
+        if (a.Gait != r.SimGait)
+        {
+            float d = Mathf.PosMod(a.Gait - r.SimGait, 1f);
+            r.SimGait = a.Gait; r.Fidget = a.Speed < 0.05f && d < 0.2f ? d * 30f : 0f; r.FidgetAge = 0;
+        }
+        else if ((r.FidgetAge += dt) > 0.08f) r.Fidget = 0;
+        r.Step = Mathf.PosMod(r.Step + adv + r.Fidget * dt, 1f);
+        float k = 1f - Mathf.Exp(-dt * 45f);
+        if (dt > 0 && walk / dt > 0.08f)
+        {
+            var fwd = new Vector2(Mathf.Cos(r.Head), Mathf.Sin(r.Head));
+            r.Way = Mathf.PosMod(Mathf.RoundToInt(Mathf.Atan2(step.Dot(new Vector2(fwd.Y, -fwd.X)), step.Dot(fwd)) / Mathf.Tau * 64f), 64);
+        }
+        // the share of the stride that is turning only moves while it steps: a standing foot stays where it stands
+        if (dt > 0 && adv / dt > 0.08f) r.Turn += (Mathf.Sign(r.Dh) * spin / adv - r.Turn) * k;
+        r.Work += (Mathf.Clamp(dt > 0 ? spin / dt / (TurnRate(a.Type) / legs.Arc) : 0f, 0f, 1f) - r.Work) * (1f - Mathf.Exp(-dt * 18f));
+    }
+
+    /// Where the Ant shader puts a foot on flat ground this frame (the same arithmetic as its vertex()), and whether
+    /// that foot is standing: the gait self-test checks that a standing foot stays where it stands.
+    /// leg 0.. = front to rear on the left (+x of the mesh), then the same on the right.
+    internal (Vector2 at, bool planted, float cycle) Foot(int i, AntMesh.Legs legs, int leg)
+    {
+        ref var r = ref _ra[i];
+        int n = legs.Rest.Length, pair = leg % n;
+        float side = leg < n ? 1f : -1f;
+        var c = new Vector2(side * (legs.HipX[pair] + legs.Rest[pair].X), legs.Rest[pair].Z + legs.Rest[pair].Y);
+        float turn = Mathf.Sign(r.Turn) * Mathf.RoundToInt(Mathf.Clamp(Mathf.Abs(r.Turn), 0, 1) * 63) / 63f;
+        float s = Mathf.PosMod(r.Step + ((pair + (side > 0 ? 0 : 1)) & 1) * 0.5f, 1f);
+        float swing;
+        if (s < 0.55f) swing = 1f - 2f * s / 0.55f;
+        else { float t = (s - 0.55f) / 0.45f; swing = 2f * (t * t * (3f - 2f * t)) - 1f; }
+        float b = -swing * 0.275f * legs.Arc * turn;
+        c = new Vector2(Mathf.Cos(b) * c.X + Mathf.Sin(b) * c.Y, -Mathf.Sin(b) * c.X + Mathf.Cos(b) * c.Y);
+        c += swing * 0.275f * legs.Stride * (1f - Mathf.Abs(turn)) * new Vector2(Mathf.Sin(r.Way * Mathf.Tau / 64f), Mathf.Cos(r.Way * Mathf.Tau / 64f));
+        var f = new Vector2(Mathf.Cos(r.Head), Mathf.Sin(r.Head));
+        return (r.Last + (new Vector2(f.Y, -f.X) * c.X + f * c.Y) * r.Scale, s < 0.55f, s);
+    }
+    internal float BankOf(int i) => _ra[i].Bank;
+    internal float TurnSpeed(int i) => _ra[i].Rate;
+    internal float DrawnHeading(int i) => _ra[i].Head;
+    internal bool OnPlantedFeet(int i) => _ra[i].Walker == _frame;
 
     public static Basis Orient(Vector3 up, float heading, float scale)
     {
@@ -358,6 +481,10 @@ public sealed class AntRenderer
         float rdt = _lastNow < 0 ? 0.016f : Mathf.Clamp(_now - _lastNow, 0, 0.1f);
         _lastNow = _now;
         float ease = 1 - Mathf.Exp(-rdt * 9f);
+        // the game's own clock, for what must stop when the game is paused: a wild walker turning on its legs
+        float gameNow = sim.Time + alpha / 30f, gdt = Mathf.Clamp(gameNow - _lastGame, 0, 0.1f);
+        _lastGame = gameNow;
+        _frame++;
         // the heroes of each colony, so workers can greet them
         var heroes = new List<(int team, Vector2 pos)>(4);
         for (int i = 0; i < sim.High; i++)
@@ -399,10 +526,13 @@ public sealed class AntRenderer
                     spoilCarry = phase > 0.03f && phase < 0.5f;
                 }
             }
+            bool steps = !a.Dormant && !callow.Active, walker = steps && !flies;
+            if (steps) ih = TurnOnLegs(i, a, ip, ih, gdt);
             var n = hf.Normal(ip.X, ip.Y);
             var up = flies ? Vector3.Up : (n + Vector3.Up * 0.6f).Normalized();
             var b = Orient(up, ih, st.Size);
             if (flies) b = new Basis(b.X.Normalized(), Mathf.Sin(sim.Time * 1.7f + i) * 0.06f + (a.Speed > 1 ? -0.12f : 0f)) * b; // pitch nose-down when cruising, gentle wobble
+            if (flies && steps) b = new Basis(b.Z.Normalized(), _ra[i].Bank) * b; // and it leans into a turn
             float hover = flies ? Mathf.Sin(sim.Time * 3.1f + i * 0.7f) * 0.15f : 0f;
             // underground ants stand on the gallery floor at their depth below the mound
             float gy = layer == 0 ? hf.Sample(ip.X, ip.Y) : hf.Sample(sim.W.Nests[layer - 1].Pos.X, sim.W.Nests[layer - 1].Pos.Y) - NestGeometry.FloorDepth(ip - sim.W.Nests[layer - 1].Pos);
@@ -443,11 +573,17 @@ public sealed class AntRenderer
             else if (lie > 0) amp = 1f;
             if (callow.Active) amp = callow.Amp;
             if (spoilRun) amp = 0.85f;
+            if (flies && a.PinT <= 0) amp = 0; // on the wing the legs hang; they do not run on air
             float camDist = camPos.DistanceTo(o);
             // larger than life at play zoom, true to life up close (as the food piles are drawn 1.4x): an ant is a few pixels
             // at the RTS camera otherwise. Render only; the sim, the picking and the fog keep the real size
             float show = inTube >= 0 && inTube < Expedition.TubeLength ? 1f : PlayScale(camDist), size = st.Size * show; // true to life inside the glass: it must fit
             if (show > 1.001f) b = new Basis(b.X * show, b.Y * show, b.Z * show);
+            if (walker && AntMesh.LegsOf(a.Type, a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team) is { Rest.Length: > 0 } legs)
+            {
+                Stride(i, a, legs, ip, size, gdt);
+                if (a.Root <= 0 && lie <= 0) amp = Mathf.Max(amp, _ra[i].Work); // turning on the spot is work for the legs too
+            }
             var data = Mind(sim, i, ref a, ip, ih, amp, cam2, heroes, ease, camDist);
             if (callow.Active) { data.R = Mathf.Floor(data.R) + callow.Gait; if (callow.Kind != 0) data.A = callow.Kind + callow.KindT; }
             data.A += 4 * callow.Pale;
@@ -753,14 +889,7 @@ public sealed class AntRenderer
 
     Color Mind(Sim sim, int i, ref Ant a, Vector2 ip, float ih, float amp, Vector2 cam2, List<(int team, Vector2 pos)> heroes, float ease, float camDist)
     {
-        ref var r = ref _ra[i];
-        if (r.Serial != a.Serial)
-        {
-            r = default;
-            r.Serial = a.Serial;
-            r.SacT = _rng.R(0, 2);
-            r.LastHit = a.HitFlash;
-        }
+        ref var r = ref Ra(i, a);
         // one-shots from what just happened to it
         if (a.HitFlash > r.LastHit + 0.5f) OneShot(ref r, 2, 0.25f, null);
         r.LastHit = a.HitFlash;
@@ -817,6 +946,11 @@ public sealed class AntRenderer
 
         int seed = a.Serial & 15;
         float x = seed + 16 * pose + Mathf.Clamp(a.Gait, 0, 0.999f);
+        if (r.Walker == _frame)
+        {
+            int q = Mathf.RoundToInt(Mathf.Clamp(Mathf.Abs(r.Turn), 0, 1) * 63);
+            x = seed + 16 * pose + 64 * (r.Turn < 0 && q > 0 ? 64 + q : q) + Mathf.Clamp(r.Step, 0, 0.999f);
+        }
         int yaw8 = (int)Mathf.Clamp((r.Yaw / 1.2f * 0.5f + 0.5f) * 255f, 0, 255);
         int pitch8 = (int)Mathf.Clamp((r.Pitch / 0.6f * 0.5f + 0.5f) * 255f, 0, 255);
         float y = yaw8 * 256 + pitch8 + Mathf.Min(amp, 0.996f);
@@ -825,6 +959,9 @@ public sealed class AntRenderer
         if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
         float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
         float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(Config.IsHero(a.Type) ? MutationTier(a.Level) : a.Brood, 0, 3); // better brood: heavier mandibles
+        if (r.Walker == _frame) w += 2048 * r.Way;
+        // on the wing the legs hang still under the body, drifting a little
+        if (Config.Flies(a.Type) && a.PinT <= 0) x = seed + 16 * pose + 0.275f + 0.02f * Mathf.Sin(_now * 1.3f + seed);
         if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }

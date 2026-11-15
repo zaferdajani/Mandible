@@ -57,6 +57,10 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   in `ColonyCommandHud` (keys K, comma, period: P and M belong to the evolve tree and armoured ants), placement ghost and reach ring in `SilkWorks`.
 - Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
   (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`; art review not passed yet). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
+- Wild walkers' legs (beetle, spider, stag beetle) are render only: `AntRenderer.BugGait` draws the body turning no faster than its legs step
+  (`BugTurnRate`) and advances its own stride with distance and turning; the Ant shader's `bug` branch plants each foot against the body's
+  travel and turn (`stride`, `turn_arc`, travel direction in INSTANCE_CUSTOM.w). The sim's `Heading`/`Gait` are untouched. Ants still use the old
+  hip swing. Check: `--gait-capture=<dir>` (GPU queue; frame sheets + a planted-foot self-test).
 - Creature voices: `tools/gen_voices.py`, `AudioDirector.Voice/VoiceOf/VoiceRank`, `PlayerInput.Speak` (web ants use the "silk" call, armoured ants borrow the major's).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (Alone → Gather → ClearTrail → FreeQueen → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is

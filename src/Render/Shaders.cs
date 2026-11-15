@@ -68,6 +68,10 @@ uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
 uniform vec3 leg_color : source_color = vec3(0.06, 0.045, 0.035);
 uniform float dead = 0.0;
+uniform vec3 legs[4];          // walkers (AntMesh.LegsOf): per leg of the +x side, front to rear: the foot's rest from its hip (x out, y forward), the hip's z
+uniform int leg_count = 0;     // 0: no planted feet (flyers, loose pieces): the plain hip swing
+uniform float stride = 0.55;   // body lengths travelled per gait cycle, and
+uniform float turn_arc = 1.0;  // radians turned per gait cycle (AntRenderer.Stride advances the phase by the same numbers)
 uniform int pattern = 0;      // 0 ant, 1 ground beetle (grooved metallic shell), 2 wolf spider (striped, hairy), 3 wasp, 4 stag beetle
 uniform float irid = 0.0;     // structural-colour sheen strength
 uniform float hero = 0.0;     // metal-inlaid armour of hero ants
@@ -127,10 +131,12 @@ void vertex() {
     float region = COLOR.b;
     // Per-instance data, packed by AntRenderer:
     //   x = seed (0..15) + 16 * pose (0 normal, 1 sentinel, 2 listening, 3 grooming) + gait fraction (distance-locked in the sim)
+    //       + 64 * turn share of the stride (walkers: 0..63 turning toward a larger heading, 64..127 the other way)
     //   y = yaw8 * 256 + pitch8 (where the head looks) + speed amplitude fraction
     //   z = flags (2 shell wall, 4 charge, 8 carrying, 16 selected, 32 hovered, 64 * hit flash 0..15)
     //       + 1024 * missing parts (bits: legs 0-5, antennae 6-7, head 8, thorax 9, gaster 10) + bite fraction
-    //   w = 512 * evolution stage (0..3) + 64 * acid etching (0..7) + 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
+    //   w = 2048 * the way a walker is travelling, in 64ths of a turn from straight ahead toward its left (+x)
+    //       + 512 * evolution stage (0..3) + 64 * acid etching (0..7) + 4 * callow paleness (0..15) + one-shot (1 order acknowledged, 2 flinch, 3 greeting) + its progress fraction
     float xi = floor(INSTANCE_CUSTOM.x);
     float phase = fract(INSTANCE_CUSTOM.x) * TAU;
     float lost = floor(floor(INSTANCE_CUSTOM.z) / 1024.0);
@@ -140,7 +146,10 @@ void vertex() {
     float limpSide = step(0.5, mod(legsLost, 8.0)) - step(0.5, floor(legsLost / 8.0));
     phase += limp * 0.6 * sin(phase);
     float seed = mod(xi, 16.0);
-    float pose = floor(xi / 16.0);
+    float pose = mod(floor(xi / 16.0), 4.0);
+    float turnq = floor(xi / 64.0);
+    float turn = turnq < 63.5 ? turnq / 63.0 : -(turnq - 64.0) / 63.0;
+    bool bug = pattern == 1 || pattern == 2 || pattern == 4;
     float yi = floor(INSTANCE_CUSTOM.y);
     float amp = fract(INSTANCE_CUSTOM.y);
     float yaw = -((floor(yi / 256.0) / 255.0 - 0.5) * 2.4);  // + in the renderer = toward mesh -X
@@ -156,6 +165,8 @@ void vertex() {
     float charge = step(4.0, zi); zi -= charge * 4.0;
     float block = step(2.0, zi);
     float wi = floor(INSTANCE_CUSTOM.w);
+    float travel = floor(wi / 2048.0); wi -= travel * 2048.0;
+    travel *= TAU / 64.0;
     float stage = floor(wi / 512.0); wi -= stage * 512.0;
     v_stage = stage;
     float etch = floor(wi / 64.0); wi -= etch * 64.0;
@@ -183,16 +194,44 @@ void vertex() {
         float side = part <= 3.0 ? 1.0 : -1.0;
         float idx = mod(part - 1.0, 3.0);
         float grp = mod(idx + (side > 0.0 ? 0.0 : 1.0), 2.0);
+        // where the foot rests, from its hip. A spider's four legs a side share three part ids, so the leg is known
+        // by its hip: legs 1 and 3 of one side step with 2 and 4 of the other (an insect's alternating tripod likewise)
+        float pair = idx;
+        vec2 f0 = vec2(0.0);
+        float nearest = 1e9;
+        for (int k = 0; k < leg_count; k++) {
+            float dz = abs(piv.y - legs[k].z);
+            if (dz < nearest) { nearest = dz; pair = float(k); f0 = vec2(side * legs[k].x, legs[k].y); }
+        }
+        grp = mod(pair + (side > 0.0 ? 0.0 : 1.0), 2.0);
         float s = fract((phase + grp * PI) / TAU);
         // planted tripod: 55% of the cycle the foot stands on the ground and sweeps back under the body,
         // 45% it swings forward with a lift. The gait phase is distance-locked, so feet do not slide.
         float A = 0.45;
         float swing, lift;
-        if (s < 0.55) { swing = A * (1.0 - 2.0 * s / 0.55); lift = 0.0; }
-        else { float t = (s - 0.55) / 0.45; float e = t * t * (3.0 - 2.0 * t); swing = A * (2.0 * e - 1.0); lift = sin(t * PI) * 0.09 * w; }
+        if (s < 0.55) { swing = 1.0 - 2.0 * s / 0.55; lift = 0.0; }
+        else { float t = (s - 0.55) / 0.45; float e = t * t * (3.0 - 2.0 * t); swing = 2.0 * e - 1.0; lift = sin(t * PI) * 0.09 * w; }
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
-        q = rot_y(q, swing * side);
-        n = rot_y(n, swing * side);
+        if (leg_count > 0 && dot(f0, f0) > 1e-6) {
+            // a walker's foot is put where the ground holds it: while it stands, the body walks and turns over it
+            // (the foot's place in the body's frame is the body's own travel and turn, undone), and the leg reaches
+            // and swings from the hip to keep it there, whichever way the body is going: a spider sidles and backs as readily. The phase advances with distance and with turning alike
+            vec2 c1 = piv + f0;
+            float b = -swing * 0.275 * turn_arc * turn;
+            c1 = vec2(cos(b) * c1.x + sin(b) * c1.y, -sin(b) * c1.x + cos(b) * c1.y);
+            c1 += swing * 0.275 * stride * (1.0 - abs(turn)) * vec2(sin(travel), cos(travel));
+            // standing: now and then one leg is lifted, reached out a little and set down again
+            float shift = idle * alive * smoothstep(0.9, 1.0, sin(TIME * 0.55 + id + pair * 2.4 + side));
+            vec2 f1 = (c1 - piv) * (1.0 + 0.07 * shift);
+            float ang = atan(f1.x, f1.y) - atan(f0.x, f0.y) + 0.06 * shift * side;
+            q.xz *= length(f1) / length(f0);
+            q = rot_y(q, ang);
+            n = rot_y(n, ang);
+            lift += shift * 0.035 * w / max(moving, 0.001);
+        } else {
+            q = rot_y(q, A * swing * side);
+            n = rot_y(n, A * swing * side);
+        }
         p = q + vec3(piv.x, 0.0, piv.y);
         p.y += lift * moving;
         // a sentinel lifts its front legs; a spider rears to lunge; a beetle behind its shell draws its legs in
@@ -216,6 +255,8 @@ void vertex() {
         vec3 q = p - vec3(piv.x, 0.0, piv.y);
         q = rot_y(q, (a * w + sweep) * alive);
         p = q + vec3(piv.x, 0.0, piv.y);
+        // a spider's pedipalps drum in turn while it stands
+        if (pattern == 2) p.y += w * alive * 0.022 * (0.35 + 0.65 * idle) * sin(TIME * 3.1 + side * 1.57 + id);
         // the flick: up, then pointing at the order; a greeting raises and quivers them; listening holds them high
         p.y += w * alive * (ack * 0.06 + greet * (0.05 + 0.012 * sin(TIME * 40.0)) + (pose == 2.0 ? 0.035 : 0.0) + (pose == 3.0 ? 0.02 * max(0.0, sin(TIME * 11.0 + side * 1.57 + id)) : 0.0));
     } else if (part == 9.0 || part == 10.0) {
@@ -238,7 +279,16 @@ void vertex() {
         p.y += sin(TIME * 2.0 + id) * 0.004;
     } else {
         // body bob, a slight gaster pump, and the gaster nodding at the petiole with the stride
-        p.y += sin(phase * 2.0) * 0.006 * amp;
+        p.y += sin(phase * 2.0) * (bug ? 0.012 : 0.006) * amp;
+        if (pattern == 2 && (part == 13.0 || (part == 14.0 && region > 0.75))) {
+            // the spider's abdomen hangs from the pedicel: it trails behind a turn, sways with the stride and nods
+            vec3 pc = vec3(0.0, 0.2, -0.07);
+            float ay = (turn * 0.22 + sin(phase) * 0.05) * moving * alive;
+            float ax = (sin(2.0 * phase - 0.6) * 0.04 * amp + idle * sin(TIME * 1.3 + id) * 0.012) * alive;
+            vec3 q = rot_y(rot_x(p - pc, ax), ay);
+            n = rot_y(rot_x(n, ax), ay);
+            p = q + pc;
+        }
         if (part == 13.0) {
             p.y += sin(TIME * 2.0 + id) * 0.004;
             if (pattern == 0) {
