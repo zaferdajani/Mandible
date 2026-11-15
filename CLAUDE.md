@@ -58,6 +58,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
 - Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
   (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`; art review not passed yet). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
 - Creature voices: `tools/gen_voices.py`, `AudioDirector.Voice/VoiceOf/VoiceRank`, `PlayerInput.Speak` (web ants use the "silk" call, armoured ants borrow the major's).
+  Every ant speaks at its own pitch (`PlayerInput.PitchOf`). The queen answers in words: `tools/voice/queen_barks.py` cuts `voc_queen_*`/`ack_queen_*` from her approved takes.
+- Live portrait (`src/UI/LivePortrait.cs`): the selection panel draws the real model of the highest-ranking selected creature (else the inspected one, else the queen) in one 208x256 viewport over the still card; per-creature rigs in `RigOf`; `ColonyCommandHud.RefreshLive` feeds it health, bite, hit flash, lost parts and calls. `--portrait-capture=<dir>` (sheet, panel shots, self-tests, on/off `[perf]`; `--no-perf` skips the timing), `--no-live-portrait` turns it off.
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (Alone → Gather → ClearTrail → FreeQueen → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at

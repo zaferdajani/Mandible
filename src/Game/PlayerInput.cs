@@ -473,9 +473,12 @@ public partial class PlayerInput : Node
             int r = AudioDirector.VoiceRank(Sim.Ants[id].Type);
             if (r > rank) { rank = r; best = id; }
         }
-        if (best < 0 || !Game.Audio.Voice((order ? "ack_" : "voc_") + VoiceOf(best), order ? -4 : -2))
+        if (best < 0 || !Game.Audio.Voice((order ? "ack_" : "voc_") + VoiceOf(best), order ? -4 : -2, 0.3, PitchOf(best)))
             Game.Audio.Ui("ui_click", order ? 0 : -6);
     }
+
+    /// Each individual's own pitch, fixed for its life: up to 10% above or below its caste's call.
+    float PitchOf(int id) => 1 + ((Sim.Ants[id].Serial * 37 % 21) - 10) * 0.01f;
 
     string VoiceOf(int id)
     {
@@ -582,7 +585,7 @@ public partial class PlayerInput : Node
         if (other >= 0)
         {
             Inspect = other; InspectSerial = Sim.Ants[other].Serial;
-            if (!Game.Audio.Voice("voc_" + VoiceOf(other), -5)) Game.Audio.Ui("ui_click", -8);
+            if (!Game.Audio.Voice("voc_" + VoiceOf(other), -5, 0.3, PitchOf(other))) Game.Audio.Ui("ui_click", -8);
             return;
         }
         // clicking food shows what it is, how much is left and what it does for the colony
