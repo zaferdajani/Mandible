@@ -116,7 +116,7 @@ public sealed class AntRenderer
         if (at.HasValue) { r.LookAt = at.Value; r.LookUntil = _now + len; }
     }
     readonly Batch[,] _dead = new Batch[3, 13];
-    readonly Batch[] _cargo = new Batch[5];
+    readonly Batch[] _cargo = new Batch[6];
     readonly Batch[] _broodCargo = new Batch[2];
     /// The nest's brood life: nurses drawn with the workers, and the callow pose of ants that just hatched.
     public NestInterior Brood;
@@ -215,7 +215,7 @@ public sealed class AntRenderer
         _labelRoot = new Node3D { Name = "Labels" };
         root.AddChild(_labelRoot);
         for (int kind = 0; kind < _cargo.Length; kind++)
-            _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind), WorkerCargo.Material((FoodKind)kind), false, $"Carried{(FoodKind)kind}");
+            _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind == FoodKind.Straw ? FoodKind.Seed : (FoodKind)kind), WorkerCargo.Material((FoodKind)kind == FoodKind.Straw ? FoodKind.Seed : (FoodKind)kind), false, $"Carried{(FoodKind)kind}");
         for (int k = 0; k < 2; k++)
             _broodCargo[k] = new Batch(root, WorkerCargo.BroodMesh(k == 1), WorkerCargo.BroodMaterial(k == 1), false, k == 1 ? "CarriedLarva" : "CarriedEgg");
         for (int shape = 0; shape < 3; shape++)

@@ -43,11 +43,17 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   each gland is a radiating core of `Strength` 1-3 that becomes `Colony.Power`, +hp/bite for every ant, saved in the roster).
   Mutation is the queen's alone: `Mutations.Trees` (climbed in order, `CanTake`), shown by `src/UI/MutationTree.cs` (target N1) from the
   result card; generals rank up only by eating (XP -> skill points). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
-- Silk: `Spinnery.cs`. After Web Throwing a colony may spin a spinnery beside its mound (`CmdKind.Spin`, key K, 60 food);
-  it lays `Sim.Traps` (2 + WebRank, 3 catches each, respun every 14 s) on the approach, re-aimed with `CmdKind.Trap`.
-  A trap roots enemies 3 s (+30% bites, `Ant.Snared`), pins low flyers; majors rip one apart, acid pools burn it, Silk
-  Cutters halve the hold. Red has silk from Chapter 10 (`ApplyMutationState`) and the AI builds one after 4:00.
-  Visuals are INTERIM (old flat decal) until targets S1-S3 are approved (`docs/art-targets/README-silk.md`); no HUD/touch button yet.
+- Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): with Web Throwing the colony builds on the surface from
+  **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
+  `WantsStraw`, never counted as food). `Sim.Works` (cap 2 + WebRank, placed within `SilkReach` of the mound):
+  **Spinnery** = offence, hatches silk ants (`Ant.Silk` soldiers that snare ground enemies, `ThrowSnare`); **Web Post** =
+  defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
+  **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.
+  `Sim.Traps`: root 3 s, +30% bites (`Ant.Snared`), 3 catches, respun; majors rip them, acid burns them, Silk Cutters
+  halve the hold. Red has silk from Chapter 10; the AI builds all of it (`AIController.Silk`). Player UI: the Silk panel
+  in `ColonyCommandHud` (keys K, P, M), placement ghost and reach ring in `SilkWorks`.
+- Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
+  (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at

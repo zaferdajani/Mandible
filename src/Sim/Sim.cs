@@ -28,6 +28,7 @@ public struct Ant
     public float Root;       // seconds left stuck in spider silk
     public bool Snared;      // caught by a colony's trap web: bitten harder until it tears free (Spinnery.cs)
     public float SnareCd;    // just out of a trap web: cannot be caught again yet
+    public bool Silk;        // a silk ant hatched by a spinnery: it snares ground enemies with thrown silk
     public float AbilityCd;  // special attack cooldown
     public int Forge;        // mandible-forge tier this warrior hatched with
     public float SpeedMul;
@@ -188,7 +189,7 @@ public sealed class Colony
     public Race Race => Config.RaceOf(Team);
     // food effects: each delivery tops these up; they run while the supply keeps flowing
     public float SugarT, JuiceT, ProteinT;
-    public readonly float[] GatheredBy = new float[5]; // per FoodKind, for stats and balance tests
+    public readonly float[] GatheredBy = new float[6]; // per FoodKind, for stats and balance tests
     // the nest: dug by workers; nothing hatches until the queen is below ground
     public bool Founded;
     public float FoodCap = Config.BaseFoodCap;
@@ -208,11 +209,7 @@ public sealed class Colony
     public int Mutagen, Mutations, Instability, Level = 1, WebRank;
     public int Cores, Power;              // core strength waiting in the reserve; colony-wide power from consumed cores
     public float MutagenGathered;
-    // the spinnery (Spinnery.cs): 0 none, 1 being spun, 2 standing; where it stands; the places its trap webs go
-    public int SpinState;
-    public float SpinDone, SpinT;
-    public Vector2 SpinPos;
-    public readonly List<Vector2> TrapSpots = new();
+    public float Straw;               // dry grass brought home: what the silk structures are strung on (Spinnery.cs)
     public int LarvaStage;            // 0 none, 1 laid (waiting for the nursery), 2 a larva the nurses feed, 3 a cocoon
     public AntType LarvaHero = AntType.Warlord;
     public float LarvaFed, LarvaNeed, LarvaHp = 1, CocoonT, CocoonTime;
@@ -728,7 +725,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd));
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u);
         }
         foreach (var c in Col)
         {
@@ -737,11 +734,12 @@ public sealed partial class Sim
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
             Mix((uint)c.Mutagen); Mix((uint)c.Cores); Mix((uint)c.Power); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
-            Mix((uint)c.SpinState); Mix(F(c.SpinDone)); Mix(F(c.SpinT)); foreach (var ts in c.TrapSpots) { Mix(F(ts.X)); Mix(F(ts.Y)); }
+            Mix(F(c.Straw));
         }
         foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Strength); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
         foreach (var tw in Traps) { Mix(F(tw.Pos.X)); Mix(F(tw.Pos.Y)); Mix((uint)tw.Team); Mix((uint)tw.Charges); }
+        foreach (var sw in Works) { Mix((uint)sw.Id); Mix((uint)sw.Kind); Mix(F(sw.Pos.X)); Mix(F(sw.Pos.Y)); Mix(F(sw.Done)); Mix(F(sw.UpDone)); Mix((uint)sw.Queue); Mix(F(sw.HatchT)); Mix(F(sw.ShotCd)); foreach (var ts in sw.Spots) { Mix(F(ts.X)); Mix(F(ts.Y)); } }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -787,7 +785,7 @@ public sealed partial class Sim
         TickShowers();
         TickWebs(dt);
         TickPools(dt);
-        TickTraps(dt);
+        TickSilk(dt);
         TickZones(dt);
         TickSquads(dt);
         TickNest(dt);
@@ -966,6 +964,7 @@ public sealed partial class Sim
         {
             if (!f.Alive || f.Layer != 0) continue; // a carcass inside a nest is the nurses' business
             if (leave && f.Kind == FoodKind.Corpse && f.Team != team) continue;
+            if (f.Kind == FoodKind.Straw && !(team is 0 or 1 && WantsStraw(team))) continue; // building material, fetched only while it is wanted
             float rr = radius + f.Radius;
             float d = p.DistanceSquaredTo(f.Pos);
             if (d < rr * rr && d - f.Radius * f.Radius < bestD) { bestD = d - f.Radius * f.Radius; best = f; }
@@ -1067,6 +1066,7 @@ public sealed partial class Sim
         if (think && a.Team < 2 && a.Layer == 0 && !Config.Flies(a.Type) && !a.Guardian && a.Type != AntType.Queen)
         {
             if (a.Type == AntType.Soldier && a.Team == 0 && Has(0, Mutation.WebThrowing) && a.SpecialCd <= 0) ThrowWeb(i, ref a);
+            if (a.Silk && a.SpecialCd <= 0) ThrowSnare(i, ref a);
             if (a.CoverT <= 0 && a.State is AntState.Idle or AntState.Forage or AntState.Gather && a.MutaP1 == 0 && !a.Nurse && !(Valid(a.Target, a.TargetSerial) && CanReach(a, Ants[a.Target])))
             {
                 int h = Hunter(a.Pos, a.Team);
@@ -1588,6 +1588,16 @@ public sealed partial class Sim
                     Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team, Type = a.CarryType, Amount = 1 });
                     a.Heading += DMath.Pi;
                     if (a.Assigned != null && a.Assigned.Alive) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
+                    else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
+                    return Vector2.Zero;
+                }
+                if (a.CarryKind == FoodKind.Straw)
+                {
+                    // dry grass is not food: it is stacked by the mound for the silk ants to build with
+                    c.Straw = Mathf.Min(Config.StrawCap, c.Straw + Config.StrawLoad);
+                    Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team, Amount = 0 });
+                    a.Heading += DMath.Pi;
+                    if (a.Assigned != null && a.Assigned.Alive && c.Straw < Config.StrawCap) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
                     else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
                     return Vector2.Zero;
                 }

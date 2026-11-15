@@ -507,7 +507,7 @@ public static class Capture
             }
             if (s.Sim.Time >= seconds || s.Sim.Winner >= 0)
             {
-                GD.Print($"[nettest] DONE t={s.Sim.Time / 60:0.0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desyncs={net.Desyncs} winner={s.Sim.Winner} spinneries={s.Sim.Col[0].SpinState}/{s.Sim.Col[1].SpinState} traps={s.Sim.Traps.Count} checksum={s.Sim.Checksum():X8}");
+                GD.Print($"[nettest] DONE t={s.Sim.Time / 60:0.0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desyncs={net.Desyncs} winner={s.Sim.Winner} silk works={s.Sim.SilkCount(0)}/{s.Sim.SilkCount(1)} straw={s.Sim.Col[0].Straw:0}/{s.Sim.Col[1].Straw:0} traps={s.Sim.Traps.Count} checksum={s.Sim.Checksum():X8}");
                 break;
             }
         }

@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Mutate, Straw, Spin, Trap }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Mutate, Straw, Spin, Trap, SilkUp, SilkHatch }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -86,7 +86,9 @@ public sealed class Cmd
             }
             case CmdKind.Extract: if (ids.Count > 0) sim.CmdExtract(ids, sim.MutagenById(FoodId)); break;
             case CmdKind.Straw: if (ids.Count > 0) sim.CmdStraw(ids, sim.Mission?.StrawById(FoodId)); break; // level 1's bridge: carry a straw together
-            case CmdKind.Spin: sim.OrderSpinnery(Team); break;   // the silk outpost beside the mound
+            case CmdKind.Spin: sim.BuildSilk(Team, (SilkKind)Arg, P); break;          // a spinnery or a web post, placed on the surface
+            case CmdKind.SilkUp: sim.UpgradeSilk(Team, FoodId, (SilkKind)Arg); break;  // a web post becomes a web tower or a trap nest
+            case CmdKind.SilkHatch: sim.HatchSilk(Team, FoodId); break;                // a spinnery raises a silk ant
             case CmdKind.Trap: sim.PlaceTrap(Team, P); break;    // re-aim a trap web
             case CmdKind.Mutate: if (Arg < 31) sim.Mutate(Team, (Mutation)(1 << Arg)); break;
             case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;

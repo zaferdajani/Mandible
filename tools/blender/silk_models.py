@@ -208,8 +208,9 @@ def tent(k):
     hubs = [Vector((r.uniform(-0.3, 0.3), r.uniform(-0.3, 0.3), r.uniform(0.3, 0.46))) for _ in range(4)]
     near = [min(hubs, key=lambda h: (h - Vector((f.x, f.y, h.z))).length) for f in feet]
     for f, h in zip(feet, near):
-        p.rope(f, h, sag=r.uniform(0.0, 0.06), rad=0.022, beads=0.22)
-        p.rope(f + (h - f) * 0.3, r.choice(hubs), sag=r.uniform(0.0, 0.05), rad=0.012, n=6, beads=0.3, sides=3)
+        p.rope(f, h, sag=r.uniform(0.08, 0.16), rad=0.018, n=10, beads=0.2)
+        for extra in range(2):
+            p.rope(f + (h - f) * r.uniform(0.15, 0.5), r.choice(hubs) + Vector((r.uniform(-0.15, 0.15), r.uniform(-0.15, 0.15), 0)), sag=r.uniform(0.08, 0.2), rad=0.009, n=9, beads=0.22, sides=3)
         if f.z < 0.05:
             for s in range(3):
                 p.rope(f + (h - f) * 0.1, f + polar(r.uniform(0.08, 0.2), r.uniform(0, 6.28)), sag=0.0, rad=0.012, n=3, beads=0, sides=3)
@@ -221,8 +222,8 @@ def tent(k):
         a, b = feet[i % nf], feet[(i % nf + nf // 2 + r.randrange(-1, 2)) % nf]
         mid = (a + b) * 0.5 + Vector((r.uniform(-0.2, 0.2), r.uniform(-0.2, 0.2), 0))
         mid.z = r.uniform(0.18, 0.44)
-        p.rope(a, mid, sag=-0.05, rad=0.011, n=6, beads=0.3, sides=3)
-        p.rope(mid, b, sag=-0.05, rad=0.011, n=6, beads=0.3, sides=3)
+        p.rope(a, mid, sag=r.uniform(0.06, 0.16), rad=0.008, n=9, beads=0.22, sides=3)
+        p.rope(mid, b, sag=r.uniform(0.06, 0.16), rad=0.008, n=9, beads=0.22, sides=3)
     # wisps of sheet in some sectors, drooping between their ropes
     for i in range(nf):
         if r.random() < 0.4:
@@ -234,7 +235,7 @@ def tent(k):
             base = a.lerp(b, v)
             q = h.lerp(base, lo + (hi - lo) * u)
             return q + Vector((0, 0, -0.07 * math.sin(v * math.pi) * math.sin(u * math.pi)))
-        p.sheet(fn, 5, 5)
+        p.sheet(fn, 5, 5, kind=0.6)
     p.finish(f"tent_{'abc'[k]}_silk")
     stems.finish(f"tent_{'abc'[k]}_stem")
 
@@ -263,7 +264,7 @@ def hammock(k):
         l, rr = la.lerp(lb, v), ra.lerp(rb, v)
         q = l.lerp(rr, u)
         belly = math.sin(u * math.pi) * (0.75 + 0.25 * math.sin(v * math.pi))
-        q.z = q.z * (1 - belly) + 0.2 * belly
+        q.z = q.z * (1 - belly) + 0.1 * belly
         q.y += (v - 0.5) * 0.5 * math.sin(u * math.pi)
         return q
     silk.sheet(fn, 12, 8)
@@ -285,7 +286,7 @@ def hammock(k):
         u, side = r.uniform(0.12, 0.88), (i % 2) * 2 - 1
         start = Vector(fn(u, 0.5 + side * 0.5))
         end = Vector((start.x + r.uniform(-0.25, 0.25), side * r.uniform(1.0, 1.45), 0))
-        silk.rope(start, end, sag=0.02, rad=0.013, n=6, beads=0.28)
+        silk.rope(start, end, sag=0.08, rad=0.01, n=8, beads=0.25, sides=3)
     # guys from the stems out to the soil
     for tie, sx, sy in posts:
         silk.rope(tie, Vector((tie.x + sx * r.uniform(0.3, 0.5), tie.y + r.uniform(-0.4, 0.4), 0)), sag=0.01, rad=0.015, n=5, beads=0.4)
@@ -311,6 +312,13 @@ def wrap():
             p.bead(pts[3], 0.022)
     for sx in (-1, 1):
         p.rope((sx * 0.2, -0.45, 0.12), (-sx * 0.2, 0.45, 0.3), sag=-0.25, rad=0.02, n=7, beads=0.3, sides=3)
+
+    def veil(u, v):
+        a = (v - 0.5) * math.pi * 1.25
+        y = -0.5 + u
+        g = 0.2 * math.sqrt(max(0.1, 1 - (y / 0.6) ** 2)) + 0.05
+        return Vector((math.sin(a) * g * 1.15, y, 0.2 + math.cos(a) * g))
+    p.sheet(veil, 7, 7, kind=0.68)
     p.finish("wrap_silk")
 
 
@@ -376,9 +384,16 @@ def spinnery():
             silk.lash(at(i, z), 0.08)
         silk.rope(a0, b0, sag=0.1, rad=0.04, n=7, beads=0.4)
         silk.rope(a1, b1, sag=0.12, rad=0.04, n=7, beads=0.4)
-        for t in range(7):  # fine threads laid over the wall every which way
+        for layer in range(2):
+            lift, lo_u, hi_u = 0.12 + 0.14 * layer, r.uniform(0.0, 0.3), r.uniform(0.6, 1.0)
+
+            def fluff(u, v, lift=lift, lo_u=lo_u, hi_u=hi_u):
+                q = Vector(wall(lo_u + (hi_u - lo_u) * u, 0.08 + 0.84 * v))
+                return q + mid_out * (lift + 0.12 * math.sin(u * 7.0 + v * 5.0 + lift * 30)) + Vector((0, 0, 0.1 * math.sin(v * 9.0)))
+            silk.sheet(fluff, 6, 6)
+        for t in range(12):  # fine threads laid over the wall every which way
             p0, p1 = Vector(wall(r.random(), 0.0)), Vector(wall(r.random(), 1.0))
-            silk.rope(p0, p1, sag=r.uniform(0.02, 0.12), rad=0.018, n=7, beads=0.45, sides=3)
+            silk.rope(p0 + mid_out * 0.2, p1 + mid_out * 0.2, sag=r.uniform(0.05, 0.2), rad=0.014, n=8, beads=0.35, sides=3)
 
         def roof(u, v, a1=a1, b1=b1):
             edge = a1.lerp(b1, v)
@@ -418,7 +433,7 @@ def spinnery():
         for g in range(2):
             end = tie + (out * r.uniform(1.6, 2.8)) + Vector((r.uniform(-0.8, 0.8), r.uniform(-0.8, 0.8), 0))
             end.z = 0
-            silk.rope(tie, end, sag=0.02, rad=0.024, n=8, beads=0.4)
+            silk.rope(tie, end, sag=0.07, rad=0.02, n=10, beads=0.35)
         tie2 = at(i, zh + r.uniform(0.6, 1.4))
         silk.lash(tie2, 0.07)
         silk.rope(tie2, at(i + 1, zh + r.uniform(0.3, 1.2)), sag=0.14, rad=0.02, n=7, beads=0.4)
@@ -428,11 +443,141 @@ def spinnery():
             silk.rope(tie2, end, sag=0.02, rad=0.02, n=9, beads=0.45)
     perches.append(Vector((cul[1][0].x * 1.25, cul[1][0].y * 1.25, 0)))
     for i, q in enumerate(perches):
-        e = bpy.data.objects.new(f"perch_{i}", None)
+        e = bpy.data.objects.new(f"perch_spinnery_{i}", None)
         e.location = q
         bpy.context.scene.collection.objects.link(e)
     silk.finish("spinnery_silk")
     stems.finish("spinnery_stem")
+
+
+def perch(name, pts):
+    for i, q in enumerate(pts):
+        e = bpy.data.objects.new(f"perch_{name}_{i}", None)
+        e.location = q
+        bpy.context.scene.collection.objects.link(e)
+
+
+def sheaf(stems, silk, n, foot, top_r, height, rad, seed_a=0.0):
+    """Grass stems standing in a ring and drawn together toward the top, lashed where they meet."""
+    r = silk.r
+    cul = []
+    for i in range(n):
+        a = seed_a + i * 2 * math.pi / n + r.uniform(-0.2, 0.2)
+        base = polar(foot * r.uniform(0.9, 1.1), a)
+        top = polar(top_r * r.uniform(0.6, 1.3), a + r.uniform(-0.6, 0.6), height * r.uniform(0.9, 1.1))
+        cul.append(stems.culm(base, top, rad, blades=2))
+    return cul
+
+
+def along(pts, z):
+    for j in range(len(pts) - 1):
+        if pts[j + 1].z >= z:
+            f = (z - pts[j].z) / max(pts[j + 1].z - pts[j].z, 1e-4)
+            return pts[j].lerp(pts[j + 1], f)
+    return pts[-1].copy()
+
+
+def post():
+    """A web post: three stems tied into a tripod, a collar of silk where they cross, one line down to its trap web."""
+    silk, stems = Piece(700), Piece(750)
+    r = silk.r
+    cul = sheaf(stems, silk, 3, 0.9, 0.12, 3.0, 0.045)
+    knot = Vector((0, 0, 2.3))
+    for c in cul:
+        silk.lash(along(c, 2.3), 0.07)
+        silk.rope(along(c, 2.3), knot, sag=0.05, rad=0.03, n=5, beads=0.3)
+    for i in range(3):
+        a, b = along(cul[i], 1.2), along(cul[(i + 1) % 3], 1.2)
+        silk.rope(a, b, sag=0.15, rad=0.03, n=7, beads=0.3)
+        silk.rope(along(cul[i], 2.2), along(cul[(i + 1) % 3], 0.9), sag=0.08, rad=0.02, n=7, beads=0.35, sides=3)
+
+        def collar(u, v, i=i):
+            p0, p1 = along(cul[i], 1.5 + 0.8 * u), along(cul[(i + 1) % 3], 1.5 + 0.8 * u)
+            return p0.lerp(p1, v) + Vector((0, 0, -0.12 * math.sin(v * math.pi)))
+        silk.sheet(collar, 4, 6, kind=0.68)
+        g = along(cul[i], 2.0)
+        out = Vector((g.x, g.y, 0)).normalized()
+        silk.rope(g, out * r.uniform(1.8, 2.4), sag=0.02, rad=0.02, n=7, beads=0.4)
+    perch("post", [Vector((cul[0][0].x * 1.4, cul[0][0].y * 1.4, 0))])
+    silk.finish("post_silk")
+    stems.finish("post_stem")
+
+
+def tower():
+    """A web tower: a tall sheaf of stems with a woven platform high up, where silk ants sit and fling webs."""
+    silk, stems = Piece(800), Piece(850)
+    r = silk.r
+    n = 4
+    cul = sheaf(stems, silk, n, 1.25, 0.75, 6.4, 0.06)
+    zp = 3.9
+    centre = Vector((0, 0, zp - 0.25))
+    for i in range(n):
+        a, b = along(cul[i], zp), along(cul[(i + 1) % n], zp)
+        silk.lash(a, 0.09)
+        silk.lash(along(cul[i], 2.0), 0.08)
+        silk.rope(a, b, sag=0.08, rad=0.04, n=7, beads=0.3)
+
+        def deck(u, v, a=a, b=b):
+            return a.lerp(b, v).lerp(centre, u * 0.97)
+        silk.sheet(deck, 5, 6, kind=0.68)
+
+        def skirt(u, v, i=i):
+            p0, p1 = along(cul[i], zp - 1.3 * u), along(cul[(i + 1) % n], zp - 1.3 * u)
+            return p0.lerp(p1, v) + Vector((0, 0, -0.2 * math.sin(v * math.pi)))
+        silk.sheet(skirt, 5, 6)
+        a2, b2 = along(cul[i], zp + 1.1), along(cul[(i + 1) % n], zp + 1.1)
+        silk.rope(a2, b2, sag=0.2, rad=0.025, n=7, beads=0.3)   # a rail above the deck
+        silk.rope(a, along(cul[(i + 1) % n], 1.6), sag=0.05, rad=0.022, n=8, beads=0.4, sides=3)
+        silk.rope(b, along(cul[i], 1.6), sag=0.05, rad=0.022, n=8, beads=0.4, sides=3)
+        out = Vector((a.x, a.y, 0)).normalized()
+        end = out * r.uniform(3.0, 3.8) + Vector((r.uniform(-0.5, 0.5), r.uniform(-0.5, 0.5), 0))
+        end.z = 0
+        silk.rope(a, end, sag=0.02, rad=0.024, n=9, beads=0.45)
+    # loose webs ready to throw hang from the rail
+    for i in range(3):
+        c = polar(0.5, i * 2.1, zp + 0.9)
+        silk.rope(c, c - Vector((0, 0, 0.6)), sag=0.0, rad=0.05, n=4, beads=0.2)
+    perch("tower", [centre + polar(0.3, 0.4, 0.06), centre + polar(0.35, 3.3, 0.06)])
+    silk.finish("tower_silk")
+    stems.finish("tower_stem")
+
+
+def trapnest():
+    """A trap nest: a low funnel web between short stems, its throat going down to the soil where the silk ants wait."""
+    silk, stems = Piece(900), Piece(950)
+    r = silk.r
+    n = 5
+    cul = sheaf(stems, silk, n, 1.5, 1.3, 2.3, 0.045)
+    throat = Vector((0.1, -0.1, 0.25))
+    for i in range(n):
+        a, b = along(cul[i], 1.3 + r.uniform(-0.2, 0.2)), along(cul[(i + 1) % n], 1.3 + r.uniform(-0.2, 0.2))
+        silk.lash(a, 0.07)
+        silk.rope(a, b, sag=0.12, rad=0.035, n=7, beads=0.3)
+
+        def funnel(u, v, a=a, b=b):
+            rim = a.lerp(b, v)
+            q = rim.lerp(throat, u ** 0.7 * 0.9)
+            return q + Vector((0, 0, -0.25 * math.sin(u * math.pi) - 0.1 * math.sin(v * math.pi)))
+        silk.sheet(funnel, 8, 6, kind=0.68, shade=1.0)
+        silk.rope(a, throat, sag=0.25, rad=0.02, n=8, beads=0.3, sides=3)
+        out = Vector((a.x, a.y, 0)).normalized()
+        for g in range(2):  # signal lines running out along the soil to the trap webs
+            end = out * r.uniform(2.4, 3.6) + Vector((r.uniform(-0.8, 0.8), r.uniform(-0.8, 0.8), 0))
+            end.z = 0
+            silk.rope(a if g == 0 else throat + out * 0.3, end, sag=0.01, rad=0.018, n=8, beads=0.4, sides=3)
+    # the dark throat
+    ring_prev = None
+    for s_ in range(4):
+        t = s_ / 3
+        ring = [silk.v(throat + Vector((math.cos(a) * (0.32 - 0.12 * t), math.sin(a) * (0.32 - 0.12 * t), -0.22 * t)), silk.tint(ROPE, 0.5 - 0.42 * t))
+                for a in (k * 2 * math.pi / 10 for k in range(10))]
+        if ring_prev:
+            for k in range(10):
+                silk.face((ring_prev[k], ring_prev[(k + 1) % 10], ring[(k + 1) % 10], ring[k]))
+        ring_prev = ring
+    perch("trapnest", [throat + Vector((0.45, 0.2, 0.2)), Vector((cul[2][0].x * 1.3, cul[2][0].y * 1.3, 0))])
+    silk.finish("trapnest_silk")
+    stems.finish("trapnest_stem")
 
 
 def float_colours(path):
@@ -481,6 +626,9 @@ for i in range(2):
 wrap()
 shot()
 spinnery()
+post()
+tower()
+trapnest()
 objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 for o in bpy.context.scene.objects:
     o.select_set(True)

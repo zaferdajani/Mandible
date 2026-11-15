@@ -346,7 +346,73 @@ public partial class ColonyCommandHud : Control
             if (!_touch) Text(b, a.key, w - 25, 9, 20, 22, 12, false, UiTheme.Dim); // phones have no keys to hint
             b.AddChild(At(new CommandMark { Kind = i, MouseFilter = MouseFilterEnum.Ignore }, 9, 8 + dy, 23, 23));
         }
+        BuildSilk(commands);
     }
+    // ---- silk above ground: its own panel over the orders, shown once the colony has Web Throwing
+    Panel _silk;
+    Label _silkStraw, _silkHint;
+    Button _silkSpin, _silkPost, _silkTower, _silkNest, _silkHatch, _silkAim;
+    float _silkClock;
+
+    void BuildSilk(Control commands)
+    {
+        float bh = _touch ? 44 : 30, gap = 4, w = 121;
+        float height = 30 + 3 * (bh + gap) + 24;
+        // over the orders on a desktop; on a phone the objective card sits there, so it goes beside them
+        _silk = _touch ? Panel(commands, -(268 + 8), _commandsSize.Y - height, 268, height) : Panel(commands, 0, -(height + 8), 268, height);
+        Text(_silk, "SILK", 10, 5, 60, 20, 13, true, Gold);
+        _silkStraw = Text(_silk, "", 70, 6, 190, 20, 12, false, UiTheme.Dim);
+        _silkStraw.HorizontalAlignment = HorizontalAlignment.Right;
+        Button B(string name, string tip, int col, int row, Action a)
+        {
+            var b = Button(_silk, name, 10 + col * (w + 6), 28 + row * (bh + gap), w, bh, a);
+            b.TooltipText = tip; b.AddThemeFontSizeOverride("font_size", _touch ? 13 : 12);
+            return b;
+        }
+        string K(string key) => _touch ? "" : $"  {key}";
+        _silkSpin = B("Spinnery" + K("K"), $"Offence. Hatches silk ants: soldiers that snare enemies on the ground. {Config.SpinneryStraw:0} straw, {Config.SpinneryFood:0} food.", 0, 0, () => Game.Input.BeginSilk(SilkKind.Spinnery));
+        _silkPost = B("Web Post" + K("P"), $"Defence. Keeps a trap web; improve it into a Web Tower or a Trap Nest. {Config.PostStraw:0} straw.", 1, 0, () => Game.Input.BeginSilk(SilkKind.Post));
+        _silkTower = B("Web Tower", $"Improve a web post: silk ants fling webs at the nearest enemy in reach. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 0, 1, () => Game.TrySilkUp(SilkKind.Tower));
+        _silkNest = B("Trap Nest", $"Improve a web post: three trap webs you can aim. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 1, 1, () => Game.TrySilkUp(SilkKind.TrapNest));
+        _silkHatch = B("Hatch silk ant", $"The spinnery raises a silk ant. {Config.SilkAntFood:0} food.", 0, 2, () => Game.TrySilkHatch());
+        _silkAim = B("Aim trap" + K("M"), "Move a trap web: then pick a spot near a web post or trap nest.", 1, 2, () => Game.Input.BeginTrap());
+        _silkHint = Text(_silk, "", 10, height - 23, 250, 18, 11, false, UiTheme.Dim);
+        _silk.Visible = false;
+    }
+
+    void RefreshSilk(Sim sim, Colony c)
+    {
+        bool has = sim.HasSilk(Local.Me) && c.Founded && !Game.Lanes;
+        _silk.Visible = has;
+        if (!has) return;
+        _silkClock += 0.12f;
+        int spinneries = 0, posts = 0, plain = 0, trappers = 0, queued = 0;
+        foreach (var w in sim.Works)
+        {
+            if (w.Team != Local.Me) continue;
+            if (w.Kind == SilkKind.Spinnery) { spinneries++; queued += w.Queue; } else posts++;
+            if (w.Kind == SilkKind.Post && w.Built && !w.Upgrading) plain++;
+            if (w.Built && Sim.TrapsOf(w.Kind) > 0) trappers++;
+        }
+        _silkStraw.Text = $"Straw {c.Straw:0}   ·   {spinneries + posts}/{sim.SilkCap(Local.Me)} built";
+        bool canSpin = sim.CanBuildSilk(Local.Me, SilkKind.Spinnery) == SilkResult.Ok, canPost = sim.CanBuildSilk(Local.Me, SilkKind.Post) == SilkResult.Ok;
+        bool canUp = plain > 0 && c.Straw >= Config.SilkUpStraw && c.Food >= Config.SilkUpFood;
+        bool canHatch = spinneries > 0 && c.Food >= Config.SilkAntFood;
+        // what can be done now glows; the next step is spelled out underneath
+        float pulse = 0.75f + 0.25f * Mathf.Sin(_silkClock * 5f);
+        void Lit(Button b, bool on, bool nudge) => b.Modulate = !on ? new Color(0.62f, 0.6f, 0.56f) : nudge ? new Color(1f, 0.85f + 0.15f * pulse, 0.45f + 0.4f * pulse) : Colors.White;
+        Lit(_silkSpin, canSpin, spinneries == 0);
+        Lit(_silkPost, canPost, posts == 0 && spinneries > 0);
+        Lit(_silkTower, canUp, canUp); Lit(_silkNest, canUp, canUp);
+        Lit(_silkHatch, canHatch, false);
+        Lit(_silkAim, trappers > 0, false);
+        _silkHint.Text = spinneries == 0 && c.Straw < Config.SpinneryStraw ? $"Workers are fetching dry grass: {c.Straw:0}/{Config.SpinneryStraw:0} straw"
+            : spinneries == 0 ? "Place a Spinnery near the mound"
+            : posts == 0 ? (c.Straw < Config.PostStraw ? $"A Web Post needs {Config.PostStraw:0} straw" : "Place a Web Post on the way raiders come")
+            : plain > 0 ? "Improve the web post: Web Tower or Trap Nest"
+            : queued > 0 ? $"Raising {queued} silk ant{(queued > 1 ? "s" : "")}" : "";
+    }
+
     void RebuildCards()
     {
         foreach (var child in _cards.GetChildren()) { _cards.RemoveChild(child); child.QueueFree(); }
@@ -432,6 +498,7 @@ public partial class ColonyCommandHud : Control
         _food.Text = $"{(int)c.Food} / {(int)c.FoodCap}"; _brood.Text = $"{c.PopUsed} / {c.PopCap}";
         _queen.Text = Config.QueenTitles[c.T(Upgrade.Queen)].ToUpperInvariant();
         _organic.Text = $"{c.Organic:0}";
+        RefreshSilk(sim, c);
         _chambers.Visible = Game.NestView;
         foreach (var (button, kind, status) in _rooms)
         {

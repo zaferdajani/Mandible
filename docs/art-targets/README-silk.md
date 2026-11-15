@@ -1,10 +1,11 @@
 # Silk targets S1-S3
 
-Status: **proposed 2026-11-15, waiting for the owner's approval.** Nothing final is built against them yet. Until
-then trap webs and the spinnery are drawn with the old flat decal (`Shaders.Web`, marked INTERIM in
-`AntRenderer.cs`), which these targets replace everywhere: thrown webs (`WebShot`/`WebLand`, `Sim.Webs`), the
-Web Throwing pins (`Ant.PinT`), the standing webs at spider lairs, trap webs (`Sim.Traps`) and the spinnery.
-`REVIEW-silk.jpg` shows all three on one sheet.
+Status: **approved by the owner on 2026-11-15** ("Approve all three"). Built: `tools/blender/silk_models.py` ->
+`assets/silk/silk.gltf`, drawn by `src/Render/SilkWorks.cs`; frames by `--silk-capture=<dir>`. The old flat decal
+(`Shaders.Web`) and the code-built cocoon on webbed ants are gone. `REVIEW-silk.jpg` shows all three targets on one sheet.
+
+The web post, web tower and trap nest (the owner's later design, same day) have no target of their own: they are
+built in the approved S2 style from the same kit and still need the owner's eye.
 
 | Target | File | What it asks of the game |
 | --- | --- | --- |
@@ -14,12 +15,13 @@ Web Throwing pins (`Ant.PinT`), the standing webs at spider lairs, trap webs (`S
 
 Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_6`, 16:9, 2026-11-15, three images.
 
-## Build plan once approved
+## Gate log
 
-- One Blender set (`tools/blender/`, exported to `assets/silk/`): a snare tent (3 variants), a wrap that sits on a
-  caught body (scaled to the ant), the trap hammock (3 variants), the spinnery, and anchor strands. The older
-  `assets/mutation/web/web.gltf` (orb web for target H1, gate plateau at 2-3) is not reused for these.
-- Anchors: each web picks the nearest grass stems and stones from `Scatter` at spawn and stretches its strands to
-  them, so no two sit the same way.
-- Silk material: one shader for all of it (strand normal detail, glue beads as a sparkle mask, warm backlight).
-- Two-part gate per `docs/art-pipeline.md`, one screenshot per visual at play zoom and close.
+| Round | Result |
+| --- | --- |
+| build passes 1-4 (self-checked frames, `D:/MandibleBuilds/review/silk-r1`) | chalk-white rods -> thinner ropes, cream tint; blue-grey sheets -> gauze lit through; box spinnery -> rounded pavilion with funnel doorways and ants |
+| 1, independent reviewer (fresh agent, sheet vs targets) | **not passed**: snare 2,2,3,3,3 / read 2; spinnery 3,3,3,3,3 / read 3; trap 3,3,3,3,4 / read 3 (primitives, material, light, palette, anchoring / readability). Blockers: snare reads as straight rods, insects not visibly wrapped, spinnery reads as a smooth lantern |
+| 2 (after round 1's fixes; not yet re-reviewed) | threads hang, a veil of silk wraps every held insect, a woolly outer layer on the spinnery, deeper trap belly. Frames: `frames-silk.jpg` (rows 1-3 snare, spinnery, trap, close and play zoom; then the web post, tower and trap nest, the placement ring, the phone layout) |
+
+Still open against the targets: silk needs a real fibre texture (the weave is procedural), glue beads barely read, the
+spinnery wants denser layered silk and clearer doorways, the phone Silk panel overlaps the queue.

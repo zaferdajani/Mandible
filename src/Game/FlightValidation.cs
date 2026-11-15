@@ -96,12 +96,25 @@ public static class FlightValidation
         Check(pinned, "A web-throwing soldier did not pin a wasp in reach");
         Run(s, 20);
         Check(!s.Airborne(s.Ants[wasp]), "The pinned wasp did not come down");
-        // the spinnery: trap webs on the approach hold a raider, bite harder, snag a low flyer, wear out and are spun again
+        // silk above ground: straw pays for it; a web post's trap web holds a raider, bites harder, is ripped by a major and spun
+        // again; the post becomes a tower that flings webs or a trap nest with three webs; a spinnery hatches silk ants that snare
         s = Quiet(root);
-        s.Col[0].Mutations |= (int)Mutation.WebThrowing; s.Col[0].WebRank = 1; s.Col[0].Founded = true; s.Col[0].Food += 200;
-        Check(s.OrderSpinnery(0) == SpinResult.Ok, "The spinnery could not be ordered with Web Throwing");
-        Run(s, (int)((Config.SpinneryTime + Config.TrapSpinTime * 3 + 2) * 30));
-        Check(s.Col[0].SpinState == 2 && s.Traps.Count == s.TrapCap(0), $"The spinnery did not spin its {s.TrapCap(0)} trap webs (has {s.Traps.Count})");
+        var col = s.Col[0];
+        col.Mutations |= (int)Mutation.WebThrowing; col.WebRank = 1; col.Founded = true; col.Food += 600;
+        var home = s.NestEntrance(0);
+        Check(s.CanBuildSilk(0, SilkKind.Post) == SilkResult.NoStraw, "A web post could be built without straw");
+        s.Tick(1f / 30);
+        int piles = 0; foreach (var f in s.W.Food) if (f.Kind == FoodKind.Straw) piles++;
+        Check(piles >= 2, $"No dry grass lies round the mound of a colony with silk ({piles} piles)");
+        Check(s.NearestFood(home, 40, null, 0)?.Kind == FoodKind.Straw && s.NearestFood(home, 40, null) == null, "Workers do not look for straw when the colony wants it (or others do)");
+        col.Straw = Config.StrawCap;
+        Check(s.BuildSilk(0, SilkKind.Post, home + new Vector2(Config.SilkReach + 4, 0)) == SilkResult.TooFar, "A web post could be placed out of reach of the mound");
+        var postAt = s.DefaultSilkSpot(0, SilkKind.Post);
+        Check(s.BuildSilk(0, SilkKind.Post, postAt) == SilkResult.Ok, "A web post could not be built with straw in store");
+        Check(col.Straw == Config.StrawCap - Config.PostStraw, "The web post did not cost straw");
+        Run(s, (int)((Config.PostTime + Config.TrapSpinTime + 1) * 30));
+        var post = s.Works[0];
+        Check(post.Built && s.Traps.Count == 1, $"The web post did not spin its trap web (has {s.Traps.Count})");
         var trap = s.Traps[0].Pos;
         int own = s.Spawn(0, AntType.Soldier, trap, 0); s.Ants[own].State = AntState.Hold;
         int raider = s.Spawn(1, AntType.Soldier, trap + new Vector2(0.5f, 0), 0); s.Ants[raider].State = AntState.Hold;
@@ -117,20 +130,51 @@ public static class FlightValidation
         s.Slay(raider);
         int major = s.Spawn(1, AntType.Major, trap, 0); s.Ants[major].State = AntState.Hold;
         s.Tick(1f / 30);
-        Check(!s.Traps.Exists(z => z.Pos == trap) && s.Ants[major].Root < Config.TrapRoot * 0.6f, "A major did not rip the trap web apart");
+        Check(s.Traps.Count == 0 && s.Ants[major].Root < Config.TrapRoot * 0.6f, "A major did not rip the trap web apart");
         s.Slay(major);
         Run(s, (int)((Config.TrapSpinTime + 1) * 30));
-        Check(s.Traps.Exists(z => z.Pos == trap), "A torn trap web was not spun again");
-        var trap2 = s.Traps[1].Pos;
-        int snag = s.Spawn(Config.Wild, AntType.Wasp, trap2, 0); s.Ants[snag].State = AntState.Hold; s.Ants[snag].Alt = 1.6f;
+        Check(s.Traps.Count == 1, "A torn trap web was not spun again");
+        int snag = s.Spawn(Config.Wild, AntType.Wasp, s.Traps[0].Pos, 0); s.Ants[snag].State = AntState.Hold; s.Ants[snag].Alt = 1.6f;
         s.Tick(1f / 30);
         Check(s.Ants[snag].PinT > 0, "A wasp passing low over a trap web was not snagged");
         s.Slay(snag);
-        var far = s.NestEntrance(0) + new Vector2(Config.TrapReach + 5, 0);
-        Check(s.PlaceTrap(0, far) == TrapResult.TooFar, "A trap web could be placed out of reach of the mound");
-        int nSpots = s.Col[0].TrapSpots.Count;
-        Check(s.PlaceTrap(0, s.NestEntrance(0) + (trap - s.NestEntrance(0)) * 0.7f) == TrapResult.Ok && s.Col[0].TrapSpots.Count == nSpots, "Re-aiming a trap web did not give up the oldest one");
-        GD.Print($"[flight-test] PASS spinnery: {s.TrapCap(0)} trap webs hold raiders {Config.TrapRoot:0.#} s (+{Config.SnareBite * 100 - 100:0}% bites), snag low flyers, majors rip them, they are spun again");
+        // the post becomes a trap nest: three webs, and one can be re-aimed
+        Check(s.UpgradeSilk(0, post.Id, SilkKind.TrapNest) == SilkResult.Ok, "A web post could not be improved into a trap nest");
+        Run(s, (int)((Config.SilkUpTime + Config.TrapSpinTime * 3 + 2) * 30));
+        Check(post.Kind == SilkKind.TrapNest && s.Traps.Count == 3, $"The trap nest does not keep three trap webs (has {s.Traps.Count})");
+        Check(s.PlaceTrap(0, post.Pos + new Vector2(Config.TrapReach + 3, 0)) == SilkResult.TooFar, "A trap web could be aimed out of reach of its nest");
+        var aim = post.Pos + (trap - post.Pos) * 0.5f;
+        Check(s.PlaceTrap(0, aim) == SilkResult.Ok && post.Spots.Count == 3 && post.Spots[2] == aim, "Re-aiming a trap web did not give up the oldest one");
+        // a second post becomes a tower and flings a web at a raider that comes near, and at a wasp in the air
+        var towerAt = s.DefaultSilkSpot(0, SilkKind.Post);
+        Check(s.BuildSilk(0, SilkKind.Post, towerAt) == SilkResult.Ok, "A second web post could not be built");
+        Run(s, (int)((Config.PostTime + 1) * 30));
+        var tw = s.Works[1];
+        Check(s.UpgradeSilk(0, tw.Id, SilkKind.Tower) == SilkResult.Ok && s.UpgradeSilk(0, tw.Id, SilkKind.TrapNest) == SilkResult.Busy, "A web post could not be improved into a tower, or twice at once");
+        Run(s, (int)((Config.SilkUpTime + 1) * 30));
+        Check(tw.Kind == SilkKind.Tower, "The web post did not become a tower");
+        raider = s.Spawn(1, AntType.Soldier, tw.Pos + new Vector2(0, Config.TowerRange - 3), 0); s.Ants[raider].State = AntState.Hold;
+        int high = s.Spawn(Config.Wild, AntType.Wasp, tw.Pos + new Vector2(0, -(Config.TowerRange - 3)), 0); s.Ants[high].State = AntState.Hold; s.Ants[high].Alt = Config.HoverAlt;
+        bool rooted = false, pinnedHigh = false;
+        for (int k = 0; k < 30 * 10 && !(rooted && pinnedHigh); k++) { s.Tick(1f / 30); rooted |= s.Ants[raider].Root > 0; pinnedHigh |= s.Ants[high].PinT > 0; }
+        Check(rooted && pinnedHigh, $"The web tower did not web a raider on the ground ({rooted}) and a wasp in the air ({pinnedHigh})");
+        s.Slay(raider); s.Slay(high);
+        // the spinnery hatches a silk ant, which snares a ground enemy
+        var spinAt = s.DefaultSilkSpot(0, SilkKind.Spinnery);
+        Check(s.BuildSilk(0, SilkKind.Spinnery, spinAt) == SilkResult.Ok, "A spinnery could not be built");
+        Check(s.CanBuildSilk(0, SilkKind.Post) == SilkResult.Full, "More silk structures than the colony's rank allows");
+        Run(s, (int)((Config.SpinneryTime + 1) * 30));
+        var sp = s.Works[2];
+        Check(s.HatchSilk(0, sp.Id) == SilkResult.Ok, "The spinnery would not raise a silk ant");
+        Run(s, (int)((Config.SilkAntTime + 1) * 30));
+        int silkAnt = -1; for (int k = 0; k < s.High; k++) if (s.Ants[k].Alive && s.Ants[k].Silk) silkAnt = k;
+        Check(silkAnt >= 0 && s.Ants[silkAnt].Type == AntType.Soldier && s.Ants[silkAnt].Team == 0, "No silk ant hatched at the spinnery");
+        s.Ants[silkAnt].State = AntState.Hold;
+        raider = s.Spawn(1, AntType.Worker, s.Ants[silkAnt].Pos + s.Approach(0) * 5f, 0); s.Ants[raider].State = AntState.Hold;
+        rooted = false;
+        for (int k = 0; k < 30 * 4 && !rooted; k++) { s.Tick(1f / 30); rooted = s.Ants[raider].Root > 0; }
+        Check(rooted, "A silk ant did not snare an enemy on the ground");
+        GD.Print($"[flight-test] PASS silk: straw pays for a web post, a trap nest (3 webs), a web tower (reach {Config.TowerRange:0}) and a spinnery whose silk ants snare; traps hold {Config.TrapRoot:0.#} s (+{Config.SnareBite * 100 - 100:0}% bites)");
         GD.Print($"[flight-test] PASS Web Throwing (rank 1) pins a wasp for {Mutations.PinTime(1):0.#} s within {Mutations.WebRange(1):0} units");
     }
 

@@ -13,7 +13,8 @@ public partial class PlayerInput : Node
     /// Build mode: the chamber (id) the player clicked under the floor, or -1.
     public int SelectedRoom = -1;
     MeshInstance3D _cue, _cueNode;
-    enum Mode { None, AttackMove, Gather, Dig, Cast }
+    enum Mode { None, AttackMove, Gather, Dig, Cast, Silk, Trap }
+    SilkKind _silkKind;
     int _castId = -1, _castSlot;
 
     /// Aiming a general's skill: the next click on an enemy (or a spot) is where it lands; right-click or Esc cancels.
@@ -221,6 +222,16 @@ public partial class PlayerInput : Node
                 if (_mode != Mode.None)
                 {
                     if (_mode == Mode.Cast) { CastAt(mb.Position); return; }
+                    if (_mode is Mode.Silk or Mode.Trap)
+                    {
+                        // a silk structure or a trap web goes where the pointer is; a bad spot keeps the ghost up for another try
+                        if (!Cam.ScreenToGround(mb.Position, out var sg)) return;
+                        var spot = new Vector2(sg.X, sg.Z);
+                        if (!(_mode == Mode.Silk ? Game.TryBuildSilk(_silkKind, spot) : Game.TryTrap(spot))) return;
+                        _mode = Mode.None;
+                        Input.SetDefaultCursorShape(Input.CursorShape.Arrow);
+                        return;
+                    }
                     if (_mode == Mode.Dig)
                     {
                         if (Game.Interior.ScreenToColony(mb.Position, out var at)) PlaceAt(at);
@@ -344,10 +355,9 @@ public partial class PlayerInput : Node
             case Godot.Key.E: Game.TryResearch(Upgrade.Mandibles); return;
             case Godot.Key.R: Game.TryResearch(Upgrade.Chitin); return;
             case Godot.Key.T: Game.TryResearch(Upgrade.SilkCutters); return;
-            case Godot.Key.K: // the spinnery; once it stands, a trap web where the pointer is
-                if (Sim.Col[Local.Me].SpinState != 2) Game.TrySpinnery();
-                else if (Cam.ScreenToGround(GetViewport().GetMousePosition(), out var kg)) Game.TryTrap(new Vector2(kg.X, kg.Z));
-                return;
+            case Godot.Key.K: BeginSilk(SilkKind.Spinnery); return;
+            case Godot.Key.P: BeginSilk(SilkKind.Post); return;
+            case Godot.Key.M: BeginTrap(); return;
             case Godot.Key.Tab: Game.ToggleTrails(); return;
             case Godot.Key.F2: SelectArmy(); return;
             case Godot.Key.F3: SelectWorkers(); return;
@@ -493,6 +503,16 @@ public partial class PlayerInput : Node
         if (Settings.Mobile) { Game.Ants.Hovered = -1; Game.Ants.HasCursor = false; return; }
         var mp = GetViewport().GetMousePosition();
         Game.Ants.Hovered = Pick(mp, true, 18);
+        if (Game.Silk != null)
+        {
+            if (_mode is Mode.Silk or Mode.Trap && Cam.ScreenToGround(mp, out var gg))
+            {
+                var at = new Vector2(gg.X, gg.Z);
+                bool ok = _mode == Mode.Trap ? Sim.TrapCheck(Local.Me, at) == SilkResult.Ok : Sim.SiteCheck(Local.Me, at) == SilkResult.Ok;
+                Game.Silk.Ghost = (true, _mode == Mode.Trap, _silkKind, at, ok);
+            }
+            else Game.Silk.Ghost = default;
+        }
         Game.Ants.HasCursor = Cam.ScreenToGround(mp, out var g);
         Game.Ants.Cursor = g;
     }
@@ -631,6 +651,29 @@ public partial class PlayerInput : Node
         _mode = Mode.AttackMove;
         Input.SetDefaultCursorShape(Input.CursorShape.Cross);
         Game.Hud.Alert("Attack-move: choose a target", new Color(1, 0.55f, 0.4f));
+    }
+
+    /// Placing a spinnery or a web post: a ghost follows the pointer until a spot is chosen (Esc or right-click cancels).
+    public void BeginSilk(SilkKind kind)
+    {
+        var r = Sim.CanBuildSilk(Local.Me, kind);
+        if (r == SilkResult.Locked && !Sim.HasSilk(Local.Me)) return; // not part of this colony yet: the key does nothing
+        if (r != SilkResult.Ok) { Game.TryBuildSilk(kind, Vector2.Zero); return; } // says why
+        if (Game.NestView) Game.SetNestView(false);
+        _mode = Mode.Silk; _silkKind = kind;
+        Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+        Game.Hud.Alert(Settings.Mobile ? $"{Sim.SilkName(kind)}: tap a spot inside the ring round the mound" : $"{Sim.SilkName(kind)}: click a spot inside the ring round the mound", new Color(1f, 0.9f, 0.6f));
+    }
+
+    public void CancelPlacing() { if (_mode is Mode.Silk or Mode.Trap) { _mode = Mode.None; Input.SetDefaultCursorShape(Input.CursorShape.Arrow); } }
+
+    public void BeginTrap()
+    {
+        if (!Sim.HasSilk(Local.Me)) return;
+        if (Sim.TrapCheck(Local.Me, Sim.NestEntrance(Local.Me)) == SilkResult.Locked) { Game.TryTrap(Vector2.Zero); return; }
+        _mode = Mode.Trap;
+        Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+        Game.Hud.Alert(Settings.Mobile ? "Trap web: tap a spot near a web post or trap nest" : "Trap web: click a spot near a web post or trap nest", new Color(1f, 0.9f, 0.6f));
     }
 
     public void BeginGather()

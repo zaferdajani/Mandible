@@ -51,8 +51,12 @@ public static class Config
     public static bool Predator(AntType t) => t == AntType.Wasp;
     public const float ReachAlt = 1.3f;     // a flyer below this height can be bitten from the ground
     // the spinnery and its trap webs (Spinnery.cs)
-    public const float SpinneryFood = 60f, SpinneryTime = 20f, SpinneryOffset = 5.5f;
-    public const float TrapSpinTime = 14f, TrapRadius = 2.6f, TrapRing = 13f, TrapReach = 34f;
+    public const float SpinneryStraw = 40f, SpinneryFood = 40f, SpinneryTime = 20f, PostStraw = 25f, PostTime = 12f;
+    public const float SilkUpStraw = 30f, SilkUpFood = 30f, SilkUpTime = 15f, SilkReach = 32f, SilkGap = 6f;
+    public const float SilkAntFood = 35f, SilkAntTime = 8f, SnareRange = 7f, SnareRoot = 1.5f;
+    public const float TowerRange = 11f, TowerCd = 4f, TowerRoot = 2f;
+    public const float StrawWant = 60f, StrawCap = 150f, StrawLoad = 5f, StrawPile = 400f;
+    public const float TrapSpinTime = 14f, TrapRadius = 2.6f, TrapOut = 5f, TrapReach = 13f;
     public const float TrapRoot = 3f, TrapPin = 2.5f, TrapGrace = 3f, TrapSnagAlt = 2.2f, SnareBite = 1.3f;
     public const int TrapCharges = 3;
     public const float HoverAlt = 2.8f;     // a wasp at its prey hangs here between stings, out of reach
@@ -453,12 +457,12 @@ public static class Config
     public static string FoodName(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",
-        FoodKind.Seed => "Seed Cache", _ => "Insect Carcass",
+        FoodKind.Seed => "Seed Cache", FoodKind.Straw => "Dry Grass", _ => "Insect Carcass",
     };
     public static string FoodNutrient(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Bread and fruit scraps (carbohydrate)", FoodKind.Berry => "Fruit sugar and water", FoodKind.Sugar => "Pure sugar (carbohydrate)",
-        FoodKind.Seed => "Fat and protein, heavy", _ => "Protein",
+        FoodKind.Seed => "Fat and protein, heavy", FoodKind.Straw => "Building material, not food", _ => "Protein",
     };
     public static string FoodEffect(FoodKind k) => k switch
     {

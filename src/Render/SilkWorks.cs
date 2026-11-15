@@ -79,6 +79,7 @@ void fragment() {
         float tw = abs(sin(v_lp.x * 60.0 + v_lp.y * 85.0 + v_lp.z * 70.0));
         col *= (0.7 + 0.18 * tw) * vec3(1.0, 0.94, 0.82);
         glow = col * 0.12;
+        spec = 0.15;
         alpha = step(h21(floor(v_lp.xz * 2.5)) * 0.3, v_integ);
     }
     ALBEDO = col;
@@ -119,9 +120,16 @@ void fragment() {
     readonly Node3D _root = new() { Name = "SilkWorks" };
     readonly bool _ok;
     readonly Bat[] _tents = new Bat[3], _tentStems = new Bat[3], _strands = new Bat[3], _hammocks = new Bat[2], _hammockStems = new Bat[2];
-    readonly Bat _wrap, _shot, _spin, _spinStems;
+    readonly Bat _wrap, _shot;
+    static readonly string[] WorkName = { "spinnery", "post", "tower", "trapnest" }; // by SilkKind
+    readonly Bat[] _work = new Bat[4], _workStems = new Bat[4];
+    readonly List<Vector3>[] _perch = { new(), new(), new(), new() }; // where the silk ants stand on each structure (model space)
+    MeshInstance3D _reach, _spot;
+    StandardMaterial3D _spotMat;
+    /// The structure the player is about to place: drawn as a pale ghost where the pointer is, with the ground the
+    /// silk ants can reach ringed round the mound.
+    public (bool on, bool trap, SilkKind kind, Vector2 pos, bool ok) Ghost;
     readonly List<(Vector3 from, Vector3 to, float t)> _flings = new();
-    readonly List<Vector3> _perch = new(); // where the silk ants stand on the spinnery (model space)
     float _clock;
 
     public SilkWorks(GameSession g)
@@ -132,7 +140,9 @@ void fragment() {
         var scene = GD.Load<PackedScene>(Scene).Instantiate<Node3D>();
         var meshes = new Dictionary<string, Mesh>();
         foreach (var n in scene.FindChildren("*", "MeshInstance3D", true, false)) if (n is MeshInstance3D mi) meshes[mi.Name] = mi.Mesh;
-        foreach (var n in scene.FindChildren("perch_*", "Node3D", true, false)) if (n is Node3D p3 && n is not MeshInstance3D) _perch.Add(p3.Position);
+        foreach (var n in scene.FindChildren("perch_*", "Node3D", true, false))
+            if (n is Node3D p3 && n is not MeshInstance3D)
+                for (int k = 0; k < 4; k++) if (p3.Name.ToString().StartsWith("perch_" + WorkName[k] + "_")) _perch[k].Add(p3.Position);
         scene.QueueFree();
         var silk = new ShaderMaterial { Shader = Shaders.Get(SilkShader) };
         var stem = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 0.7f, CullMode = BaseMaterial3D.CullModeEnum.Disabled, BacklightEnabled = true, Backlight = new Color(0.12f, 0.16f, 0.04f) };
@@ -141,8 +151,13 @@ void fragment() {
         for (int k = 0; k < 2; k++) { _hammocks[k] = B($"hammock_{"ab"[k]}_silk", silk, 16); _hammockStems[k] = B($"hammock_{"ab"[k]}_stem", stem, 16); }
         _wrap = B("wrap_silk", silk, 256);
         _shot = B("shot_silk", silk, 32);
-        _spin = B("spinnery_silk", silk, 2);
-        _spinStems = B("spinnery_stem", stem, 2);
+        for (int k = 0; k < 4; k++) { _work[k] = B(WorkName[k] + "_silk", silk, 12); _workStems[k] = B(WorkName[k] + "_stem", stem, 12); }
+        // placement markers: the reach of the silk ants round the mound, and the spot under the ghost
+        var ringMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(1f, 0.82f, 0.4f, 0.55f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, NoDepthTest = true };
+        _reach = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = Config.SilkReach - 0.25f, OuterRadius = Config.SilkReach, Rings = 96, RingSegments = 4 }, MaterialOverride = ringMat, Scale = new Vector3(1, 0.02f, 1), Visible = false, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        _spotMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, Transparency = BaseMaterial3D.TransparencyEnum.Alpha, NoDepthTest = true };
+        _spot = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = 2.3f, OuterRadius = 2.7f, Rings = 40, RingSegments = 4 }, MaterialOverride = _spotMat, Scale = new Vector3(1, 0.02f, 1), Visible = false, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        _root.AddChild(_reach); _root.AddChild(_spot);
         _ok = true;
     }
 
@@ -175,7 +190,8 @@ void fragment() {
         foreach (var b in _strands) b.Begin();
         foreach (var b in _hammocks) b.Begin();
         foreach (var b in _hammockStems) b.Begin();
-        _wrap.Begin(); _shot.Begin(); _spin.Begin(); _spinStems.Begin();
+        _wrap.Begin(); _shot.Begin();
+        for (int k = 0; k < 4; k++) { _work[k].Begin(); _workStems[k].Begin(); }
 
         // the spiders' webs: thrown ones and the standing ones round a lair
         foreach (var z in sim.Webs)
@@ -209,7 +225,7 @@ void fragment() {
             float integ = Mathf.Clamp(left * 2.5f, 0, 1);
             float gy = hf.Sample(a.Pos.X, a.Pos.Y);
             var o = new Vector3(a.Pos.X, gy + a.Alt, a.Pos.Y);
-            _wrap.Add(AntRenderer.Orient(Vector3.Up, a.Heading, a.Size), o, integ, 1f);
+            _wrap.Add(AntRenderer.Orient(Vector3.Up, a.Heading, a.Size * 1.2f), o, integ, 1f);
             var back = o + Vector3.Up * 0.3f * a.Size;
             int lines = a.PinT > 0 ? 6 : 5;
             for (int k = 0; k < lines; k++)
@@ -238,7 +254,8 @@ void fragment() {
         {
             var z = sim.Traps[k];
             if (z.Team != Local.Me && !seen(z.Pos)) continue;
-            var along = z.Pos - sim.NestEntrance(z.Team);
+            var owner = sim.WorkById(z.Work);
+            var along = z.Pos - (owner?.Pos ?? sim.NestEntrance(z.Team));
             float yaw = Mathf.Atan2(-along.X, -along.Y) + (Hash(z.Pos) - 0.5f) * 0.5f;
             int v = Hash(z.Pos * 1.7f) < 0.5f ? 0 : 1;
             float grow = Mathf.Clamp(z.Age / 1.6f, 0, 1);
@@ -250,14 +267,41 @@ void fragment() {
             _hammockStems[v].Add(b, o, 1, 0);
         }
 
-        // the spinnery beside each mound, and the silk ants that live on it
-        foreach (var c in sim.Col)
+        // the silk structures: spinneries, web posts, web towers, trap nests
+        foreach (var w in sim.Works)
         {
-            if (c.SpinState == 0 || (c.Team != Local.Me && !seen(c.SpinPos))) continue;
-            var o = hf.Point(c.SpinPos, 0.02f);
-            var b = new Basis(Vector3.Up, Hash(c.SpinPos) * Mathf.Tau);
-            _spin.Add(b, o, Mathf.Clamp(c.SpinDone, 0.05f, 1f), c.SpinState == 1 ? 0.25f : 0.04f);
-            _spinStems.Add(b, o, 1, 0);
+            if (w.Team != Local.Me && !seen(w.Pos)) continue;
+            var o = hf.Point(w.Pos, 0.02f);
+            var b = new Basis(Vector3.Up, Hash(w.Pos) * Mathf.Tau);
+            float shake = !w.Built || w.Upgrading ? 0.25f : 0.04f;
+            float integ = Mathf.Clamp(w.Done, 0.05f, 1f);
+            if (w.Upgrading)
+            {
+                // the post is woven over into what it becomes
+                _work[(int)w.UpTo].Add(b, o, Mathf.Clamp(w.UpDone, 0.05f, 1f), shake);
+                _workStems[(int)w.UpTo].Add(b * Basis.FromScale(new Vector3(1, Mathf.Clamp(w.UpDone * 1.5f, 0.1f, 1f), 1)), o, 1, 0);
+                integ = 1 - w.UpDone;
+            }
+            _work[(int)w.Kind].Add(b, o, integ, shake);
+            _workStems[(int)w.Kind].Add(b, o, 1, 0);
+        }
+
+        // the ghost of what is about to be placed
+        _reach.Visible = Ghost.on && !Ghost.trap;
+        _spot.Visible = Ghost.on;
+        if (Ghost.on)
+        {
+            var o = hf.Point(Ghost.pos, 0.06f);
+            _reach.Position = hf.Point(sim.NestEntrance(Local.Me), 0.1f);
+            _spot.Position = o;
+            _spotMat.AlbedoColor = Ghost.ok ? new Color(0.75f, 1f, 0.45f, 0.85f) : new Color(1f, 0.35f, 0.2f, 0.85f);
+            if (Ghost.trap) _hammocks[0].Add(Basis.FromScale(Vector3.One * Config.TrapRadius), o, Ghost.ok ? 0.5f : 0.25f, 0);
+            else
+            {
+                var b = new Basis(Vector3.Up, Hash(Ghost.pos) * Mathf.Tau);
+                _work[(int)Ghost.kind].Add(b, o, Ghost.ok ? 0.55f : 0.25f, 0);
+                _workStems[(int)Ghost.kind].Add(b, o, 1, 0);
+            }
         }
 
         foreach (var x in _tents) x.End();
@@ -265,7 +309,8 @@ void fragment() {
         foreach (var x in _strands) x.End();
         foreach (var x in _hammocks) x.End();
         foreach (var x in _hammockStems) x.End();
-        _wrap.End(); _shot.End(); _spin.End(); _spinStems.End();
+        _wrap.End(); _shot.End();
+        for (int k = 0; k < 4; k++) { _work[k].End(); _workStems[k].End(); }
     }
 
     /// The silk ants that live on each spinnery, drawn into the ant batches (called from AntRenderer's frame).
@@ -273,20 +318,21 @@ void fragment() {
     {
         if (!_ok) return;
         var sim = _g.Sim;
-        foreach (var c in sim.Col)
+        foreach (var w in sim.Works)
         {
-            if (c.SpinState == 0 || (c.Team != Local.Me && !r.VisibleToPlayer(c.SpinPos))) continue;
-            var o = _g.World.HF.Point(c.SpinPos, 0.02f);
-            float yaw = Hash(c.SpinPos) * Mathf.Tau;
+            if (w.Team != Local.Me && !r.VisibleToPlayer(w.Pos)) continue;
+            var o = _g.World.HF.Point(w.Pos, 0.02f);
+            float yaw = Hash(w.Pos) * Mathf.Tau;
             var b = new Basis(Vector3.Up, yaw);
-            int ants = c.SpinState == 2 ? _perch.Count : System.Math.Min(2, _perch.Count);
+            var perch = _perch[(int)w.Kind];
+            int ants = w.Built ? perch.Count : System.Math.Min(1, perch.Count);
             for (int k = 0; k < ants; k++)
             {
-                var at = _perch[k];
-                float heading = Mathf.Atan2(at.Z, at.X) + (k == 0 ? 1f : 0f); // facing out of its doorway
-                float t = _clock * 0.5f + k * 1.7f;
-                var data = AntRenderer.Pack(k * 5 + c.Team, 3, t * 0.2f, 0.4f * Mathf.Sin(t + k), -0.1f + 0.06f * Mathf.Sin(t * 2.3f), 0.25f, false, 0.2f * Mathf.Max(0, Mathf.Sin(t * 4f)));
-                r.AddWorker(c.Team, AntRenderer.Orient(Vector3.Up, heading - yaw, 1.45f), o + b * at, data, 0);
+                var at = perch[k];
+                float heading = Mathf.Atan2(at.Z, at.X) + (at.Y > 3f ? 1f : 0f); // facing out
+                float t = _clock * 0.5f + k * 1.7f + w.Id;
+                var data = AntRenderer.Pack(k * 5 + w.Id, 3, t * 0.2f, 0.4f * Mathf.Sin(t + k), -0.1f + 0.06f * Mathf.Sin(t * 2.3f), 0.25f, false, 0.2f * Mathf.Max(0, Mathf.Sin(t * 4f)));
+                r.AddWorker(w.Team, AntRenderer.Orient(Vector3.Up, heading - yaw, 1.45f), o + b * at, data, 0);
             }
         }
     }
