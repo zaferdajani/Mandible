@@ -49,6 +49,23 @@ There are two progressions. They use different things and give different rewards
 - Draw on real strategy-game craft (combined arms, tempo, scouting, economy against army, feints and flanks,
   holding a line while a strike force works) and on real ant behaviour.
 
+## 1c. Mutation units cost their own body part (owner, 2026-11-15)
+
+- A core only unlocks the unit. **Each one hatched also needs a matching part taken from the related insect**, so
+  the player cannot mass-produce them:
+
+| Unit | Part needed per ant | Taken from |
+|---|---|---|
+| Winged ants | A pair of wings | Flies |
+| Stinger ants | A sting | Wasps |
+| Web ants | A silk gland | Spiders |
+| Armoured ants | Shell plates | Beetles |
+
+- Parts are a kind of organic matter with their own count per kind. They come from killing that insect; workers
+  carry the part home with the remains. One part, one ant.
+- The hatch button shows the part and how many are in store, and says what to hunt when there are none.
+- Plain castes (workers, soldiers, majors) never need parts.
+
 ## 2. Evolution: organic matter levels up the queen and the generals
 
 - **Currency:** the colony's balance of organic matter (remains of other creatures). A high balance is what allows
