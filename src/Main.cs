@@ -95,6 +95,7 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--command-capture=")) _ = ColonyValidation.Capture(this, a.Substring(18));
         foreach (var a in args) if (a.StartsWith("--level-capture=")) _ = LevelValidation.Capture(this, a["--level-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--portrait-capture=")) _ = PortraitCapture.Run(this, a["--portrait-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--gait-capture=")) _ = GaitCapture.Run(this, a["--gait-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--silk-capture=")) _ = SilkCapture.Run(this, a["--silk-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--mutation-capture=")) _ = MutationCapture.Run(this, a["--mutation-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--map-capture=")) _ = LevelValidation.MapCapture(this, a["--map-capture=".Length..]);

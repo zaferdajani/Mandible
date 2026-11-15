@@ -101,6 +101,43 @@ public static class AntMesh
         return mesh;
     }
 
+    /// A walker's legs as its own mesh has them: for each leg of the left side (+x), front to rear, where the foot
+    /// rests from its hip (x out, y forward) and the hip's z (Rest) and x (HipX); how far it travels per gait cycle in
+    /// body lengths (Stride) and how far it turns per cycle in radians (Arc: the same foot travel, as an arc about the body).
+    public sealed record Legs(Vector3[] Rest, float[] HipX, float Stride, float Arc);
+    static readonly Dictionary<(AntType, int), Legs> LegCache = new();
+    public static Legs LegsOf(AntType type, int team)
+    {
+        int tm = team == 1 ? 1 : 0;
+        if (LegCache.TryGetValue((type, tm), out var got)) return got;
+        var mesh = Build(type, false, tm);
+        var hips = new List<(Vector2 hip, Vector3 foot, float w)>();
+        for (int s = 0; mesh != null && s < mesh.GetSurfaceCount(); s++)
+        {
+            var arr = mesh.SurfaceGetArrays(s);
+            var vs = arr[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            var cs = arr[(int)Mesh.ArrayType.Color].AsColorArray();
+            var u2 = arr[(int)Mesh.ArrayType.TexUV2].AsVector2Array();
+            if (cs == null || u2 == null || cs.Length != vs.Length || u2.Length != vs.Length) continue;
+            for (int v = 0; v < vs.Length; v++)
+            {
+                int part = Mathf.RoundToInt(cs[v].R * 255f);
+                if (part < 1 || part > 3) continue;
+                var hip = u2[v];
+                int at = hips.FindIndex(h => h.hip.DistanceSquaredTo(hip) < 1e-5f);
+                if (at < 0) { hips.Add((hip, vs[v], cs[v].G)); continue; }
+                // the foot is the far end of the leg: the heaviest weight, and of those the lowest
+                if (cs[v].G > hips[at].w + 1e-3f || (cs[v].G > hips[at].w - 1e-3f && vs[v].Y < hips[at].foot.Y)) hips[at] = (hips[at].hip, vs[v], Mathf.Max(cs[v].G, hips[at].w));
+            }
+        }
+        hips.Sort((p, q) => q.hip.Y.CompareTo(p.hip.Y));
+        if (hips.Count > 4) hips.RemoveRange(4, hips.Count - 4);
+        float stride = type == AntType.Spider ? 0.72f : type == AntType.Beetle || type == AntType.StagBeetle ? 0.46f : 0.55f, reach = 0;
+        foreach (var h in hips) reach += new Vector2(h.foot.X, h.foot.Z).Length() / hips.Count;
+        var legs = new Legs(hips.ConvertAll(h => new Vector3(h.foot.X - h.hip.X, h.foot.Z - h.hip.Y, h.hip.Y)).ToArray(), hips.ConvertAll(h => h.hip.X).ToArray(), stride, hips.Count > 0 ? stride / Mathf.Max(0.05f, reach) : 1f);
+        return LegCache[(type, tm)] = legs;
+    }
+
     /// `far`: the distant-crowd build of a colony caste, drawn once an ant is far enough from the camera that the
     /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
     /// The caste whose mesh a mutation unit borrows until its own merged body is approved and built.
