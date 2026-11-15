@@ -34,7 +34,11 @@ public static class SilkCapture
             // ---- the HUD: the Silk panel with nothing built yet, then the placement ghost and the reach ring
             await Wait(4.5f);
             gs.Camera.JumpTo(home, 60);
-            await Shot(Settings.Mobile ? "silk-panel-mobile" : "silk-panel", 1.5f);
+            // the entry point as the player meets it: the guide button and the glowing Silk tab, then the Silk tab open
+            sim.Col[0].Queue.Clear();
+            await Shot(Settings.Mobile ? "entry-mobile" : "entry", 6.5f);
+            gs.Hud.CommandHud?.ShowPage(5);
+            await Shot(Settings.Mobile ? "silk-panel-mobile" : "silk-panel", 1.0f);
             gs.Input.BeginSilk(SilkKind.Spinnery);
             var want = sim.DefaultSilkSpot(0, SilkKind.Spinnery);
             gs.Silk.Ghost = (true, false, SilkKind.Spinnery, want, true);

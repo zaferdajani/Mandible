@@ -957,7 +957,7 @@ public partial class GameSession : Node3D
         {
             _silkTold = true;
             if (Sim.SilkCount(Local.Me) == 0)
-                Hud.Banner("Silk above ground", "Your ants can build on the surface now. Mark out a Spinnery (it hatches silk ants) or a Web Post (it defends the mound): one worker goes inside to weave it and the others bring it dry grass. See the Silk panel by the orders.", 8f);
+                Hud.Banner("Silk above ground", "Your ants can build on the surface now. Mark out a Spinnery (it hatches silk ants) or a Web Post (it defends the mound): one worker goes inside to weave it and the others bring it dry grass. Open the Silk tab, or press Show me above it.", 8f);
         }
         Straws?.Update(dt);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
@@ -1154,7 +1154,7 @@ public partial class GameSession : Node3D
                     {
                         var (title, text) = (SilkKind)e.Tier switch
                         {
-                            SilkKind.Spinnery => ("The spinnery stands", "It hatches silk ants: soldiers that fling snares at enemies on the ground. Use Hatch silk ant in the Silk panel."),
+                            SilkKind.Spinnery => ("The spinnery stands", "It hatches silk ants: soldiers that fling snares at enemies on the ground. Use Hatch silk ant on the Silk tab."),
                             SilkKind.Post => ("A web post stands", "It keeps one trap web on the ground before it. Improve it into a Web Tower (flings webs at whatever comes near) or a Trap Nest (three trap webs you can aim)."),
                             SilkKind.Tower => ("A web tower stands", "Silk ants up the stems fling a web at the nearest enemy in reach, on the ground or in the air, every few seconds."),
                             _ => ("A trap nest stands", "It keeps three trap webs. Use Aim trap web, then pick a spot near it, to move one."),

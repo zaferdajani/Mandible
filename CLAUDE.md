@@ -50,8 +50,7 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
   **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.
   `Sim.Traps`: root 3 s, +30% bites (`Ant.Snared`), 3 catches, respun; majors rip them, acid burns them, Silk Cutters
-  halve the hold. Red has silk from Chapter 10; the AI builds all of it (`AIController.Silk`). Player UI: the Silk panel
-  in `ColonyCommandHud` (keys K, P, M), placement ghost and reach ring in `SilkWorks`.
+  halve the hold. Red has silk from Chapter 10; the AI builds all of it (`AIController.Silk`). Player UI: the cards' tabs are Hatch · Build · Silk · Research · Generals · Remains (`ColonyCommandHud`, `TabOrder`); a tab glows when there is something to do on it (`RefreshEntry`, `Glow`), an idle incubator with food banked is named above the tabs, and the silk guide button there (`_silkGuide`, "Show me") walks the player through Spinnery, Web Post, improvement. Silk keys K, P, M; placement ghost and reach ring in `SilkWorks`.
 - Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
   (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
