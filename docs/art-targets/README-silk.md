@@ -27,5 +27,8 @@ Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_6`, 16:9,
 
 | 4, independent reviewer (owner chose "from concepts": spinnery = image-to-3D scan of `s2-spinnery-isolated.jpg`, snare and trap = photographed webs on cards; frames `frames-silk.jpg`) | **not passed, but up**: snare 2,3,3,4,3 / read 2; spinnery 3,4,3,4,3 / read 3; trap 2,3,2,3,3 / read 3. Material and palette now 3-4. Blockers: the snare lies too flat and is small at play zoom, the spinnery reads as a box on posts with a slab shadow, the trap's stems read as a fence and held raiders are not wrapped |
 
-Open after round 4: lift the snare dome higher and larger; shadows from the cards (alpha) instead of slabs; irregular
-grass for the trap's stems; silk over raiders held in a trap; the web post, tower and trap nest are still script-built.
+| 5, independent reviewer (taller, wider snare dome; grass tufts and uneven stems on the trap; the spinnery larger and tied down with guy threads; frames `frames-silk.jpg`) | **not passed, up again**: snare 3,3,2,4,3 / read 2; spinnery 3,3,3,4,3 / read 3; **trap 4,4,3,4,4 / read 3**. Blockers: the snare is thin and low-contrast at play zoom and reads as a wire dome with a beaded rim; the spinnery reads as a lantern on stilts, not tied to the mound; held raiders are not visibly wrapped |
+
+Open after round 5: thicker, brighter snare with taut lines to separate anchors and no beaded rim; a denser spinnery
+with silk skirts to the soil and mound; silk draped over raiders in a trap; stronger silk contrast at play zoom; the
+web post, tower and trap nest are still script-built.

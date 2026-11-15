@@ -72,6 +72,7 @@ public static class SilkCapture
 
             // ---- S3: a trap web across the approach, raiders marching into it
             var trap = sim.Traps[0].Pos;
+            foreach (var tz in sim.Traps) if (tz.Pos.DistanceSquaredTo(home) < trap.DistanceSquaredTo(home)) trap = tz.Pos; // the one nearest the mound: well inside the lit ground
             var into = (trap - home).Normalized();
             var across = new Vector2(-into.Y, into.X);
             for (int k = 0; k < 6; k++)

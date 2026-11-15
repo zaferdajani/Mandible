@@ -67,7 +67,7 @@ void fragment() {
         // gauze is lit through, evenly and warm: most of its light is its own, so the sky's blue never tints it
         float glint = smoothstep(0.82, 0.97, f1) * step(0.6, h21(floor(uv * 90.0)));
         vec3 warm = col * vec3(0.7, 0.54, 0.32); // sunlit silk is honey-cream, never white
-        glow = warm * (0.2 + 0.42 * fib) + vec3(0.6, 0.42, 0.16) * glint;
+        glow = warm * (0.3 + 0.5 * fib) + vec3(0.6, 0.42, 0.16) * glint;
         col *= 0.3 + 0.3 * fib;
         spec = 0.0;
         rough = 1.0;
@@ -163,7 +163,7 @@ void fragment() {
     float _scanScale = 1;
     Vector3 _scanOff;
     const string SpinScan = "res://assets/silk/spinnery.glb";
-    const float SpinHeight = 6.2f;
+    const float SpinHeight = 7.2f;
     StandardMaterial3D _spotMat;
     /// The structure the player is about to place: drawn as a pale ghost where the pointer is, with the ground the
     /// silk ants can reach ringed round the mound.
@@ -275,7 +275,7 @@ void fragment() {
             float h = Hash(z.Pos);
             float integ = Mathf.Clamp(z.Life / 1.5f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 3f + 0.25f, 0, 1);
             float rise = Mathf.Clamp((z.Max - z.Life) * 4f + 0.3f, 0.3f, 1f); // it unrolls as it lands
-            var tb = new Basis(Vector3.Up, h * Mathf.Tau) * Basis.FromScale(new Vector3(z.R * 1.05f, z.R * 1.05f * rise, z.R * 1.05f));
+            var tb = new Basis(Vector3.Up, h * Mathf.Tau) * Basis.FromScale(new Vector3(z.R * 1.3f, z.R * 1.3f * rise, z.R * 1.3f));
             _tents[(int)(h * 3) % 3].Add(tb, hf.Point(z.Pos, 0.02f), integ, 0.12f);
             _tentStems[(int)(h * 3) % 3].Add(tb, hf.Point(z.Pos, 0.02f), 1, 0);
             _tentCards[(int)(h * 3) % 3].Add(tb, hf.Point(z.Pos, 0.02f), integ, 0.12f);
@@ -365,6 +365,17 @@ void fragment() {
                 float grow = _scanScale * Mathf.Lerp(0.25f, 1f, Mathf.SmoothStep(0, 1, w.Done));
                 var sb = b * Basis.FromScale(Vector3.One * grow);
                 _spinScan.Add(sb, o + sb * _scanOff, 1, 0);
+                float up = SpinHeight * Mathf.Lerp(0.25f, 1f, Mathf.SmoothStep(0, 1, w.Done));
+                var nest = sim.NestEntrance(w.Team);
+                for (int g = 0; g < 9; g++)
+                {
+                    float ang = (g + Hash(new Vector2(w.Id, g))) * Mathf.Tau / 9f;
+                    var dir = new Vector3(Mathf.Cos(ang), 0, Mathf.Sin(ang));
+                    var from = o + dir * 1.1f + Vector3.Up * up * (0.35f + 0.3f * Hash(new Vector2(g, w.Id * 7)));
+                    float reach = 3.2f + 2.2f * Hash(new Vector2(g * 3, w.Id));
+                    var to2 = g == 0 ? nest + (w.Pos - nest).Normalized() * 2.2f : new Vector2(w.Pos.X + dir.X * reach, w.Pos.Y + dir.Z * reach);
+                    Strand(g + w.Id, from, hf.Point(to2, 0.03f), 2.2f, Mathf.Clamp(w.Done * 1.5f, 0, 1), shake);
+                }
                 continue;
             }
             _work[(int)w.Kind].Add(b, o, integ, shake);

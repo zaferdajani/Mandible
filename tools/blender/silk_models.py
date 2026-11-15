@@ -227,7 +227,7 @@ def tent(k):
         pts = stems.culm(base, base + Vector((r.uniform(-0.25, 0.25), r.uniform(-0.25, 0.25), r.uniform(1.0, 1.45))), 0.03, blades=2)
         feet[i] = pts[3 + r.randrange(2)].copy()
         p.lash(feet[i], 0.04, turns=2)
-    hubs = [Vector((r.uniform(-0.3, 0.3), r.uniform(-0.3, 0.3), r.uniform(0.3, 0.46))) for _ in range(4)]
+    hubs = [Vector((r.uniform(-0.3, 0.3), r.uniform(-0.3, 0.3), r.uniform(0.5, 0.72))) for _ in range(4)]
     near = [min(hubs, key=lambda h: (h - Vector((f.x, f.y, h.z))).length) for f in feet]
     for f, h in zip(feet, near):
         p.rope(f, h, sag=r.uniform(0.08, 0.16), rad=0.018, n=10, beads=0.2)
@@ -243,7 +243,7 @@ def tent(k):
     for i in range(nf * 2):
         a, b = feet[i % nf], feet[(i % nf + nf // 2 + r.randrange(-1, 2)) % nf]
         mid = (a + b) * 0.5 + Vector((r.uniform(-0.2, 0.2), r.uniform(-0.2, 0.2), 0))
-        mid.z = r.uniform(0.18, 0.44)
+        mid.z = r.uniform(0.3, 0.66)
         p.rope(a, mid, sag=r.uniform(0.06, 0.16), rad=0.008, n=9, beads=0.22, sides=3)
         p.rope(mid, b, sag=r.uniform(0.06, 0.16), rad=0.008, n=9, beads=0.22, sides=3)
     # wisps of sheet in some sectors, drooping between their ropes
@@ -264,7 +264,7 @@ def tent(k):
     def dome(u, v):
         x, y = (u - 0.5) * 2.5, (v - 0.5) * 2.5
         d = math.sqrt(x * x + y * y) / 1.25
-        z = 0.44 * max(0.0, 1 - d ** 1.6) + 0.05 * noise.noise(Vector((x * 1.7 + ph, y * 1.7, ph))) * max(0.0, 1 - d)
+        z = 0.72 * max(0.0, 1 - d ** 1.35) + 0.09 * noise.noise(Vector((x * 1.7 + ph, y * 1.7, ph))) * max(0.0, 1 - d)
         return (x, y, max(z, 0.03))
     card.card(dome, 13, 13)
     card.finish(f"tent_{'abc'[k]}_card")
@@ -282,8 +282,11 @@ def hammock(k):
             if sx == 1 and sy == 0.2:
                 continue
             base = Vector((sx * r.uniform(0.98, 1.12), sy * r.uniform(0.3, 0.55), 0))
-            top = base + Vector((sx * r.uniform(0.0, 0.25), r.uniform(-0.2, 0.2), r.uniform(1.35, 1.85)))
-            pts = stems.culm(base, top, 0.034)
+            top = base + Vector((sx * r.uniform(-0.15, 0.6), r.uniform(-0.55, 0.55), r.uniform(1.0, 2.3)))
+            pts = stems.culm(base, top, r.uniform(0.024, 0.04), blades=r.randrange(1, 4))
+            for extra in range(r.randrange(1, 3)):  # a tuft round its foot
+                b2 = base + Vector((r.uniform(-0.22, 0.22), r.uniform(-0.22, 0.22), 0))
+                stems.culm(b2, b2 + Vector((r.uniform(-0.4, 0.4), r.uniform(-0.4, 0.4), r.uniform(0.5, 1.2))), 0.02, blades=r.randrange(1, 3))
             tie = pts[3] if r.random() < 0.5 else pts[4]
             silk.lash(tie, 0.05)
             posts.append((tie, sx, sy))
