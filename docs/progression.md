@@ -29,6 +29,26 @@ There are two progressions. They use different things and give different rewards
 - Mutations happen during play, and every mutation the queen has taken stays for the following levels.
 - Each new unit adds its own branch to the evolve tree (below).
 
+## 1b. Where cores are found: the core is the level's strategy problem (owner, 2026-11-15)
+
+- **Cores are found during play, in the level that needs them.** If a level can only be won with a unit the colony
+  lacks (flying ants to cross ground no ant can walk, web ants to bring wasps down), that level holds the right core,
+  and getting it is the heart of the level. The player is never stuck for want of a core that is not on the map.
+- **Never easy.** A core is never handed over, lying unguarded, or won by sending everything at it. Reaching it,
+  cutting it out and carrying it home must each ask for a plan.
+- **It takes the whole colony.** Design every core so that the units the player already has must work together to
+  win it, each doing what only it can do. Examples of the kind of problem wanted:
+  - a guardian that a frontal attack cannot beat: lure it away, split its escort, or strike while it feeds;
+  - ground that must be prepared first (a bridge built, webs cut, a gate held) while raids press the nest;
+  - a slow, heavy carrier that must be escorted home through an ambush, so the army has to be divided between
+    the escort and the nest;
+  - a clock or a rival: the red colony wants the same core, or the body rots;
+  - a counter that must be scouted: the guardian's weakness is found by watching it, not told outright.
+- **Fair, not cheap.** Hard through decisions, not through hidden information or bigger numbers: the player can
+  see the problem, has the tools, and loses only to a bad plan. Guidance names the goal, never the solution.
+- Draw on real strategy-game craft (combined arms, tempo, scouting, economy against army, feints and flanks,
+  holding a line while a strike force works) and on real ant behaviour.
+
 ## 2. Evolution: organic matter levels up the queen and the generals
 
 - **Currency:** the colony's balance of organic matter (remains of other creatures). A high balance is what allows
