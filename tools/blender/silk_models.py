@@ -87,12 +87,25 @@ class Piece:
             self.cols[vert] = c
             self.uvs[vert] = (0.0, 0.0)
 
-    def rope(self, a, b, sag=0.05, rad=0.022, n=8, beads=0.3, sides=5):
+    def rope(self, a, b, sag=0.05, rad=0.022, n=8, beads=0.3, sides=5, fuzz=True):
         """A thread from a to b that hangs a little, thicker where it is tied, with glue beads along it."""
         a, b = Vector(a), Vector(b)
         length = (b - a).length
         wob = Vector((self.r.uniform(-1, 1), self.r.uniform(-1, 1), 0)) * 0.02 * length
-        pts = [a.lerp(b, t) + Vector((0, 0, -sag * length * 4 * t * (1 - t))) + wob * math.sin(t * math.pi) for t in (i / (n - 1) for i in range(n))]
+        ph = self.r.uniform(0, 40)
+        side = (b - a).cross(Vector((0, 0, 1)))
+        side = side.normalized() if side.length > 1e-5 else Vector((1, 0, 0))
+
+        def path(t, amp=1.0, shift=0.0):
+            w = math.sin(t * math.pi)
+            wander = side * (noise.noise(Vector((t * 3.1 + ph + shift, ph, 0))) * 0.035 * length * w * amp) + Vector((0, 0, noise.noise(Vector((ph, t * 2.7 + shift, 1))) * 0.02 * length * w * amp))
+            return a.lerp(b, t) + Vector((0, 0, -sag * length * 4 * t * (1 - t))) + wob * w + wander
+        pts = [path(i / (n - 1)) for i in range(n)]
+        if fuzz and rad >= 0.016 and length > 0.5:
+            for k in range(2):
+                m = max(n, 8)
+                stray = [path(i / (m - 1), 2.6, 7.0 * (k + 1)) for i in range(m)]
+                self.tube(stray, [rad * THIN * 0.3] * m, 3)
         rad *= THIN
         radii = [rad * (1.0 + 0.9 * (abs(2 * i / (n - 1) - 1) ** 3)) * self.r.uniform(0.85, 1.15) for i in range(n)]
         self.tube(pts, radii, sides)
@@ -102,20 +115,22 @@ class Piece:
                 t = (k + self.r.uniform(0.2, 0.8)) / max(count, 1)
                 i = min(int(t * (n - 1)), n - 2)
                 f = t * (n - 1) - i
-                self.bead(pts[i].lerp(pts[i + 1], f), rad * self.r.uniform(1.5, 2.3))
+                self.bead(pts[i].lerp(pts[i + 1], f), rad * self.r.uniform(1.9, 3.0))
         return pts
 
     def sheet(self, fn, nu=7, nv=7, shade=1.0, kind=SHEET):
         """A membrane of fibres: fn(u, v) -> point, u along the fibres."""
         grid = []
         seed = self.r.uniform(0, 50)
+        ul = (Vector(fn(1.0, 0.5)) - Vector(fn(0.0, 0.5))).length * 0.5
+        vl = (Vector(fn(0.5, 1.0)) - Vector(fn(0.5, 0.0))).length * 0.5
         for i in range(nu):
             row = []
             for j in range(nv):
                 u, v = i / (nu - 1), j / (nv - 1)
                 p = Vector(fn(u, v))
                 p += Vector((0, 0, 1)) * 0.03 * noise.noise(p * 3.1 + Vector((seed, 0, 0)))
-                row.append(self.v(p, self.tint(kind, shade), (u * 3.0 + seed, v + seed * 0.37)))
+                row.append(self.v(p, self.tint(kind, shade), (u * ul + seed, v * vl + seed * 0.37)))
             grid.append(row)
         for i in range(nu - 1):
             for j in range(nv - 1):

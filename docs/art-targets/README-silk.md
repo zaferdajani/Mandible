@@ -23,5 +23,8 @@ Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_6`, 16:9,
 | 1, independent reviewer (fresh agent, sheet vs targets) | **not passed**: snare 2,2,3,3,3 / read 2; spinnery 3,3,3,3,3 / read 3; trap 3,3,3,3,4 / read 3 (primitives, material, light, palette, anchoring / readability). Blockers: snare reads as straight rods, insects not visibly wrapped, spinnery reads as a smooth lantern |
 | 2 (after round 1's fixes; not yet re-reviewed) | threads hang, a veil of silk wraps every held insect, a woolly outer layer on the spinnery, deeper trap belly. Frames: `frames-silk.jpg` (rows 1-3 snare, spinnery, trap, close and play zoom; then the web post, tower and trap nest, the placement ring, the phone layout) |
 
-Still open against the targets: silk needs a real fibre texture (the weave is procedural), glue beads barely read, the
-spinnery wants denser layered silk and clearer doorways, the phone Silk panel overlaps the queue.
+| 3, independent reviewer (real fibre texture `silk_fibre.png`, wandering ropes with stray fibres, brighter beads; frames `D:/MandibleBuilds/review/silk-r3`) | **not passed**: snare 2,2,2,3,2 / read 2; spinnery 3,3,2,2,3 / read 3; trap 3,3,2,3,3 / read 3. Blockers: near-white/grey sheets, snare unreadable at play zoom, spinnery reads as a bag, stems as thin rods. A warmer tint went in after this round (not re-reviewed) |
+
+**Plateau.** Three rounds of script-built geometry sit at 2-3, the same ceiling the mutation props hit. More rounds of
+the same method are unlikely to pass. Routes that could: image-to-3D of the approved concepts for the spinnery (as
+`core.glb` was made), photographed silk on alpha cards for the webs, or a hand-sculpted set.

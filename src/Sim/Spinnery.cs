@@ -26,6 +26,9 @@ public sealed class SilkWork
     public SilkKind Kind;
     public Vector2 Pos;
     public float Done;               // 0..1 while it is being spun
+    public float Need, Got;          // straw the site needs and what workers have brought to it
+    public int Weaver = -1, WeaverSerial; // the worker walking to the site to become its weaver
+    public bool WeaverIn;            // she has gone inside: she weaves from now on and never comes out
     public bool Built => Done >= 1;
     public bool Upgrading;           // a post being improved
     public SilkKind UpTo;
@@ -36,7 +39,7 @@ public sealed class SilkWork
     public float ShotAnim;           // rendering only
 }
 
-public enum SilkResult { Ok, Locked, NoFood, NoStraw, Full, TooFar, TooClose, Blocked, Dead, Busy, NoPop }
+public enum SilkResult { Ok, Locked, NoFood, NoStraw, Full, TooFar, TooClose, Blocked, Dead, Busy, NoPop, NoWorker }
 
 public sealed partial class Sim
 {
@@ -56,8 +59,38 @@ public sealed partial class Sim
     public static float FoodCost(SilkKind k) => k == SilkKind.Spinnery ? Config.SpinneryFood : k == SilkKind.Post ? 0 : Config.SilkUpFood;
     public static string SilkName(SilkKind k) => k switch { SilkKind.Spinnery => "Spinnery", SilkKind.Post => "Web Post", SilkKind.Tower => "Web Tower", _ => "Trap Nest" };
 
-    /// Workers bring straw home while the colony has silk and its straw store is low.
-    public bool WantsStraw(int team) => HasSilk(team) && Col[team].Straw < Config.StrawWant;
+    /// The building site of this colony that still needs straw (the oldest first), or null.
+    public SilkWork StrawSite(int team)
+    {
+        foreach (var w in Works) if (w.Team == team && !w.Built && w.Got < w.Need) return w;
+        return null;
+    }
+
+    /// Workers fetch straw while a site is waiting for it, or while the small store by the mound (for improving posts) is low.
+    public bool WantsStraw(int team) => HasSilk(team) && (StrawSite(team) != null || Col[team].Straw < Config.StrawWant);
+
+    /// Where a loaded ant takes what it carries: straw goes straight to the building site that needs it.
+    public (Vector2 pos, byte layer) DeliveryFor(in Ant a)
+    {
+        if (a.Carrying && a.CarryKind == FoodKind.Straw && a.Team < 2 && StrawSite(a.Team) is { } site) return (site.Pos, (byte)0);
+        return FoodDeliveryPoint(a.Team);
+    }
+
+    /// A worker of the colony that could become a weaver: the nearest one on the surface with empty jaws.
+    int FreeWorker(int team, Vector2 p)
+    {
+        int best = -1; float bd = float.MaxValue;
+        for (int i = 0; i < High; i++)
+        {
+            ref var a = ref Ants[i];
+            if (!a.Alive || a.Team != team || a.Type != AntType.Worker || a.Layer != 0 || a.Carrying || a.WeaveP1 != 0) continue;
+            float d = a.Pos.DistanceSquaredTo(p);
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    }
+
+    bool AnyWorker(int team) { for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == team && Ants[i].Type == AntType.Worker) return true; return false; }
 
     SilkResult SilkBase(int team)
     {
@@ -83,20 +116,20 @@ public sealed partial class Sim
         if (r != SilkResult.Ok) return r;
         if (kind is not (SilkKind.Spinnery or SilkKind.Post)) return SilkResult.Locked;
         if (SilkCount(team) >= SilkCap(team)) return SilkResult.Full;
-        var c = Col[team];
-        if (c.Straw < StrawCost(kind)) return SilkResult.NoStraw;
-        return c.Food < FoodCost(kind) ? SilkResult.NoFood : SilkResult.Ok;
+        if (!AnyWorker(team)) return SilkResult.NoWorker; // one worker gives herself to it as its weaver
+        return Col[team].Food < FoodCost(kind) ? SilkResult.NoFood : SilkResult.Ok;
     }
 
+    /// Marks out a building site. Workers bring its straw to it, and one worker walks in to become the weaver:
+    /// she spins it from the inside and is never seen again.
     public SilkResult BuildSilk(int team, SilkKind kind, Vector2 p)
     {
         var r = CanBuildSilk(team, kind);
         if (r == SilkResult.Ok) r = SiteCheck(team, p);
         if (r != SilkResult.Ok) return r;
         var c = Col[team];
-        c.Straw -= StrawCost(kind);
         c.Food -= FoodCost(kind); c.Spent += FoodCost(kind);
-        var w = new SilkWork { Id = _nextWork++, Team = team, Kind = kind, Pos = p };
+        var w = new SilkWork { Id = _nextWork++, Team = team, Kind = kind, Pos = p, Need = StrawCost(kind) };
         Works.Add(w);
         Events.Add(new SimEvent { Kind = EvKind.SpinneryBegun, Pos = p, Team = team, Tier = (int)kind });
         return SilkResult.Ok;
@@ -308,7 +341,33 @@ public sealed partial class Sim
             if (!c.Alive) { Works.RemoveAt(k); continue; }
             if (!w.Built)
             {
-                w.Done += dt / (w.Kind == SilkKind.Spinnery ? Config.SpinneryTime : Config.PostTime);
+                if (!w.WeaverIn)
+                {
+                    // a worker is called to the site; when she reaches it she goes inside for good
+                    if (!Valid(w.Weaver, w.WeaverSerial) || Ants[w.Weaver].WeaveP1 != w.Id + 1)
+                    {
+                        w.Weaver = FreeWorker(w.Team, w.Pos);
+                        if (w.Weaver < 0) continue;
+                        w.WeaverSerial = Ants[w.Weaver].Serial;
+                        Ants[w.Weaver].WeaveP1 = w.Id + 1;
+                    }
+                    ref var wv = ref Ants[w.Weaver];
+                    if (wv.Layer == 0 && wv.Pos.DistanceSquaredTo(w.Pos) < 2.2f * 2.2f)
+                    {
+                        Events.Add(new SimEvent { Kind = EvKind.WeaverIn, Pos = w.Pos, Team = w.Team, Tier = (int)w.Kind });
+                        Remove(w.Weaver);
+                        w.Weaver = -1; w.WeaverIn = true;
+                    }
+                    else if (wv.State != AntState.Move || wv.Goal.DistanceSquaredTo(w.Pos) > 1f)
+                    {
+                        wv.Assigned = null; wv.FoodTarget = null;
+                        wv.Goal = w.Pos; wv.GoalLayer = 0; wv.State = AntState.Move;
+                    }
+                    continue;
+                }
+                // she weaves as fast as the straw arrives
+                float cap = w.Need <= 0 ? 1 : Mathf.Min(1f, w.Got / w.Need);
+                w.Done = Mathf.Min(cap, w.Done + dt / (w.Kind == SilkKind.Spinnery ? Config.SpinneryTime : Config.PostTime));
                 if (w.Done < 1) continue;
                 w.Done = 1;
                 w.SpinT = Config.TrapSpinTime * 0.4f;

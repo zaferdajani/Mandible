@@ -48,7 +48,8 @@ public static class SilkCapture
             GD.Print("[silk-capture] spinnery: " + sim.BuildSilk(0, SilkKind.Spinnery, want));
             var p1 = home + along * 13; var p2 = home + along * 11 + side * 9; var p3 = home + along * 11 - side * 9;
             foreach (var p in new[] { p1, p2, p3 }) GD.Print("[silk-capture] post: " + sim.BuildSilk(0, SilkKind.Post, p));
-            Run(gs, (int)((Config.SpinneryTime + 2) * 30));
+            foreach (var w in sim.Works) w.Got = w.Need;
+            Run(gs, (int)((Config.SpinneryTime + 16) * 30));
             c.Straw = Config.StrawCap; c.Food += 300;
             SilkWork Near(Vector2 p) { SilkWork b = null; foreach (var w in sim.Works) if (b == null || w.Pos.DistanceSquaredTo(p) < b.Pos.DistanceSquaredTo(p)) b = w; return b; }
             sim.UpgradeSilk(0, Near(p2).Id, SilkKind.Tower);

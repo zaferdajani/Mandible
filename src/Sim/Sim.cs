@@ -29,6 +29,7 @@ public struct Ant
     public bool Snared;      // caught by a colony's trap web: bitten harder until it tears free (Spinnery.cs)
     public float SnareCd;    // just out of a trap web: cannot be caught again yet
     public bool Silk;        // a silk ant hatched by a spinnery: it snares ground enemies with thrown silk
+    public int WeaveP1;      // a worker on her way to a building site to become its weaver (the site's id + 1)
     public float AbilityCd;  // special attack cooldown
     public int Forge;        // mandible-forge tier this warrior hatched with
     public float SpeedMul;
@@ -95,7 +96,7 @@ public struct Ant
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
     SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
-    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost, SpinneryBegun, SpinneryDone, TrapSpun, TrapCatch, TrapTorn }
+    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost, SpinneryBegun, SpinneryDone, TrapSpun, TrapCatch, TrapTorn, WeaverIn }
 
 public struct SimEvent
 {
@@ -725,7 +726,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1);
         }
         foreach (var c in Col)
         {
@@ -739,7 +740,7 @@ public sealed partial class Sim
         foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Strength); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
         foreach (var tw in Traps) { Mix(F(tw.Pos.X)); Mix(F(tw.Pos.Y)); Mix((uint)tw.Team); Mix((uint)tw.Charges); }
-        foreach (var sw in Works) { Mix((uint)sw.Id); Mix((uint)sw.Kind); Mix(F(sw.Pos.X)); Mix(F(sw.Pos.Y)); Mix(F(sw.Done)); Mix(F(sw.UpDone)); Mix((uint)sw.Queue); Mix(F(sw.HatchT)); Mix(F(sw.ShotCd)); foreach (var ts in sw.Spots) { Mix(F(ts.X)); Mix(F(ts.Y)); } }
+        foreach (var sw in Works) { Mix((uint)sw.Id); Mix((uint)sw.Kind); Mix(F(sw.Pos.X)); Mix(F(sw.Pos.Y)); Mix(F(sw.Done)); Mix(F(sw.Got)); Mix(sw.WeaverIn ? 1u : 0u); Mix(F(sw.UpDone)); Mix((uint)sw.Queue); Mix(F(sw.HatchT)); Mix(F(sw.ShotCd)); foreach (var ts in sw.Spots) { Mix(F(ts.X)); Mix(F(ts.Y)); } }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -1575,7 +1576,7 @@ public sealed partial class Sim
             a.Deposit -= dt;
             if (a.Deposit <= 0) { a.Deposit = 0.12f; if (a.Layer == 0) Ph.Deposit(a.Team, a.Pos, 0.9f * TrailMul(a.Team)); }
             if (a.CarryKind == FoodKind.Seed) speedMul = 0.8f; // seeds are heavy
-            var delivery = FoodDeliveryPoint(a.Team);
+            var delivery = DeliveryFor(a);
             var to = delivery.pos - a.Pos;
             if (a.Carrying && a.Layer == delivery.layer && to.Length() < (delivery.layer == 0 ? 1.8f : 1.1f))
             {
@@ -1593,11 +1594,12 @@ public sealed partial class Sim
                 }
                 if (a.CarryKind == FoodKind.Straw)
                 {
-                    // dry grass is not food: it is stacked by the mound for the silk ants to build with
-                    c.Straw = Mathf.Min(Config.StrawCap, c.Straw + Config.StrawLoad);
+                    // dry grass is not food: it goes to the building site that waits for it, or is stacked by the mound
+                    if (StrawSite(a.Team) is { } site && site.Pos.DistanceSquaredTo(a.Pos) < 9f) site.Got = Mathf.Min(site.Need, site.Got + Config.StrawLoad);
+                    else c.Straw = Mathf.Min(Config.StrawCap, c.Straw + Config.StrawLoad);
                     Events.Add(new SimEvent { Kind = EvKind.Deliver, Pos = delivery.pos, Team = a.Team, Amount = 0 });
                     a.Heading += DMath.Pi;
-                    if (a.Assigned != null && a.Assigned.Alive && c.Straw < Config.StrawCap) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
+                    if (a.Assigned != null && a.Assigned.Alive && WantsStraw(a.Team)) { a.FoodTarget = a.Assigned; a.State = AntState.Gather; }
                     else { a.Assigned = null; a.FoodTarget = null; a.State = AntState.Forage; }
                     return Vector2.Zero;
                 }
@@ -1629,7 +1631,7 @@ public sealed partial class Sim
             // Keep the full destination below ground so Layering can follow the
             // actual gallery tree. Surface travel retains its slight meander.
             if (a.Layer > 0) return to;
-            var surfaceHome = nest - a.Pos;
+            var surfaceHome = a.CarryKind == FoodKind.Straw && a.Carrying ? to : nest - a.Pos; // straw goes to the building site that waits for it
             return surfaceHome.Normalized() + MathX.Dir(a.Heading + DMath.Sin(Time * 3 + i) * 0.4f) * 0.25f;
         }
 

@@ -45,7 +45,7 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   result card; generals rank up only by eating (XP -> skill points). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): with Web Throwing the colony builds on the surface from
   **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
-  `WantsStraw`, never counted as food). `Sim.Works` (cap 2 + WebRank, placed within `SilkReach` of the mound):
+  `WantsStraw`, never counted as food). Building (owner, 2026-11-15): a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + WebRank, placed within `SilkReach` of the mound):
   **Spinnery** = offence, hatches silk ants (`Ant.Silk` soldiers that snare ground enemies, `ThrowSnare`); **Web Post** =
   defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
   **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.

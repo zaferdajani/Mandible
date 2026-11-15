@@ -370,8 +370,8 @@ public partial class ColonyCommandHud : Control
             return b;
         }
         string K(string key) => _touch ? "" : $"  {key}";
-        _silkSpin = B("Spinnery" + K("K"), $"Offence. Hatches silk ants: soldiers that snare enemies on the ground. {Config.SpinneryStraw:0} straw, {Config.SpinneryFood:0} food.", 0, 0, () => Game.Input.BeginSilk(SilkKind.Spinnery));
-        _silkPost = B("Web Post" + K("P"), $"Defence. Keeps a trap web; improve it into a Web Tower or a Trap Nest. {Config.PostStraw:0} straw.", 1, 0, () => Game.Input.BeginSilk(SilkKind.Post));
+        _silkSpin = B("Spinnery" + K("K"), $"Offence. Hatches silk ants: soldiers that snare enemies on the ground. One worker to weave it, {Config.SpinneryStraw:0} straw brought to it, {Config.SpinneryFood:0} food.", 0, 0, () => Game.Input.BeginSilk(SilkKind.Spinnery));
+        _silkPost = B("Web Post" + K("P"), $"Defence. Keeps a trap web; improve it into a Web Tower or a Trap Nest. One worker to weave it, {Config.PostStraw:0} straw brought to it.", 1, 0, () => Game.Input.BeginSilk(SilkKind.Post));
         _silkTower = B("Web Tower", $"Improve a web post: silk ants fling webs at the nearest enemy in reach. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 0, 1, () => Game.TrySilkUp(SilkKind.Tower));
         _silkNest = B("Trap Nest", $"Improve a web post: three trap webs you can aim. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 1, 1, () => Game.TrySilkUp(SilkKind.TrapNest));
         _silkHatch = B("Hatch silk ant", $"The spinnery raises a silk ant. {Config.SilkAntFood:0} food.", 0, 2, () => Game.TrySilkHatch());
@@ -406,9 +406,13 @@ public partial class ColonyCommandHud : Control
         Lit(_silkTower, canUp, canUp); Lit(_silkNest, canUp, canUp);
         Lit(_silkHatch, canHatch, false);
         Lit(_silkAim, trappers > 0, false);
-        _silkHint.Text = spinneries == 0 && c.Straw < Config.SpinneryStraw ? $"Workers are fetching dry grass: {c.Straw:0}/{Config.SpinneryStraw:0} straw"
+        var site = sim.StrawSite(Local.Me);
+        SilkWork waiting = null;
+        foreach (var w in sim.Works) if (w.Team == Local.Me && !w.Built && !w.WeaverIn) waiting = w;
+        _silkHint.Text = waiting != null ? $"A worker is walking to the {Sim.SilkName(waiting.Kind)} to weave it"
+            : site != null ? $"Workers bring straw to the {Sim.SilkName(site.Kind)}: {site.Got:0}/{site.Need:0}"
             : spinneries == 0 ? "Place a Spinnery near the mound"
-            : posts == 0 ? (c.Straw < Config.PostStraw ? $"A Web Post needs {Config.PostStraw:0} straw" : "Place a Web Post on the way raiders come")
+            : posts == 0 ? "Place a Web Post on the way raiders come"
             : plain > 0 ? "Improve the web post: Web Tower or Trap Nest"
             : queued > 0 ? $"Raising {queued} silk ant{(queued > 1 ? "s" : "")}" : "";
     }

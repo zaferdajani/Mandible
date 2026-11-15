@@ -418,7 +418,8 @@ public partial class GameSession : Node3D
     // ---- silk above ground (Spinnery.cs): a spinnery for silk ants, web posts improved into towers or trap nests
     static string SilkWhy(SilkResult r, SilkKind kind) => r switch
     {
-        SilkResult.NoStraw => $"The {Sim.SilkName(kind)} needs {Sim.StrawCost(kind):0} straw: send workers to the dry grass",
+        SilkResult.NoStraw => $"The {Sim.SilkName(kind)} needs {Sim.StrawCost(kind):0} straw by the mound: workers are fetching dry grass",
+        SilkResult.NoWorker => "A worker must give herself to it as its weaver: the colony has none",
         SilkResult.NoFood => $"The {Sim.SilkName(kind)} needs {Sim.FoodCost(kind):0} food",
         SilkResult.Full => "The silk ants can keep no more structures: a higher Web Throwing rank allows more",
         SilkResult.TooFar => "Too far: the silk ants build within the ring round the mound",
@@ -441,7 +442,7 @@ public partial class GameSession : Node3D
         Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)Local.Me, Arg = (byte)kind, P = at });
         Effects.Marker(World.HF.Point(at), new Color(1f, 0.93f, 0.75f));
         Audio.Ui("ui_queue");
-        Hud.Alert($"The silk ants begin a {Sim.SilkName(kind)}", UiTheme.Dim);
+        Hud.Alert($"{Sim.SilkName(kind)} marked out: a worker goes in to weave it, the others bring {Sim.StrawCost(kind):0} straw", UiTheme.Dim);
         return true;
     }
 
@@ -956,7 +957,7 @@ public partial class GameSession : Node3D
         {
             _silkTold = true;
             if (Sim.SilkCount(Local.Me) == 0)
-                Hud.Banner("Silk above ground", "Your ants can build on the surface now. Workers bring dry grass (straw) home; with it, build a Spinnery to hatch silk ants and Web Posts to defend the mound. See the Silk panel by the orders.", 8f);
+                Hud.Banner("Silk above ground", "Your ants can build on the surface now. Mark out a Spinnery (it hatches silk ants) or a Web Post (it defends the mound): one worker goes inside to weave it and the others bring it dry grass. See the Silk panel by the orders.", 8f);
         }
         Straws?.Update(dt);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
@@ -1160,6 +1161,10 @@ public partial class GameSession : Node3D
                         };
                         Hud.Banner(title, text, 6f);
                     }
+                    break;
+                case EvKind.WeaverIn:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos)) Effects.Burst(wp, 8, 2, 1.6f, 0.3f, 0.9f);
+                    if (e.Team == Local.Me && !Demo) Hud.Alert($"A worker has gone into the {Sim.SilkName((SilkKind)e.Tier)} to weave it. She will not come out.", UiTheme.Dim);
                     break;
                 case EvKind.TrapCatch:
                     if (Demo || Fog == null || Fog.Visible(e.Pos))

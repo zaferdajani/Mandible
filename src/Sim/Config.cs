@@ -55,7 +55,7 @@ public static class Config
     public const float SilkUpStraw = 30f, SilkUpFood = 30f, SilkUpTime = 15f, SilkReach = 32f, SilkGap = 6f;
     public const float SilkAntFood = 35f, SilkAntTime = 8f, SnareRange = 7f, SnareRoot = 1.5f;
     public const float TowerRange = 11f, TowerCd = 4f, TowerRoot = 2f;
-    public const float StrawWant = 60f, StrawCap = 150f, StrawLoad = 5f, StrawPile = 400f;
+    public const float StrawWant = 30f, StrawCap = 60f, StrawLoad = 5f, StrawPile = 400f;
     public const float TrapSpinTime = 14f, TrapRadius = 2.6f, TrapOut = 5f, TrapReach = 13f;
     public const float TrapRoot = 3f, TrapPin = 2.5f, TrapGrace = 3f, TrapSnagAlt = 2.2f, SnareBite = 1.3f;
     public const int TrapCharges = 3;

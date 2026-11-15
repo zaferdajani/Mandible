@@ -19,6 +19,7 @@ render_mode blend_mix, cull_disabled, depth_prepass_alpha;
 varying float v_kind;
 varying float v_integ;
 varying vec3 v_lp;
+uniform sampler2D fibre : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -48,36 +49,32 @@ void fragment() {
         // a bead of glue: wet, bright, a pinpoint of the sun in it
         rough = 0.05; spec = 1.0;
         col = vec3(1.0, 0.9, 0.68);
-        glow = vec3(0.3, 0.2, 0.07);
+        glow = vec3(0.75, 0.55, 0.22);
         alpha = step(0.12, v_integ);
     } else if (v_kind < 0.75) {
-        // a sheet: tangled threads laid three ways over a thin veil, dense in places and torn open in others
+        // a sheet: real silk fibre (a photographed weave, assets/silk/silk_fibre.png) at two scales, thin in places,
+        // torn open in others; the spinnery's walls (kind above 0.5) are woven thick
         vec2 uv = UV;
-        float w1 = vn(uv * vec2(2.0, 4.0)) * 6.0, w2 = vn(uv * vec2(5.0, 3.0) + 9.0) * 5.0;
-        float t1 = thread(uv.y * 31.0 + w1 + sin(uv.x * 4.0) * 2.0, 0.1);
-        float t2 = thread((uv.x * 6.0 + uv.y * 5.0) * 4.6 + w2, 0.07);
-        float t3 = thread((uv.x * 5.0 - uv.y * 9.0) * 3.9 + w1 * 0.7, 0.05);
-        float fine = thread(uv.y * 120.0 + w2 * 3.0, 0.2) * 0.35;
-        float dens = vn(uv * vec2(1.3, 2.1) + 4.0);
-        float dense = clamp((v_kind - 0.5) * 6.0, 0.0, 1.0); // the spinnery's walls are woven thick
-        float veil = mix(0.06, 0.45, smoothstep(0.3, 0.75, dens)) + dense * 0.4;
-        float threads = max(max(t1, t2 * 0.9), max(t3 * 0.8, fine));
-        float hole = vn(uv * vec2(2.2, 3.4) + 11.0) * 0.7 + vn(uv * vec2(7.0, 9.0)) * 0.3;
+        float f1 = texture(fibre, uv * 0.42).r;
+        float f2 = texture(fibre, uv.yx * 1.05 + 0.37).r;
+        float fib = max(f1, f2 * 0.7);
+        float dense = clamp((v_kind - 0.5) * 6.0, 0.0, 1.0);
+        float dens = vn(uv * vec2(1.6, 2.4) + 4.0);
+        float veil = mix(0.0, 0.18, smoothstep(0.35, 0.8, dens)) + dense * 0.4;
+        float hole = vn(uv * vec2(2.6, 3.8) + 11.0) * 0.7 + vn(uv * vec2(8.0, 10.0)) * 0.3;
         float open = smoothstep(hole - 0.06, hole + 0.06, v_integ * 0.9 + 0.02);
-        alpha = clamp(threads * 0.8 + veil, 0.0, 0.92) * open;
-        col *= 0.8 + 0.3 * threads;
-        // glue caught in the weave
-        float glint = step(0.988, h21(floor(uv * vec2(70.0, 150.0))));
+        alpha = clamp(smoothstep(0.22, 0.75, fib) * 0.9 + veil, 0.0, 0.94) * open;
         // gauze is lit through, evenly and warm: most of its light is its own, so the sky's blue never tints it
-        glow = vec3(0.5, 0.36, 0.14) * glint + col * vec3(0.62, 0.55, 0.42);
-        col *= 0.3;
+        float glint = smoothstep(0.82, 0.97, f1) * step(0.6, h21(floor(uv * 90.0)));
+        vec3 warm = col * vec3(0.7, 0.54, 0.32); // sunlit silk is honey-cream, never white
+        glow = warm * (0.2 + 0.42 * fib) + vec3(0.6, 0.42, 0.16) * glint;
+        col *= 0.3 + 0.3 * fib;
         spec = 0.0;
-        alpha = max(alpha, glint * open * 0.9);
         rough = 1.0;
     } else {
         // a rope: twisted strands; the last of it goes when the web is nearly gone
         float tw = abs(sin(v_lp.x * 60.0 + v_lp.y * 85.0 + v_lp.z * 70.0));
-        col *= (0.7 + 0.18 * tw) * vec3(1.0, 0.94, 0.82);
+        col *= (0.62 + 0.18 * tw) * vec3(1.0, 0.88, 0.66);
         glow = col * 0.12;
         spec = 0.15;
         alpha = step(h21(floor(v_lp.xz * 2.5)) * 0.3, v_integ);
@@ -145,6 +142,7 @@ void fragment() {
                 for (int k = 0; k < 4; k++) if (p3.Name.ToString().StartsWith("perch_" + WorkName[k] + "_")) _perch[k].Add(p3.Position);
         scene.QueueFree();
         var silk = new ShaderMaterial { Shader = Shaders.Get(SilkShader) };
+        if (ResourceLoader.Exists("res://assets/silk/silk_fibre.png")) silk.SetShaderParameter("fibre", GD.Load<Texture2D>("res://assets/silk/silk_fibre.png"));
         var stem = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 0.7f, CullMode = BaseMaterial3D.CullModeEnum.Disabled, BacklightEnabled = true, Backlight = new Color(0.12f, 0.16f, 0.04f) };
         Bat B(string name, Material m, int cap) => new(_root, meshes[name], m, cap, name);
         for (int k = 0; k < 3; k++) { _tents[k] = B($"tent_{"abc"[k]}_silk", silk, 48); _tentStems[k] = B($"tent_{"abc"[k]}_stem", stem, 48); _strands[k] = B($"strand_{"abc"[k]}_silk", silk, 512); }
@@ -273,7 +271,7 @@ void fragment() {
             if (w.Team != Local.Me && !seen(w.Pos)) continue;
             var o = hf.Point(w.Pos, 0.02f);
             var b = new Basis(Vector3.Up, Hash(w.Pos) * Mathf.Tau);
-            float shake = !w.Built || w.Upgrading ? 0.25f : 0.04f;
+            float shake = (!w.Built && w.WeaverIn) || w.Upgrading ? 0.3f : 0.04f;
             float integ = Mathf.Clamp(w.Done, 0.05f, 1f);
             if (w.Upgrading)
             {
@@ -325,7 +323,7 @@ void fragment() {
             float yaw = Hash(w.Pos) * Mathf.Tau;
             var b = new Basis(Vector3.Up, yaw);
             var perch = _perch[(int)w.Kind];
-            int ants = w.Built ? perch.Count : System.Math.Min(1, perch.Count);
+            int ants = w.Built ? perch.Count : w.WeaverIn ? System.Math.Min(1, perch.Count) : 0;
             for (int k = 0; k < ants; k++)
             {
                 var at = perch[k];
