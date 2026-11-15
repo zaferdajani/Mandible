@@ -86,9 +86,9 @@ public static class Levels
         new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "The lairs are the larder; armoured ants", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
             Blurb = "The yard is bare. Hunt the lairs for their feasts, win the beetle's core at the last seep before the red colony does, and end its queen.",
             Stars = new[] { (StarGoal.Time, 1800f, Under(30)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
-        new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Acid gunners and watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
-            Blurb = "Burn three watch posts that shield the red queen, from the air and from range, then end her.",
-            Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
+        new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Acid gunners, watch posts, the Stone Mother and scorpion ants", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
+            Blurb = "Armoured guards hold the three watch posts that shield the red queen. Under a flat stone on the dry bank lives a scorpion whose sting goes between plates: win her core, then burn the posts and end the queen.",
+            Stars = new[] { (StarGoal.Time, 1620f, Under(27)), (StarGoal.Lost, 70f, "Lose no more than 70 ants") } },
         new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Wasps, web ants and stinger ants", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
             Blurb = "The Hornet Mother raids from her paper nest, out of every ant's reach. Win the spider's core and the wasp's, and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
@@ -526,6 +526,8 @@ public sealed partial class Sim
                 Muster(0, AntType.Worker, 14, home);
                 Muster(0, AntType.Soldier, 30, home + toFoe * 9);
                 Muster(0, AntType.Major, 4, home + toFoe * 12);
+                Muster(0, AntType.Armoured, 6, home + toFoe * 14);
+                Muster(0, AntType.WebAnt, 6, home + toFoe * 7);
                 GrownRival(foe, toFoe, workers: 8, soldiers: 12, majors: 2);
                 ClearCorridor(home, foe, -1);
                 foreach (float a in new[] { -0.9f, 0f, 0.9f })
@@ -541,6 +543,12 @@ public sealed partial class Sim
                         int id2 = Spawn(1, AntType.Soldier, OpenGround(p + face * 3 + across * (i * 1.6f - 2.4f)), face.AngleD());
                         if (id2 >= 0) { Ants[id2].State = AntState.Hold; Track(g, id2); }
                     }
+                    // the red line has the beetle's plates since the Dry Spell: jaws barely mark these two
+                    for (int i = 0; i < 2; i++)
+                    {
+                        int id3 = Spawn(1, AntType.Armoured, OpenGround(p + face * 4.6f + across * (i * 3.2f - 1.6f)), face.AngleD(), 3);
+                        if (id3 >= 0) { Ants[id3].State = AntState.Hold; Track(g, id3); }
+                    }
                 }
                 m.WaveFrom = foe + (home - foe).Normalized() * 12;
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 10), (AntType.Major, 1, 2) } });
@@ -555,7 +563,32 @@ public sealed partial class Sim
                     for (int i = 0; i < 4; i++) AddRemains(larder + MathX.Dir(i * 1.57f + 0.2f) * 8.6f, AntType.Wasp, Part.Sting, i * 2.3f);
                 }
                 Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Each winged ant needs a pair of wings: a spider on the flank (the marker) keeps a larder of dead flies in its web, and a few dead hornets. Kill the spiders and the workers carry the wings home; with a sting in store a winged ant hatches as a stinger. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
-                Add(Expedition.Obj.Group, "Burn the watch posts", "While any watch post stands the red queen cannot be harmed. Strike them one by one (gold rings on the map). Posts left: {0}.", b: -2);
+                {
+                    // the Stone Mother: a scorpion under a flat stone on the dry bank (Scorpion.cs). In the mouth of her
+                    // burrow nothing beats her; she walks out for a fresh carcass on open ground. The level shows it once
+                    // (a dead beetle she takes at the start) and leaves grazing beetles within her reach.
+                    var stone = OpenGround(home + toFoe * 64 - side * 50); // the flank across from the spider's larder: its dead are not her bait
+                    ClearAround(stone, 20);
+                    int sg = AddGroup("The flat stone", stone);
+                    int keeper = GroupBug(sg, AntType.Scorpion, stone, 6);
+                    if (keeper >= 0) { Ants[keeper].Pos = Ants[keeper].PrevPos = Ants[keeper].Home = Ants[keeper].Anchor = stone; Ants[keeper].Heading = (home - stone).AngleD(); }
+                    GiveCore(keeper, Mutation.Scorpion);
+                    m.CoreKeepers.Add(keeper);
+                    m.ScorpionGroup = sg;
+                    var bank = OpenGround(stone + (home - stone).Normalized() * 19);
+                    int bg = AddGroup("Grazing beetles", bank);
+                    for (int i = 0; i < 3; i++) GroupBug(bg, AntType.Beetle, bank + MathX.Dir(i * 2.1f) * 3f, 1);
+                    foreach (var (bug, _) in m.Groups[bg]) Ants[bug].Home = Ants[bug].Pos;
+                    m.BaitGroup = bg; m.BaitAt = bank;
+                    int shown = Spawn(Config.Wild, AntType.Beetle, OpenGround(stone + (home - stone).Normalized() * 11 + side * 5), 0f);
+                    if (shown >= 0) Kill(shown, -1);
+                    m.RivalWantsCore = true; m.RivalDelay = 25; m.RivalEscort = 8;
+                    Add(Expedition.Obj.Group, "Bring down the Stone Mother", "The colony feels a core under a flat stone on the dry bank (the gold ring): a scorpion with her young on her back. Watch what brings her out before you send anyone. Left: {0}.", b: sg);
+                }
+                Add(Expedition.Obj.Extract, "Cut out the scorpion's core", "Select workers and right-click the glowing core in her body. Her young have spilled off her back, and the red colony has smelled it too. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The carrier is slow and the young scorpions hunt it. If the red colony carries the core home instead, the chapter is lost. Distance: {0}.");
+                Add(Expedition.Obj.Hatch, "Hatch scorpion ants", "The queen has changed: she lays scorpion ants (the Hatch tab). Each one needs a scorpion's sting: the Stone Mother's body holds one and so does each of her young. Kill the young and the workers carry the stings home. Their sting goes between the plates the red guards wear. Scorpion ants: {0}/{1}.", a: (int)AntType.ScorpionAnt, b: 3);
+                Add(Expedition.Obj.Group, "Burn the watch posts", "While any watch post stands the red queen cannot be harmed. Armoured guards hold each one (gold rings on the map). Posts left: {0}.", b: -2);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "Her shield is down. Send everything down the red shaft before she raises new guards.");
                 break;
             case 10: // The Hornet Mother

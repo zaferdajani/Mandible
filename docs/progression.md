@@ -19,7 +19,7 @@ There are two progressions. They use different things and give different rewards
 | Spider | Web ants | Throw silk, spin trap webs, live in the Spinnery above ground |
 | Fly | Winged ants | Flight |
 | Wasp | Stinger ants | The flying ants grow a wasp's venom sting (owner, 2026-11-15: "the flying ants will have stingers then") |
-| Scorpion (to build) | Ground stingers | The wasp's sting upgrades the flying ants only. Ground ants get a sting by defeating a scorpion and taking its stinger (owner, 2026-11-15). Not built: needs the scorpion, its core and an approved body target |
+| Scorpion | Scorpion ants (ground stingers) | The wasp's sting upgrades the flying ants only. Ground ants get a sting by defeating a scorpion and taking its stinger (owner, 2026-11-15). Rule: section 1d |
 | Beetle | Armoured ants | Thicker shell: higher armour and defence |
 | Mantis (later) | Mantis ants | A hybrid ant-mantis; needs a newly built body |
 
@@ -61,6 +61,7 @@ There are two progressions. They use different things and give different rewards
 | Stinger ants | A sting | Wasps |
 | Web ants | A silk gland | Spiders |
 | Armoured ants | Shell plates | Beetles |
+| Scorpion ants | A scorpion's sting | Scorpions: the Stone Mother and her young |
 
 - Parts are a kind of organic matter with their own count per kind. They come from killing that insect; workers
   carry the part home with the remains. One part, one ant.
@@ -70,7 +71,7 @@ There are two progressions. They use different things and give different rewards
   it; she carries it home and it is counted when she delivers. If she dies on the way the part lies in her body for the
   next carrier. A brood that is cancelled gives its parts back. Web ants raised at the Spinnery cost a gland each too.
 - **A brood is a squad, so it costs one part for each ant in it**: four pairs of wings for four winged ants, four
-  glands for four web ants, three sets of plates for three armoured ants.
+  glands for four web ants, three sets of plates for three armoured ants, three scorpion's stings for three scorpion ants.
 - Stingers: a winged ant always costs a pair of wings. Once the queen has the wasp's core, each winged ant laid also
   takes one sting if one is in store and hatches as a stinger; with no sting it hatches as a plain winged ant, so a
   missing sting never blocks the brood. A stinger is that ant, not the whole colony: winged ants already alive when
@@ -84,12 +85,48 @@ There are two progressions. They use different things and give different rewards
 - Where each level's parts are: The Silk Trap, 8 flies in the web (the level asks for 4 winged ants); The Royal Larva,
   4 flies in the spider lair; The Hornet Mother, its spiders and wasps, and 8 flies in the silk spitter's hollow; The
   Dry Spell, 8 beetles (asks for 3 armoured ants); Wings and Acid, a guarded web with 10 flies and 4 dead hornets
-  (asks for 6 winged ants, two broods).
+  (asks for 6 winged ants, two broods), and the Stone Mother with her eight young: nine scorpion's stings (asks for 3
+  scorpion ants, one brood; the six left over go with the colony to the chapters that follow, which have no scorpion of their own).
 - Skirmish and multiplayer: four dead flies lie beside each of the two fly's cores and in the two spider lairs nearest
   each colony (24 on the map at most, six broods). Once the queen lays winged ants and no hunter stands by them, the
   carcass crews carry them home, one worker a fly. Stings, glands and plates come from the lairs' wasps, spiders and beetles.
+  No scorpion lives on the skirmish map, so scorpion ants are the campaign's only, for now.
 - Parts in store go with the colony to the following levels (the roster). The ants a level starts with cost nothing.
 - The rival colony and the skirmish AI obey the same rule (the queue check is shared).
+
+## 1d. The scorpion's sting: ground stingers (owner approved 2026-11-15)
+
+The owner's rule: the wasp's sting belongs to the flying ants; ground ants get theirs from a scorpion. The owner chose
+a new caste, the piercing numbing sting and chapter 11 (2026-11-15). Built in `src/Sim/Scorpion.cs`.
+
+- **Who gets it.** A new ground caste, the **scorpion ant**, grown on the soldier's body: a scorpion's segmented
+  tail arched over its back, ending in the bulb and curved sting, and the soldier's jaws kept. One new unit from one
+  core, like the web ant and the armoured ant. Plain soldiers stay as they are. A brood is three.
+- **What the sting does.** It is not a second copy of the wasp's venom.
+
+| | Stinger ants (wasp) | Scorpion ants (scorpion) |
+|---|---|---|
+| Where | in the air | on the ground; cannot reach anything airborne |
+| The venom | burns: damage that keeps running after the strike | numbs: the victim walks and bites 40% slower for 4 s |
+| Against a shell | armour takes its share | the sting goes between the plates: the strike ignores armour |
+| Rhythm | every strike | bites like a soldier; the tail strikes once every 5 s |
+| Best against | what heals (the Hornet Mother) and what flees | what is plated and heavy: beetles, majors, armoured ants, the Old Stag |
+| Weak to | silk, gunners | the air, acid at range, a swarm of cheap workers (one sting, one victim) |
+
+  Together they are the colony's two venoms: the ground sting holds a big enemy still and opens its shell, the
+  winged sting burns it down.
+- **The part (section 1c).** Each scorpion ant hatched costs one **scorpion's sting**. A dead scorpion keeps its
+  sting like any other part: the Stone Mother's body holds one and each of her eight young holds one, so chapter 11
+  gives nine and asks for three. No other chapter and no skirmish map has a scorpion yet.
+- **The tree.** A seventh branch, "Scorpion ants", with two nodes: *Deep Sting* (the numbness lasts 1 s longer per
+  rank, 2 ranks) and *Nerve Venom* (a numbed enemy also takes 10% more from every bite per rank, 3 ranks). The
+  backdrop now has eight tunnels (made from target P6's backdrop): the queen, the generals, five units, and one
+  left empty for the mantis ants.
+- **The colour tells the rank (owner, 2026-11-15: "stingers start black but upgrading them turned yellow and
+  stronger").** A scorpion ant hatches with a black tail (target P8-B). Every rank bought in its branch turns the
+  tail and sting further towards amber-yellow (target P8-A at the full five ranks), so an upgraded sting is seen
+  on the field. (Read as the scorpion ants; the owner's sentence may have meant the winged stingers too.)
+- **Where the core is found:** chapter 11, Wings and Acid; see level-design.md section 5.
 
 ## 2. Evolution: organic matter levels up the queen and the generals
 

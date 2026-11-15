@@ -302,6 +302,7 @@ public sealed class AIController : IColonyAI
         else if (Config.Unlocked(ProdKind.Flyer, c.Tier, c.Mutations) && flyers * 5 < soldiers && _sim.PartReady(_team, ProdKind.Flyer)) pick = ProdKind.Flyer;
         else if (Config.Unlocked(ProdKind.WebAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.WebAnt] * 8 < soldiers && _sim.PartReady(_team, ProdKind.WebAnt)) pick = ProdKind.WebAnt;
         else if (Config.Unlocked(ProdKind.Armoured, c.Tier, c.Mutations) && c.Count[(int)AntType.Armoured] * 5 < soldiers && _sim.PartReady(_team, ProdKind.Armoured)) pick = ProdKind.Armoured;
+        else if (Config.Unlocked(ProdKind.ScorpionAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.ScorpionAnt] * 6 < soldiers && _sim.PartReady(_team, ProdKind.ScorpionAnt)) pick = ProdKind.ScorpionAnt;
         else pick = ProdKind.Soldier;
         Q(pick); // a major simply waits until the food is there
     }
@@ -380,6 +381,7 @@ public sealed class AIController : IColonyAI
             ref var a = ref _sim.Ants[i];
             if (!a.Alive || a.Team != _team || !Config.IsWarrior(a.Type)) continue;
             if (a.State == AntState.Engage) continue;
+            if (a.State == AntState.Hold) continue; // posted by the chapter (a watch post's guards): they hold their post, or its marker points at nothing
             if (a.Pos.DistanceTo(nest) < 90) _tmp.Add(i);
         }
         if (_tmp.Count > 0) Move(_tmp, _sim.Ants[threat].Pos, true);

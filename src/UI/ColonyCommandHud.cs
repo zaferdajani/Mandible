@@ -75,7 +75,7 @@ public partial class ColonyCommandHud : Control
     public static Texture2D PartIcon(Part p)
     {
         if (PartTex.TryGetValue(p, out var t)) return t;
-        string path = "res://assets/ui/mutation/" + p switch { Part.Wings => "ic_hornetwings.png", Part.Sting => "ic_stinger.png", Part.Gland => "ic_webthrowing.png", _ => "ic_ironchitin.png" };
+        string path = "res://assets/ui/mutation/" + p switch { Part.Wings => "ic_hornetwings.png", Part.Sting => "ic_stinger.png", Part.Gland => "ic_webthrowing.png", Part.Tail => "em_deepsting.png", _ => "ic_ironchitin.png" };
         return PartTex[p] = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
     }
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
@@ -94,8 +94,8 @@ public partial class ColonyCommandHud : Control
     public static readonly Color OrganicColor = new(0.86f, 0.5f, 0.16f);
     static readonly Color Edge = new("a77e32"), Gold = new("f4cd70"), Background = new(0.035f, 0.031f, 0.022f, 0.96f);
     static readonly ChamberKind[] Rooms = { ChamberKind.Brood, ChamberKind.Storage, ChamberKind.Royal, ChamberKind.Wings, ChamberKind.Forge, ChamberKind.Armory, ChamberKind.Silk };
-    static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured };
-    static readonly string[] Keys = { "Z", "X", "C", "F", "D", "W", "M" }; // one per entry of Units
+    static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured, ProdKind.ScorpionAnt };
+    static readonly string[] Keys = { "Z", "X", "C", "F", "D", "W", "M", ";" }; // one per entry of Units
 
     static T At<T>(T control, float x, float y, float w, float h) where T : Control
     { control.Position = new Vector2(x, y); control.Size = new Vector2(w, h); return control; }
@@ -689,7 +689,7 @@ public partial class ColonyCommandHud : Control
         foreach (int id in input.Selection) if (Game.Sim.Ants[id].Alive) { var a = Game.Sim.Ants[id]; type = a.Type; hp += a.Hp; max += a.MaxHp; n++; }
         _selection.Text = n > 0 ? n == 1 ? Config.Of(type).Name : $"{n} ANTS SELECTED" : "THE COLONY";
         _health.Value = n > 0 ? hp / Mathf.Max(1, max) : 1;
-        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
+        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured, AntType.ScorpionAnt => ProdKind.ScorpionAnt,
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker };
         // a selected hero shows its own upright bust; the wide card art serves the queue and the Heroes tab
         _selectedArt.Texture = n > 0 && Config.IsHero(type) && HeroArt.Bust(type, Local.Me) is { } bust ? bust : n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);

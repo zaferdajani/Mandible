@@ -46,6 +46,8 @@ public partial class LivePortrait : TextureRect
         AntType.Marshal => new(Focus.Wings, 40, 14, 0.36f),
         AntType.WebAnt => new(Focus.Tip, 156, 16),                       // the spinnerets
         AntType.Armoured => new(Focus.Body, 42, 26, 0.5f),               // the shell
+        AntType.ScorpionAnt => new(Focus.Body, 62, 16, 0.56f),           // the tail arched over her back
+        AntType.Scorpion or AntType.Scorpling => new(Focus.Body, 34, 24, 0.6f), // claws, back and tail
         AntType.Beetle => new(Focus.Body, 128, 34, 0.56f),               // the wing cases
         AntType.StagBeetle => new(Focus.Head, 28, 20, 0.42f, 0.3f, 0.02f),     // the antlers
         AntType.Spider => new(Focus.Head, 12, 6, 0.36f, 0.13f),          // eyes and fangs

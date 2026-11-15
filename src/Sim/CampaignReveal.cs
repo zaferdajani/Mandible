@@ -17,6 +17,7 @@ public static class Reveal
     /// Eating in the field to mend: the Dry Spell, whose lairs are the larder, teaches it.
     public const int Feasting = 10;
     public const int Armoured = 10;      // the Dry Spell: a beetle's core, armoured ants
+    public const int Scorpion = 11;      // Wings and Acid: the Stone Mother's core, scorpion ants
     public const int SilkTrapId = 13, RoyalLarvaId = 14; // the two mutation chapters' level ids
     /// The Hornet Mother's chapter: the wasps arrive; the silk spitter's core gives web ants, the answer to them, and
     /// a wasp's core gives the winged ants their sting.
@@ -31,6 +32,7 @@ public static class Reveal
         ProdKind.Flyer => Mutagen,       // the mutation units: each from the chapter that holds its core (and only with the core)
         ProdKind.WebAnt => Web,
         ProdKind.Armoured => Armoured,
+        ProdKind.ScorpionAnt => Scorpion,
         ProdKind.Gunner => 11,
         _ => 15,                         // the Acid Matron and Sky Marshal are bought with stars (Levels.Unlocks)
     };
@@ -61,6 +63,7 @@ public static class Reveal
         AntType.Flyer => 5,              // the first winged ants, out of the fly's core in The Silk Trap
         AntType.WebAnt => Web,
         AntType.Armoured => Armoured,
+        AntType.ScorpionAnt or AntType.Scorpion or AntType.Scorpling => Scorpion,
         AntType.Warlord => 7,            // old Burr, out of the royal cocoon
         AntType.Wasp => 9,               // the Hornet Mother's daughters (the Silk Trap's queen wasp is already dead)
         AntType.Gunner => 11,
@@ -101,6 +104,7 @@ public static class Reveal
         (10, "Lairs as larders", "Every bug the army kills is remains the workers haul home."),
         (10, "Eating in the field", "Fighters and generals mend by eating remains: right-click a carcass with them."),
         (10, "Armoured ants", "From a beetle's core: ants under shell plates, slow and very hard to kill."),
+        (11, "Scorpion ants", "From a scorpion's core: ground ants with a scorpion's tail. The sting goes between the plates and numbs."),
         (10, "Silk Cutters", "A chamber whose research cuts ants free of spider silk."),
         (11, "Acid gunners", "An Empress queen lays acid gunners (D)."),
         (12, "The Old Stag", "The lord of the yard. Beat it and it fights for you."),

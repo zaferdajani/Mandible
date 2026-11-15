@@ -95,6 +95,9 @@ public struct Ant
     // flight (the owner's rule: ground ants cannot fight a flyer in the air)
     public float PinT;                // seconds pinned to the ground by thrown silk (Mutation.Web)
     public float CoverT;              // a ground ant ducking away from a wasp it cannot reach
+    // the scorpion (Scorpion.cs)
+    public float NumbT;               // numbed by a scorpion's sting: walks (SlowT) and bites slower
+    public float TailCd;              // a scorpion ant's tail: seconds until it can strike again
 }
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
@@ -739,7 +742,7 @@ public sealed partial class Sim
         {
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
-            Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(a.Brood); Mix(a.CoreP1); Mix(F(a.PinT)); Mix(F(a.Alt));
+            Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(a.Brood); Mix(a.CoreP1); Mix(F(a.PinT)); Mix(F(a.Alt)); Mix(F(a.NumbT)); Mix(F(a.TailCd));
             Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1); Mix(a.PartP1); Mix(a.Sting ? 1u : 0u);
         }
         foreach (var c in Col)
@@ -1042,8 +1045,11 @@ public sealed partial class Sim
         a.RetreatT -= dt;
         a.SpecialCd -= dt;
         a.SnareCd -= dt;
+        a.NumbT -= dt;
+        a.TailCd -= dt;
         if (a.Snared && a.Root <= 0 && a.PinT <= 0) a.Snared = false;
-        if (a.PinT > 0)
+        if (a.PinT > 0 && a.Type == AntType.Scorpion) a.PinT -= dt; // silk holds its tail only: it still walks and grips
+        else if (a.PinT > 0)
         {
             // pinned to the ground by thrown silk: it struggles where it fell, and ground ants can reach it
             a.PinT -= dt;
@@ -1114,6 +1120,12 @@ public sealed partial class Sim
             // the core and the royal larva come before everything else a worker does
             desired = a.Nurse ? NurseLogic(ref a) : CoreLogic(i, ref a, dt, ref speedMul);
             desired = Layering(ref a, desired);
+            Move(i, ref a, st, desired, speedMul, dt);
+            return;
+        }
+
+        if (a.Type == AntType.Scorpion && a.Team == Config.Wild && !a.Raider && ScorpionTick(i, ref a, st, dt, think, ref desired, ref speedMul))
+        {
             Move(i, ref a, st, desired, speedMul, dt);
             return;
         }
@@ -1189,7 +1201,7 @@ public sealed partial class Sim
                 // drift back to anchor if shoved
                 if (a.State == AntState.Idle && a.Pos.DistanceTo(a.Anchor) > 2.5f) { desired = a.Anchor - a.Pos; speedMul = 0.6f; }
                 // wild bugs lick their wounds at their lair, and prowl around it looking for prey
-                if (a.Team == Config.Wild && a.State == AntState.Idle)
+                if (a.Team == Config.Wild && a.State == AntState.Idle && a.Type != AntType.Scorpion)
                 {
                     a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * (a.Boss ? 0.01f : 0.04f) * dt); // the Old Stag mends slowly, so a retreat does not reset the fight
                     if (think && a.Hp > a.MaxHp * 0.8f && Rng.F() < 0.035f)
@@ -1308,7 +1320,7 @@ public sealed partial class Sim
         if (a.Cooldown > 0) return;
         int bridged = Bridges.Count > 0 ? OnBridge(a) : 0;
         if (bridged is > 0 and < 3) return; // locked into the bridge: no biting until it is rank 3
-        a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f);
+        a.Cooldown = st.Cooldown * Rng.R(0.85f, 1.15f) * (a.NumbT > 0 ? 1f / (1f - Config.NumbSlow) : 1f);
         a.AttackAnim = 1;
         float dmg = st.Damage * a.DmgMul * (a.BuffT > 0 ? a.BuffMul : 1f) * MoraleMul(a.Team) * Rng.R(0.85f, 1.15f);
         if (a.FrenzyT > 0) dmg *= Skills.FrenzyBite[System.Math.Clamp((int)a.FrenzyRank, 1, 3) - 1];
@@ -1336,6 +1348,8 @@ public sealed partial class Sim
             t.PoisonSrc = i;
         }
         MutantBite(i, ref a, ref t, dmg);
+        dmg *= TailStrike(i, ref a, ref t, out bool pierce);
+        if (a.Type == AntType.Scorpion && !HeavyBody(t.Type)) t.Root = Mathf.Max(t.Root, Config.ScorpionClawHold); // gripped in a claw
         if (Config.Ranged(a.Type)) Events.Add(new SimEvent { Kind = EvKind.Spit, Pos = a.Pos, To = t.Pos, Team = a.Team, Type = a.Type });
         else Events.Add(new SimEvent { Kind = EvKind.Bite, Pos = t.Pos, Team = a.Team, Type = a.Type });
         var tp = t.Pos;
@@ -1469,7 +1483,7 @@ public sealed partial class Sim
         foreach (var w in _shots) yield return (w.From, w.To, w.T / w.Dur);
     }
 
-    public void Damage(int target, float dmg, int attacker)
+    public void Damage(int target, float dmg, int attacker, bool pierce = false)
     {
         ref var t = ref Ants[target];
         if (!t.Alive) return;
@@ -1479,6 +1493,9 @@ public sealed partial class Sim
         if (t.HasteT > 0) armor += t.GuardArmor; // Trail Blaze: the line holds
         if (t.MarkT > 0) dmg *= t.MarkMul; // Scout Swarm: marked
         if (t.Snared) dmg *= Config.SnareBite; // held in a trap web
+        dmg *= NerveMul(t, attacker);
+        if (pierce) armor = 0;               // a scorpion's sting goes between the plates
+        else if (Denned(t)) dmg *= 1f / 4f;  // under its stone only a few jaws reach it
         if (armor > 0) dmg *= 1f - Mathf.Min(armor, 0.75f);
         if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;
@@ -1517,6 +1534,7 @@ public sealed partial class Sim
         if (Mission != null && !t.Summoned) RosterKill(id, killer);
         if (t.Boss && t.Team == Config.Wild && killer >= 0 && Ants[killer].Team < 2) { Rouse(id, Ants[killer].Team, killer); return; }
         MutationDeath(id, ref t, killer);
+        ScorpionDeath(ref t);
         t.Alive = false;
         if (t.SquadP1 > 0) Squads[t.SquadP1 - 1].Members.Remove(id);
         var st = Config.Of(t.Type);

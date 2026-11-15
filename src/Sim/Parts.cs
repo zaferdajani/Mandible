@@ -3,18 +3,19 @@ using Godot;
 namespace Mandible;
 
 /// A body part taken from an insect (docs/progression.md 1c): every mutation unit hatched costs one of its kind.
-public enum Part { Wings = 0, Sting = 1, Gland = 2, Plates = 3 }
+public enum Part { Wings = 0, Sting = 1, Gland = 2, Plates = 3, Tail = 4 } // Tail: a scorpion's sting (progression.md 1d)
 
 public static class BodyParts
 {
-    public const int Count = 4;
+    public const int Count = 5;
 
     /// The part (+1) a dead creature of this kind holds; 0: none. Flies are not a living creature: their remains are
     /// placed with Sim.AddRemains.
     public static byte Of(AntType t) => t switch
     {
         AntType.Wasp => (byte)Part.Sting + 1, AntType.Spider => (byte)Part.Gland + 1,
-        AntType.Beetle or AntType.StagBeetle => (byte)Part.Plates + 1, _ => 0,
+        AntType.Beetle or AntType.StagBeetle => (byte)Part.Plates + 1,
+        AntType.Scorpion or AntType.Scorpling => (byte)Part.Tail + 1, _ => 0,
     };
 
     /// The part (+1) one brood of this kind costs; 0: none (plain castes and generals). A winged ant always costs a
@@ -22,27 +23,29 @@ public static class BodyParts
     public static byte Needs(ProdKind k, int mutations) => k switch
     {
         ProdKind.Flyer => (byte)Part.Wings + 1,
-        ProdKind.WebAnt => (byte)Part.Gland + 1, ProdKind.Armoured => (byte)Part.Plates + 1, _ => 0,
+        ProdKind.WebAnt => (byte)Part.Gland + 1, ProdKind.Armoured => (byte)Part.Plates + 1,
+        ProdKind.ScorpionAnt => (byte)Part.Tail + 1, _ => 0,
     };
 
     /// The same for the unit that hatches.
     public static byte NeedsFor(AntType unit, int mutations) => unit switch
     {
         AntType.Flyer => Needs(ProdKind.Flyer, mutations), AntType.WebAnt => Needs(ProdKind.WebAnt, mutations),
-        AntType.Armoured => Needs(ProdKind.Armoured, mutations), _ => 0,
+        AntType.Armoured => Needs(ProdKind.Armoured, mutations), AntType.ScorpionAnt => Needs(ProdKind.ScorpionAnt, mutations), _ => 0,
     };
 
     public static string Name(Part p, int n = 1) => p switch
     {
         Part.Wings => n == 1 ? "pair of wings" : "pairs of wings", Part.Sting => n == 1 ? "sting" : "stings",
-        Part.Gland => n == 1 ? "silk gland" : "silk glands", _ => n == 1 ? "set of shell plates" : "sets of shell plates",
+        Part.Gland => n == 1 ? "silk gland" : "silk glands", Part.Tail => n == 1 ? "scorpion's sting" : "scorpion's stings",
+        _ => n == 1 ? "set of shell plates" : "sets of shell plates",
     };
 
     /// Short name for a count on a button.
-    public static string Short(Part p) => p switch { Part.Wings => "wings", Part.Sting => "stings", Part.Gland => "silk glands", _ => "shell plates" };
+    public static string Short(Part p) => p switch { Part.Wings => "wings", Part.Sting => "stings", Part.Gland => "silk glands", Part.Tail => "scorpion stings", _ => "shell plates" };
 
     /// The insect it is taken from.
-    public static string Prey(Part p) => p switch { Part.Wings => "flies", Part.Sting => "wasps", Part.Gland => "spiders", _ => "beetles" };
+    public static string Prey(Part p) => p switch { Part.Wings => "flies", Part.Sting => "wasps", Part.Gland => "spiders", Part.Tail => "scorpions", _ => "beetles" };
 
     /// Two words for the hatch card when there are none in store.
     public static string Lack(Part p) => p == Part.Wings ? "Find flies" : $"Hunt {Prey(p)}";
@@ -112,7 +115,7 @@ public sealed partial class Sim
     /// Whether the queen lays a unit that is paid with this part (+1).
     bool UsesPart(Colony c, byte partP1) => partP1 != 0 && (c.Mutations & (int)((Part)(partP1 - 1) switch
     {
-        Part.Wings => Mutation.Winged, Part.Sting => Mutation.Stinger, Part.Gland => Mutation.Web, _ => Mutation.Armoured,
+        Part.Wings => Mutation.Winged, Part.Sting => Mutation.Stinger, Part.Gland => Mutation.Web, Part.Tail => Mutation.Scorpion, _ => Mutation.Armoured,
     })) != 0;
 
     /// A living fighter or hunter of another side within r of p on the surface.

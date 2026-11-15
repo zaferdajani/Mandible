@@ -33,14 +33,15 @@ public sealed partial class EvolveTree : PanelContainer
         EvoNode.FlightMuscle => "em_flightmuscle.png", EvoNode.LightShell => "em_wingcases.png",
         EvoNode.VenomSac => "em_venomsac.png", EvoNode.LastingVenom => "em_lastingvenom.png",
         EvoNode.Spinneret => "em_spinneret.png", EvoNode.SilkGlands => "em_silkglands.png",
-        EvoNode.Plates => "em_plates.png", _ => "em_mending.png",
+        EvoNode.Plates => "em_plates.png", EvoNode.Mending => "em_mending.png",
+        EvoNode.DeepSting => "em_deepsting.png", _ => "em_nervevenom.png",
     };
     /// A branch the queen has no core for yet shows the emblem of its first node, dark.
     static string Icon(Mutation m) { foreach (var d in Evolve.Nodes) if (d.Branch == m) return Icon(d.Node); return GeneralIcon; }
 
-    // where the backdrop's six tunnels run, as fractions of the screen (measured on evolve_bg.jpg as it is laid over
+    // where the backdrop's tunnels run (eight: the queen, the generals, five mutation units, and one kept for the mantis ants), as fractions of the screen (measured on evolve_bg.jpg as it is laid over
     // the panel): the first tunnel's centre, the step between tunnels, and how far down they run straight
-    const float Tunnel0 = 0.1303f, TunnelStep = 0.1483f, TunnelFoot = 0.67f;
+    const float Tunnel0 = 0.1299f, TunnelStep = 0.1059f, TunnelFoot = 0.67f;
 
     // light added on top (glows, lit tunnels): additive, never a flat fill
     static CanvasItemMaterial Add => new() { BlendMode = CanvasItemMaterial.BlendModeEnum.Add };
@@ -160,7 +161,7 @@ public sealed partial class EvolveTree : PanelContainer
 
         // ---- one branch per mutation unit
         int col = 2;
-        foreach (var mu in new[] { Mutation.Winged, Mutation.Stinger, Mutation.Web, Mutation.Armoured })
+        foreach (var mu in new[] { Mutation.Winged, Mutation.Stinger, Mutation.Web, Mutation.Armoured, Mutation.Scorpion })
         {
             bool owned = (c.Mutations & (int)mu) != 0;
             Head(col, colW, Mutations.Name(mu).ToUpperInvariant(), Mutations.Source(mu));
@@ -206,13 +207,13 @@ public sealed partial class EvolveTree : PanelContainer
     void Head(int col, float colW, string name, string line)
     {
         float cx = CustomMinimumSize.X * (Tunnel0 + TunnelStep * col);
-        var head = UiTheme.Text(name, (int)(14 * S), UiTheme.Title, new Color(1f, 0.76f, 0.4f));
+        var head = UiTheme.Text(name, (int)(11.5f * S), UiTheme.Title, new Color(1f, 0.76f, 0.4f));
         head.HorizontalAlignment = HorizontalAlignment.Center;
         head.Position = new Vector2(cx - colW / 2, 54 * S); head.Size = new Vector2(colW, 22 * S);
         head.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
         _body.AddChild(head);
-        var sub = UiTheme.Text(line, (int)(12.5f * S), UiTheme.Body, new Color(0.92f, 0.82f, 0.68f));
-        sub.HorizontalAlignment = HorizontalAlignment.Center;
+        var sub = UiTheme.Text(line, (int)(10 * S), UiTheme.Body, new Color(0.92f, 0.82f, 0.68f));
+        sub.HorizontalAlignment = HorizontalAlignment.Center; sub.ClipText = true;
         sub.Position = new Vector2(cx - colW / 2, 71 * S); sub.Size = new Vector2(colW, 16 * S);
         _body.AddChild(sub);
     }
@@ -251,13 +252,14 @@ public sealed partial class EvolveTree : PanelContainer
         if (press != null) b.Pressed += () => { press(); _game.Audio.Ui("research"); };
 
         // the plaque is as wide as a column allows, so neighbours never touch; its lines are clipped to it
-        state = state.Replace("  ·  ", " · ").Replace(" ORGANIC", " ORG");
-        var plaque = new PanelContainer { Position = new Vector2(c.X - 79 * S, c.Y + w.Y * 0.5f - 14 * S), CustomMinimumSize = new Vector2(158 * S, 0), Size = new Vector2(158 * S, 0), ClipContents = true, MouseFilter = MouseFilterEnum.Ignore };
+        state = state.Replace("  ·  ", " · ").Replace(" OF ", "/").Replace(" ORGANIC", " ORG");
+        float pw = CustomMinimumSize.X * TunnelStep - 5 * S; // seven columns stand on the tunnels now: a plaque is one tunnel step wide
+        var plaque = new PanelContainer { Position = new Vector2(c.X - pw / 2, c.Y + w.Y * 0.5f - 14 * S), CustomMinimumSize = new Vector2(pw, 0), Size = new Vector2(pw, 0), ClipContents = true, MouseFilter = MouseFilterEnum.Ignore };
         plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(bought && !afford ? new Color(0.13f, 0.07f, 0.2f, 0.94f) : new Color(0.09f, 0.05f, 0.03f, 0.9f), afford ? Amber : bought ? Violet.Lerp(Green, 0.3f) : new Color(0.36f, 0.26f, 0.18f), bought || afford ? 2 : 1, 7, 3));
         var v = new VBoxContainer(); v.AddThemeConstantOverride("separation", -2);
-        var nm = UiTheme.Text(name, (int)(12.5f * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
+        var nm = UiTheme.Text(name, (int)(10.5f * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
         nm.HorizontalAlignment = HorizontalAlignment.Center; nm.ClipText = true;
-        var st = UiTheme.Text(state, (int)(11.5f * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
+        var st = UiTheme.Text(state, (int)(9.5f * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
         st.HorizontalAlignment = HorizontalAlignment.Center; st.ClipText = true;
         v.AddChild(nm); v.AddChild(st);
         plaque.AddChild(v);

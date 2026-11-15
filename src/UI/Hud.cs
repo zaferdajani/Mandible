@@ -387,7 +387,7 @@ public partial class Hud : CanvasLayer
         v.AddChild(head);
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 4);
-        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D"), (ProdKind.WebAnt, "W"), (ProdKind.Armoured, "M") };
+        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D"), (ProdKind.WebAnt, "W"), (ProdKind.Armoured, "M"), (ProdKind.ScorpionAnt, ";") };
         foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(72, 70)));
         _prod[(int)ProdKind.Chamber] = new Button { Visible = false }; // chambers are dug by workers now (V / L in the chambers panel)
         _prodLock[(int)ProdKind.Chamber] = new Control();
@@ -634,7 +634,7 @@ public partial class Hud : CanvasLayer
             "Left-click / drag  select ants   ·   Shift adds   ·   Double-click selects all of that kind on screen",
             "Right-click  move / attack / gather (workers on food)   ·   A + click  attack-move",
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
-            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F winged ant"), (ProdKind.Gunner, "D acid gunner"), (ProdKind.WebAnt, "W web ant"), (ProdKind.Armoured, "M armoured ant")),
+            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F winged ant"), (ProdKind.Gunner, "D acid gunner"), (ProdKind.WebAnt, "W web ant"), (ProdKind.Armoured, "M armoured ant"), (ProdKind.ScorpionAnt, "; scorpion ant")),
             ResearchLine(),
             ManualLine("Generals:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
             BugLine(),

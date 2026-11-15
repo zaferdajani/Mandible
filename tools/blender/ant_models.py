@@ -38,8 +38,10 @@ OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else ""
 BODY, HEAD, GASTER, EYE = 0, 12, 13, 11
 # what CUSTOM0.y says about a surface (the Ant shader reads it): 1 a seta, and for the mutation units' borrowed
 # anatomy 2 spider silk, 3 beetle shell (uv.x counts its ridges), 4 a wasp's banded gaster (uv.x runs along it),
-# 5 a spider's velvet hair, 6 a fly's red compound eye, 7 a spider's simple eye
+# 5 a spider's velvet hair, 6 a fly's red compound eye, 7 a spider's simple eye when it is on an eye part and a
+# scorpion's tail anywhere else (the shader's eye branch and body branch never meet, so the two share the number)
 SETA, SILK, SHELL, BANDS, VELVET, FLYEYE, SPIDEREYE = 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0
+TAIL = 7.0
 HEAD_R, THORAX_R, GASTER_R = 0.0, 0.5, 1.0
 
 
@@ -241,6 +243,8 @@ CASTES = {
     "Stinger": dict(H=1.0, M=0.9, G=1.0, T=1.35, L=0.95, eye=1.55, ocelli=True, flight=True, merge="wasp"),
     "WebAnt": dict(H=1.32, M=1.3, G=1.0, T=1.05, L=1.24, eye=0.95, merge="spider", legs8=True),
     "Armoured": dict(H=1.85, M=1.6, G=1.05, T=1.1, L=0.95, eye=0.9, groove=0.5, merge="beetle", plated=True),
+    # the scorpion ant (target P8-B, docs/art-targets/README-scorpion.md): the soldier, its gaster running on into a scorpion's tail
+    "ScorpionAnt": dict(H=1.32, M=1.3, G=1.0, T=1.05, L=1.0, eye=0.95, merge="scorpion"),
     "Warlord": dict(H=1.8, M=2.4, G=1.1, T=1.25, L=1.05, eye=0.85, groove=1.0, spines=True, teeth=6, setae=1.6),
     "Matron": dict(H=1.15, M=1.0, G=1.0, T=1.15, L=1.0, eye=1.05, replete=True, setae=1.4),
     "Marshal": dict(H=1.2, M=1.3, G=1.1, T=1.55, L=0.98, eye=1.5, ocelli=True, flight=True, setae=1.4),
@@ -648,6 +652,9 @@ SCANS = {
     ("solenopsis", "WebAnt"): dict(body="solenopsis_major", head=0.85, own_gaster=True),
     ("lasius", "Armoured"): dict(body="camponotus_major", own_gaster=True),
     ("solenopsis", "Armoured"): dict(body="solenopsis_major", own_gaster=True),
+    # the scorpion ant keeps the soldier's own scanned gaster: the tail grows out of its tip
+    ("lasius", "ScorpionAnt"): dict(body="camponotus_minor"),
+    ("solenopsis", "ScorpionAnt"): dict(body="solenopsis_major", head=0.85),
 }
 BODIES = os.environ.get("ANT_BODIES", "D:/Temp/ant-rebuild/bodies")
 LABEL_PART = {0: (HEAD, HEAD_R), 1: (BODY, THORAX_R), 2: (GASTER, GASTER_R), 3: (EYE, HEAD_R)}
@@ -1223,6 +1230,71 @@ def merged(parts, species, caste, lod, meta, cfg, moved):
         out.append(make(v, f, lv, GASTER, GASTER_R))
         tip = axis(1.0)
         bristles(14 if near else 0, zB, waist.z + 0.1 * span, 0.03, 0.03, 0.0013)
+
+    if kind == "scorpion":
+        # a scorpion's tail grown out of the tip of the ant's own gaster: five barrel segments arching up and forward
+        # over the back, a swollen bulb, a curved sting and its bead of venom. One body: the tail's coordinate runs
+        # from 0 at the root to 1 at the point, and the shader carries the ant's own dark shell along it (TAIL)
+        G = waist + (Vector(meta["gaster_tip"]) - waist) * cfg.get("gaster", 1.0)
+        s = max((G - waist).length, 0.2)
+        b, u = Vector((0, 0, -1)), Vector((0, 1, 0))
+        P = [G - b * 0.34 * s, G + b * 0.18 * s + u * 0.08 * s, G + b * 0.50 * s + u * 0.36 * s, G + b * 0.58 * s + u * 0.80 * s,
+             G + b * 0.40 * s + u * 1.20 * s, G + b * 0.03 * s + u * 1.44 * s]
+        R = [0.175, 0.15, 0.136, 0.124, 0.114]
+        total = 6.4
+        ss = 10 if near else 8 if not far else 5
+        tl = lv if near else 0   # the mid mesh keeps its budget: the barrels are lofted fine enough without a subdivision
+
+        def tail_part(v, f, a, bb, k0, k1, level):
+            pr = make(v, f, level, GASTER, GASTER_R)
+            pr.seta = TAIL
+            ab = bb - a
+            L2 = max(ab.length_squared, 1e-9)
+            pr.coord = []
+            for q in pr.v:
+                tl = min(1.0, max(0.0, (q - a).dot(ab) / L2))
+                pr.coord.append(((k0 + (k1 - k0) * tl) / total, tl))
+            out.append(pr)
+            return pr
+
+        for i in range(5):
+            a, bb, r = P[i], P[i + 1], R[i] * s
+            if far:
+                secs = [(a, r * 0.8, r * 0.8), (a.lerp(bb, 0.5), r, r), (bb, r * 0.78, r * 0.78)]
+            else:
+                r0 = r * (1.55 if i == 0 else 0.66)   # the first segment swells out of the gaster itself: no joint, one body
+                secs = [(a, r0, r0), (a.lerp(bb, 0.14), r * max(0.97, r0 / r * 0.82), r * max(1.0, r0 / r * 0.82)), (a.lerp(bb, 0.5), r * 1.0, r * 1.04),
+                        (a.lerp(bb, 0.86), r * 1.02, r * 1.05), (bb, r * 0.68, r * 0.68)]
+            v, f = loft(secs, ss, up_hint=Vector((1, 0, 0)))
+            tail_part(v, f, a, bb, i, i + 1, tl)
+            if near:
+                # the tail's own fine hairs, as on the gaster it grew from
+                d = (bb - a).normalized()
+                side = Vector((1, 0, 0))
+                upv = d.cross(side).normalized()
+                for _ in range(7):
+                    th = rnd.uniform(0, 2 * math.pi)
+                    o = (side * math.cos(th) + upv * math.sin(th))
+                    base = a.lerp(bb, rnd.uniform(0.2, 0.85)) + o * r * 0.96
+                    hv, hf = cone(base, base + (o + d * 0.5).normalized() * rnd.uniform(0.035, 0.06) * s * 2.2, 0.0016, 3)
+                    out.append(make(hv, hf, 0, GASTER, GASTER_R, seta=SETA))
+        # the bulb: swollen, hung forward of the last joint
+        fwd = (P[5] - P[4]).normalized()
+        bc = P[5] + (-b) * 0.15 * s - u * 0.02 * s
+        v, f = ellipsoid(bc, 0.13 * s, 0.125 * s, 0.17 * s, 6 if near else 4, ss, fwd=-b)
+        tail_part(v, f, bc + b * 0.17 * s, bc - b * 0.17 * s, 5.0, 5.8, tl)
+        # the sting: a curved needle from the front of the bulb, down towards the ant's own head
+        s0 = bc - b * 0.14 * s - u * 0.03 * s
+        pts = [s0, s0 - b * 0.09 * s - u * 0.045 * s, s0 - b * 0.14 * s - u * 0.13 * s, s0 - b * 0.13 * s - u * 0.23 * s]
+        rs = [0.06 * s, 0.04 * s, 0.021 * s, 0.004 * s]
+        if not far:
+            pts, rs = resample(pts, rs, 2)
+        v, f = loft([(q, r, r) for q, r in zip(pts, rs)], 5 if near else 4, cap_start=True, cap_end=False)
+        tail_part(v, f, pts[0], pts[-1], 5.8, 6.4, 0)
+        if not far:
+            v, f = ellipsoid(pts[-1] + Vector((0, -0.008, 0)), 0.0085, 0.0105, 0.0085, 4, 6)
+            out.append(make(v, f, lv, GASTER, GASTER_R, membrane_fn=lambda q: 1.0))
+        tip = pts[-1]
     return out, tip
 
 

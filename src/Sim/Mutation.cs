@@ -18,11 +18,12 @@ public enum Mutation
     Armoured = 8,      // beetle core: armoured ants (AntType.Armoured), a thick shell
     RoyalLarva = 16,   // a mutated queen's core: the royal larva, out of whose cocoon a general breaks
     // 32 is kept for the mantis ants (later; needs a newly built body)
+    Scorpion = 64,     // scorpion core: scorpion ants (AntType.ScorpionAnt), ground ants whose sting ignores armour and numbs
 }
 
 public static class Mutations
 {
-    public static readonly Mutation[] All = { Mutation.Winged, Mutation.Stinger, Mutation.Web, Mutation.Armoured, Mutation.RoyalLarva };
+    public static readonly Mutation[] All = { Mutation.Winged, Mutation.Stinger, Mutation.Web, Mutation.Armoured, Mutation.Scorpion, Mutation.RoyalLarva };
 
     /// The unit the queen can lay after it.
     public static string Name(Mutation m) => m switch
@@ -31,6 +32,7 @@ public static class Mutations
         Mutation.Stinger => "Stinger Ants",
         Mutation.Web => "Web Ants",
         Mutation.Armoured => "Armoured Ants",
+        Mutation.Scorpion => "Scorpion Ants",
         Mutation.RoyalLarva => "The Royal Larva",
         _ => "",
     };
@@ -41,6 +43,7 @@ public static class Mutations
         Mutation.Stinger => "The winged ants grow a wasp's sting. Every strike injects venom that keeps burning.",
         Mutation.Web => "The queen lays web ants: a spider's spinnerets on an ant. They fling silk that pins a flying enemy to the ground, where any ant can bite it.",
         Mutation.Armoured => "The queen lays armoured ants: a beetle's shell plates over an ant. Slow, and very hard to kill.",
+        Mutation.Scorpion => "The queen lays scorpion ants: a scorpion's tail and sting grown out of an ant. The sting goes between the plates and numbs what it hits.",
         Mutation.RoyalLarva => "The queen can lay a royal larva in its own nursery. Fed on organic matter it spins a cocoon, and a general breaks out.",
         _ => "",
     };
@@ -52,6 +55,7 @@ public static class Mutations
         Mutation.Stinger => "a wasp's core",
         Mutation.Web => "a spider's core",
         Mutation.Armoured => "a beetle's core",
+        Mutation.Scorpion => "a scorpion's core",
         Mutation.RoyalLarva => "a mutated queen's core",
         _ => "",
     };
@@ -65,6 +69,7 @@ public static class Mutations
         Mutation.Winged or Mutation.Stinger => AntType.Flyer,
         Mutation.Web => AntType.WebAnt,
         Mutation.Armoured => AntType.Armoured,
+        Mutation.Scorpion => AntType.ScorpionAnt,
         Mutation.RoyalLarva => AntType.Warlord,
         _ => AntType.Queen,
     };
@@ -75,6 +80,7 @@ public static class Mutations
         AntType.Spider => Mutation.Web,
         AntType.Wasp => Mutation.Stinger,
         AntType.Beetle or AntType.StagBeetle => Mutation.Armoured,
+        AntType.Scorpion => Mutation.Scorpion,
         _ => Mutation.None,
     };
 
@@ -264,7 +270,9 @@ public sealed partial class Sim
         for (int j = 0; j < High && pinned < Mutations.PinCount(rank); j++)
         {
             ref var b = ref Ants[j];
-            if (!b.Alive || b.Team == a.Team || b.Layer != 0 || !Config.Flies(b.Type) || !Airborne(b)) continue;
+            // flyers in the air; and a scorpion on the ground, whose tail the silk ties down
+            bool tail = b.Type == AntType.Scorpion && b.PinT <= 0;
+            if (!b.Alive || b.Team == a.Team || b.Layer != 0 || !(tail || Config.Flies(b.Type) && Airborne(b))) continue;
             if (a.Pos.DistanceSquaredTo(b.Pos) > range * range) continue;
             b.PinT = Mutations.PinTime(rank);
             b.Root = 0;
@@ -386,6 +394,7 @@ public sealed partial class Sim
         AntType.Spider => "the spider's core",
         AntType.Wasp => "the wasp's core",
         AntType.Beetle or AntType.StagBeetle => "the beetle's core",
+        AntType.Scorpion => "the scorpion's core",
         AntType.Queen => "the queen's core",
         _ => "a mutation core",
     };
@@ -613,7 +622,8 @@ public sealed partial class Sim
     /// What the story has given the queen before this chapter begins (a chapter played on its own, with no save).
     public static int StoryMutations(int chapter) =>
         (chapter > Reveal.Mutagen ? (int)Mutation.Winged : 0) | (chapter > Reveal.RoyalLarva ? (int)Mutation.RoyalLarva : 0)
-        | (chapter > Reveal.Web ? (int)(Mutation.Web | Mutation.Stinger) : 0) | (chapter > Reveal.Armoured ? (int)Mutation.Armoured : 0);
+        | (chapter > Reveal.Web ? (int)(Mutation.Web | Mutation.Stinger) : 0) | (chapter > Reveal.Armoured ? (int)Mutation.Armoured : 0)
+        | (chapter > Reveal.Scorpion ? (int)Mutation.Scorpion : 0);
 
     /// The colony's mutations and evolve tree as the chapter begins: what the roster carried, and never less than the
     /// story has given by this chapter, so every chapter is playable on its own.
@@ -642,6 +652,10 @@ public sealed partial class Sim
 public sealed partial class Expedition
 {
     public int Mutated, Stings, HeroesBorn, MastersSlain;
+    public int TailStings;                // scorpion ants' tail strikes that landed
+    public int ScorpionGroup = -1;        // the Stone Mother's group: her young join it when she dies
+    public int BaitGroup = -1;            // the prey that grazes within her reach: its carcasses draw her out
+    public Vector2 BaitAt;
     public int MasterGroup = -1;          // the nest master whose death the chapter counts (the web spider)
     public float LarvaLow = 1;
 }

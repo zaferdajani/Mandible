@@ -16,10 +16,13 @@ branches, black-ant warriors) multiply on top; see [progression.md](progression.
 | Acid Gunner | +10% / +20% / +1.0 pts | 55 · 6.0 · 0% | L5: 77 · 10.8 · 4% |
 | Web Ant (spider core) | +12% / +12% / +1.5 pts | 64 · 7.1 · 4% | L5: 95 · 10.6 · 10% |
 | Armoured Ant (beetle core) | +20% / +10% / +4.0 pts | 190 · 10.6 · 32% | L5: 342 · 14.8 · 48% |
+| Scorpion Ant (scorpion core) | +15% / +15% / +2.0 pts | 84 · 10.8 · 6% | L5: 134 · 17.2 · 14% |
 | Ground Beetle | +40% / +22% / +3.0 pts | 290 · 16.7 · 25% | L5: 754 · 31.3 · 37% |
 | Wolf Spider | +35% / +32% / +1.0 pts | 240 · 30.0 · 5% | L5: 576 · 68.4 · 9% |
 | Stag Beetle | +40% / +25% / +3.0 pts | 800 · 36.0 · 30% | L5: 2080 · 72.0 · 42% |
 | Hunting Wasp | +35% / +30% / +2.0 pts | 240 · 23.5 · 10% | L5: 576 · 51.7 · 18% |
+| Scorpion (the Stone Mother is level 6) | +40% / +20% / +2.0 pts | 900 · 26.7 · 22% | L6: 2700 · 53.3 · 32% |
+| Young Scorpion | +30% / +20% / +1.0 pts | 58 · 8.6 · 5% | L5: 128 · 15.4 · 9% |
 | Warlord | +12% / +10% / +2.0 pts | 820 · 35.0 · 30% | L10: 1706 · 66.5 · 48% |
 | Acid Matron | +10% / +14% / +1.0 pts | 620 · 20.0 · 10% | L10: 1178 · 45.2 · 19% |
 | Sky Marshal | +10% / +13% / +1.5 pts | 620 · 31.4 · 18% | L10: 1178 · 68.2 · 32% |

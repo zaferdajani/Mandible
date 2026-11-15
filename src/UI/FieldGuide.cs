@@ -547,13 +547,14 @@ public partial class FieldGuide : ColorRect
         if (t == AntType.Queen) return $"HP {st.Hp}.  Lays all brood. Feed her royal jelly (research) to unlock new castes and stronger generals.";
         var k = t switch
         {
-            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
+            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured, AntType.ScorpionAnt => ProdKind.ScorpionAnt,
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
         };
         string squad = Config.SquadSize(t) > 1 ? $"Hatches as a squad of {Config.SquadSize(t)}.  " : "";
         if (t == AntType.Flyer) squad += $"MUTATION  from {Mutations.Source(Mutation.Winged)}. With {Mutations.Source(Mutation.Stinger)}: {Mutations.Text(Mutation.Stinger)}  ";
         if (t == AntType.WebAnt) squad += $"MUTATION  from {Mutations.Source(Mutation.Web)}.  ";
         if (t == AntType.Armoured) squad += $"MUTATION  from {Mutations.Source(Mutation.Armoured)}.  ";
+        if (t == AntType.ScorpionAnt) squad += $"MUTATION  from {Mutations.Source(Mutation.Scorpion)}. Its tail is black when it hatches and turns amber as its branch of the evolve tree is bought.  ";
         if (Config.IsHero(t) && team == 0 && CampaignProgress.MetMutation) squad += "In the campaign every general is born from a royal larva.  ";
         string race = "";
         var r = Config.RaceOf(team);
@@ -600,6 +601,8 @@ public partial class FieldGuide : ColorRect
             (AntType.Spider, "Fast and fragile. Keep moving: an ant stuck in its silk is the one it pounces on.", "Wolf spiders hunt by sight and pounce rather than spin webs; our spider cheats a little."),
             (AntType.StagBeetle, "The lord of the yard. Spread out when it lowers its head: the toss hits everything in front of its jaws. Kill it for a feast.", "Male stag beetles wrestle rivals with antler-like mandibles."),
             (AntType.Wasp, "Flies. It stings, climbs away and comes back. Only flyers and spitters can reach it in the air.", "Hunting wasps snatch ants and other insects to feed their own larvae."),
+            (AntType.Scorpion, "Under her stone nothing beats her: a charge only feeds her. Fresh meat on open ground brings her out; silk ties her tail; heavy ants in the mouth of the burrow keep her from going back. Her body holds a scorpion's sting.", "A scorpion hides under a stone by day and comes out for prey; the mother carries her pale young on her back."),
+            (AntType.Scorpling, "Quick and thin-shelled. They spill off their mother when she dies and hunt whoever carries her core. Each one's body holds a scorpion's sting: the part a scorpion ant costs.", "Young scorpions ride their mother's back until their first moult."),
         })
             if (CampaignProgress.Met(t)) grid.AddChild(Card(t, Config.Wild, $"{Config.StatLine(t)}  ·  levels 1-5 (wild bugs grow 40% tougher a level).\nATTACK  {Config.AttackDesc(t)}\nDEFENCE  {Config.DefenceDesc(t)}\nSPECIAL  {Config.SpecialDesc(t)}\n{game}  Slay wild bugs to rank up your warriors and haul the carcass home as protein.", real));
         return grid;

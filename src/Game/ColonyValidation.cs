@@ -42,6 +42,7 @@ public static class ColonyValidation
                 foreach (var part in only.Split(','))
                     if (part == "ep2") Episode2(app); else if (part == "ep3") Episode3(app); else if (part == "ep4") Episode4(app);
                     else if (part == "mutation") LevelValidation.Mutations(app);
+                    else if (part == "scorpion") LevelValidation.ScorpionOnly(app);
                     else if (part == "flight") FlightValidation.Run(app);
                     else LevelValidation.Play(app, int.Parse(part), out _);
                 GD.Print("[campaign-test] ALL PASS (selected levels)");
@@ -198,6 +199,8 @@ public static class ColonyValidation
             // a mutation unit costs a part of its insect (docs/progression.md 1c): locked only by an empty store
             foreach (var kind in new[] { ProdKind.Flyer, ProdKind.WebAnt, ProdKind.Armoured })
                 Check(sk.CanEnqueue(0, kind) == QueueResult.NoPart, $"Skirmish hatches {kind} without its parts");
+            // no scorpion lives on the skirmish map, so its core is never taken there: scorpion ants are the campaign's
+            Check(sk.CanEnqueue(0, ProdKind.ScorpionAnt) == QueueResult.Locked, "Skirmish lays scorpion ants with no scorpion on the map");
             for (int part = 0; part < BodyParts.Count; part++) sk.Col[0].Parts[part] = 8;
             foreach (var kind in new[] { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured, ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
                 Check(sk.CanEnqueue(0, kind) == QueueResult.Ok, $"Skirmish caste locked: {kind}");

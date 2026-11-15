@@ -44,12 +44,13 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   the queen's level is `Upgrade.Queen`, paid in organic matter), `src/UI/EvolveTree.cs` (the tree screen, key P, N1's look).
   PROGRESSION RULES ARE IN `docs/progression.md`; how each chapter uses them (core challenges, the rival's race for a core)
   is `docs/level-design.md` section 5. Mutation units: winged ants = `AntType.Flyer`, stingers = flyers with `Mutation.Stinger`,
-  `WebAnt`, `Armoured`. Their merged bodies (targets P1-P4) are built by `tools/blender/ant_models.py` `merged()` on the castes' scans
-  (`assets/ants/*_{Flyer,Stinger,WebAnt,Armoured}_*.res`; the stinger body is drawn for each winged ant with `Ant.Sting`, `AntRenderer.BatchOf`; the live portrait too, `Subject.Sting`; a dead stinger still lies as a winged ant);
-  the borrowed anatomy is marked per vertex in CUSTOM0.y (silk, shell, bands, velvet, fly eye) and coloured by the Ant shader. Chapter 5's fly: `MutagenProps.IsFly`,
+  `WebAnt`, `Armoured`, `ScorpionAnt` (the scorpion's core, `Mutation.Scorpion`; `src/Sim/Scorpion.cs` holds its piercing numbing tail, `Ant.NumbT`, and the wild
+  scorpion of chapter 11: den, bait, tail tied by silk; targets P7-P8 in `docs/art-targets/README-scorpion.md`; test `MANDIBLE_LEVELS=scorpion`; hatch key `;`; campaign only, no scorpion lives on the skirmish map). Their merged bodies (targets P1-P4, P8) are built by `tools/blender/ant_models.py` `merged()` on the castes' scans
+  (`assets/ants/*_{Flyer,Stinger,WebAnt,Armoured,ScorpionAnt}_*.res`; the stinger body is drawn for each winged ant with `Ant.Sting`, `AntRenderer.BatchOf`; the live portrait too, `Subject.Sting`; a dead stinger still lies as a winged ant);
+  the borrowed anatomy is marked per vertex in CUSTOM0.y (silk, shell, bands, velvet, fly eye; 7 is a spider's eye on an eye part and the scorpion's tail elsewhere) and coloured by the Ant shader. Chapter 5's fly: `MutagenProps.IsFly`,
   `assets/mutation/fly`, `fly_hub`. Build record: `docs/art-targets/README-mutation-units.md`. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Body parts (`Parts.cs`, progression.md 1c): every mutation ant hatched costs one part of its insect, so a brood costs its squad size
-  (`Sim.PartCount`): `Part` Wings/Sting/Gland/Plates, `Colony.Parts[]` (in the roster, format `p3`), `BodyParts.Needs(ProdKind, mutations)`
+  (`Sim.PartCount`): `Part` Wings/Sting/Gland/Plates/Tail (Tail = a scorpion's sting, from the Stone Mother and her young, one per scorpion ant), `Colony.Parts[]` (in the roster, format `p4`; `p3` and `p2` rosters still load), `BodyParts.Needs(ProdKind, mutations)`
   (a winged ant always costs wings). Stingers are per ant (`Ant.Sting`, not the colony's flag): with the wasp's core a brood of winged ants
   also takes up to one sting per ant from the store (`StingsFor`, `ProdItem.StingN`) and that many hatch as stingers; none in store never blocks it. A dead wasp/spider/beetle keeps its part in `FoodSource.Part`; the first
   worker to cut a load takes it (`Ant.PartP1`), stored when she delivers. `CanEnqueue` -> `QueueResult.NoPart`, `CanHatchSilk` -> `SilkResult.NoPart`.

@@ -32,7 +32,7 @@ public static class PortraitCapture
             (int team, AntType type)[] who =
             {
                 (0, AntType.Queen), (0, AntType.Worker), (0, AntType.Soldier), (0, AntType.Major), (0, AntType.Flyer), (0, AntType.Flyer) /* twice: the second sits as a stinger */, (0, AntType.Gunner),
-                (0, AntType.Warlord), (0, AntType.Matron), (0, AntType.Marshal), (0, AntType.WebAnt), (0, AntType.Armoured),
+                (0, AntType.Warlord), (0, AntType.Matron), (0, AntType.Marshal), (0, AntType.WebAnt), (0, AntType.Armoured), (0, AntType.ScorpionAnt), (Config.Wild, AntType.Scorpion),
                 (Config.Wild, AntType.Beetle), (Config.Wild, AntType.Spider), (Config.Wild, AntType.StagBeetle), (Config.Wild, AntType.Wasp),
                 (1, AntType.Queen), (1, AntType.Soldier), (1, AntType.Warlord),
             };

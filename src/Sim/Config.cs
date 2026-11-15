@@ -8,11 +8,14 @@ public enum AntType
     Gunner = 9, Warlord = 10, Matron = 11, Marshal = 12,
     WebAnt = 13,    // spider core: flings silk that pins flyers (Mutation.Web)
     Armoured = 14,  // beetle core: a thick shell (Mutation.Armoured)
+    ScorpionAnt = 15, // scorpion core: a ground ant with a scorpion's tail; its sting ignores armour and numbs (Mutation.Scorpion)
+    Scorpion = 16,  // the Stone Mother's kind: claws that hold, a tail that kills what stands in front of it
+    Scorpling = 17, // her young: small, quick, a sting each (the part a scorpion ant costs)
 }
 
 public enum AntState { Idle, Forage, Gather, Return, Move, AttackMove, Engage, Hold, Dig }
 
-public enum ProdKind { Worker, Soldier, Major, Chamber, Flyer, Gunner, Warlord, Matron, Marshal, WebAnt, Armoured }
+public enum ProdKind { Worker, Soldier, Major, Chamber, Flyer, Gunner, Warlord, Matron, Marshal, WebAnt, Armoured, ScorpionAnt }
 
 /// Colony research, done in the special sections of the nest. The queen's ascension gates the rest.
 public enum Upgrade { Queen, Mandibles, Chitin, SilkCutters }
@@ -37,16 +40,16 @@ public static class Config
     public const int Wild = 2; // neutral bugs guarding food
     public const int MaxLevel = 5;
     public const int HeroMaxLevel = 10;
-    public const int TypeCount = 15;        // AntType values
+    public const int TypeCount = 18;        // AntType values
     public static readonly int[] LevelXp = { 0, 0, 40, 110, 210, 350 }; // xp needed to reach level n
     // Lane War's match levels for its general (a colony's generals level in the evolve tree: Evolve.GeneralCost)
     public static readonly int[] HeroXp = { 0, 0, 90, 210, 370, 580, 850, 1180, 1580, 2060, 2650 };
     public static int MaxLevelOf(AntType t) => IsHero(t) ? HeroMaxLevel : MaxLevel;
     public static int XpFor(AntType t, int level) => IsHero(t) ? HeroXp[level] : LevelXp[System.Math.Min(level, MaxLevel)];
 
-    public static bool IsBug(AntType t) => t >= AntType.Beetle && t <= AntType.Wasp;
+    public static bool IsBug(AntType t) => (t >= AntType.Beetle && t <= AntType.Wasp) || t == AntType.Scorpion || t == AntType.Scorpling;
     public static bool IsHero(AntType t) => t is AntType.Warlord or AntType.Matron or AntType.Marshal;
-    public static bool IsWarrior(AntType t) => t == AntType.Soldier || t == AntType.Major || t == AntType.Flyer || t == AntType.Gunner || t == AntType.WebAnt || t == AntType.Armoured || IsHero(t);
+    public static bool IsWarrior(AntType t) => t == AntType.Soldier || t == AntType.Major || t == AntType.Flyer || t == AntType.Gunner || t == AntType.WebAnt || t == AntType.Armoured || t == AntType.ScorpionAnt || IsHero(t);
     public static bool Flies(AntType t) => t == AntType.Wasp || t == AntType.Flyer || t == AntType.Marshal;
     public static bool Ranged(AntType t) => t == AntType.Gunner || t == AntType.Matron;
     /// Flying predators (wasps, the Hornet Mother): in the air no ground ant can reach them, acid gunners included;
@@ -82,6 +85,9 @@ public static class Config
         AntType.Gunner => new(0.1f, 0.2f, 0.01f),
         AntType.WebAnt => new(0.12f, 0.12f, 0.015f),
         AntType.Armoured => new(0.2f, 0.1f, 0.04f),
+        AntType.ScorpionAnt => new(0.15f, 0.15f, 0.02f),
+        AntType.Scorpion => new(0.4f, 0.2f, 0.02f),
+        AntType.Scorpling => new(0.3f, 0.2f, 0.01f),
         AntType.Beetle => new(0.4f, 0.22f, 0.03f),
         AntType.Spider => new(0.35f, 0.32f, 0.01f),
         AntType.StagBeetle => new(0.4f, 0.25f, 0.03f),
@@ -109,6 +115,9 @@ public static class Config
         AntType.StagBeetle => "Antler Toss",
         AntType.Spider => "Web Snare",
         AntType.Wasp => "Venom Sting",
+        AntType.Scorpion => "Killing Sting",
+        AntType.Scorpling => "Numbing Sting",
+        AntType.ScorpionAnt => "Piercing Sting",
         _ => "",
     };
 
@@ -118,6 +127,12 @@ public static class Config
     public const float WarlordCleave = 0.5f;        // share of each bite dealt to everyone around the victim
     // the colony castes' chitin (the combat scale): workers and gunners wear none
     public const float SoldierArmor = 0.05f, MajorArmor = 0.12f, QueenArmor = 0.15f, FlyerArmor = 0.03f;
+    public const float ScorpionAntArmor = 0.06f, ScorpionArmor = 0.22f, ScorplingArmor = 0.05f;
+    // the scorpion ant's tail (Mutation.Scorpion): one strike every TailCooldown that ignores armour and numbs
+    public const float TailCooldown = 5f, TailDamage = 1.6f, NumbTime = 4f, NumbSlow = 0.4f;
+    // the scorpion: its tail kills an ant outright in the arc ahead of it, its claws hold two more; hurt, it goes home to heal
+    public const float ScorpionSting = 2.2f, ScorpionArc = 0.5f, ScorpionClawHold = 2.5f, ScorpionFlee = 0.35f, ScorpionHeal = 0.03f, ScorpionBaitRange = 34f;
+    public const int ScorpionDoor = 3;      // ants that can bite it at once while it sits in its burrow
     public const float WebAntArmor = 0.04f, ArmouredArmor = 0.32f; // the armoured ant: a beetle's plates, the thickest shell a caste wears
     public const float WarlordArmor = 0.3f;
     public const float WarCryBite = 1.3f;           // allies' bite multiplier (+3% a level)
@@ -156,6 +171,9 @@ public static class Config
         AntType.StagBeetle => "Antler jaws with the longest reach of any bug; what they catch, they toss.",
         AntType.Spider => $"Fast pounce bite; a bite on silk-wrapped prey deals {LungeDamage:0.#}x.",
         AntType.Wasp => $"Flies. Every few seconds a venomous sting: {StingDamage:0.#}x bite plus venom for {StingVenomTime:0}s.",
+        AntType.Scorpion => "Claws that grip two ants at once, and a tail that kills whatever ant stands in front of it.",
+        AntType.Scorpling => "A quick small sting that numbs.",
+        AntType.ScorpionAnt => $"A soldier's bite, and every {TailCooldown:0}s a tail strike of {TailDamage:0.#}x that ignores armour.",
         _ => "",
     };
 
@@ -167,6 +185,9 @@ public static class Config
         AntType.Beetle => $"Hard wing cases: armour {BeetleArmor * 100:0}%, {(BeetleArmor + ShellWallArmor) * 100:0}% behind the Shell Wall.",
         AntType.StagBeetle => $"The heaviest chitin in the yard: armour {StagArmor * 100:0}%.",
         AntType.Spider => "Almost no armour: it relies on speed and silk.",
+        AntType.Scorpion => $"Armour {ScorpionArmor * 100:0}%. Under its stone only {ScorpionDoor} ants can reach it, and it heals there.",
+        AntType.Scorpling => "Thin shell; it relies on numbers.",
+        AntType.ScorpionAnt => $"A soldier's chitin: armour {ScorpionAntArmor * 100:0}%. It cannot reach anything in the air.",
         AntType.Wasp => $"Hit and run: climbs out of reach for {WaspRetreat:0.#}s after every sting. Armour {WaspArmor * 100:0}%.",
         _ => "",
     };
@@ -179,6 +200,9 @@ public static class Config
         AntType.Beetle => $"SHELL WALL: when swarmed or hurt it locks its wing cases down: +{ShellWallArmor * 100:0}% armour for {ShellWallTime:0}s.",
         AntType.StagBeetle => $"ANTLER TOSS: charges prey at {ChargeSpeed:0.#}x speed and tosses everything in front of it {TossThrow:0} lengths through the air for {TossDamage:0.#}x bite, leaving them stunned on their backs.",
         AntType.Spider => "WEB SNARE + LUNGE: spits silk that roots a patch of ants, then lunges onto the wrapped prey at a run.",
+        AntType.Scorpion => $"KILLING STING: the tail strikes only ahead of it, and not at all while silk pins it. Below {ScorpionFlee * 100:0}% health it runs for its stone.",
+        AntType.Scorpling => $"NUMBING STING: its victim walks and bites {NumbSlow * 100:0}% slower for {NumbTime:0}s.",
+        AntType.ScorpionAnt => $"PIERCING STING: goes between the plates, and the victim walks and bites {NumbSlow * 100:0}% slower for {NumbTime:0}s.",
         AntType.Wasp => $"VENOM STING: a {StingDamage:0.#}x bite that keeps burning for {StingVenomTime:0}s, then it climbs away before the swarm can answer.",
         _ => "",
     };
@@ -205,6 +229,9 @@ public static class Config
         AntType.Gunner => 16,
         AntType.WebAnt => 18,
         AntType.Armoured => 26,
+        AntType.ScorpionAnt => 22,
+        AntType.Scorpion => 40 * level,
+        AntType.Scorpling => 12,
         AntType.Warlord or AntType.Matron or AntType.Marshal => 120 * level,
         _ => 30 * level,
     } * (IsBug(t) ? 1 : 1 + (level - 1) * 0.5f);
@@ -238,6 +265,9 @@ public static class Config
         new() { Name = "Sky Marshal", Hp = 620, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Web Ant", Hp = 64, Armor = WebAntArmor, Damage = 5f, Cooldown = 0.7f, Speed = 7.2f, Reach = 1.25f, Aggro = 13, Sight = 16, Size = 1.4f, Cost = 55, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
         new() { Name = "Armoured Ant", Hp = 190, Armor = ArmouredArmor, Damage = 9f, Cooldown = 0.85f, Speed = 5.4f, Reach = 1.4f, Aggro = 13, Sight = 13, Size = 1.85f, Cost = 80, BuildTime = 5.5f, CorpseFood = 14, Pop = 2 },
+        new() { Name = "Scorpion Ant", Hp = 84, Armor = ScorpionAntArmor, Damage = 7f, Cooldown = 0.65f, Speed = 7f, Reach = 1.35f, Aggro = 13, Sight = 13, Size = 1.5f, Cost = 65, BuildTime = 4.5f, CorpseFood = 7, Pop = 1 },
+        new() { Name = "Scorpion", Hp = 900, Armor = ScorpionArmor, Damage = 24f, Cooldown = 0.9f, Speed = 6.4f, Reach = 2.4f, Aggro = 14, Sight = 12, Size = 4.2f, Cost = 0, BuildTime = 0, CorpseFood = 90, Pop = 0 },
+        new() { Name = "Young Scorpion", Hp = 58, Armor = ScorplingArmor, Damage = 6f, Cooldown = 0.7f, Speed = 9.5f, Reach = 1.2f, Aggro = 14, Sight = 12, Size = 1.3f, Cost = 0, BuildTime = 0, CorpseFood = 5, Pop = 0 },
     };
 
     public static UnitStats Of(AntType t) => Stats[(int)t];
@@ -253,6 +283,7 @@ public static class Config
         ProdKind.Marshal => AntType.Marshal,
         ProdKind.WebAnt => AntType.WebAnt,
         ProdKind.Armoured => AntType.Armoured,
+        ProdKind.ScorpionAnt => AntType.ScorpionAnt,
         _ => AntType.Flyer,
     };
 
@@ -266,6 +297,7 @@ public static class Config
         ProdKind.Flyer => "Winged ant. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires a fly's mutation core. Each one costs a pair of wings. With the wasp's core each also takes a sting, if one is in store, and hatches as a stinger.",
         ProdKind.WebAnt => "Web ant. Flings silk that pins a flying enemy to the ground, where any ant can bite it. A weak biter.\nRequires a spider's mutation core. Each one costs a spider's silk gland.",
         ProdKind.Armoured => "Armoured ant. A beetle's shell plates: slow, and shrugs off a third of every blow.\nRequires a beetle's mutation core. Each one costs a beetle's shell plates.",
+        ProdKind.ScorpionAnt => "Scorpion ant. A soldier with a scorpion's tail: its sting goes between the plates and numbs what it hits.\nRequires a scorpion's mutation core. Each one costs a scorpion's sting.",
         ProdKind.Gunner => "Sprays formic acid from range. Fragile; keep it behind the soldiers.\nRequires an Empress queen.",
         ProdKind.Warlord => "GENERAL. The plated brawler: cleaving bites, 30% armour, War Cry.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
         ProdKind.Matron => "GENERAL. The ranged acid spitter: splashing spray, Acid Burst and venom pools.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
@@ -274,7 +306,7 @@ public static class Config
     };
 
     /// Warriors hatch as squads; workers and heroes hatch alone.
-    public static int SquadSize(AntType t) => t switch { AntType.Soldier => 6, AntType.Gunner => 4, AntType.Flyer => 4, AntType.WebAnt => 4, AntType.Major => 3, AntType.Armoured => 3, _ => 1 };
+    public static int SquadSize(AntType t) => t switch { AntType.Soldier => 6, AntType.Gunner => 4, AntType.Flyer => 4, AntType.WebAnt => 4, AntType.Major => 3, AntType.Armoured => 3, AntType.ScorpionAnt => 3, _ => 1 };
     public static int SquadSize(ProdKind k) => k == ProdKind.Chamber ? 1 : SquadSize(UnitOf(k));
     public static bool InSquads(AntType t) => SquadSize(t) > 1;
     /// A squad is 10% cheaper than its members bought one by one, and hatches faster than one at a time.
@@ -340,6 +372,7 @@ public static class Config
         ProdKind.Flyer => (mutations & (int)Mutation.Winged) != 0,
         ProdKind.WebAnt => (mutations & (int)Mutation.Web) != 0,
         ProdKind.Armoured => (mutations & (int)Mutation.Armoured) != 0,
+        ProdKind.ScorpionAnt => (mutations & (int)Mutation.Scorpion) != 0,
         ProdKind.Gunner => tiers[(int)Upgrade.Queen] >= 3,
         ProdKind.Warlord => tiers[(int)Upgrade.Queen] >= 2,
         ProdKind.Matron => tiers[(int)Upgrade.Queen] >= 3,
@@ -391,7 +424,7 @@ public static class Config
     /// Workers it takes to drag a carcass whole (0: one worker can carry it, or it is too big to move and is cut up where it lies).
     public static int HaulNeed(AntType t) => t switch
     {
-        AntType.Major => 2, AntType.Warlord or AntType.Matron or AntType.Marshal => 3, AntType.Wasp => 3, AntType.Beetle or AntType.Spider => 4, _ => 0,
+        AntType.Major => 2, AntType.Warlord or AntType.Matron or AntType.Marshal => 3, AntType.Wasp => 3, AntType.Beetle or AntType.Spider => 4, AntType.Scorpion => 6, _ => 0,
     };
     public const float HaulSpeed = 2.4f;       // a fully crewed carcass slides home at this pace (30% faster with extra hands)
     public const float HaulArrive = 4.5f;      // a dragged carcass is home when its edge is this close to the nest mouth or the midden
@@ -408,8 +441,8 @@ public static class Config
     /// Organic matter in one load of these remains: a worker is a crumb, a major a meal, a beetle or a hero a feast.
     public static float OrganicPerLoad(AntType t) => t switch
     {
-        AntType.Worker => 0.5f, AntType.Soldier or AntType.Gunner or AntType.Flyer or AntType.WebAnt => 0.8f, AntType.Major or AntType.Armoured => 1f,
-        AntType.Beetle or AntType.Spider => 0.8f, AntType.Wasp => 0.9f, AntType.StagBeetle => 1f, _ => 2f, // queen, heroes
+        AntType.Worker => 0.5f, AntType.Soldier or AntType.Gunner or AntType.Flyer or AntType.WebAnt or AntType.ScorpionAnt => 0.8f, AntType.Major or AntType.Armoured => 1f,
+        AntType.Beetle or AntType.Spider => 0.8f, AntType.Wasp => 0.9f, AntType.StagBeetle or AntType.Scorpion => 1f, AntType.Scorpling => 0.6f, _ => 2f, // queen, heroes
     };
     public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
     public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
@@ -419,7 +452,7 @@ public static class Config
     /// Larvae need protein, not just sugar: organic matter for each brood on top of its food.
     public static float BroodOrganic(ProdKind k) => k switch
     {
-        ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner or ProdKind.WebAnt => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major or ProdKind.Armoured => 1.5f,
+        ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner or ProdKind.WebAnt => 0.3f, ProdKind.ScorpionAnt => 0.5f, ProdKind.Flyer => 0.6f, ProdKind.Major or ProdKind.Armoured => 1.5f,
         ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal => 8f, _ => 0f,
     };
     /// The ground a colony watches for fresh remains without having to stumble on them: grows with its workforce.
@@ -433,7 +466,7 @@ public static class Config
     public const float OrganicFloor = 15f, OrganicTrickle = 0.15f; // the queen's own body keeps a colony that never hunts from stalling outright
     public static ProdKind KindOf(AntType t) => t switch
     {
-        AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
+        AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured, AntType.ScorpionAnt => ProdKind.ScorpionAnt,
         AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
     };
     public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";
