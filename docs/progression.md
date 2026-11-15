@@ -17,11 +17,15 @@ There are two progressions. They use different things and give different rewards
 | Core from | New unit | What it does |
 |---|---|---|
 | Spider | Web ants | Throw silk, spin trap webs, live in the Spinnery above ground |
-| Wasp | Stinger ants | A venom sting |
 | Fly | Winged ants | Flight |
+| Wasp | Stinger ants | The flying ants grow a wasp's venom sting (owner, 2026-11-15: "the flying ants will have stingers then") |
 | Beetle | Armoured ants | Thicker shell: higher armour and defence |
 | Mantis (later) | Mantis ants | A hybrid ant-mantis; needs a newly built body |
 
+- **Art rule (owner, 2026-11-15):** every mutation unit is a new ant whose body combines the source insect's
+  artwork with the ant's: a real merged body (the spider's spinnerets and legs on the web ant, the wasp's sting and
+  banding on the stinger, the fly's wings and eyes on the winged ant, the beetle's shell plates on the armoured ant).
+  Never a plain ant with a tint or an icon. Each needs an approved target (art-pipeline.md).
 - Mutations happen during play, and every mutation the queen has taken stays for the following levels.
 - Each new unit adds its own branch to the evolve tree (below).
 
