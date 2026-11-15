@@ -85,7 +85,7 @@ public static class Levels
             Stars = new[] { (StarGoal.Time, 900f, Under(15)), (StarGoal.Escort, 0f, "Vetch lives to the end") } },
         new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "The lairs are the larder; armoured ants", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
             Blurb = "The yard is bare. Hunt the lairs for their feasts, win the beetle's core at the last seep before the red colony does, and end its queen.",
-            Stars = new[] { (StarGoal.Time, 1560f, Under(26)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
+            Stars = new[] { (StarGoal.Time, 1800f, Under(30)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
         new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Acid gunners and watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
             Blurb = "Burn three watch posts that shield the red queen, from the air and from range, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
@@ -575,8 +575,8 @@ public sealed partial class Sim
                     m.WaveAt = -1; m.WaveGap = 160; // the raids come once the colony has its answer (WaveStep)
                 }
                 {
-                    // the silk spitter: a rare spitting spider in the free corner of the yard, its hollow strung with its own webs,
-                    // and two hornets that hunt over it: a massed charge is rooted in the silk and stung where it stands.
+                    // the silk spitter: a rare spitting spider in the free corner of the yard, its hollow strung with its own webs:
+                    // a massed charge is rooted in the silk and bitten where it stands.
                     // Its body holds the spider's core: web ants, the colony's answer to the wasps.
                     var mid = home.Lerp(foe, 0.5f);
                     var corner = OpenGround(ClampMap(mid - side * home.DistanceTo(foe) * 0.42f));
@@ -598,7 +598,6 @@ public sealed partial class Sim
                     GroupBug(sg, AntType.Spider, corner - side * 4, 1);
                     foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
                     for (int k = 0; k < 4; k++) Webs.Add(new WebZone { Pos = corner + MathX.Dir(k * 1.57f + 0.4f) * 6.5f, R = 2.4f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
-                    for (int k = 0; k < 2; k++) { int w = GroupBug(sg, AntType.Wasp, corner + MathX.Dir(k * 3.1f) * 9, 1); Ants[w].Home = Ants[w].Pos; }
                     // the Hornet Mother's sentinel, on the road to the paper nest: it carries the wasp's core
                     var post = OpenGround(home.Lerp(W.Nests[1].Pos, 0.5f) + side * 36);
                     ClearAround(post, 12);
@@ -610,7 +609,7 @@ public sealed partial class Sim
                     m.CoreKeepers.Add(sentinel);
                     m.SentinelGroup = pg;
                 }
-                Add(Expedition.Obj.Group, "Bring down the silk spitter", "The colony feels a core in the far corner (the gold ring): a spitting spider in a hollow strung with silk, and hornets hunting over it. Spitter's band left: {0}.", b: 1);
+                Add(Expedition.Obj.Group, "Bring down the silk spitter", "The colony feels a core in the far corner (the gold ring): a spitting spider in a hollow strung with silk. Spitter's band left: {0}.", b: 1);
                 Add(Expedition.Obj.Extract, "Cut out the spider's core", "Select workers and right-click the glowing core in the spitter's body. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy, its carrier slow, and wasps hunt what moves in the open. Distance: {0}.");
                 Add(Expedition.Obj.Hatch, "Hatch web ants", "The queen has changed: she lays web ants (the Hatch tab). Their silk pins a flyer to the ground. Web ants: {0}/{1}.", a: (int)AntType.WebAnt, b: 4);

@@ -144,6 +144,7 @@ public sealed partial class Sim
         foreach (var c in Col)
         {
             for (int u = 0; u < c.Tier.Length; u++) c.Tier[u] = Config.MaxTier((Upgrade)u);
+            c.Mutations = (int)(Mutation.Winged | Mutation.Stinger | Mutation.Web | Mutation.Armoured); // every core already taken
             DevelopNest(c.Team);
             if (c.Chambers.Count > 7) c.Chambers.RemoveRange(7, c.Chambers.Count - 7);
             RecountCapacity(c);

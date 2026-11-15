@@ -165,7 +165,7 @@ public static class CarrionValidation
             sim.CmdFeast(new List<int> { redWarlord }, redDead);
             Ticks(6);
             GD.Print($"[carrion-test] devour: red Warlord xp {xpR:0} -> {sim.Ants[redWarlord].Xp:0}, hp {hpR:0} -> {sim.Ants[redWarlord].Hp:0}, its own dead left {redDead.Amount:0.0} loads");
-            Check(sim.Ants[redWarlord].Xp > xpR && sim.Ants[redWarlord].Hp > hpR, "Devour the Fallen gave nothing");
+            Check(sim.Ants[redWarlord].Xp == xpR && sim.Ants[redWarlord].Hp > hpR, "Devour the Fallen did not mend the Warlord (or eating taught it)");
 
             // rot
             var old = Carcass(AntType.Soldier, 1, Clear(home + outv * 30));

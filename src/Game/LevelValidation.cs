@@ -398,7 +398,7 @@ public static class LevelValidation
         Check(s.Mission.AllowsProd(ProdKind.Matron) && !s.Mission.AllowsProd(ProdKind.Marshal), "The Acid Matron perk did not open her (alone)");
         Close();
         s = Open(app, 3, out _, Perk.Gunner | Perk.Larder | Perk.Matron);
-        Check(!s.Mission.AllowsProd(ProdKind.Gunner) && !s.Mission.AllowsProd(ProdKind.Flyer) && !s.Mission.AllowsProd(ProdKind.Matron), "Star perks opened castes before Act III");
+        Check(!s.Mission.AllowsProd(ProdKind.Gunner) && !s.Mission.AllowsProd(ProdKind.Matron), "Star perks opened castes before Act III");
         int soldiers = s.Col[0].Count[(int)AntType.Soldier];
         Close();
         s = Open(app, 10, out _, Perk.Gunner);
@@ -463,9 +463,13 @@ public static class LevelValidation
             Check(s.Col[1].Alive == (n >= Reveal.RedColony), $"Chapter {n}: the red colony is {(s.Col[1].Alive ? "present" : "absent")}");
             Check(m.EndsWithQueen == (n >= Reveal.FirstQueenKill && Levels.Info(id).Rival != RivalKind.None), $"Chapter {n}: {(m.EndsWithQueen ? "won" : "not won")} by a queen kill");
             // the mutation track: what the story has given by this chapter, and the sixth sense from the Silk Trap on
-            Check(s.Has(0, Mutation.Stinger) == (n > Reveal.Mutagen) && s.Has(0, Mutation.RoyalLarva) == (n > Reveal.RoyalLarva), $"Chapter {n}: the story's mutations are wrong ({s.Col[0].Mutations})");
+            Check(s.Col[0].Mutations == Sim.StoryMutations(n) && s.Has(0, Mutation.Winged) == (n > Reveal.Mutagen) && s.Has(0, Mutation.RoyalLarva) == (n > Reveal.RoyalLarva) && s.Has(0, Mutation.Web) == (n > Reveal.Web) && s.Has(0, Mutation.Stinger) == (n > Reveal.Stinger) && s.Has(0, Mutation.Armoured) == (n > Reveal.Armoured), $"Chapter {n}: the story's mutations are wrong ({s.Col[0].Mutations})");
+            // a chapter holds a core only for the unit it introduces, and never hands the unit over at the start
+            if (n == Reveal.Mutagen) Check(s.Col[0].Count[(int)AntType.Flyer] == 0 && m.Gland is { Gives: Mutation.Winged, Home: false }, "The Silk Trap handed over winged ants, or holds no fly's core");
+            Check(s.Col[0].Count[(int)AntType.WebAnt] == 0 || n > Reveal.Web, $"Chapter {n}: web ants before the spider's core");
+            Check(s.Col[0].Count[(int)AntType.Armoured] == 0 || n > Reveal.Armoured, $"Chapter {n}: armoured ants before the beetle's core");
             Check((s.Nursery(0) != null) == (n > Reveal.RoyalLarva), $"Chapter {n}: the royal nursery is {(s.Nursery(0) != null ? "dug" : "missing")}");
-            if (n > Reveal.RoyalLarva) Check(s.CanEnqueue(0, ProdKind.Warlord) is QueueResult.Ok or QueueResult.HeroExists or QueueResult.NoFood, $"Chapter {n}: the royal larva cannot be laid for a hero");
+            if (n > Reveal.RoyalLarva) Check(s.CanEnqueue(0, ProdKind.Warlord) is QueueResult.Ok or QueueResult.HeroExists or QueueResult.NoFood, $"Chapter {n}: the royal larva cannot be laid for a general");
             foreach (var (name, _) in Reveal.NewIn(n)) introduced.Add(name);
             Close();
         }

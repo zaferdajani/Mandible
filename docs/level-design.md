@@ -133,7 +133,7 @@ The rival is the red fire ants' royal line: the young queen **Ashling**, then he
 | 7 | II | **The Royal Larva** (new, id 14) | a queen's core won from the red burial party: nursery, nurses, the gauge, the cocoon, the first general (old Burr) | young (Cinder's scouts) | raise the larva into a hero, guard the cocoon, kill the scouts' queen | under 21:00 · no raider ever wounds the larva |
 | 8 | II | **Queen Cinder** (Ep 3) | research, scouting, an outpost | Cinder | kill Queen Cinder | under 22:00 · lose no more than 60 ants |
 | 9 | III · Hard Times | **The Hornet Mother** | wasps, a boss with her own nest (Hemlock leads) | grown | kill the red queen | under 25:00 · slay the Hornet Mother first |
-| 10 | III | **The Dry Spell** | the lairs are the larder; the beetle's core (armoured ants), raced for by the red colony | grown | kill the red queen | under 26:00 · clear all three lairs first |
+| 10 | III | **The Dry Spell** | the lairs are the larder; the beetle's core (armoured ants), raced for by the red colony | grown | kill the red queen | under 30:00 · clear all three lairs first |
 | 11 | III | **Wings and Acid** | acid gunners, watch posts shield the queen | grown, shielded | kill the red queen | under 20:00 · lose no more than 50 ants |
 | 12 | IV · The Ember Empress | **The Nuptial Flight** (Ep 4) | the Old Stag, guardians, the princesses' flight | shielded | kill the red queen before the flight | under 20:00 · the Old Stag survives |
 | 13 | IV | **The Long March** | time pressure: eight minutes, one army | awake | kill the mound's queen before the seal | under 4:00 · lose no more than 60 ants |
@@ -253,7 +253,7 @@ The rules are in [progression.md](progression.md) and are not repeated here: a m
 | --- | --- | --- | --- |
 | 5 The Silk Trap | fly, winged ants | the spider's brood lies behind a curtain of permanent silk that roots every ground ant; only wings cross it | the web spider (level 4) sits on its catch inside a ring of silk that holds whatever charges in. The silk falls only when its spiders are dead, so they must be drawn out and fought on open ground; the red scouts raid the nest while the core is on the road |
 | 7 The Royal Larva | a mutated queen (Ashling), the general | the red scouts' queen is the chapter's end, and the Warlord leads the assault | Ashling's body lies between the mounds; a red burial party (four workers, eight soldiers) cuts at the same core and carries it home unless stopped; then the army is split between hunting remains for the larva and the nursery under raid |
-| 9 The Hornet Mother | spider, web ants | wasps in the air cannot be touched from the ground; the hornet raids only break once silk brings them down | the silk spitter's hollow is strung with silk, and two hornets hunt over it that only winged ants can reach |
+| 9 The Hornet Mother | spider, web ants | wasps in the air cannot be touched from the ground; the hornet raids only break once silk brings them down | the silk spitter (level 4) and two spiders in a hollow strung with permanent silk that roots a massed charge |
 | 9 The Hornet Mother | wasp, stinger ants | the Hornet Mother regrows 6% of her health a second unless venom is in her | her sentinel (level 4) and three hornets hold the road to the paper nest; they are fought with web ants and winged ants together |
 | 10 The Dry Spell | beetle, armoured ants | eight red gunners hold the approach to the red mound | a level-5 beetle and its brood hold the last seep; the red colony sends parties for the same core and raids along its road home |
 
@@ -293,7 +293,7 @@ From then on, **generals in the campaign come only this way**: the Generals tab 
 
 ### Chapter 9, The Hornet Mother
 
-1. **Bring down the silk spitter** and the hornets over its hollow.
+1. **Bring down the silk spitter** in its hollow.
 2. **Cut out the spider's core** and **carry it to the queen**.
 3. **Hatch web ants** (four).
 4. **Break the hornet raid**: the raids begin once the colony has its answer.
