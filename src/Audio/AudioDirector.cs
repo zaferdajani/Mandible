@@ -35,7 +35,7 @@ public partial class AudioDirector : Node
         foreach (var s in new[] { "pickup", "deliver", "spawn", "ui_click", "ui_hover", "ui_error", "ui_ready", "ui_queue", "alert", "victory", "defeat", "levelup", "mutate", "mutate_queen", "web", "web_land", "sweep", "sting", "research" })
             Bank(s, 1, s);
         // creature voices (tools/gen_voices.py): three calls when clicked, two when given an order (the kingdom only)
-        foreach (var v in new[] { "queen", "worker", "soldier", "silk", "major", "flyer", "gunner", "warlord", "matron", "marshal", "beetle", "stag", "spider", "wasp" })
+        foreach (var v in new[] { "queen", "worker", "soldier", "silk", "major", "armoured", "flyer", "gunner", "warlord", "matron", "marshal", "beetle", "stag", "spider", "wasp" })
         {
             Bank("voc_" + v, 3, $"voc_{v}_");
             Bank("ack_" + v, 2, $"ack_{v}_");
@@ -127,6 +127,10 @@ public partial class AudioDirector : Node
     }
 
     AudioStreamPlayer _voice;
+    /// The last creature call: how many have sounded, whether it answered an order, how long it lasts (the live portrait answers with it).
+    public int VoiceCount; public bool VoiceOrder, VoiceWords; public float VoiceLength;
+    /// The queen's spoken answer is sounding (the live portrait speaks it).
+    public bool QueenSpeaking => VoiceWords && _voice != null && _voice.Playing;
     readonly Dictionary<string, int> _lastTake = new();
 
     /// The voice of each creature (no speech: every kind has its own call). Silk = web ants (and silk-spun soldiers).
@@ -136,7 +140,7 @@ public partial class AudioDirector : Node
         AntType.Major => "major", AntType.Flyer => "flyer", AntType.Gunner => "gunner", AntType.Warlord => "warlord",
         AntType.Matron => "matron", AntType.Marshal => "marshal", AntType.Beetle => "beetle",
         AntType.StagBeetle => "stag", AntType.Spider => "spider", AntType.Wasp => "wasp",
-        AntType.WebAnt => "silk", AntType.Armoured => "major", _ => "worker", // armoured ants borrow the major's call until they have their own
+        AntType.WebAnt => "silk", AntType.Armoured => "armoured", _ => "worker",
     };
 
     /// Who answers for a mixed selection: the highest rank speaks, once.
@@ -148,7 +152,8 @@ public partial class AudioDirector : Node
 
     /// A creature's call ("voc_x" clicked, "ack_x" ordered). One voice at a time, never the same take twice running;
     /// false when there is no such call or one has only just begun (the caller falls back to a plain click).
-    public bool Voice(string key, float db = 0, double gap = 0.3)
+    /// `pitch`: the individual's own voice (PlayerInput.PitchOf): no two ants of a caste sound quite alike.
+    public bool Voice(string key, float db = 0, double gap = 0.3, float pitch = 1)
     {
         if (!_banks.TryGetValue(key, out var bank) || bank.Length == 0) return false;
         if (!Throttle("voice", gap)) return false;
@@ -157,8 +162,10 @@ public partial class AudioDirector : Node
         _lastTake[key] = take;
         _voice.Stream = bank[take];
         _voice.VolumeDb = db + Mathf.LinearToDb(SfxVolume);
-        _voice.PitchScale = 1 + _rng.RandfRange(-0.04f, 0.04f);
+        bool words = key.EndsWith("_queen"); // the queen speaks: her words are never bent
+        _voice.PitchScale = words ? 1 : pitch * (1 + _rng.RandfRange(-0.03f, 0.03f));
         _voice.Play();
+        VoiceCount++; VoiceWords = words; VoiceOrder = key.StartsWith("ack_"); VoiceLength = (float)(bank[take].GetLength() / _voice.PitchScale);
         return true;
     }
 

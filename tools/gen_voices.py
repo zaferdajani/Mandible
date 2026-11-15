@@ -282,6 +282,20 @@ def marshal(r, v, ack):
 
 
 # ------------------------------------------------------------------ the wild
+def armoured(r, v, ack):
+    # an ant inside a beetle's shell: a dry rasp of plate on plate, then the hollow knock of the shell settling
+    shell = [(310, 16, 1), (560, 12, 0.6), (980, 9, 0.35)]
+    def rasp(d):
+        return scrape(r, d, 70, 48, [(620, 7, 1), (1500, 6, 0.6), (2900, 5, 0.3)], 0.3, 0.005, (350, 5000))
+    if ack:
+        return mix([(0, clack(r, shell, 0.004, 0.25), 1.0), (0.09, clack(r, shell, 0.004, 0.25), 0.7), (0.15, rasp(0.14), 0.5)])
+    if v == 0:
+        return mix([(0, rasp(0.3), 0.7), (0.3, clack(r, shell, 0.004, 0.25), 1.0)])
+    if v == 1:
+        return mix([(0, clack(r, shell, 0.004, 0.25), 1.0), (0.12, rasp(0.2), 0.6), (0.36, clack(r, shell, 0.004, 0.25), 0.8)])
+    return mix([(0, rasp(0.16), 0.6), (0.2, rasp(0.16), 0.7), (0.4, clack(r, shell, 0.004, 0.25), 1.0)])
+
+
 def beetle(r, v, ack):
     # hollow knocks on a thick shell and a creak of plates
     shell = [(240, 18, 1), (410, 14, 0.6), (690, 10, 0.3)]
@@ -320,7 +334,8 @@ def wasp(r, v, ack):
     return mix([(0, buzz(r, 0.45, a, b, w, 0.06, 0.6, 0.4, 30, 0.06), 1.0), (0.45, tick, 0.4)])
 
 
-VOICES = [(queen, True), (worker, True), (soldier, True), (silk, True), (major, True), (flyer, True), (gunner, True),
+# The queen is not here any more: she answers in words (tools/voice/queen_barks.py writes voc_queen_*/ack_queen_*).
+VOICES = [(worker, True), (armoured, True), (soldier, True), (silk, True), (major, True), (flyer, True), (gunner, True),
           (warlord, True), (matron, True), (marshal, True), (beetle, False), (stag, False), (spider, False), (wasp, False)]
 
 if __name__ == "__main__":

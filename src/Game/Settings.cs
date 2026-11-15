@@ -10,6 +10,8 @@ public static class Settings
     public enum Quality { Low, Medium, High, Ultra }
     public static Quality Gfx = Default();
     public static bool Mobile => ForceMobile || OS.HasFeature("mobile");
+    /// The selection panel's living portrait (LivePortrait). --no-live-portrait turns it off to measure its cost.
+    public static bool LivePortrait = true;
     public static bool ForceMobile; // --mobile: a desktop test run lays out and scales the UI as a phone does
     public static bool Portrait; // a desktop window taller than wide (phones and tablets are locked to landscape)
     public static bool Touch => Mobile || DisplayServer.IsTouchscreenAvailable();

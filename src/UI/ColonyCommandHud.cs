@@ -28,6 +28,44 @@ public partial class ColonyCommandHud : Control
     Label _food, _organic, _brood, _queen, _selection, _detail, _counts, _queueName, _queueNext, _queueTime, _network;
     TextureRect _selectedArt, _queueArt, _nextArt;
     public Texture2D SelectedArt => _selectedArt.Texture;
+    LivePortrait _live;
+    public LivePortrait Live => _live;
+    int _heardVoice = -1;
+
+    /// The living portrait over the still card: the highest-ranking creature selected (the one whose call answers
+    /// a click), else the creature being inspected, else the colony's queen. Every frame.
+    void RefreshLive(float dt)
+    {
+        var sim = Game.Sim; var input = Game.Input; var c = sim.Col[Local.Me];
+        int id = -1;
+        if (LivePortrait.Enabled && _selectionBlock.Visible && !(Game.NestView && input.SelectedRoom >= 0 && input.SelectedRoom < c.Chambers.Count))
+        {
+            int rank = -1;
+            foreach (int s in input.Selection)
+            {
+                if (!sim.Ants[s].Alive) continue;
+                int r = AudioDirector.VoiceRank(sim.Ants[s].Type);
+                if (r > rank) { rank = r; id = s; }
+            }
+            if (id < 0 && sim.Valid(input.Inspect, input.InspectSerial)) id = input.Inspect;
+            else if (id < 0 && input.InspectFood is not { Alive: true } && c.QueenId >= 0 && sim.Ants[c.QueenId].Alive) id = c.QueenId;
+        }
+        if (id < 0) { _live.Clear(); _heardVoice = Game.Audio.VoiceCount; return; }
+        ref var a = ref sim.Ants[id];
+        var gore = Game.Ants?.Gore;
+        bool queen = a.Type == AntType.Queen && a.Team == Local.Me;
+        _live.Show(new LivePortrait.Subject
+        {
+            Team = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team, Type = a.Type, Seed = a.Serial, Health = a.Hp / Mathf.Max(1, a.MaxHp),
+            HitFlash = a.HitFlash, Bite = a.AttackAnim, Lost = gore?.Lost(id, a.Serial) ?? 0, Etch = gore?.Etch(id, a.Serial) ?? 0,
+            Stage = Config.IsHero(a.Type) ? AntRenderer.MutationTier(a.Level) : a.Brood,
+            Block = a.BlockT > 0, Charge = a.ChargeT > 0, Carry = a.Carrying,
+            Speaking = queen && (Game.Telepathy is { Speaking: true } || Game.Audio.QueenSpeaking), Voice = queen && Game.Telepathy != null ? Game.Telepathy.Loudness : -1,
+        });
+        // a creature call just sounded: the portrait answers with it, for as long as it lasts
+        if (Game.Audio.VoiceCount != _heardVoice) { if (_heardVoice >= 0 && !Game.Audio.VoiceWords) _live.React(Game.Audio.VoiceOrder, Game.Audio.VoiceLength); _heardVoice = Game.Audio.VoiceCount; }
+        _live.Advance(dt);
+    }
     ProgressBar _health, _queueProgress;
     readonly List<(Button button, ProdKind kind)> _units = new();
     // the body part a mutation unit costs (docs/progression.md 1c): its icon and how many are in store, on the unit's card
@@ -289,6 +327,9 @@ public partial class ColonyCommandHud : Control
         _selectionBlock = Block(271, 709, _selectionSize.X, _selectionSize.Y);
         _selectionPanel = Panel(_selectionBlock, 0, 0, 1123, 221);
         _selectedArt = Art(_selectionBlock, Region(new Rect2(286, 726, 154, 190)), 15, 17, 155, 190);
+        // over the still card: the creature itself, alive (the card stays underneath as the fallback)
+        _live = At(new LivePortrait { Visible = false }, 15, 17, 155, 190);
+        _selectionBlock.AddChild(_live);
         _selection = Text(_selectionBlock, "BROOD CHAMBER", 180, 15, 226, 30, 18, true, Gold);
         _health = Bar(_selectionBlock, 182, 47, 213, 6);
         // the evolution bar: what this ant has eaten toward its next stage (a hero: toward its next level)
@@ -530,6 +571,7 @@ public partial class ColonyCommandHud : Control
     {
         Arrange(GetViewport().GetVisibleRect().Size);
         UpdateRoomLabels();
+        RefreshLive(dt);
         _refresh -= dt; if (_refresh > 0) return; _refresh = 0.12f;
         var sim = Game.Sim; var c = sim.Col[Local.Me];
         _food.Text = $"{(int)c.Food} / {(int)c.FoodCap}"; _brood.Text = $"{c.PopUsed} / {c.PopCap}";

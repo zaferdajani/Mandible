@@ -182,6 +182,18 @@ public partial class Telepathy : Control
     }
 
     public bool Speaking => _cur != null;
+    /// How loud her voice is this instant, 0..1 (the live portrait moves her jaws with it); below 0 when a line has no sound.
+    public float Loudness
+    {
+        get
+        {
+            if (_cur == null || _voice == null || !_voice.Playing) return -1;
+            int bus = AudioServer.GetBusIndex(VoiceBus);
+            if (bus < 0) return -1;
+            float db = Mathf.Max(AudioServer.GetBusPeakVolumeLeftDb(bus, 0), AudioServer.GetBusPeakVolumeRightDb(bus, 0));
+            return Mathf.Clamp((db + 42f) / 34f, 0, 1);
+        }
+    }
     public string Current => _cur?.Id;
 
     public void Skip()
