@@ -614,6 +614,21 @@ public sealed class AntRenderer
             var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
             _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(fade, 0, 0, 0));
         }
+        // INTERIM (awaiting the owner's approval of targets S1-S3, docs/art-targets/README-silk.md): trap webs and the
+        // spinnery are drawn with the old flat decal so the mechanic can be played; the modelled silk replaces all three.
+        foreach (var z in sim.Traps)
+        {
+            if (z.Team != Local.Me && !VisibleToPlayer(z.Pos)) continue;
+            float grow = Mathf.Clamp(z.Age * 0.8f, 0.15f, 1f) * (0.55f + 0.15f * z.Charges);
+            var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
+            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f * grow, 1, z.R * 2.3f * grow)), wo, new Color(1, 0, 0, 0));
+        }
+        foreach (var c in sim.Col)
+        {
+            if (c.SpinState == 0 || (c.Team != Local.Me && !VisibleToPlayer(c.SpinPos))) continue;
+            float sz = 7f * Mathf.Lerp(0.3f, 1f, c.SpinDone);
+            _webs.Add(Basis.FromScale(new Vector3(sz, 1, sz)), new Vector3(c.SpinPos.X, hf.Sample(c.SpinPos.X, c.SpinPos.Y) + 0.14f, c.SpinPos.Y), new Color(1, 0, 0, 0));
+        }
         foreach (var z in sim.Pools)
         {
             if (!VisibleToPlayer(z.Pos) && z.Team != Local.Me) continue;

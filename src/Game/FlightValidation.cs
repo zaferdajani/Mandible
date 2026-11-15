@@ -96,6 +96,41 @@ public static class FlightValidation
         Check(pinned, "A web-throwing soldier did not pin a wasp in reach");
         Run(s, 20);
         Check(!s.Airborne(s.Ants[wasp]), "The pinned wasp did not come down");
+        // the spinnery: trap webs on the approach hold a raider, bite harder, snag a low flyer, wear out and are spun again
+        s = Quiet(root);
+        s.Col[0].Mutations |= (int)Mutation.WebThrowing; s.Col[0].WebRank = 1; s.Col[0].Founded = true; s.Col[0].Food += 200;
+        Check(s.OrderSpinnery(0) == SpinResult.Ok, "The spinnery could not be ordered with Web Throwing");
+        Run(s, (int)((Config.SpinneryTime + Config.TrapSpinTime * 3 + 2) * 30));
+        Check(s.Col[0].SpinState == 2 && s.Traps.Count == s.TrapCap(0), $"The spinnery did not spin its {s.TrapCap(0)} trap webs (has {s.Traps.Count})");
+        var trap = s.Traps[0].Pos;
+        int own = s.Spawn(0, AntType.Soldier, trap, 0); s.Ants[own].State = AntState.Hold;
+        int raider = s.Spawn(1, AntType.Soldier, trap + new Vector2(0.5f, 0), 0); s.Ants[raider].State = AntState.Hold;
+        s.Tick(1f / 30);
+        Check(s.Ants[raider].Root > 0 && s.Ants[raider].Snared, "A raider walking into a trap web was not held");
+        Check(s.Ants[own].Root <= 0, "A trap web held one of its own colony's ants");
+        float before = s.Ants[raider].Hp; s.Damage(raider, 1f, own);
+        float held = before - s.Ants[raider].Hp;
+        s.Slay(own); Run(s, (int)((Config.TrapRoot + 0.5f) * 30));
+        Check(s.Ants[raider].Root <= 0 && !s.Ants[raider].Snared, "The raider never tore free of the trap web");
+        before = s.Ants[raider].Hp; s.Damage(raider, 1f, -1);
+        Check(held > (before - s.Ants[raider].Hp) * 1.2f, "A held raider was not bitten harder");
+        s.Slay(raider);
+        int major = s.Spawn(1, AntType.Major, trap, 0); s.Ants[major].State = AntState.Hold;
+        s.Tick(1f / 30);
+        Check(!s.Traps.Exists(z => z.Pos == trap) && s.Ants[major].Root < Config.TrapRoot * 0.6f, "A major did not rip the trap web apart");
+        s.Slay(major);
+        Run(s, (int)((Config.TrapSpinTime + 1) * 30));
+        Check(s.Traps.Exists(z => z.Pos == trap), "A torn trap web was not spun again");
+        var trap2 = s.Traps[1].Pos;
+        int snag = s.Spawn(Config.Wild, AntType.Wasp, trap2, 0); s.Ants[snag].State = AntState.Hold; s.Ants[snag].Alt = 1.6f;
+        s.Tick(1f / 30);
+        Check(s.Ants[snag].PinT > 0, "A wasp passing low over a trap web was not snagged");
+        s.Slay(snag);
+        var far = s.NestEntrance(0) + new Vector2(Config.TrapReach + 5, 0);
+        Check(s.PlaceTrap(0, far) == TrapResult.TooFar, "A trap web could be placed out of reach of the mound");
+        int nSpots = s.Col[0].TrapSpots.Count;
+        Check(s.PlaceTrap(0, s.NestEntrance(0) + (trap - s.NestEntrance(0)) * 0.7f) == TrapResult.Ok && s.Col[0].TrapSpots.Count == nSpots, "Re-aiming a trap web did not give up the oldest one");
+        GD.Print($"[flight-test] PASS spinnery: {s.TrapCap(0)} trap webs hold raiders {Config.TrapRoot:0.#} s (+{Config.SnareBite * 100 - 100:0}% bites), snag low flyers, majors rip them, they are spun again");
         GD.Print($"[flight-test] PASS Web Throwing (rank 1) pins a wasp for {Mutations.PinTime(1):0.#} s within {Mutations.WebRange(1):0} units");
     }
 

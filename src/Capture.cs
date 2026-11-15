@@ -454,6 +454,7 @@ public static class Capture
         string shotDir = parts.Length > 2 ? parts[2] : null;
         bool shotTaken = false;
         var net = new Lockstep();
+        Sim.SilkForAll = System.Environment.GetEnvironmentVariable("MANDIBLE_SILK") != null; // both sides spin spinneries and trap webs
         app.AddChild(net);
         net.OnStart += () =>
         {
@@ -506,7 +507,7 @@ public static class Capture
             }
             if (s.Sim.Time >= seconds || s.Sim.Winner >= 0)
             {
-                GD.Print($"[nettest] DONE t={s.Sim.Time / 60:0.0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desyncs={net.Desyncs} winner={s.Sim.Winner} checksum={s.Sim.Checksum():X8}");
+                GD.Print($"[nettest] DONE t={s.Sim.Time / 60:0.0}m ticks={s.Sim.Ticks} checks ok={net.ChecksOk} desyncs={net.Desyncs} winner={s.Sim.Winner} spinneries={s.Sim.Col[0].SpinState}/{s.Sim.Col[1].SpinState} traps={s.Sim.Traps.Count} checksum={s.Sim.Checksum():X8}");
                 break;
             }
         }

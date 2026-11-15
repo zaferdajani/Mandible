@@ -344,6 +344,10 @@ public partial class PlayerInput : Node
             case Godot.Key.E: Game.TryResearch(Upgrade.Mandibles); return;
             case Godot.Key.R: Game.TryResearch(Upgrade.Chitin); return;
             case Godot.Key.T: Game.TryResearch(Upgrade.SilkCutters); return;
+            case Godot.Key.K: // the spinnery; once it stands, a trap web where the pointer is
+                if (Sim.Col[Local.Me].SpinState != 2) Game.TrySpinnery();
+                else if (Cam.ScreenToGround(GetViewport().GetMousePosition(), out var kg)) Game.TryTrap(new Vector2(kg.X, kg.Z));
+                return;
             case Godot.Key.Tab: Game.ToggleTrails(); return;
             case Godot.Key.F2: SelectArmy(); return;
             case Godot.Key.F3: SelectWorkers(); return;

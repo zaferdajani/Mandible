@@ -95,6 +95,7 @@ public sealed class AIController : IColonyAI
         Produce(c);
         GeneralAI.Learn(_sim, _team, Orders);
         Remains(c);
+        Silk(c);
         March();
         Reinforce(c);
         Defend(c);
@@ -254,11 +255,25 @@ public sealed class AIController : IColonyAI
         (Upgrade.Queen, 4, 560), (Upgrade.Mandibles, 3, 650), (Upgrade.Chitin, 3, 700), (Upgrade.Queen, 5, 780),
     };
 
+    /// The spinnery: spun once the colony has silk and food to spare; its trap webs keep their default places on the approach.
+    void Silk(Colony c)
+    {
+        if (Passive || c.SpinState != 0 || _sim.Time < 240 || c.Food < Config.SpinneryFood + 80) return;
+        if (_sim.CanSpin(_team) == SpinResult.Ok) Orders.Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)_team });
+    }
+
     /// Starts the next research when affordable; returns true while the colony is saving up for it.
     bool Research(Colony c)
     {
         if (c.Researching) return false;
         float pace = _diff switch { Difficulty.Easy => 1.5f, Difficulty.Hard => 0.8f, _ => 1f };
+        // the rival has trap webs out: sharpen the claws before anything else
+        if (_sim.Col[1 - _team].SpinState == 2 && c.T(Upgrade.SilkCutters) == 0)
+        {
+            var rs = R(Upgrade.SilkCutters);
+            if (rs == ResearchResult.Ok) return false;
+            if (rs == ResearchResult.NoFood) return true;
+        }
         foreach (var (u, tier, after) in Plan)
         {
             if (c.T(u) >= tier) continue;

@@ -26,6 +26,8 @@ public struct Ant
     public float Xp, MaxHp, Size, DmgMul;
     public float Alt;        // height above ground (flyers)
     public float Root;       // seconds left stuck in spider silk
+    public bool Snared;      // caught by a colony's trap web: bitten harder until it tears free (Spinnery.cs)
+    public float SnareCd;    // just out of a trap web: cannot be caught again yet
     public float AbilityCd;  // special attack cooldown
     public int Forge;        // mandible-forge tier this warrior hatched with
     public float SpeedMul;
@@ -92,7 +94,7 @@ public struct Ant
 
 public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death, Pickup, Deliver, Spawn, ProdDone, QueenHit, QueenDead, PopBlocked, UnderAttack, Shower, LevelUp, WebShot, WebLand, Sweep, Sting, ResearchDone, Spit, WarCry, AcidBurst, DiveBomb, SquadReady, NestFounded, QueenInside, ChamberDone, StoreFull, Charge, Toss, Lunge, ShellWall, Rally, Hurt, Bury, Feast, Evolve,
     SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
-    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost }
+    MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost, SpinneryBegun, SpinneryDone, TrapSpun, TrapCatch, TrapTorn }
 
 public struct SimEvent
 {
@@ -206,6 +208,11 @@ public sealed class Colony
     public int Mutagen, Mutations, Instability, Level = 1, WebRank;
     public int Cores, Power;              // core strength waiting in the reserve; colony-wide power from consumed cores
     public float MutagenGathered;
+    // the spinnery (Spinnery.cs): 0 none, 1 being spun, 2 standing; where it stands; the places its trap webs go
+    public int SpinState;
+    public float SpinDone, SpinT;
+    public Vector2 SpinPos;
+    public readonly List<Vector2> TrapSpots = new();
     public int LarvaStage;            // 0 none, 1 laid (waiting for the nursery), 2 a larva the nurses feed, 3 a cocoon
     public AntType LarvaHero = AntType.Warlord;
     public float LarvaFed, LarvaNeed, LarvaHp = 1, CocoonT, CocoonTime;
@@ -721,7 +728,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(F(a.Evo)); Mix((uint)a.Stage); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd));
         }
         foreach (var c in Col)
         {
@@ -730,9 +737,11 @@ public sealed partial class Sim
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
             Mix((uint)c.Mutagen); Mix((uint)c.Cores); Mix((uint)c.Power); Mix((uint)c.Mutations); Mix((uint)c.WebRank); Mix((uint)c.Instability); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
+            Mix((uint)c.SpinState); Mix(F(c.SpinDone)); Mix(F(c.SpinT)); foreach (var ts in c.TrapSpots) { Mix(F(ts.X)); Mix(F(ts.Y)); }
         }
         foreach (var mg in Mutagens) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Strength); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         if (Mission != null) { Mix((uint)Mission.Stage); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
+        foreach (var tw in Traps) { Mix(F(tw.Pos.X)); Mix(F(tw.Pos.Y)); Mix((uint)tw.Team); Mix((uint)tw.Charges); }
         Mix(Fortified ? 1u : 0u);
         Mix(Loadouts.Hash); // every machine must have the same data/loadouts.json
         if (Mode == GameMode.Lanes)
@@ -778,6 +787,7 @@ public sealed partial class Sim
         TickShowers();
         TickWebs(dt);
         TickPools(dt);
+        TickTraps(dt);
         TickZones(dt);
         TickSquads(dt);
         TickNest(dt);
@@ -1012,6 +1022,8 @@ public sealed partial class Sim
         a.BlockT -= dt;
         a.RetreatT -= dt;
         a.SpecialCd -= dt;
+        a.SnareCd -= dt;
+        if (a.Snared && a.Root <= 0 && a.PinT <= 0) a.Snared = false;
         if (a.PinT > 0)
         {
             // pinned to the ground by thrown silk: it struggles where it fell, and ground ants can reach it
@@ -1445,6 +1457,7 @@ public sealed partial class Sim
         float armor = Config.DefenceAt(t.Type, t.Level) + (t.BlockT > 0 ? (t.BlockArmor > 0 ? t.BlockArmor : Config.ShellWallArmor) : 0f);
         if (t.HasteT > 0) armor += t.GuardArmor; // Trail Blaze: the line holds
         if (t.MarkT > 0) dmg *= t.MarkMul; // Scout Swarm: marked
+        if (t.Snared) dmg *= Config.SnareBite; // held in a trap web
         if (armor > 0) dmg *= 1f - Mathf.Min(armor, 0.75f);
         if (t.Guardian) dmg *= GuardianDamageMul(in t, attacker);
         t.Hp -= dmg;

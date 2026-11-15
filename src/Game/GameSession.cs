@@ -411,6 +411,38 @@ public partial class GameSession : Node3D
         _ => "Flying ants need the Wing Chamber (W)",
     };
 
+    /// The silk outpost beside the mound (Web Throwing): the silk ants move above ground and lay trap webs.
+    public void TrySpinnery()
+    {
+        var bad = new Color(1, 0.5f, 0.35f);
+        var r = Sim.CanSpin(Local.Me);
+        if (r == SpinResult.Locked && !Sim.Has(Local.Me, Mutation.WebThrowing)) return; // not part of this colony yet: the key does nothing
+        if (r == SpinResult.Ok) { Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)Local.Me }); Audio.Ui("ui_queue"); Hud.Alert("The silk ants begin a spinnery beside the mound", UiTheme.Dim); return; }
+        Hud.Alert(r switch
+        {
+            SpinResult.NoFood => $"The spinnery needs {Config.SpinneryFood:0} food",
+            SpinResult.Exists => "The spinnery is still being spun",
+            SpinResult.Dead => "The colony has fallen",
+            _ => "The queen must be below ground first",
+        }, bad);
+        Audio.Ui("ui_error");
+    }
+
+    public void TryTrap(Vector2 at)
+    {
+        var r = Sim.TrapCheck(Local.Me, at);
+        if (r == TrapResult.Ok)
+        {
+            Issue(new Cmd { Kind = CmdKind.Trap, Team = (byte)Local.Me, P = at });
+            Effects.Marker(World.HF.Point(at), new Color(1f, 0.93f, 0.75f));
+            Hud.Alert("Trap web: the silk ants will spin it here", UiTheme.Dim);
+            Audio.Ui("ui_click");
+            return;
+        }
+        Hud.Alert(r == TrapResult.TooFar ? "Too far: the silk ants spin within reach of the mound" : r == TrapResult.Blocked ? "No room for a web there" : "Trap webs need the spinnery (K)", new Color(1, 0.5f, 0.35f));
+        Audio.Ui("ui_error");
+    }
+
     public void TryResearch(Upgrade u, Vector2? at = null)
     {
         if (Sim.Mission is { } story && !story.ShowsResearch(u)) return; // not introduced yet
@@ -1058,6 +1090,16 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.WebShot:
                     if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
+                    break;
+                case EvKind.SpinneryDone:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The spinnery stands", "The silk ants live above ground now and lay trap webs on the approaches. Press K over a spot to re-aim one.", 5f);
+                    break;
+                case EvKind.TrapCatch:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos))
+                    {
+                        Effects.Burst(wp, 10, 2, 2.4f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("web_land", wp, 0, 0.1f);
+                    }
                     break;
                 case EvKind.WebLand:
                     if (Demo || Fog == null || Fog.Visible(e.Pos))
