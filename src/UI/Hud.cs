@@ -11,7 +11,7 @@ public partial class Hud : CanvasLayer
     Label _food, _pop, _clock, _alert, _selTitle, _selDetail, _hint;
     HBoxContainer _selIcons;
     ProgressBar _selHp;
-    readonly Button[] _prod = new Button[9];
+    readonly Button[] _prod = new Button[11];
     readonly Control[] _prodLock = new Control[9];
     readonly Label[] _heroStatus = new Label[9];
     readonly Button[] _res = new Button[5];
@@ -236,7 +236,7 @@ public partial class Hud : CanvasLayer
     static readonly (string key, string name, ChamberKind kind, Upgrade? up)[] BuildRooms =
     {
         ("V", "Brood Chamber", ChamberKind.Brood, null), ("L", "Storage", ChamberKind.Storage, null),
-        ("Q", "Royal Chamber", ChamberKind.Royal, Upgrade.Queen), ("W", "Wing Chamber", ChamberKind.Wings, Upgrade.Wings),
+        ("Q", "Royal Chamber", ChamberKind.Royal, Upgrade.Queen),
         ("E", "Mandible Forge", ChamberKind.Forge, Upgrade.Mandibles), ("R", "Chitin Armory", ChamberKind.Armory, Upgrade.Chitin),
         ("T", "Silk Cutters", ChamberKind.Silk, Upgrade.SilkCutters),
     };
@@ -302,7 +302,7 @@ public partial class Hud : CanvasLayer
 
     static Upgrade? UpgradeOf(ChamberKind k) => k switch
     {
-        ChamberKind.Royal => Upgrade.Queen, ChamberKind.Wings => Upgrade.Wings, ChamberKind.Forge => Upgrade.Mandibles,
+        ChamberKind.Royal => Upgrade.Queen, ChamberKind.Forge => Upgrade.Mandibles,
         ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null,
     };
 
@@ -387,8 +387,8 @@ public partial class Hud : CanvasLayer
         v.AddChild(head);
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 4);
-        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D") };
-        foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(84, 70)));
+        (ProdKind kind, string key)[] brood = { (ProdKind.Worker, "Z"), (ProdKind.Soldier, "X"), (ProdKind.Major, "C"), (ProdKind.Flyer, "F"), (ProdKind.Gunner, "D"), (ProdKind.WebAnt, "W"), (ProdKind.Armoured, "M") };
+        foreach (var (kind, key) in brood) row.AddChild(ProdButton(kind, key, new Vector2(72, 70)));
         _prod[(int)ProdKind.Chamber] = new Button { Visible = false }; // chambers are dug by workers now (V / L in the chambers panel)
         _prodLock[(int)ProdKind.Chamber] = new Control();
         v.AddChild(row);
@@ -610,7 +610,7 @@ public partial class Hud : CanvasLayer
     string ResearchLine()
     {
         var shown = new System.Collections.Generic.List<string>();
-        foreach (var (u, text) in new[] { (Upgrade.Queen, "Q royal jelly (queen level)"), (Upgrade.Wings, "W wings"), (Upgrade.Mandibles, "E mandible forge"), (Upgrade.Chitin, "R chitin"), (Upgrade.SilkCutters, "T silk cutters") })
+        foreach (var (u, text) in new[] { (Upgrade.Queen, "Q the queen's level (organic matter)"), (Upgrade.Mandibles, "E mandible forge"), (Upgrade.Chitin, "R chitin"), (Upgrade.SilkCutters, "T silk cutters") })
             if (Game.Sim.Mission is not { } m || m.ShowsResearch(u)) shown.Add(text);
         return shown.Count == 0 ? "" : "Chambers:  " + string.Join("  ·  ", shown);
     }
@@ -634,7 +634,7 @@ public partial class Hud : CanvasLayer
             "Left-click / drag  select ants   ·   Shift adds   ·   Double-click selects all of that kind on screen",
             "Right-click  move / attack / gather (workers on food)   ·   A + click  attack-move",
             "S stop   ·   H hold   ·   G gather   ·   Ctrl+1-9 save group, 1-9 recall",
-            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F flying ant"), (ProdKind.Gunner, "D acid gunner")),
+            ManualLine("Brood:  ", "", (ProdKind.Worker, "Z worker"), (ProdKind.Soldier, "X soldier"), (ProdKind.Major, "C major"), (ProdKind.Chamber, "V chamber"), (ProdKind.Flyer, "F winged ant"), (ProdKind.Gunner, "D acid gunner"), (ProdKind.WebAnt, "W web ant"), (ProdKind.Armoured, "M armoured ant")),
             ResearchLine(),
             ManualLine("Generals:  ", ". They level to 10 and cast specials on their own.", (ProdKind.Warlord, "Y Warlord"), (ProdKind.Matron, "U Acid Matron"), (ProdKind.Marshal, "I Sky Marshal")),
             BugLine(),
@@ -867,7 +867,7 @@ public partial class Hud : CanvasLayer
             var fallen = new System.Collections.Generic.List<string>();
             foreach (var v in Game.Sim.Mission.Fallen) if (v.Name != "") fallen.Add($"{v.Name} ({Config.Of(v.Type).Name}, rank {v.Level}, {v.Kills} kills)");
             if (fallen.Count > 0) { var l = UiTheme.Text("Fallen: " + string.Join(",  ", fallen), 14, UiTheme.Bold, new Color(1f, 0.6f, 0.45f)); l.HorizontalAlignment = HorizontalAlignment.Center; l.AutowrapMode = TextServer.AutowrapMode.WordSmart; body.AddChild(l); body.MoveChild(l, at++); }
-            at = AddMutationChoice(body, r, id, at);
+            at = AddProgression(body, r, id, at);
         }
         // the stars come second: bragging rights, under the colony
         var big = new ResultStars { Bits = Game.Stars, Fresh = Game.NewStars, CustomMinimumSize = new Vector2(0, 70) };
@@ -889,34 +889,30 @@ public partial class Hud : CanvasLayer
         Game.Audio.Ui("research");
     }
 
-    /// After a chapter (from the Royal Larva on) the queen's mutation trees: every core in the reserve buys one rung,
-    /// climbed in order. The choice goes into the colony that walks into the next chapter; unspent cores stay in the
-    /// reserve for the next chapter's tree.
-    int AddMutationChoice(VBoxContainer body, ColonyRoster r, int id, int at)
+    /// After a chapter: what the colony carries into the next one (docs/progression.md). The queen's mutation units and
+    /// everything bought in the evolve tree stay.
+    int AddProgression(VBoxContainer body, ColonyRoster r, int id, int at)
     {
         if (Levels.NumberOf(id) < Reveal.Mutagen) return at;
-        var line = UiTheme.Text($"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}", 15, UiTheme.Bold, new Color(0.86f, 0.78f, 1f));
+        var names = new System.Collections.Generic.List<string>();
+        foreach (var mu in Mutations.All) if ((r.Mutations & (int)mu) != 0) names.Add(Mutations.Name(mu));
+        int ranks = 0; foreach (byte e in r.Evo) ranks += e;
+        var line = UiTheme.Text($"THE QUEEN LAYS  {(names.Count == 0 ? "no mutation unit yet" : string.Join(", ", names))}   ·   QUEEN LEVEL {r.QueenTier}   ·   EVOLVE TREE RANKS {ranks}", 14, UiTheme.Bold, new Color(0.86f, 0.78f, 1f));
         line.HorizontalAlignment = HorizontalAlignment.Center;
+        line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         body.AddChild(line); body.MoveChild(line, at++);
-        // the queen's mutation trees: shown whenever there is a next chapter, so the player can plan the climb even
-        // before a core comes home; a taken rung goes into the colony that walks into the next chapter
-        if (Levels.NumberOf(id) < Reveal.RoyalLarva || Levels.IdAt(Levels.NumberOf(id) + 1) <= 0) return at;
-        var open = new Button { Text = r.Mutagen > 0 ? $"THE QUEEN'S MUTATIONS  ·  {r.Mutagen} CORE{(r.Mutagen > 1 ? "S" : "")} TO SPEND" : "THE QUEEN'S MUTATIONS", CustomMinimumSize = new Vector2(360, Settings.Mobile ? 64 : 50), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
-        open.AddThemeFontOverride("font", UiTheme.Title);
-        open.AddThemeFontSizeOverride("font_size", 16);
-        open.Pressed += () => ShowMutationTree(r, id, () =>
-        {
-            line.Text = $"MUTAGEN  {r.Mutagen}   ·   COLONY LEVEL {r.Level}   ·   INSTABILITY {r.Instability}";
-            open.Text = r.Mutagen > 0 ? $"THE QUEEN'S MUTATIONS  ·  {r.Mutagen} CORE{(r.Mutagen > 1 ? "S" : "")} TO SPEND" : "THE QUEEN'S MUTATIONS";
-        });
-        body.AddChild(open); body.MoveChild(open, at++);
-        Grow((Control)body.GetParent().GetParent(), 40);
+        Grow((Control)body.GetParent().GetParent(), 26);
         return at;
     }
 
-    /// The queen's mutation trees over everything (target N1), closed with the button beneath or Escape.
-    public void ShowMutationTree(ColonyRoster r, int id, System.Action changed = null)
+    Control _evolveOverlay;
+
+    /// The evolve tree over everything, closed with the button beneath, P or Escape.
+    public void ToggleEvolveTree()
     {
+        if (_evolveOverlay != null && IsInstanceValid(_evolveOverlay)) { _evolveOverlay.QueueFree(); _evolveOverlay = null; return; }
+        if (Game.Lanes || !Game.Sim.EvolveRules) return;
+        if (Game.Sim.Mission is { } m && m.Chapter < Reveal.Mutagen) return;
         var overlay = new Control { MouseFilter = Control.MouseFilterEnum.Stop };
         overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         var dim = new ColorRect { Color = new Color(0, 0, 0, 0.72f) };
@@ -926,16 +922,16 @@ public partial class Hud : CanvasLayer
         centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         var col = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         col.AddThemeConstantOverride("separation", 10);
-        var tree = new MutationTree(r, m => CampaignProgress.ChooseMutation(id, r, m), Mutations.TraitOf(id));
-        tree.Changed += () => { Game.Audio.Ui("mutate_queen", -6); changed?.Invoke(); };
-        col.AddChild(tree);
-        var close = new Button { Text = "Close", CustomMinimumSize = new Vector2(180, Settings.Mobile ? 56 : 42), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
-        close.Pressed += () => overlay.QueueFree();
+        col.AddChild(new EvolveTree(Game));
+        var close = new Button { Text = "Close (P)", CustomMinimumSize = new Vector2(180, Settings.Mobile ? 56 : 42), SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
+        close.Pressed += ToggleEvolveTree;
         col.AddChild(close);
         centre.AddChild(col);
         overlay.AddChild(centre);
         AddChild(overlay);
+        _evolveOverlay = overlay;
     }
+    public bool EvolveTreeOpen => _evolveOverlay != null && IsInstanceValid(_evolveOverlay);
 
     public void Alert(string text, Color? c = null)
     {
@@ -997,7 +993,7 @@ public partial class Hud : CanvasLayer
         for (int i = 0; i < _prod.Length; i++)
         {
             var k = (ProdKind)i;
-            bool unlocked = Config.Unlocked(k, c.Tier);
+            bool unlocked = Config.Unlocked(k, c.Tier, c.Mutations);
             bool ok = unlocked && c.Alive && c.Food >= Config.ProdCost(k) && c.Queue.Count < Config.QueueLimit;
             if (k == ProdKind.Chamber && c.PopCap + (c.PendingChambers() + 1) * Config.ChamberPop > Config.MaxPopCap) ok = false;
             if (Config.IsHeroKind(k))
@@ -1072,7 +1068,7 @@ public partial class Hud : CanvasLayer
     {
         var sim = Game.Sim;
         var sel = Game.Input.Selection;
-        int[] counts = new int[13];
+        int[] counts = new int[Config.TypeCount];
         float hp = 0, max = 0;
         int alive = 0, single = -1;
         foreach (int id in sel)

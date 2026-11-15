@@ -74,12 +74,12 @@ struct RenderAnt
 
 public sealed class AntRenderer
 {
-    readonly Batch[,] _live = new Batch[3, 13];
+    readonly Batch[,] _live = new Batch[3, Config.TypeCount];
     /// The rank and file far from the camera: the same material on a mesh with half the detail, no shadow.
-    readonly Batch[,] _far = new Batch[3, 13];
+    readonly Batch[,] _far = new Batch[3, Config.TypeCount];
     public const float FarDist = 62f;
     /// Ants this near the camera get the full anatomy: setae, claws, tarsal segments, mandible teeth.
-    readonly Batch[,] _close = new Batch[3, 13];
+    readonly Batch[,] _close = new Batch[3, Config.TypeCount];
     public const float CloseDist = 26f;
     readonly RenderAnt[] _ra = new RenderAnt[Config.MaxAnts];
     readonly Rng _rng = new(4242);
@@ -115,7 +115,7 @@ public sealed class AntRenderer
         r.HasLookAt = at.HasValue;
         if (at.HasValue) { r.LookAt = at.Value; r.LookUntil = _now + len; }
     }
-    readonly Batch[,] _dead = new Batch[3, 13];
+    readonly Batch[,] _dead = new Batch[3, Config.TypeCount];
     readonly Batch[] _cargo = new Batch[5];
     readonly Batch[] _broodCargo = new Batch[2];
     /// The nest's brood life: nurses drawn with the workers, and the callow pose of ants that just hatched.
@@ -177,7 +177,7 @@ public sealed class AntRenderer
         parent.AddChild(root);
         var shader = Shaders.Get(Shaders.Ant);
         for (int team = 0; team < 3; team++)
-            for (int t = 0; t < 13; t++)
+            for (int t = 0; t < Config.TypeCount; t++)
             {
                 // the wild side draws the bugs, plus level 1's island queen (another strain) and her dead workers
                 if ((team == Config.Wild) != (Config.IsBug((AntType)t) || team == Config.Wild && (AntType)t is AntType.Queen or AntType.Worker)) continue;
@@ -267,7 +267,7 @@ public sealed class AntRenderer
     public void ApplyQuality()
     {
         for (int team = 0; team < 3; team++)
-            for (int t = 0; t < 13; t++)
+            for (int t = 0; t < Config.TypeCount; t++)
             {
                 if (_live[team, t] == null) continue;
                 var type = (AntType)t;
@@ -472,14 +472,12 @@ public sealed class AntRenderer
                 float w = a.Type == AntType.Queen ? 5f : Mathf.Max(1.1f, size * 1.0f);
                 var bb = Basis.FromScale(new Vector3(w, a.Type == AntType.Queen ? 0.35f : 0.16f, 1));
                 _bars.Add(bb, o + Vector3.Up * barY, new Color(a.Hp / a.MaxHp, tc.R, tc.G, tc.B));
-                if (sim.EatRules && sim.Eats(a))
-                    _evoBars.Add(Basis.FromScale(new Vector3(w, 0.11f, 1)), o + Vector3.Up * barY - camUp * 0.2f, new Color(sim.EvolutionProgress(a), tc.R, tc.G, tc.B));
             }
             // auto-eat: a drop of hemolymph over our own ants that will eat their kills
             if (a.AutoEat && a.Team == Local.Me && sim.EatRules && a.CharmP1 == 0)
                 _drops.Add(Basis.FromScale(Vector3.One * Mathf.Clamp(0.32f + st.Size * 0.08f, 0.4f, 0.62f)), o + Vector3.Up * (barY + 0.15f) + camRight * (Mathf.Max(1.1f, st.Size) * 0.5f + 0.35f), new Color(0.95f, 0, 0, 0));
-            // chevrons: one gold pip per evolution stage (the campaign: per veteran level above the first)
-            int ranks = sim.EatRules ? (sim.Evolves(a) ? a.Stage : 0) : a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
+            // chevrons: one gold pip per veteran level above the first (the campaign's lone veterans)
+            int ranks = a.SquadP1 == 0 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) ? a.Level - 1 : 0;
             if (ranks > 0)
             {
                 float pip = Mathf.Clamp(0.3f + size * 0.1f, 0.38f, 0.6f);
@@ -813,7 +811,7 @@ public sealed class AntRenderer
         flags += 64 * (int)Mathf.Clamp(a.HitFlash * 15f, 0, 15);
         if (Gore != null) flags += 1024 * Gore.Lost(i, a.Serial);
         float z = flags + Mathf.Min(Mathf.Max(a.AttackAnim, a.Carrying || a.Hauling ? 0.15f : 0f), 0.996f);
-        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(Config.IsHero(a.Type) ? MutationTier(a.Level) : a.Stage, 0, 3);
+        float w = (Gore != null ? 64 * Gore.Etch(i, a.Serial) : 0) + 512 * Mathf.Clamp(Config.IsHero(a.Type) ? MutationTier(a.Level) : a.Brood, 0, 3); // better brood: heavier mandibles
         if (r.Kind != 0 && _now >= r.KindStart) w += r.Kind + Mathf.Clamp((_now - r.KindStart) / r.KindLen, 0, 0.996f);
         return new Color(x, y, z, w);
     }

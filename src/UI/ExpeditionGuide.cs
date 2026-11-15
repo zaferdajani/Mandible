@@ -36,7 +36,7 @@ public partial class ExpeditionGuide : PanelContainer
         // the optional goals, live: lit while they still hold
         _stars = new StarList { Size_ = 8, FontSize = 13 };
         column.AddChild(_stars);
-        if (steps) column.AddChild(new MutationStrip { Game = Game }); // shows itself from the Silk Trap on
+        if (steps) column.AddChild(new EvolveStrip { Game = Game }); // shows itself from the Silk Trap on
         var row = new HBoxContainer(); column.AddChild(row);
         var finger = new Vector2(0, Settings.Mobile ? 46 : 0);
         var show = new Button { Text = "Show objective", CustomMinimumSize = finger }; row.AddChild(show);
@@ -90,7 +90,7 @@ public partial class ExpeditionGuide : PanelContainer
                 guiding = true;
                 Game.Guide.Show(m.QueenAt, "MUTATED QUEEN · ATTACK TOGETHER", Settings.Mobile ? "Tap Army, then tap her. Alone, any ant dies" : "Soldiers (F2), then right-click her. Alone, any ant dies");
             }
-            else if (m.Stage == ExpeditionStage.Fragment && Game.Sim.MutagenById(m.GlandId) is { Home: false } gland)
+            else if (m.Stage == ExpeditionStage.Fragment && Game.Sim.CoreById(m.GlandId) is { Home: false } gland)
             {
                 guiding = true;
                 if (gland.Carried) Game.Guide.Show(Game.Sim.NestEntrance(Local.Me), "THE QUEEN", "The gland is heavy: its carrier walks slowly home");

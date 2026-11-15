@@ -40,7 +40,7 @@ public static class MutationCapture
             gland.Done = gland.Work;
             var haulAt = gland.Pos + toward * 14;
             int carrier = sim.Spawn(0, AntType.Worker, haulAt, toward.AngleD());
-            sim.Mutagens[0].Pos = haulAt;
+            sim.Cores[0].Pos = haulAt;
             sim.CmdExtract(new System.Collections.Generic.List<int> { carrier }, gland);
             var escort = new System.Collections.Generic.List<int>();
             for (int k = 0; k < 3; k++) escort.Add(sim.Spawn(0, AntType.Worker, haulAt + new Vector2(k - 1, 1.2f), toward.AngleD()));
@@ -52,9 +52,8 @@ public static class MutationCapture
             gs.Camera.JumpTo(gland.Pos, 10); await Shot("haul-close", 2f);
             gs.Camera.JumpTo(gland.Pos, 55); await Shot("haul", 1.5f);
 
-            // ---- the radiating core: a queen's core (strength 3) in the carrier's jaws at play zoom; a general's burst;
-            // the queen's mutation with its column of light (targets M2, M3: docs/art-targets/REVIEW-mutation-core.jpg)
-            gland.Strength = 3;
+            // ---- the core in the carrier's jaws at play zoom; a general's burst; the queen's mutation with its column
+            // of light (targets M2, M3: docs/art-targets/REVIEW-mutation-core.jpg)
             gs.SetPaused(false); await Wait(0.3f); gs.SetPaused(true);
             gs.Camera.JumpTo(gland.Pos, 40); await Shot("core-carried", 1.5f);
             gs.SetPaused(false);
@@ -65,14 +64,12 @@ public static class MutationCapture
             gs.GeneralBurst(general, 2);
             await Shot("general-burst", 0.45f);
             await Wait(3f);
-            sim.Col[0].Mutagen = 1; sim.Col[0].Cores = 3;
-            sim.Mission.Fixed = Mutation.Stinger;
-            sim.Col[0].Mutations &= ~(int)Mutation.Stinger;
+            sim.Col[0].Mutations &= ~(int)Mutation.Winged;
             gs.Camera.PitchOverride = 38;
             gs.Camera.JumpTo(home - toward * 6, 58);
             await Wait(0.8f);
             // called outside a tick, its event would be cleared before the frame reads it: hand it to the session directly
-            if (sim.Mutate(0, Mutation.Stinger)) gs.MutationMoment(sim.Events[^1]);
+            sim.GiveMutation(0, Mutation.Winged); gs.MutationMoment(sim.Events.FindLast(e => e.Kind == EvKind.Mutate));
             await Shot("queen-beam", 0.7f);
             gs.Camera.PitchOverride = 0;
 
@@ -80,7 +77,7 @@ public static class MutationCapture
             app.StartEpisode(Reveal.RoyalLarvaId);
             gs = app.Session; gs.Hud.CloseBriefing();
             sim = gs.Sim;
-            sim.Mutate(0, Mutation.RoyalLarva);
+            sim.GiveMutation(0, Mutation.RoyalLarva);
             var room = sim.ChamberOf(0, ChamberKind.Nursery);
             room.Done = room.Work; room.Built = true;
             sim.Col[0].Organic = 0;
@@ -93,10 +90,13 @@ public static class MutationCapture
             gs.Camera.JumpTo(at + new Vector2(0, 2.4f), 11); await Shot("nursery-close", 3f);
             gs.Camera.JumpTo(at, 40); await Shot("nursery", 1.5f);
 
-            // ---- the queen's mutation trees on the result card (a colony with the story rungs and the first shell rung)
-            var plan = new ColonyRoster { Mutations = (int)(Mutation.Stinger | Mutation.RoyalLarva | Mutation.IronChitin | Mutation.WebThrowing), WebRank = 1, Mutagen = 2, Cores = 5, Power = 4 };
-            gs.Hud.ShowMutationTree(plan, Reveal.RoyalLarvaId);
-            await Shot("mutation-tree", 1f);
+            // ---- the evolve tree: a colony with winged ants and web ants, a general, and organic matter to spend
+            sim.GiveMutation(0, Mutation.Winged); sim.GiveMutation(0, Mutation.Web);
+            sim.Col[0].Organic = 64; sim.Col[0].Evo[(int)EvoNode.FlightMuscle] = 2;
+            sim.Spawn(0, AntType.Warlord, sim.W.Nests[0].Pos + new Vector2(6, 0), 0, 3);
+            gs.SetNestView(false);
+            gs.Hud.ToggleEvolveTree();
+            await Shot("evolve-tree", 1f);
 
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_mutcap.cfg"));
             CampaignProgress.UsePath("user://campaign.cfg");

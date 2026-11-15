@@ -82,7 +82,7 @@ public sealed partial class Sim
             ref var a = ref Ants[id];
             if (!a.Alive) continue;
             if (a.Type != AntType.Worker) { others.Add(id); continue; }
-            if (a.MutaP1 > 0) DropMutagen(id, ref a);
+            if (a.MutaP1 > 0) DropCore(id, ref a);
             a.StrawP1 = (byte)(s.Id + 1);
             a.Nurse = false; a.DigP1 = 0;
             a.Assigned = null; a.FoodTarget = null;
@@ -139,7 +139,7 @@ public sealed partial class Sim
         var m = Mission;
         if (m.GlandId >= 0) return;
         if (m.QueenAlive(this)) { m.QueenAt = Ants[m.IslandQueen].Pos; return; }
-        var g = AddMutagen(m.QueenAt + new Vector2(1.3f, 0f), "the island queen's mutagen gland", AntType.Queen, Mutations.ExtractWork, 0, 3);
+        var g = AddCore(m.QueenAt + new Vector2(1.3f, 0f), "the island queen's gland", AntType.Queen, Mutation.None); // a story object: the queen eats it and the story begins
         m.GlandId = g.Id;
     }
 

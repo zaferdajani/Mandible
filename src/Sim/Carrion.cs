@@ -27,9 +27,9 @@ public sealed partial class Sim
     /// that introduces it (Reveal.Organic: the founding, Chapter 1).
     public bool OrganicRules => Mission == null || Mission.Organic;
 
-    /// Evolution by eating: kills teach nothing, fighters grow only on remains. The campaign ranks its squads by kills
-    /// until the chapter that introduces eating (Reveal.Evolution).
-    public bool EatRules => Mission == null || Mission.Evolution;
+    /// Eating in the field: fighters with nothing to fight eat the remains beside them and mend. The campaign opens it
+    /// in the chapter that teaches it (Reveal.Feasting).
+    public bool EatRules => Mission == null || Mission.Feasting;
 
     public void SetRemains(int team, RemainsOrder order)
     {
@@ -42,8 +42,8 @@ public sealed partial class Sim
     public float Organic(int team) => team is >= 0 and <= 1 ? Col[team].Organic : 0;
     /// Organic matter a brood of this kind needs on top of its food (0 in the campaign until it opts in).
     public float OrganicCost(ProdKind k) => OrganicRules ? Config.BroodOrganic(k) : 0;
-    /// Organic matter the queen's next ascension needs (0 in the campaign until it opts in).
-    public float QueenOrganic(int team) => OrganicRules ? Config.QueenOrganic(Col[team].T(Upgrade.Queen) + 1) : 0;
+    /// Organic matter the queen's next level costs in the evolve tree.
+    public float QueenOrganic(int team) => Evolve.QueenCost(Col[team].T(Upgrade.Queen) + 1);
     /// Whether the founders carry enough food and organic matter to found the nest (the royal chamber waits until they do).
     public bool CanFound(int team) => !OrganicRules || Col[team].Food >= Config.FoundFood && Col[team].Organic >= Config.FoundOrganic;
     /// Organic matter these remains still hold (what hauling them home gives, and what eating them teaches).
@@ -71,29 +71,7 @@ public sealed partial class Sim
         return best;
     }
 
-    /// Organic matter an ant still needs for its next stage (heroes: to their next level); 0 when it is complete.
-    public float EvolutionNeed(in Ant a)
-    {
-        if (Config.IsHero(a.Type)) return a.Level >= Config.HeroMaxLevel ? 0 : Mathf.Max(0, (NextXp(a) - a.Xp) / Config.HeroXpPerOrganic);
-        if (!Evolves(a)) return 0;
-        return a.Stage >= Config.MaxStage ? 0 : Mathf.Max(0, Config.StageCost(a.Stage + 1) - a.Evo);
-    }
-
-    /// Progress toward the next stage or level, 0..1.
-    public float EvolutionProgress(in Ant a)
-    {
-        if (Config.IsHero(a.Type))
-        {
-            if (a.Level >= Config.HeroMaxLevel) return 1;
-            float lo = Config.XpFor(a.Type, a.Level), hi = NextXp(a);
-            return hi > lo ? Mathf.Clamp((a.Xp - lo) / (hi - lo), 0, 1) : 1;
-        }
-        return a.Stage >= Config.MaxStage ? 1 : Mathf.Clamp(a.Evo / Config.StageCost(a.Stage + 1), 0, 1);
-    }
-
-    /// Colony fighters evolve by eating: soldiers, majors, flyers and gunners (heroes level instead; lane creeps and
-    /// mound guardians are spent, not grown).
-    public bool Evolves(in Ant a) => a.Team < 2 && Config.IsWarrior(a.Type) && !Config.IsHero(a.Type) && !a.Guardian && a.Lane == 0;
+    /// Colony fighters and generals eat remains in the field to mend (lane creeps and mound guardians do not).
     public bool Eats(in Ant a) => a.Team < 2 && Config.IsWarrior(a.Type) && !a.Guardian && a.Lane == 0;
 
     // ------------------------------------------------------------------ the midden and morale
@@ -220,8 +198,8 @@ public sealed partial class Sim
         return true;
     }
 
-    // ------------------------------------------------------------------ eating and evolving
-    /// The player (or the AI) sends fighters and heroes to eat these remains; whoever eats them evolves.
+    // ------------------------------------------------------------------ eating
+    /// The player (or the AI) sends fighters and generals to eat these remains; whoever eats them mends.
     public void CmdFeast(List<int> ids, FoodSource f)
     {
         foreach (int id in ids)
@@ -240,15 +218,12 @@ public sealed partial class Sim
         }
     }
 
-    /// A fighter or hero with nothing to fight eats at remains it stands by (or was sent to): each mouthful heals it
-    /// and grows it, more from big prey and most from a rival hero. It stands still while it eats. Returns true while
-    /// it feasts.
+    /// A fighter or general with nothing to fight eats at remains it stands by (or was sent to): each mouthful heals
+    /// it. It stands still while it eats. Returns true while it feasts.
     bool Feast(int i, ref Ant a, float dt, bool think, ref Vector2 desired)
     {
-        bool hero = Config.IsHero(a.Type);
-        if (!EatRules && !hero) return false; // the campaign keeps its kill-ranked squads until eating is introduced
-        bool growing = hero ? a.Level < Config.HeroMaxLevel : a.Stage < Config.MaxStage && Evolves(a);
-        if (!growing && a.Hp >= a.MaxHp * 0.999f) { a.FoodTarget = null; a.FeastOrder = false; return false; }
+        if (!EatRules && !Config.IsHero(a.Type)) return false; // the campaign opens eating in its own chapter
+        if (a.Hp >= a.MaxHp * 0.999f) { a.FoodTarget = null; a.FeastOrder = false; return false; } // whole: the rest is the queen's
         var f = a.FoodTarget;
         if (f != null && !CanEat(a, f)) { f = a.FoodTarget = null; a.FeastOrder = false; }
         if (f != null && !a.FeastOrder && !a.AutoEat) { f = a.FoodTarget = null; } // auto-eat turned off: the kill is left for the workers
@@ -280,49 +255,9 @@ public sealed partial class Sim
         f.LastFeast = Time;
         a.AttackAnim = 1;
         a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * Config.FeastHeal * (own ? Config.DevourHeal : 1f));
-        Nourish(i, ref a, Config.OrganicPerLoad(f.AntType));
         Col[a.Team].OrganicEaten += Config.OrganicPerLoad(f.AntType);
         Events.Add(new SimEvent { Kind = EvKind.Feast, Pos = f.Pos, To = a.Pos, Team = a.Team, Type = f.AntType, FoodP1 = f.Id + 1, Who = i + 1, Amount = own ? 1 : 0 });
         return true;
-    }
-
-    /// Organic matter eaten by one ant: a hero learns from it, a fighter evolves.
-    void Nourish(int i, ref Ant a, float organic)
-    {
-        if (Config.IsHero(a.Type)) { GrantXp(i, organic * Config.HeroXpPerOrganic, true); return; }
-        if (!Evolves(a) || a.Stage >= Config.MaxStage) return;
-        if (Mission != null && a.Team == Config.Enemy) return; // the campaign's rival keeps the strength its level gives it
-        a.Evo += organic * (a.Team == 0 && Has(0, Mutation.HungryGut) ? Mutations.GutMul : 1f);
-        while (a.Stage < Config.MaxStage && a.Evo >= Config.StageCost(a.Stage + 1))
-        {
-            a.Evo -= Config.StageCost(a.Stage + 1);
-            a.Stage++;
-            ApplyLevel(ref a);
-            a.Hp = Mathf.Min(a.MaxHp, a.Hp + a.MaxHp * 0.3f); // the moult heals
-            Events.Add(new SimEvent { Kind = EvKind.Evolve, Pos = a.Pos, Team = a.Team, Type = a.Type, Tier = a.Stage, Who = i + 1 });
-        }
-        if (a.Stage >= Config.MaxStage) a.Evo = 0;
-    }
-
-    /// Fighters and heroes brought home are fed from the colony's reserve: the player chooses whether the organic matter
-    /// grows the queen or the army. Only those standing at the nest (or inside it) are fed.
-    public void FeedFromReserve(int team, List<int> ids)
-    {
-        if (!EatRules) return;
-        var c = Col[team];
-        var nest = NestEntrance(team);
-        foreach (int id in ids)
-        {
-            ref var a = ref Ants[id];
-            if (!a.Alive || a.Team != team || !Eats(a) || c.Organic < 0.5f) continue;
-            if (a.Layer == 0 && a.Pos.DistanceTo(nest) > Config.ReinforceRadius) continue;
-            float need = EvolutionNeed(a);
-            if (need <= 0) continue;
-            float take = Mathf.Min(need + 0.01f, c.Organic);
-            c.Organic -= take;
-            Nourish(id, ref a, take);
-            Events.Add(new SimEvent { Kind = EvKind.Feast, Pos = a.Pos, To = a.Pos, Team = team, Type = a.Type, Who = id + 1, Amount = 2 });
-        }
     }
 
     // ------------------------------------------------------------------ remains over time
@@ -437,7 +372,7 @@ public sealed partial class Sim
         if (!EatRules || killer < 0 || !Ants[killer].Alive) return;
         ref var k = ref Ants[killer];
         if (!k.AutoEat || !Eats(k) || !CanEat(k, f)) return;
-        bool Hungry(in Ant x) => EvolutionNeed(x) > 0 || x.Hp < x.MaxHp * 0.999f;
+        bool Hungry(in Ant x) => x.Hp < x.MaxHp * 0.999f;
         int eaters = 0;
         if (Hungry(k) && k.FoodTarget is not { Alive: true }) { k.FoodTarget = f; eaters++; }
         if (k.SquadP1 > 0)

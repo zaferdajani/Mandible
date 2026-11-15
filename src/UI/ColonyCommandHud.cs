@@ -46,7 +46,7 @@ public partial class ColonyCommandHud : Control
     public static readonly Color OrganicColor = new(0.86f, 0.5f, 0.16f);
     static readonly Color Edge = new("a77e32"), Gold = new("f4cd70"), Background = new(0.035f, 0.031f, 0.022f, 0.96f);
     static readonly ChamberKind[] Rooms = { ChamberKind.Brood, ChamberKind.Storage, ChamberKind.Royal, ChamberKind.Wings, ChamberKind.Forge, ChamberKind.Armory, ChamberKind.Silk };
-    static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner };
+    static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured };
     static readonly string[] Keys = { "Z", "X", "C", "F", "D" };
 
     static T At<T>(T control, float x, float y, float w, float h) where T : Control
@@ -216,7 +216,7 @@ public partial class ColonyCommandHud : Control
         }
     }
     static Upgrade? RoomUpgrade(ChamberKind k) => k switch
-    { ChamberKind.Royal => Upgrade.Queen, ChamberKind.Wings => Upgrade.Wings, ChamberKind.Forge => Upgrade.Mandibles, ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null };
+    { ChamberKind.Royal => Upgrade.Queen, ChamberKind.Forge => Upgrade.Mandibles, ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null };
     void OrderRoom(ChamberKind kind)
     { if (RoomUpgrade(kind) is { } u) Game.TryResearch(u); else Game.TryDig(kind); }
     void ResearchCancel(Button button, Upgrade upgrade)
@@ -284,8 +284,8 @@ public partial class ColonyCommandHud : Control
         // the evolution bar: what this ant has eaten toward its next stage (a hero: toward its next level)
         _evo = Bar(_selectionBlock, 182, 57, 213, 4);
         _evo.AddThemeStyleboxOverride("fill", UiTheme.Box(OrganicColor, OrganicColor, 0, 2, 0));
-        _feedReserve = Button(_selectionBlock, "Feed from the reserve", 184, 190, 212, _touch ? 30 : 24, () => Game.Input.FeedFromReserve());
-        _feedReserve.TooltipText = "Fighters and generals at the nest eat organic matter from the colony's reserve and evolve. What they eat, the queen cannot.";
+        _feedReserve = Button(_selectionBlock, "Evolve tree (P)", 184, 190, 212, _touch ? 30 : 24, () => Game.Hud.ToggleEvolveTree());
+        _feedReserve.TooltipText = "Organic matter is spent in the evolve tree: the queen's level, a general's level, a rank on a mutation unit's branch.";
         _counts = Text(_selectionBlock, "", 184, 74, 214, 30, _touch ? 14 : 13);
         _detail = Text(_selectionBlock, "", 185, 119, 212, _touch ? 90 : 84, _touch ? 14 : 12);
         _detail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -504,7 +504,7 @@ public partial class ColonyCommandHud : Control
         foreach (int id in input.Selection) if (Game.Sim.Ants[id].Alive) { var a = Game.Sim.Ants[id]; type = a.Type; hp += a.Hp; max += a.MaxHp; n++; }
         _selection.Text = n > 0 ? n == 1 ? Config.Of(type).Name : $"{n} ANTS SELECTED" : "THE COLONY";
         _health.Value = n > 0 ? hp / Mathf.Max(1, max) : 1;
-        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+        ProdKind kind = type switch { AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker };
         // a selected hero shows its own upright bust; the wide card art serves the queue and the Heroes tab
         _selectedArt.Texture = n > 0 && Config.IsHero(type) && HeroArt.Bust(type, Local.Me) is { } bust ? bust : n > 0 && type != AntType.Queen ? UnitArt(kind) : RoomPortrait(ChamberKind.Royal);
@@ -536,34 +536,18 @@ public partial class ColonyCommandHud : Control
     void RefreshEvolution(Colony c, PlayerInput input, int n)
     {
         var sim = Game.Sim;
-        int eaters = 0, best = -1; float progress = 0, need = 0;
+        int general = -1;
         foreach (int id in input.Selection)
-        {
-            ref var a = ref sim.Ants[id];
-            if (!a.Alive || !sim.Eats(a)) continue;
-            eaters++;
-            progress += sim.EvolutionProgress(a);
-            float nd = sim.EvolutionNeed(a);
-            if (best < 0 || nd > need) { best = id; need = nd; }
-        }
-        bool show = eaters > 0 && sim.EatRules && n > 0;
-        _evo.Visible = show;
-        _feedReserve.Visible = show && c.Organic >= 1 && need > 0;
-        _detail.Size = new Vector2(212, show ? 68 : (_touch ? 90 : 84));
-        if (!show) return;
-        _evo.Value = progress / eaters;
-        ref var b = ref sim.Ants[best];
-        if (Config.IsHero(b.Type))
-        {
-            _counts.Text = $"{_counts.Text}  ·  Level {b.Level}";
-            _detail.Text = b.Level >= Config.HeroMaxLevel ? "A legend: nothing left to learn." :
-                $"Level {b.Level + 1} needs {need:0} more organic matter. Only eating teaches: right-click remains to feast.{(sim.Cannibal(b) ? " Devours our own fallen too." : "")}";
-            return;
-        }
-        string stage = Config.StageNames[b.Stage];
-        _counts.Text = eaters == 1 ? $"{_counts.Text}  ·  {stage}" : $"{_counts.Text}  ·  evolution {progress / eaters * 100:0}%";
-        _detail.Text = b.Stage >= Config.MaxStage ? $"{stage}: fully evolved." :
-            $"Next, {Config.StageNames[b.Stage + 1]}: {Config.StageGain(b.Stage + 1)}. Needs {need:0} more organic matter: eat the remains of bugs or enemy ants (right-click them), or feed from the reserve.";
+            if (sim.Ants[id].Alive && Config.IsHero(sim.Ants[id].Type)) { general = id; break; }
+        _evo.Visible = false;
+        bool tree = sim.EvolveRules && (sim.Mission == null || sim.Mission.Chapter >= Reveal.Mutagen);
+        _feedReserve.Visible = tree && n > 0;
+        _detail.Size = new Vector2(212, _feedReserve.Visible ? 68 : (_touch ? 90 : 84));
+        if (general < 0) return;
+        ref var b = ref sim.Ants[general];
+        _counts.Text = $"{_counts.Text}  ·  Level {b.Level}";
+        _detail.Text = b.Level >= Config.HeroMaxLevel ? "A legend: nothing left to learn." :
+            $"Level {b.Level + 1} costs {Evolve.GeneralCost(b.Level + 1):0} organic matter in the evolve tree (P). Eating remains mends it.{(sim.Cannibal(b) ? " Devours our own fallen too." : "")}";
     }
     void RefreshQueue(Colony c)
     {

@@ -98,7 +98,7 @@ void fragment() {
     static Node3D Load(string name) => ResourceLoader.Exists(Root + $"{name}/{name}.gltf") ? GD.Load<PackedScene>(Root + $"{name}/{name}.gltf").Instantiate<Node3D>() : null;
 
     // ---------------------------------------------------------------- the web and the queen wasp (H1), the gland (H2)
-    (Node3D, Node3D, Node3D, StandardMaterial3D) MakeSite(MutagenSource m)
+    (Node3D, Node3D, Node3D, StandardMaterial3D) MakeSite(MutationCore m)
     {
         bool wild = m.From == AntType.Wasp; // level 1's dead queen lies in the world (PondWorld): only her gland is drawn here
         var web = wild ? Load("web") : null;
@@ -149,7 +149,7 @@ void fragment() {
     }
 
     /// The dead queen's gland on level 1's island: the same amber flesh and breathing violet-green core as H2.
-    Node3D GlandOnly(MutagenSource m, Node3D gland)
+    Node3D GlandOnly(MutationCore m, Node3D gland)
     {
         var glow = new StandardMaterial3D
         {
@@ -173,7 +173,7 @@ void fragment() {
         var sim = _g.Sim;
         _t += dt;
         float pulse = 0.5f + 0.5f * Mathf.Sin(_t * 2.4f);
-        foreach (var m in sim.Mutagens)
+        foreach (var m in sim.Cores)
         {
             if (m.From is not (AntType.Wasp or AntType.Queen)) continue;
             if (!_sites.TryGetValue(m.Id, out var s)) _sites[m.Id] = s = MakeSite(m);

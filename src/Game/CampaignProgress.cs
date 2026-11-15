@@ -41,12 +41,12 @@ public static class CampaignProgress
     /// A star unlock's name, kept secret while it would name a caste or hero the player has not met yet.
     public static string UnlockName(Levels.Unlock u)
     {
-        var type = u.Perk switch { Perk.Matron => AntType.Matron, Perk.Marshal => AntType.Marshal, Perk.Gunner => AntType.Gunner, Perk.Flyer => AntType.Flyer, _ => AntType.Worker };
+        var type = u.Perk switch { Perk.Matron => AntType.Matron, Perk.Marshal => AntType.Marshal, Perk.Gunner => AntType.Gunner, _ => AntType.Worker };
         return Met(type) ? u.Name : $"a {u.Kind.ToLowerInvariant()} not yet met";
     }
 
-    /// Evolution by eating, met in its chapter (or any Skirmish or Lane War): the Field Guide's Feeding page.
-    public static bool MetEvolution { get { Ensure(); return _openModes || Frontier >= Reveal.Evolution; } }
+    /// The evolve tree, met in the chapter of the first core (or any Skirmish): the Field Guide's Evolution page.
+    public static bool MetEvolution { get { Ensure(); return _openModes || Frontier >= Reveal.Mutagen; } }
 
     /// The mutation track (mutagen, the sixth sense, mutations), met in the Silk Trap: the Field Guide's Mutation page.
     public static bool MetMutation { get { Ensure(); return Frontier >= Reveal.Mutagen; } }
@@ -107,15 +107,6 @@ public static class CampaignProgress
         if (next <= 0 || survivors == null || Completed(next)) return;
         _roster[next] = survivors.Save();
         Save();
-    }
-
-    /// The result card's mutation choice: the colony walking into the next chapter takes it (one mutagen). Like the
-    /// roster itself, a chapter already won keeps the colony it began with.
-    public static bool ChooseMutation(int id, ColonyRoster survivors, Mutation m)
-    {
-        if (survivors == null || !survivors.Take(m)) return false;
-        CarryRoster(id, survivors);
-        return true;
     }
 
     /// The comic beat before a level plays once by itself; the map replays it on request.

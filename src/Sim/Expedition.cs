@@ -221,7 +221,7 @@ public sealed partial class Sim
         if (Mission.Stage == ExpeditionStage.RaiseWorkers && Mission.WorkersHatched >= Expedition.WorkerGoal) BeginBridge();
         if (Mission.Stage == ExpeditionStage.Bridge) TickBridge(dt);
         if (Mission.Stage == ExpeditionStage.Fragment) TickFragment();
-        if (Mission.Stage == ExpeditionStage.Fragment && MutagenById(Mission.GlandId) is { Home: true })
+        if (Mission.Stage == ExpeditionStage.Fragment && CoreById(Mission.GlandId) is { Home: true })
         { Mission.Stage = ExpeditionStage.Complete; Winner = 0; }
         if (c.Founded || Mission.EntranceOrdered || Mission.Stage == ExpeditionStage.Provision) return;
         // Founders stay behind the fighting party, rather than foraging into the ambush.

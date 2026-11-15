@@ -119,13 +119,6 @@ public partial class ResearchGlyph : Control
                 DrawCircle(c + new Vector2(-u * 3.4f, -u * 2f), u * 0.5f, col);
                 DrawCircle(c + new Vector2(u * 3.4f, -u * 2f), u * 0.5f, col);
                 break;
-            case Upgrade.Wings:
-                for (int s = -1; s <= 1; s += 2)
-                {
-                    DrawColoredPolygon(new[] { c, c + new Vector2(s * u * 4.2f, -u * 3f), c + new Vector2(s * u * 4.6f, -u * 1.4f), c + new Vector2(s * u * 0.8f, u * 0.4f) }, new Color(col, 0.85f));
-                    DrawColoredPolygon(new[] { c + new Vector2(0, u * 0.4f), c + new Vector2(s * u * 3.6f, u * 1.2f), c + new Vector2(s * u * 3.2f, u * 2.6f), c + new Vector2(s * u * 0.6f, u * 1.2f) }, new Color(col, 0.6f));
-                }
-                break;
             case Upgrade.Mandibles:
                 for (int s = -1; s <= 1; s += 2)
                     DrawPolyline(new[] { c + new Vector2(s * u * 1.2f, u * 3f), c + new Vector2(s * u * 3f, 0), c + new Vector2(s * u * 2.2f, -u * 2.6f), c + new Vector2(s * u * 0.3f, -u * 3.2f) }, col, lw * 1.6f, true);

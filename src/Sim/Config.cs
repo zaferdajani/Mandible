@@ -6,14 +6,16 @@ public enum AntType
 {
     Worker = 0, Soldier = 1, Major = 2, Queen = 3, Beetle = 4, Spider = 5, StagBeetle = 6, Wasp = 7, Flyer = 8,
     Gunner = 9, Warlord = 10, Matron = 11, Marshal = 12,
+    WebAnt = 13,    // spider core: flings silk that pins flyers (Mutation.Web)
+    Armoured = 14,  // beetle core: a thick shell (Mutation.Armoured)
 }
 
 public enum AntState { Idle, Forage, Gather, Return, Move, AttackMove, Engage, Hold, Dig }
 
-public enum ProdKind { Worker, Soldier, Major, Chamber, Flyer, Gunner, Warlord, Matron, Marshal }
+public enum ProdKind { Worker, Soldier, Major, Chamber, Flyer, Gunner, Warlord, Matron, Marshal, WebAnt, Armoured }
 
 /// Colony research, done in the special sections of the nest. The queen's ascension gates the rest.
-public enum Upgrade { Queen, Wings, Mandibles, Chitin, SilkCutters }
+public enum Upgrade { Queen, Mandibles, Chitin, SilkCutters }
 
 public enum Difficulty { Easy, Normal, Hard }
 
@@ -35,15 +37,16 @@ public static class Config
     public const int Wild = 2; // neutral bugs guarding food
     public const int MaxLevel = 5;
     public const int HeroMaxLevel = 10;
+    public const int TypeCount = 15;        // AntType values
     public static readonly int[] LevelXp = { 0, 0, 40, 110, 210, 350 }; // xp needed to reach level n
-    // generals: early levels come quickly so the first skills arrive in the first fights; the ultimate ranks are earned
+    // Lane War's match levels for its general (a colony's generals level in the evolve tree: Evolve.GeneralCost)
     public static readonly int[] HeroXp = { 0, 0, 90, 210, 370, 580, 850, 1180, 1580, 2060, 2650 };
     public static int MaxLevelOf(AntType t) => IsHero(t) ? HeroMaxLevel : MaxLevel;
     public static int XpFor(AntType t, int level) => IsHero(t) ? HeroXp[level] : LevelXp[System.Math.Min(level, MaxLevel)];
 
     public static bool IsBug(AntType t) => t >= AntType.Beetle && t <= AntType.Wasp;
-    public static bool IsHero(AntType t) => t >= AntType.Warlord;
-    public static bool IsWarrior(AntType t) => t == AntType.Soldier || t == AntType.Major || t == AntType.Flyer || t == AntType.Gunner || IsHero(t);
+    public static bool IsHero(AntType t) => t is AntType.Warlord or AntType.Matron or AntType.Marshal;
+    public static bool IsWarrior(AntType t) => t == AntType.Soldier || t == AntType.Major || t == AntType.Flyer || t == AntType.Gunner || t == AntType.WebAnt || t == AntType.Armoured || IsHero(t);
     public static bool Flies(AntType t) => t == AntType.Wasp || t == AntType.Flyer || t == AntType.Marshal;
     public static bool Ranged(AntType t) => t == AntType.Gunner || t == AntType.Matron;
     /// Flying predators (wasps, the Hornet Mother): in the air no ground ant can reach them, acid gunners included;
@@ -68,6 +71,8 @@ public static class Config
         AntType.Queen => new(0.15f, 0.1f, 0.03f),
         AntType.Flyer => new(0.12f, 0.18f, 0.015f),
         AntType.Gunner => new(0.1f, 0.2f, 0.01f),
+        AntType.WebAnt => new(0.12f, 0.12f, 0.015f),
+        AntType.Armoured => new(0.2f, 0.1f, 0.04f),
         AntType.Beetle => new(0.4f, 0.22f, 0.03f),
         AntType.Spider => new(0.35f, 0.32f, 0.01f),
         AntType.StagBeetle => new(0.4f, 0.25f, 0.03f),
@@ -104,6 +109,7 @@ public static class Config
     public const float WarlordCleave = 0.5f;        // share of each bite dealt to everyone around the victim
     // the colony castes' chitin (the combat scale): workers and gunners wear none
     public const float SoldierArmor = 0.05f, MajorArmor = 0.12f, QueenArmor = 0.15f, FlyerArmor = 0.03f;
+    public const float WebAntArmor = 0.04f, ArmouredArmor = 0.32f; // the armoured ant: a beetle's plates, the thickest shell a caste wears
     public const float WarlordArmor = 0.3f;
     public const float WarCryBite = 1.3f;           // allies' bite multiplier (+3% a level)
     public const float WarCryShock = 1.0f;          // the roar itself hits everyone within WarCryShockR for one bite
@@ -188,6 +194,8 @@ public static class Config
         AntType.Wasp => 24 * level,
         AntType.Flyer => 22,
         AntType.Gunner => 16,
+        AntType.WebAnt => 18,
+        AntType.Armoured => 26,
         AntType.Warlord or AntType.Matron or AntType.Marshal => 120 * level,
         _ => 30 * level,
     } * (IsBug(t) ? 1 : 1 + (level - 1) * 0.5f);
@@ -219,6 +227,8 @@ public static class Config
         new() { Name = "Warlord", Hp = 820, Armor = WarlordArmor, Damage = 28f, Cooldown = 0.8f, Speed = 7.2f, Reach = 2.0f, Aggro = 15, Sight = 18, Size = 2.7f, Cost = 250, BuildTime = 20f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Acid Matron", Hp = 620, Armor = MatronArmor, Damage = 18f, Cooldown = 0.9f, Speed = 6.5f, Reach = 6.5f, Aggro = 15, Sight = 18, Size = 2.5f, Cost = 350, BuildTime = 25f, CorpseFood = 40, Pop = 4 },
         new() { Name = "Sky Marshal", Hp = 620, Armor = MarshalArmor, Damage = 22f, Cooldown = 0.7f, Speed = 12f, Reach = 1.9f, Aggro = 16, Sight = 22, Size = 2.2f, Cost = 450, BuildTime = 30f, CorpseFood = 40, Pop = 4 },
+        new() { Name = "Web Ant", Hp = 64, Armor = WebAntArmor, Damage = 5f, Cooldown = 0.7f, Speed = 7.2f, Reach = 1.25f, Aggro = 13, Sight = 16, Size = 1.4f, Cost = 55, BuildTime = 4f, CorpseFood = 6, Pop = 1 },
+        new() { Name = "Armoured Ant", Hp = 190, Armor = ArmouredArmor, Damage = 9f, Cooldown = 0.85f, Speed = 5.4f, Reach = 1.4f, Aggro = 13, Sight = 13, Size = 1.85f, Cost = 80, BuildTime = 5.5f, CorpseFood = 14, Pop = 2 },
     };
 
     public static UnitStats Of(AntType t) => Stats[(int)t];
@@ -232,26 +242,30 @@ public static class Config
         ProdKind.Warlord => AntType.Warlord,
         ProdKind.Matron => AntType.Matron,
         ProdKind.Marshal => AntType.Marshal,
+        ProdKind.WebAnt => AntType.WebAnt,
+        ProdKind.Armoured => AntType.Armoured,
         _ => AntType.Flyer,
     };
 
-    public static bool IsHeroKind(ProdKind k) => k >= ProdKind.Warlord;
+    public static bool IsHeroKind(ProdKind k) => k is ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal;
 
     public static string Role(ProdKind k) => k switch
     {
         ProdKind.Worker => "Forages on its own, lays food trails and carries corpses home.",
         ProdKind.Soldier => "Fast, aggressive fighter. The backbone of any raid.",
         ProdKind.Major => "Huge-headed crusher. Slow, tough and devastating.\nRequires a Matriarch queen.",
-        ProdKind.Flyer => "Winged alate. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires the Wing Chamber.",
+        ProdKind.Flyer => "Winged ant. Flies over rocks, strikes wasps in the air, swoops on ground prey.\nRequires a fly's mutation core.",
+        ProdKind.WebAnt => "Web ant. Flings silk that pins a flying enemy to the ground, where any ant can bite it. A weak biter.\nRequires a spider's mutation core.",
+        ProdKind.Armoured => "Armoured ant. A beetle's shell plates: slow, and shrugs off a third of every blow.\nRequires a beetle's mutation core.",
         ProdKind.Gunner => "Sprays formic acid from range. Fragile; keep it behind the soldiers.\nRequires an Empress queen.",
         ProdKind.Warlord => "GENERAL. The plated brawler: cleaving bites, 30% armour, War Cry.\nLevels up to 10. Requires a Matriarch; stronger from a higher queen.",
         ProdKind.Matron => "GENERAL. The ranged acid spitter: splashing spray, Acid Burst and venom pools.\nLevels up to 10. Requires an Empress; stronger from a higher queen.",
-        ProdKind.Marshal => "GENERAL. The winged commander: swoops from the air, Dive Bomb rallies the army.\nLevels up to 10. Requires an Ancient Empress and the Wing Chamber.",
+        ProdKind.Marshal => "GENERAL. The winged commander: swoops from the air, Dive Bomb rallies the army.\nLevels up to 10. Requires an Ancient Empress and winged ants.",
         _ => "",
     };
 
     /// Warriors hatch as squads; workers and heroes hatch alone.
-    public static int SquadSize(AntType t) => t switch { AntType.Soldier => 6, AntType.Gunner => 4, AntType.Flyer => 4, AntType.Major => 3, _ => 1 };
+    public static int SquadSize(AntType t) => t switch { AntType.Soldier => 6, AntType.Gunner => 4, AntType.Flyer => 4, AntType.WebAnt => 4, AntType.Major => 3, AntType.Armoured => 3, _ => 1 };
     public static int SquadSize(ProdKind k) => k == ProdKind.Chamber ? 1 : SquadSize(UnitOf(k));
     public static bool InSquads(AntType t) => SquadSize(t) > 1;
     /// A squad is 10% cheaper than its members bought one by one, and hatches faster than one at a time.
@@ -276,15 +290,13 @@ public static class Config
     public static int QueenNeeded(Upgrade u, int nextTier) => u switch
     {
         Upgrade.Queen => 0,
-        Upgrade.Wings => 2,
         Upgrade.SilkCutters => 2,
         _ => nextTier, // mandibles / chitin tier n needs queen tier n
     };
 
     public static float ResearchCost(Upgrade u, int nextTier) => u switch
     {
-        Upgrade.Queen => nextTier switch { 2 => 200, 3 => 400, 4 => 700, _ => 1100 },
-        Upgrade.Wings => 160,
+        Upgrade.Queen => 0, // her levels are bought with organic matter (Evolve.QueenCost)
         Upgrade.SilkCutters => 100,
         _ => 90 + 70 * (nextTier - 1),
     };
@@ -292,7 +304,6 @@ public static class Config
     public static float ResearchTime(Upgrade u, int nextTier) => u switch
     {
         Upgrade.Queen => 20 + 15 * nextTier,
-        Upgrade.Wings => 30,
         Upgrade.SilkCutters => 20,
         _ => 18 + 8 * nextTier,
     };
@@ -300,7 +311,6 @@ public static class Config
     public static string ResearchName(Upgrade u, int nextTier) => u switch
     {
         Upgrade.Queen => $"Royal Jelly: {QueenTitles[System.Math.Min(5, nextTier)]}",
-        Upgrade.Wings => "Wing Chamber",
         Upgrade.SilkCutters => "Silk Cutters",
         Upgrade.Mandibles => $"Mandible Forge {new string('I', nextTier)}",
         _ => $"Chitin Armory {new string('I', nextTier)}",
@@ -308,22 +318,23 @@ public static class Config
 
     public static string ResearchDesc(Upgrade u) => u switch
     {
-        Upgrade.Queen => "Feed the queen royal jelly. She grows mightier, unlocks new castes, and hatches stronger generals.\nMatriarch: majors, Wing Chamber, Silk Cutters, tier II forges, the Warlord general.\nEmpress: Acid Gunners, tier III forges, the Acid Matron general, brood 25% faster.\nAncient Empress: the Sky Marshal general.\nEternal Mother: brood 50% faster, mightiest generals.",
-        Upgrade.Wings => "Raise winged alates: flying ants that cross rocks and fight wasps in the air.",
+        Upgrade.Queen => "The queen's level, paid in organic matter (the evolve tree's trunk). Every ant she lays afterwards hatches stronger, the nest holds more, and she opens new castes and hatches stronger generals.\nMatriarch: majors, Silk Cutters, tier II forges, the Warlord general.\nEmpress: Acid Gunners, tier III forges, the Acid Matron general, brood 25% faster.\nAncient Empress: the Sky Marshal general.\nEternal Mother: brood 50% faster, mightiest generals.",
         Upgrade.SilkCutters => "Sharpened tarsal claws: webbed ants break free in half the time.",
         Upgrade.Mandibles => "New warriors hatch larger: per tier +22% bite, +12% health, +10% size, but 8% slower.",
         _ => "Hardened chitin: all warriors gain 18% health per tier.",
     };
 
-    /// Unit unlocks: majors need a Matriarch, flyers need the Wing Chamber.
-    public static bool Unlocked(ProdKind k, int[] tiers) => k switch
+    /// Unit unlocks: the queen's level opens the ant castes; a mutation core opens each hybrid (Mutation bits).
+    public static bool Unlocked(ProdKind k, int[] tiers, int mutations) => k switch
     {
         ProdKind.Major => tiers[(int)Upgrade.Queen] >= 2,
-        ProdKind.Flyer => tiers[(int)Upgrade.Wings] >= 1,
+        ProdKind.Flyer => (mutations & (int)Mutation.Winged) != 0,
+        ProdKind.WebAnt => (mutations & (int)Mutation.Web) != 0,
+        ProdKind.Armoured => (mutations & (int)Mutation.Armoured) != 0,
         ProdKind.Gunner => tiers[(int)Upgrade.Queen] >= 3,
         ProdKind.Warlord => tiers[(int)Upgrade.Queen] >= 2,
         ProdKind.Matron => tiers[(int)Upgrade.Queen] >= 3,
-        ProdKind.Marshal => tiers[(int)Upgrade.Queen] >= 4 && tiers[(int)Upgrade.Wings] >= 1,
+        ProdKind.Marshal => tiers[(int)Upgrade.Queen] >= 4 && (mutations & (int)Mutation.Winged) != 0,
         _ => true,
     };
 
@@ -384,31 +395,22 @@ public static class Config
 
     // ------------------------------------------------------------------ organic matter and evolution
     // Organic matter is the evolving material: it comes only from the remains of other creatures (wild bugs, the other
-    // colony). Workers haul it home into the reserve; fighters and heroes evolve only by eating it. Killing teaches nothing.
+    // colony). Workers haul it home into the reserve, where it is spent in the evolve tree (Evolve.cs); eating it in the field heals.
     /// Organic matter in one load of these remains: a worker is a crumb, a major a meal, a beetle or a hero a feast.
     public static float OrganicPerLoad(AntType t) => t switch
     {
-        AntType.Worker => 0.5f, AntType.Soldier or AntType.Gunner or AntType.Flyer => 0.8f, AntType.Major => 1f,
+        AntType.Worker => 0.5f, AntType.Soldier or AntType.Gunner or AntType.Flyer or AntType.WebAnt => 0.8f, AntType.Major or AntType.Armoured => 1f,
         AntType.Beetle or AntType.Spider => 0.8f, AntType.Wasp => 0.9f, AntType.StagBeetle => 1f, _ => 2f, // queen, heroes
     };
-    public const int MaxStage = 3;
-    /// Organic matter a fighter must eat for each stage: about one beetle, then a whole lair, then the stag or a rival hero.
-    public static float StageCost(int stage) => stage switch { 1 => 24f, 2 => 60f, _ => 120f };
-    public const float StageHp = 0.15f, StageBite = 0.12f, StageSize = 0.06f; // per stage
-    public static readonly string[] StageNames = { "Hatched", "Blooded", "Scarred", "Grizzled" };
-    public static string StageGain(int stage) => $"+{StageHp * 100:0}% health, +{StageBite * 100:0}% bite, heavier mandibles";
     public const int RivalHeroCap = 6;          // the campaign's rival heroes stop growing here
-    public const float HeroXpPerOrganic = 12.5f; // a general turns what it eats into experience: about 210 organic from level 1 to 10
     public const float FeastBite = 1.0f;       // seconds over each mouthful (one load)
     public const float FeastHeal = 0.06f;      // share of its health each mouthful restores
     // Devour the Fallen: the fire-ant Warlord alone eats its own colony's dead, faster and healing more
     public const float DevourPace = 1.6f, DevourHeal = 1.5f;
-    /// The queen ascends on organic matter alone.
-    public static float QueenOrganic(int nextTier) => nextTier switch { 2 => 10f, 3 => 25f, 4 => 50f, _ => 80f };
     /// Larvae need protein, not just sugar: organic matter for each brood on top of its food.
     public static float BroodOrganic(ProdKind k) => k switch
     {
-        ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major => 1.5f,
+        ProdKind.Worker => 0f, ProdKind.Soldier or ProdKind.Gunner or ProdKind.WebAnt => 0.3f, ProdKind.Flyer => 0.6f, ProdKind.Major or ProdKind.Armoured => 1.5f,
         ProdKind.Warlord or ProdKind.Matron or ProdKind.Marshal => 8f, _ => 0f,
     };
     /// The ground a colony watches for fresh remains without having to stumble on them: grows with its workforce.
@@ -422,7 +424,7 @@ public static class Config
     public const float OrganicFloor = 15f, OrganicTrickle = 0.15f; // the queen's own body keeps a colony that never hunts from stalling outright
     public static ProdKind KindOf(AntType t) => t switch
     {
-        AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+        AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
         AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
     };
     public static string RemainsName(RemainsOrder o) => o == RemainsOrder.Haul ? "Haul remains home" : "Leave remains for the army";

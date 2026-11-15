@@ -72,12 +72,16 @@ public static class GeneralValidation
                 int g = sim.Spawn(0, type, field, 0);
                 ref var a = ref sim.Ants[g];
                 Check(a.Level == 1 && a.Sk0 == 1 && a.SkPts == 0, $"{tag}: a new general must know its signature at rank 1 with no spare point");
-                // a general levels only by eating
+                // a general levels only in the evolve tree, on the colony's organic matter: never by eating or killing
                 float organic = 0;
                 int lastLevel = 1;
+                sim.Col[0].Organic = 0;
+                Apply(Cmd.Units(CmdKind.Evolve, 0, new List<int> { g }, sim));
+                Check(a.Level == 1, $"{tag}: levelled with no organic matter in the reserve");
                 while (a.Level < Config.HeroMaxLevel && organic < 1000)
                 {
-                    sim.TestFeed(g, 5); organic += 5;
+                    sim.Col[0].Organic += 5; organic += 5;
+                    Apply(Cmd.Units(CmdKind.Evolve, 0, new List<int> { g }, sim));
                     if (a.Level != lastLevel)
                     {
                         Check(a.SkPts == a.Level - a.Sk0 - a.Sk1 - a.Sk2, $"{tag}: one skill point per level");
@@ -86,6 +90,7 @@ public static class GeneralValidation
                         lastLevel = a.Level;
                     }
                 }
+                organic -= sim.Col[0].Organic; // what was put in and not spent
                 GD.Print($"[general-test] {tag}: level {a.Level} after {organic:0} organic; ranks Q{a.Sk0} W{a.Sk1} E{a.Sk2}, {a.SkPts} unspent");
                 Check(a.Level == 10, $"{tag}: did not reach level 10");
                 Check(organic >= 150 && organic <= 260, $"{tag}: the 10-level curve should cost about 210 organic, took {organic}");
@@ -318,15 +323,16 @@ public static class GeneralValidation
                 foreach (int id in squad) Check(sim.Ants[id].AutoEat == on, $"auto-eat {(on ? "ON" : "OFF")} must reach the whole squad");
                 foreach (int id in squad) sim.Ants[id].State = AntState.Idle;
                 var prey = Spawn(1, AntType.Major, 1, 1, spot + outv * 1.5f)[0];
-                float evo0 = 0; foreach (int id in squad) evo0 += sim.Ants[id].Evo;
+                foreach (int id in squad) sim.Ants[id].Hp = sim.Ants[id].MaxHp * 0.5f; // hurt: eating mends
+                float evo0 = 0; foreach (int id in squad) evo0 += sim.Ants[id].Hp;
                 sim.Slay(prey, squad[0]);
                 FoodSource carcass = null;
                 foreach (var f in sim.W.Food) if (f.Kind == FoodKind.Corpse && f.Alive && f.Pos.DistanceTo(spot + outv * 1.5f) < 1f) carcass = f;
                 Check(carcass != null, "the kill left no carcass");
                 Ticks(8);
-                float evo = 0; foreach (int id in squad) evo += sim.Ants[id].Evo + 24 * sim.Ants[id].Stage;
+                float evo = 0; foreach (int id in squad) evo += sim.Ants[id].Hp;
                 bool queued = (carcass.Queued & 1) != 0;
-                GD.Print($"[general-test] auto-eat {(on ? "ON" : "OFF")}: mouthfuls {carcass.Feasted}, claim {carcass.ClaimTeam}, squad evolution {evo0:0.0} -> {evo:0.0}, queued for haulers {queued}");
+                GD.Print($"[general-test] auto-eat {(on ? "ON" : "OFF")}: mouthfuls {carcass.Feasted}, claim {carcass.ClaimTeam}, squad health {evo0:0.0} -> {evo:0.0}, queued for haulers {queued}");
                 if (on) Check(carcass.Feasted >= 3 && evo > evo0 && carcass.ClaimTeam == 1 && !queued, "auto-eat ON: the squad must eat its kill, and the haulers must leave it");
                 else Check(carcass.Feasted == 0 && carcass.ClaimTeam == 0, "auto-eat OFF: the kill must be left for the workers");
                 foreach (int id in squad) sim.Slay(id);

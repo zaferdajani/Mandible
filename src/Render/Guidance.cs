@@ -127,7 +127,7 @@ public sealed class Guidance
             centre += a.Pos; n++;
             if (a.Type == AntType.Worker) workers++;
             if (!sim.Eats(a)) continue;
-            float nd = sim.EvolutionNeed(a);
+            float nd = a.MaxHp - a.Hp; // eating mends: the most hurt eater decides
             if (eater < 0 || nd > need) { eater = id; need = nd; }
             cannibal |= sim.Cannibal(a);
         }
@@ -152,9 +152,7 @@ public sealed class Guidance
             if (eater >= 0 && need > 0)
             {
                 ref var e = ref sim.Ants[eater];
-                bool hero = Config.IsHero(e.Type);
-                float share = hero ? organic / Mathf.Max(1f, need + 0.01f) : organic / Config.StageCost(e.Stage + 1);
-                string gain = organic >= need ? (hero ? "A FULL LEVEL" : "THE NEXT STAGE") : $"+{share * 100:0}% {(hero ? "OF A LEVEL" : "EVOLUTION")}";
+                string gain = "MEND";
                 line = best.Team == Local.Me ? $"DEVOUR THE FALLEN · {gain}" : $"FEAST · {gain}";
                 if (best.Team != Local.Me) line += $"\nOR HAUL HOME · +{organic:0} ORGANIC";
             }

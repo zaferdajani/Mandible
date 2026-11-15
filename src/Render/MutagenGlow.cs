@@ -128,7 +128,7 @@ void fragment() {
     }
 
     /// How hard a core of this strength radiates (1 dim, 2 strong, 3 a queen's blaze).
-    public static float Radiance(int strength) => strength switch { <= 1 => 0.55f, 2 => 1f, _ => 1.6f };
+    public const float Radiance = 1f; // every core glows alike: what it gives is its creature's kind, not a strength
 
     readonly Dictionary<int, MeshInstance3D> _rings = new();
     MeshInstance3D Ring(int id)
@@ -144,11 +144,10 @@ void fragment() {
     {
         var sim = _g.Sim;
         _t += dt;
-        foreach (var m in sim.Mutagens)
+        foreach (var m in sim.Cores)
         {
-            // a stronger core beats faster and harder
-            float pulse = 0.5f + 0.5f * Mathf.Sin(_t * (1.8f + 0.6f * m.Strength) + m.Id);
-            float rad = Radiance(m.Strength);
+            float pulse = 0.5f + 0.5f * Mathf.Sin(_t * 3f + m.Id);
+            const float rad = Radiance;
             if (!_sources.TryGetValue(m.Id, out var s))
             {
                 var node = new Node3D();
@@ -183,9 +182,9 @@ void fragment() {
             var veins = Veins(m.Id);
             if (veins != null)
             {
-                // the ruptured patch: veins spread over the body while the gland is in it, brighter and wider for a stronger core
+                // the ruptured patch: veins spread over the body while the gland is in it, pulsing with it
                 veins.Visible = s.node.Visible && !m.Free;
-                float span = (1.6f + 0.8f * m.Strength) * (1 + 0.5f * zoom);
+                float span = 3.2f * (1 + 0.5f * zoom);
                 veins.Size = new Vector3(span, 3.5f, span);
                 veins.Position = s.node.Position + Vector3.Down * 0.3f; // centred on the gland: on the island queen's body, or round the wasp up in her web
                 veins.RotationDegrees = new Vector3(0, m.Id * 47f, 0);
@@ -198,7 +197,7 @@ void fragment() {
                 if (m.Free)
                 {
                     // seed-sized in the jaws, swelling a little with the camera's distance so it reads at play zoom
-                    float size = (0.42f + 0.07f * m.Strength) * (1 + 1.8f * zoom) * _coreScale;
+                    float size = 0.56f * (1 + 1.8f * zoom) * _coreScale;
                     var at = _g.World.HF.Point(m.Pos, m.Carried ? 0.55f : 0.3f);
                     cm.node.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(0, -m.Heading + Mathf.Pi / 2, 0.25f)).Scaled(Vector3.One * size), at);
                     cm.mat.EmissionEnergyMultiplier = (0.8f + 1.4f * pulse) * rad;
@@ -210,11 +209,11 @@ void fragment() {
             // drawn just in front of the body toward the eye, so the gaster or the jaws never hide the light inside them
             var eye = _g.GetViewport().GetCamera3D();
             if (eye != null) halo.Position += (eye.GlobalPosition - halo.Position).Normalized() * (m.Free ? 0.4f : 0.9f);
-            halo.Scale = Vector3.One * (m.Free ? 1.3f : 2.4f + 0.8f * m.Strength) * (0.7f + 0.3f * rad) * (1 + 2.4f * zoom); // never a lost dot at play zoom
+            halo.Scale = Vector3.One * (m.Free ? 1.3f : 4f) * (0.7f + 0.3f * rad) * (1 + 2.4f * zoom); // never a lost dot at play zoom
             var hm = (ShaderMaterial)halo.MaterialOverride;
             hm.SetShaderParameter("patch_", m.Free ? 0f : 1f);
             hm.SetShaderParameter("t", _t + m.Id);
-            hm.SetShaderParameter("strength", (float)m.Strength); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
+            hm.SetShaderParameter("strength", 2f); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
             // the sixth sense: a faint ring of disturbed air spreads from a source the colony feels, even through the fog
             // from play zoom a carried gland keeps a faint, slow ripple under it, so the player can follow it across the yard
             bool sensed = (!m.Carried || zoom > 0.5f) && sim.Senses(Local.Me, m);

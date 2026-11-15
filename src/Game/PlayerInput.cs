@@ -340,7 +340,9 @@ public partial class PlayerInput : Node
             case Godot.Key.U: Game.TryEnqueue(ProdKind.Matron); return;
             case Godot.Key.I: Game.TryEnqueue(ProdKind.Marshal); return;
             case Godot.Key.Q: Game.TryResearch(Upgrade.Queen); return;
-            case Godot.Key.W: Game.TryResearch(Upgrade.Wings); return;
+            case Godot.Key.W: Game.TryEnqueue(ProdKind.WebAnt); return;
+            case Godot.Key.M: Game.TryEnqueue(ProdKind.Armoured); return;
+            case Godot.Key.P: Game.Hud.ToggleEvolveTree(); return;
             case Godot.Key.E: Game.TryResearch(Upgrade.Mandibles); return;
             case Godot.Key.R: Game.TryResearch(Upgrade.Chitin); return;
             case Godot.Key.T: Game.TryResearch(Upgrade.SilkCutters); return;
@@ -413,15 +415,6 @@ public partial class PlayerInput : Node
             if (s != null) foreach (int m in s.Members) if (!all.Contains(m)) all.Add(m);
         }
         return all;
-    }
-
-    /// Fighters and heroes at the nest eat from the colony's organic reserve.
-    public void FeedFromReserve()
-    {
-        Prune();
-        if (Selection.Count == 0) return;
-        Game.Issue(Cmd.Units(CmdKind.FeedReserve, Local.Me, Selection, Sim));
-        Game.Audio.Ui("ui_click");
     }
 
     public void Reinforce()
@@ -704,7 +697,7 @@ public partial class PlayerInput : Node
                     return;
                 }
             // a glowing gland: workers carve it out and carry it home, fighters in the selection guard them
-            foreach (var mg in Sim.Mutagens)
+            foreach (var mg in Sim.Cores)
             {
                 if (mg.Home || mg.Pos.DistanceTo(world) > 2.4f || !(Sim.Senses(Local.Me, mg) || Game.Fog == null || Game.Fog.Visible(mg.Pos))) continue;
                 var xc = Cmd.Units(CmdKind.Extract, Local.Me, Selection, Sim);
