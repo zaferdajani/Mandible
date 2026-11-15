@@ -62,7 +62,7 @@ public sealed partial class Sim
         float bestScore = 0;
         foreach (var f in W.Food)
         {
-            if (f.Kind != FoodKind.Corpse || !f.Alive || f.Layer != layer || (f.Team == team && !cannibal)) continue;
+            if (f.Kind != FoodKind.Corpse || !f.Alive || f.Husk || f.Layer != layer || (f.Team == team && !cannibal)) continue;
             float d = f.Pos.DistanceTo(from);
             if (d > radius) continue;
             float score = RemainsValue(f) / (6f + d); // rich and near
@@ -135,7 +135,7 @@ public sealed partial class Sim
     Vector2 AtCarcass(int i, ref Ant a, FoodSource f, UnitStats st, ref float speedMul)
     {
         bool bury = f.Team == a.Team && CarrionRules;
-        int need = CarrionRules || FounderDrag(f, a.Team) ? Config.HaulNeed(f.AntType) : 0;
+        int need = f.Husk ? 0 : CarrionRules || FounderDrag(f, a.Team) ? Config.HaulNeed(f.AntType) : 0; // a dried husk is light: one worker carries it
         // drag it whole: big enough to need a team, not yet home, and not already in the jaws of the other colony
         var dest = HaulDest(f, a.Team, bury);
         if (need > 0 && f.Layer == 0 && !f.Hauled && f.Pos.DistanceTo(dest) <= Config.HaulArrive + f.Radius) Arrive(f, a.Team, bury);
@@ -162,6 +162,7 @@ public sealed partial class Sim
             return to;
         }
         a.Hauling = false;
+        TakePart(ref a, f);
         if (bury)
         {
             // a small nestmate is carried away whole
@@ -191,6 +192,7 @@ public sealed partial class Sim
         if (!a.Burying || a.Layer != 0 || a.Pos.DistanceTo(Midden(a.Team)) > 2f) return false;
         a.Carrying = false;
         a.Burying = false;
+        if (a.PartP1 != 0) { StorePart(Col[a.Team], a.PartP1, a.Pos); a.PartP1 = 0; }
         Mourn(Col[a.Team], 1);
         Events.Add(new SimEvent { Kind = EvKind.Bury, Pos = a.Pos, Team = a.Team, Type = a.CarryType });
         a.Heading += DMath.Pi;
@@ -269,10 +271,20 @@ public sealed partial class Sim
         {
             var f = list[i];
             if (f.Kind != FoodKind.Corpse) continue;
-            f.Age += dt;
+            if (!f.Husk) f.Age += dt;
             f.HaulCount = f.Haulers;
             f.Haulers = 0;
-            if (f.Age > Config.CarcassFresh + Config.CarcassRot) f.Amount = 0;
+            if (f.Husk) { if (f.Part == 0) f.Amount = 0; continue; } // the part is gone: so is the husk
+            if (f.Age > Config.CarcassFresh + Config.CarcassRot)
+            {
+                // the meat goes. In the campaign a part outlasts it, so a level can never lose the parts it holds: a dried
+                // husk of one load keeps the wings, sting, gland or plates until a worker is sent for it. The husk is a body
+                // of its own, so the carcass ends for its foragers exactly as it always has.
+                if (f.Part != 0 && Mission != null && f.Layer == 0)
+                    list.Add(new FoodSource { Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = f.Pos, Amount = 1, Max = f.Max, Radius = f.Radius, Team = f.Team, AntType = f.AntType, Heading = f.Heading, Age = f.Age, Part = f.Part, Husk = true });
+                f.Part = 0;
+                f.Amount = 0;
+            }
             else if (f.Natural && f.Age > Config.CarcassFresh)
                 f.Amount = Mathf.Min(f.Amount, f.Max * (1 - (f.Age - Config.CarcassFresh) / Config.CarcassRot)); // dries out, shrinks, crumbles
             if (f.Layer > 0 && f.Alive) InNest(f, dt);
@@ -283,6 +295,7 @@ public sealed partial class Sim
         foreach (var c in Col)
             if (c.Alive && OrganicRules && c.Organic < Config.OrganicFloor && (Mission == null || c.Founded)) c.Organic += Config.OrganicTrickle * dt;
         if (CarrionRules && Ticks % 60 == 0) foreach (var c in Col) Recruit(c);
+        if (Mission != null && Ticks % 60 == 30) PartErrands(Col[0]);
     }
 
     /// Prey recruitment and automatic collection. The colony notices fresh remains anywhere within its collection
@@ -306,8 +319,10 @@ public sealed partial class Sim
             float d = f.Pos.DistanceTo(nest);
             float value = RemainsValue(f);
             bool known = d <= radius || d <= Config.RecruitRange && Seen(team, f.Pos);
-            if (claimed || eaten || value < 1.5f || !known) { f.Queued &= ~bit; continue; }
-            queue.Add((value / (20f + d), f));
+            // a husk is worth fetching only for its part: when the queen lays the unit it pays for, and no hunter stands by it
+            bool part = f.Husk && UsesPart(c, f.Part) && !HunterNear(team, f.Pos, PartErrandClear);
+            if (claimed || eaten || (f.Husk ? !part : value < 1.5f) || !known) { f.Queued &= ~bit; continue; }
+            queue.Add(((value + (part ? 30f : 0f)) / (20f + d), f));
         }
         if (queue.Count == 0) return;
         queue.Sort((x, y) => x.score != y.score ? y.score.CompareTo(x.score) : x.f.Id.CompareTo(y.f.Id));
@@ -412,6 +427,7 @@ public sealed partial class Sim
         {
             // home at the clearing: the founders butcher it on the spot and the whole body goes into the site's stock
             StoreRemains(Col[team], f.AntType, f.Amount);
+            StorePart(Col[team], f.Part, f.Pos); f.Part = 0;
             f.Amount = 0;
             Events.Add(new SimEvent { Kind = EvKind.Pickup, Pos = f.Pos, Team = team, Type = f.AntType, FoodP1 = f.Id + 1 });
             return;
@@ -424,7 +440,7 @@ public sealed partial class Sim
 
     void Drag(FoodSource f, float dt)
     {
-        int need = Config.HaulNeed(f.AntType);
+        int need = f.Husk ? 0 : Config.HaulNeed(f.AntType);
         if (need == 0 || f.HaulCount < need || f.Hauled) return;
         int team = f.HaulTeam;
         bool bury = f.Team == team && CarrionRules;
@@ -478,6 +494,7 @@ public sealed partial class Sim
         }
         float take = Mathf.Min(f.Amount, Config.NestEatRate * dt);
         f.Amount -= take;
+        if (f.Part != 0) { StorePart(c, f.Part, f.Pos); f.Part = 0; }
         if (CarrionRules || OrganicRules && f.Team != team) { StoreRemains(c, f.AntType, take); return; }
         // the campaign's colony eats them as food
         float gain = take * Config.FoodValue(FoodKind.Corpse, Mission != null) * c.FoodMult * (Config.Favoured(c.Race, FoodKind.Corpse) ? Config.FoodBonus(c.Race) : 1f);

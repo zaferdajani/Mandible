@@ -299,9 +299,9 @@ public sealed class AIController : IColonyAI
         if (workers < wantWorkers && workers < soldiers * 2 + 20) pick = ProdKind.Worker;
         else if (Config.Unlocked(ProdKind.Major, c.Tier, c.Mutations) && majors * 4 < soldiers) pick = ProdKind.Major;
         else if (Config.Unlocked(ProdKind.Gunner, c.Tier, c.Mutations) && gunners * (c.Race == Race.BlackGarden ? 3 : 7) < soldiers) pick = ProdKind.Gunner; // fire ants have no acid
-        else if (Config.Unlocked(ProdKind.Flyer, c.Tier, c.Mutations) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
-        else if (Config.Unlocked(ProdKind.WebAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.WebAnt] * 8 < soldiers) pick = ProdKind.WebAnt;
-        else if (Config.Unlocked(ProdKind.Armoured, c.Tier, c.Mutations) && c.Count[(int)AntType.Armoured] * 5 < soldiers) pick = ProdKind.Armoured;
+        else if (Config.Unlocked(ProdKind.Flyer, c.Tier, c.Mutations) && flyers * 5 < soldiers && _sim.PartReady(_team, ProdKind.Flyer)) pick = ProdKind.Flyer;
+        else if (Config.Unlocked(ProdKind.WebAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.WebAnt] * 8 < soldiers && _sim.PartReady(_team, ProdKind.WebAnt)) pick = ProdKind.WebAnt;
+        else if (Config.Unlocked(ProdKind.Armoured, c.Tier, c.Mutations) && c.Count[(int)AntType.Armoured] * 5 < soldiers && _sim.PartReady(_team, ProdKind.Armoured)) pick = ProdKind.Armoured;
         else pick = ProdKind.Soldier;
         Q(pick); // a major simply waits until the food is there
     }

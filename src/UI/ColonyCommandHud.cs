@@ -30,6 +30,16 @@ public partial class ColonyCommandHud : Control
     public Texture2D SelectedArt => _selectedArt.Texture;
     ProgressBar _health, _queueProgress;
     readonly List<(Button button, ProdKind kind)> _units = new();
+    // the body part a mutation unit costs (docs/progression.md 1c): its icon and how many are in store, on the unit's card
+    readonly List<(ProdKind kind, TextureRect icon, Label count, TextureRect sting, Label stings, Label title)> _parts = new();
+    static readonly Dictionary<Part, Texture2D> PartTex = new();
+    static float b_w(Control strip) => ((Control)strip.GetParent()).Size.X - 4; // the strip's inner width
+    public static Texture2D PartIcon(Part p)
+    {
+        if (PartTex.TryGetValue(p, out var t)) return t;
+        string path = "res://assets/ui/mutation/" + p switch { Part.Wings => "ic_hornetwings.png", Part.Sting => "ic_stinger.png", Part.Gland => "ic_webthrowing.png", _ => "ic_ironchitin.png" };
+        return PartTex[p] = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+    }
     readonly List<(Button button, ChamberKind kind, Label status)> _rooms = new();
     readonly List<(Button button, Upgrade upgrade, Label status)> _research = new();
     readonly List<Button> _tabs = new();
@@ -397,7 +407,7 @@ public partial class ColonyCommandHud : Control
         _silkStraw.Text = $"Straw {c.Straw:0}   ·   {spinneries + posts}/{sim.SilkCap(Local.Me)} built";
         bool canSpin = sim.CanBuildSilk(Local.Me, SilkKind.Spinnery) == SilkResult.Ok, canPost = sim.CanBuildSilk(Local.Me, SilkKind.Post) == SilkResult.Ok;
         bool canUp = plain > 0 && c.Straw >= Config.SilkUpStraw && c.Food >= Config.SilkUpFood;
-        bool canHatch = spinneries > 0 && c.Food >= Config.SilkAntFood;
+        bool canHatch = spinneries > 0 && c.Food >= Config.SilkAntFood && c.Parts[(int)Part.Gland] > 0;
         // what can be done now glows; the next step is spelled out underneath
         float pulse = 0.75f + 0.25f * Mathf.Sin(_silkClock * 5f);
         void Lit(Button b, bool on, bool nudge) => b.Modulate = !on ? new Color(0.62f, 0.6f, 0.56f) : nudge ? new Color(1f, 0.85f + 0.15f * pulse, 0.45f + 0.4f * pulse) : Colors.White;
@@ -420,7 +430,7 @@ public partial class ColonyCommandHud : Control
     void RebuildCards()
     {
         foreach (var child in _cards.GetChildren()) { _cards.RemoveChild(child); child.QueueFree(); }
-        _units.Clear(); _research.Clear(); _orders.Clear(); _fallenStatus = null;
+        _units.Clear(); _parts.Clear(); _research.Clear(); _orders.Clear(); _fallenStatus = null;
         for (int i = 0; i < _tabs.Count; i++)
         {
             _tabs[i].AddThemeStyleboxOverride("normal", UiTheme.Box(i == _page ? new Color("624619") : Background, i == _page ? Gold : Edge, 1, 3, 0));
@@ -446,6 +456,25 @@ public partial class ColonyCommandHud : Control
                 Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", tight ? 22 : 26, 106, cw - 41, 17, tight ? 11 : _touch ? 13 : 12);
                 if (!_touch) Text(b, key, cw - 24, 101, 20, 18, 13);
                 Art(b, Region(new Rect2(691, 820, 13, 22)), tight ? 5 : 8, 94, 13, 22);
+                if (BodyParts.Needs(kind, 0) != 0)
+                {
+                    // a dark strip across the foot of the portrait: the part's icon and the count in store, or what to hunt
+                    var chip = At(new Panel { MouseFilter = MouseFilterEnum.Ignore }, 3, 68, cw - 6, 22);
+                    chip.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.05f, 0.04f, 0.02f, 0.9f), Edge, 1, 3, 0));
+                    b.AddChild(chip);
+                    var icon = Art(chip, null, 3, 2, 18, 18);
+                    var count = Text(chip, "", 2, 1, cw - 10, 20, tight ? 11 : 12);
+                    count.HorizontalAlignment = HorizontalAlignment.Center;
+                    // winged ants: the stings in store too (right half of the strip), once the queen has the wasp's core
+                    TextureRect sting = null; Label stings = null;
+                    if (kind == ProdKind.Flyer)
+                    {
+                        float half = (cw - 6) / 2;
+                        sting = Art(chip, PartIcon(Part.Sting), half + 1, 2, 18, 18);
+                        stings = Text(chip, "", half + 20, 1, half - 22, 20, tight ? 11 : 12);
+                    }
+                    _parts.Add((kind, icon, count, sting, stings, title));
+                }
                 _units.Add((b, kind));
             }
         }
@@ -525,8 +554,47 @@ public partial class ColonyCommandHud : Control
         {
             var availability = sim.CanEnqueue(Local.Me, k);
             b.Disabled = availability != QueueResult.Ok;
-            b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : b.Disabled ? 0.65f : 1f);
+            b.Modulate = new Color(1, 1, 1, availability == QueueResult.Locked ? 0.4f : availability == QueueResult.NoPart ? 0.85f : b.Disabled ? 0.65f : 1f); // short of parts: the strip that says what to hunt stays readable
             b.TooltipText = $"{Config.ProdName(k)} · {Config.ProdCost(k):0} food · {Config.ProdTime(k):0}s · {Config.ProdPop(k)} population";
+            if (sim.PartNeed(Local.Me, k) is var need and > 0)
+            {
+                var part = (Part)(need - 1); int have = sim.PartsOf(Local.Me, part);
+                int n = Sim.PartCount(k);
+                b.TooltipText += $" · {n} {BodyParts.Name(part, n)}, one for each ant ({have} in store)" + (have < n ? "\n" + BodyParts.Hunt(part) : "");
+                if (k == ProdKind.Flyer && sim.Has(Local.Me, Mutation.Stinger))
+                {
+                    int st = sim.StingsFor(Local.Me, k), stored = sim.PartsOf(Local.Me, Part.Sting);
+                    b.TooltipText += $"\nStings in store: {stored}. " + (st == 0 ? "With none, this brood hatches as plain winged ants. Hunt wasps for stings." : st >= n ? $"This brood takes {n} and hatches as stingers." : $"This brood takes {st}: {st} stinger{(st == 1 ? "" : "s")} and {n - st} plain winged ant{(n - st == 1 ? "" : "s")}.");
+                }
+            }
+        }
+        foreach (var (k, icon, count, sting, stings, title) in _parts)
+        {
+            var part = (Part)(sim.PartNeed(Local.Me, k) - 1); int have = sim.PartsOf(Local.Me, part);
+            icon.Texture = PartIcon(part);
+            int n = Sim.PartCount(k);
+            count.Text = have > 0 ? $"{have} / {n}" : BodyParts.Lack(part); // in store / what one brood costs
+            count.AddThemeColorOverride("font_color", have >= n ? Gold : new Color(1, 0.5f, 0.35f));
+            icon.Visible = have > 0; // with none in store the strip is all words: what to hunt
+            if (sting != null)
+            {
+                // wings on the left half, stings on the right; the card's title says what this brood will hatch as
+                bool wasp = sim.Has(Local.Me, Mutation.Stinger) && have > 0;
+                int st = sim.StingsFor(Local.Me, k);
+                sting.Visible = stings.Visible = wasp;
+                // beside the wing icon when the strip is shared, centred across it otherwise
+                count.Position = new Vector2(wasp ? 23 : 2, 1);
+                count.Size = new Vector2(wasp ? b_w(count) / 2 - 22 : b_w(count), count.Size.Y);
+                count.HorizontalAlignment = wasp ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+                if (wasp)
+                {
+                    count.Text = $"{have}/{n}";
+                    stings.Text = $"{sim.PartsOf(Local.Me, Part.Sting)}";
+                    stings.AddThemeColorOverride("font_color", st > 0 ? Gold : new Color(1, 0.5f, 0.35f));
+                    sting.Modulate = new Color(1, 1, 1, st > 0 ? 1f : 0.5f);
+                }
+                title.Text = !sim.Has(Local.Me, Mutation.Stinger) || st == 0 ? Config.ProdName(k) : st >= n ? "Stinger Ant" : $"{st} stinger{(st == 1 ? "" : "s")} of {n}";
+            }
         }
         foreach (var (b, u, status) in _research)
         {

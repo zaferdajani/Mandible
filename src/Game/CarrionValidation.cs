@@ -150,6 +150,68 @@ public static class CarrionValidation
             Check(rr == ResearchResult.NoOrganic, "The queen ascended without organic matter");
             sim.Col[0].Organic = 50;
 
+            // body parts (docs/progression.md 1c): a mutation unit costs one part of its insect, carried home with the remains
+            {
+                var pc = sim.Col[0];
+                pc.Queue.Clear();
+                sim.GiveMutation(0, Mutation.Winged); sim.GiveMutation(0, Mutation.Web);
+                var bare = (sim.CanEnqueue(0, ProdKind.WebAnt), sim.CanEnqueue(0, ProdKind.Flyer), sim.CanEnqueue(0, ProdKind.Soldier));
+                Check(bare == (QueueResult.NoPart, QueueResult.NoPart, QueueResult.Ok), $"With no parts in store only the plain castes may be laid (web ant, winged ant, soldier: {bare})");
+                var den = Clear(home + outv * 16 + perp * 12);
+                int denSpider = sim.Spawn(Config.Wild, AntType.Spider, den, 0);
+                sim.Damage(denSpider, 99999, -1);
+                FoodSource body = null;
+                foreach (var f in sim.W.Food) if (f.Kind == FoodKind.Corpse && f.AntType == AntType.Spider && f.Part != 0) body = f;
+                Check(body != null && body.Part == (byte)Part.Gland + 1, "A dead spider did not keep its silk gland");
+                int ticks = 0;
+                for (; ticks < 150 * 30 && pc.Parts[(int)Part.Gland] == 0; ticks++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Gland] == 1 && body.Part == 0, "The workers did not bring the silk gland home with the remains");
+                int squad = Sim.PartCount(ProdKind.WebAnt);
+                Check(squad == Config.SquadSize(ProdKind.WebAnt) && sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.NoPart, "One silk gland must not pay for a whole squad of web ants");
+                pc.Parts[(int)Part.Gland] = squad + 1;
+                Check(sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.Ok && sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "Silk glands must open web ants and nothing else");
+                sim.Enqueue(0, ProdKind.WebAnt);
+                Check(pc.Parts[(int)Part.Gland] == 1 && sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.NoPart, "A brood must cost one part for each ant");
+                sim.CancelLast(0);
+                Check(pc.Parts[(int)Part.Gland] == squad + 1, "A cancelled brood did not give its parts back");
+                // stingers: a winged ant always costs wings; with the wasp's core it also takes a sting if one is in store
+                sim.GiveMutation(0, Mutation.Stinger);
+                int four = Sim.PartCount(ProdKind.Flyer);
+                pc.Parts[(int)Part.Sting] = 9; pc.Parts[(int)Part.Wings] = 0;
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "Stings alone must not pay for a winged ant");
+                pc.Parts[(int)Part.Sting] = 0; pc.Parts[(int)Part.Wings] = four * 2;
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.Ok && sim.StingsFor(0, ProdKind.Flyer) == 0, "A missing sting must never block a brood of winged ants");
+                pc.Parts[(int)Part.Sting] = 2;
+                sim.Enqueue(0, ProdKind.Flyer);
+                Check(pc.Parts[(int)Part.Wings] == four && pc.Parts[(int)Part.Sting] == 0 && pc.Queue[^1].StingN == 2, "A brood of winged ants did not take its wings and the two stings in store");
+                sim.CancelLast(0);
+                Check(pc.Parts[(int)Part.Wings] == four * 2 && pc.Parts[(int)Part.Sting] == 2, "A cancelled brood of stingers did not give its wings and stings back");
+                sim.Enqueue(0, ProdKind.Flyer);
+                int plain0 = 0, stingers0 = 0;
+                for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == 0 && sim.Ants[i].Type == AntType.Flyer) { if (sim.Ants[i].Sting) stingers0++; else plain0++; }
+                for (int k = 0; k < 120 * 30 && pc.Queue.Count > 0; k++) sim.Tick(dt);
+                int plain = -plain0, stingers = -stingers0;
+                for (int i = 0; i < sim.High; i++) if (sim.Ants[i].Alive && sim.Ants[i].Team == 0 && sim.Ants[i].Type == AntType.Flyer) { if (sim.Ants[i].Sting) stingers++; else plain++; }
+                Check(stingers == 2 && plain == four - 2, $"Two stings must make two stingers and two plain winged ants (hatched {stingers} and {plain})");
+                // skirmish wings: dead flies lie in the lairs; once no hunter stands by them and the queen lays winged ants,
+                // the carcass crews bring the wings home one husk a worker
+                int flies = 0; foreach (var f in sim.W.Food) if (f.Husk && f.Part == (byte)Part.Wings + 1) flies++;
+                Check(flies >= 2 * Sim.SkirmishFlies, $"The skirmish map holds too few dead flies for both colonies ({flies})");
+                pc.Parts[(int)Part.Wings] = 0;
+                var web = Clear(home + outv * 20 - perp * 14);
+                for (int k = 0; k < 4; k++) sim.AddRemains(web + MathX.Dir(k * 1.57f) * 2f, AntType.Wasp, Part.Wings);
+                int guard = sim.Spawn(Config.Wild, AntType.Spider, web + new Vector2(3, 0), 0);
+                sim.Ants[guard].Home = sim.Ants[guard].Pos; sim.Ants[guard].State = AntState.Hold;
+                for (int k = 0; k < 20 * 30; k++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Wings] == 0 || !sim.Ants[guard].Alive, "Workers were sent for the flies while the spider still stood over them");
+                if (sim.Ants[guard].Alive) sim.Damage(guard, 99999, -1);
+                int wingTicks = 0;
+                for (; wingTicks < 150 * 30 && pc.Parts[(int)Part.Wings] < 4; wingTicks++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Wings] >= 4, $"The carcass crews did not bring the four flies' wings home ({pc.Parts[(int)Part.Wings]})");
+                GD.Print($"[carrion-test] skirmish wings: {flies} dead flies on the map; four by a dead spider came home in {wingTicks / 30f:0}s");
+                GD.Print($"[carrion-test] parts: the spider's silk gland came home in {ticks / 30f:0}s; a brood costs one part for each ant, a cancelled brood gives them back, a sting in store makes a winged ant a stinger");
+            }
+
             // Devour the Fallen: only the fire ants' Warlord eats its own kind
             var pit = Clear(home + outv * 70 - perp * 30); // beyond the black colony's collection ring: its haulers would come for the red dead
             var redDead = Carcass(AntType.Soldier, 1, pit);

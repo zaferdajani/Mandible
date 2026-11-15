@@ -289,7 +289,7 @@ public sealed partial class Sim
     /// A winged ant's sting (the wasp core): venom that keeps burning after the bite.
     void MutantBite(int i, ref Ant a, ref Ant t, float dmg)
     {
-        if (a.Type != AntType.Flyer || !Has(a.Team, Mutation.Stinger) || !t.Alive || t.Type == AntType.Queen) return;
+        if (a.Type != AntType.Flyer || !a.Sting || !t.Alive || t.Type == AntType.Queen) return;
         float venom = dmg * (Mutations.StingVenom + Evolve.VenomSacVenom * Evo(a.Team, EvoNode.VenomSac));
         float time = Mutations.StingTime + Evolve.LastingVenomTime * Evo(a.Team, EvoNode.LastingVenom);
         Events.Add(new SimEvent { Kind = EvKind.Sting, Pos = t.Pos, Team = a.Team, Type = a.Type });
@@ -350,12 +350,32 @@ public sealed partial class Sim
             used.Add(best);
             Cores.Add(new MutationCore { Id = _nextCore++, Pos = best.Pos + perp * 2.5f, Name = "a fly's core", From = AntType.Wasp, Gives = Mutation.Winged, Heading = best.Facing });
         }
+        // wings (docs/progression.md 1c): the game has no living fly, so every winged ant's wings come from dead flies.
+        // Four lie beside each fly's core (one brood) and four in the two spider lairs nearest each colony (the spiders'
+        // catch), guarded by what lives there: six broods' worth on the whole map at most, so wings stay scarce.
+        var larders = new List<Camp>(used);
+        foreach (var nest in new[] { n0, n1 })
+            for (int pick = 0; pick < 2; pick++)
+            {
+                Camp best = null; float bd = float.MaxValue;
+                foreach (var camp in W.Camps)
+                {
+                    if (larders.Contains(camp) || !System.Array.Exists(camp.Bugs, b => b.type == AntType.Spider)) continue;
+                    float d = camp.Pos.DistanceTo(nest);
+                    if (d < bd) { bd = d; best = camp; }
+                }
+                if (best != null) larders.Add(best);
+            }
+        foreach (var camp in larders)
+            for (int k = 0; k < SkirmishFlies; k++) AddRemains(camp.Pos + MathX.Dir(camp.Facing + 0.6f + k * DMath.Tau / SkirmishFlies) * 5.2f, AntType.Wasp, Part.Wings, k * 1.3f);
     }
+    public const int SkirmishFlies = 4;
 
     void ClearSkirmishCores()
     {
         Cores.Clear(); _nextCore = 0;
         for (int i = 0; i < High; i++) Ants[i].CoreP1 = 0;
+        W.Food.RemoveAll(f => f.Husk); // the skirmish's dead flies: a campaign level places its own
     }
 
     /// Marks a living creature as the keeper of a core: when it dies the core lies in its body.
@@ -607,6 +627,9 @@ public sealed partial class Sim
         for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type != AntType.Queen && !Config.IsHero(Ants[i].Type)) Ants[i].Brood = (byte)System.Math.Clamp(c.T(Upgrade.Queen) - 1, 0, 4);
         if (Mission != null && Mission.Perks.HasFlag(Perk.Larder)) c.Organic += Levels.LarderOrganic;
         if (roster != null) for (int n = 0; n < c.Evo.Length; n++) c.Evo[n] = roster.Evo[n];
+        if (roster != null) for (int n = 0; n < c.Parts.Length; n++) c.Parts[n] = roster.Parts[n];
+        // the winged ants a chapter starts with cost nothing: where the story has already given the wasp's core they are stingers
+        for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team <= 1 && Ants[i].Type == AntType.Flyer && Has(Ants[i].Team, Mutation.Stinger)) GiveSting(i);
         if (Has(0, Mutation.RoyalLarva) && c.Founded && ChamberOf(0, ChamberKind.Nursery) == null)
             AddChamber(0, ChamberKind.Nursery, Mutations.NurseryWork, true);
         if (Has(0, Mutation.Winged) && c.Founded && ChamberOf(0, ChamberKind.Wings) == null) AddChamber(0, ChamberKind.Wings, 60f, true);

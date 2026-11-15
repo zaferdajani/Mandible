@@ -65,6 +65,30 @@ There are two progressions. They use different things and give different rewards
   carry the part home with the remains. One part, one ant.
 - The hatch button shows the part and how many are in store, and says what to hunt when there are none.
 - Plain castes (workers, soldiers, majors) never need parts.
+- How it is built (`src/Sim/Parts.cs`): the part stays in the dead insect's body until a worker cuts the first load from
+  it; she carries it home and it is counted when she delivers. If she dies on the way the part lies in her body for the
+  next carrier. A brood that is cancelled gives its parts back. Web ants raised at the Spinnery cost a gland each too.
+- **A brood is a squad, so it costs one part for each ant in it**: four pairs of wings for four winged ants, four
+  glands for four web ants, three sets of plates for three armoured ants.
+- Stingers: a winged ant always costs a pair of wings. Once the queen has the wasp's core, each winged ant laid also
+  takes one sting if one is in store and hatches as a stinger; with no sting it hatches as a plain winged ant, so a
+  missing sting never blocks the brood. A stinger is that ant, not the whole colony: winged ants already alive when
+  the core comes home stay plain. The winged ants a later chapter starts with are stingers.
+- In the campaign a part is never lost to rot: when the carcass crumbles, a dried husk stays and keeps the part until a
+  worker is sent for it (right-click it with workers). While a level's objective asks for a mutation unit the colony
+  sends for the parts on its own, and the objective marker shows the nearest body that holds one, or the nearest prey.
+- **Flies are not a living creature yet.** Wings come from dead flies a spider has caught: they hang in its web or lie
+  in its lair, and are won by killing the spider. The dead fly uses the wasp's carcass until it has a body of its
+  own: it needs an approved art target. No living fly is planned.
+- Where each level's parts are: The Silk Trap, 8 flies in the web (the level asks for 4 winged ants); The Royal Larva,
+  4 flies in the spider lair; The Hornet Mother, its spiders and wasps, and 8 flies in the silk spitter's hollow; The
+  Dry Spell, 8 beetles (asks for 3 armoured ants); Wings and Acid, a guarded web with 10 flies and 4 dead hornets
+  (asks for 6 winged ants, two broods).
+- Skirmish and multiplayer: four dead flies lie beside each of the two fly's cores and in the two spider lairs nearest
+  each colony (24 on the map at most, six broods). Once the queen lays winged ants and no hunter stands by them, the
+  carcass crews carry them home, one worker a fly. Stings, glands and plates come from the lairs' wasps, spiders and beetles.
+- Parts in store go with the colony to the following levels (the roster). The ants a level starts with cost nothing.
+- The rival colony and the skirmish AI obey the same rule (the queue check is shared).
 
 ## 2. Evolution: organic matter levels up the queen and the generals
 

@@ -17,6 +17,24 @@ public static class MutationCapture
             async System.Threading.Tasks.Task Shot(string name, float s = 1.5f) { await Wait(s); using var im = app.GetViewport().GetTexture().GetImage(); im.SavePng(dir.PathJoin(name + ".png")); GD.Print("[mutation-capture] " + name); }
             CampaignProgress.UsePath("user://campaign_mutcap.cfg"); CampaignProgress.Reset();
             void Run(GameSession g, int frames) { for (int i = 0; i < frames; i++) g.Sim.Tick(1f / 30); }
+            // the hatch cards (docs/progression.md 1c): the part each mutation unit costs, with the count in store or what to hunt
+            async System.Threading.Tasks.Task HatchCards()
+            {
+                app.StartEpisode(9); // Wings and Acid: every core taken, so all three mutation units are on the row
+                var hs = app.Session; hs.Hud.CloseBriefing();
+                hs.Sim.Col[0].Parts[(int)Part.Wings] = 6; hs.Sim.Col[0].Parts[(int)Part.Sting] = 2; hs.Sim.Col[0].Parts[(int)Part.Gland] = 3; hs.Sim.Col[0].Parts[(int)Part.Plates] = 0;
+                Run(hs, 30);
+                hs.Hud.CommandHud?.ShowPage(1);
+                await Shot("hatch-parts", 2f);
+            }
+            if (System.Environment.GetEnvironmentVariable("MANDIBLE_CAPTURE_ONLY") == "parts")
+            {
+                await HatchCards();
+                CampaignProgress.UsePath("user://campaign.cfg");
+                GD.Print("[mutation-capture] PASS (hatch cards only)");
+                app.GetTree().Quit();
+                return;
+            }
 
             // ---- H1: the queen wasp in the web, the colony's scouts below it
             app.StartEpisode(Reveal.SilkTrapId);
@@ -98,6 +116,7 @@ public static class MutationCapture
             gs.Hud.ToggleEvolveTree();
             await Shot("evolve-tree", 1f);
 
+            await HatchCards();
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://campaign_mutcap.cfg"));
             CampaignProgress.UsePath("user://campaign.cfg");
             GD.Print("[mutation-capture] PASS");

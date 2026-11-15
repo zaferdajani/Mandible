@@ -121,7 +121,7 @@ public sealed partial class Sim
         {
             a.SpeedMul *= 1 + Evolve.FlightMuscleSpeed * Evo(a.Team, EvoNode.FlightMuscle);
             a.MaxHp *= 1 + Evolve.LightShellHp * Evo(a.Team, EvoNode.LightShell);
-            if (Has(a.Team, Mutation.Stinger)) a.DmgMul *= Mutations.StingBite;
+            if (a.Sting) a.DmgMul *= Mutations.StingBite;
         }
     }
 

@@ -514,7 +514,7 @@ public sealed partial class Sim
                 }
                 Add(Expedition.Obj.Extract, "Cut out the beetle's core", "Select workers and right-click the glowing core in the beetle's body. The red colony has smelled it too. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy and its carrier slow, and the red raids cross its road. If the red colony carries it home instead, the chapter is lost. Distance: {0}.");
-                Add(Expedition.Obj.Hatch, "Hatch armoured ants", "The queen has changed: she lays armoured ants (the Hatch tab). The red mound's approach is a killing ground for bare chitin. Armoured ants: {0}/{1}.", a: (int)AntType.Armoured, b: 3);
+                Add(Expedition.Obj.Hatch, "Hatch armoured ants", "The queen has changed: she lays armoured ants (the Hatch tab). The red mound's approach is a killing ground for bare chitin. Each ant needs a beetle's shell plates: workers bring them home with the remains of every beetle killed. Armoured ants: {0}/{1}.", a: (int)AntType.Armoured, b: 3);
                 Add(Expedition.Obj.Evolve, "Spend in the evolve tree", "Organic matter is spent in the evolve tree (V): the queen's level, a general's level, or a rank on a unit's branch. Ranks bought: {0}/{1}.", b: 1);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The red colony is starving and its raids are thin. Gather the army and send everyone down the red shaft.");
                 break;
@@ -545,7 +545,16 @@ public sealed partial class Sim
                 m.WaveFrom = foe + (home - foe).Normalized() * 12;
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 10), (AntType.Major, 1, 2) } });
                 m.WaveAt = 420; m.WaveGap = 0;
-                Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Winged ants cross the yard fast; gunners burn guards from range. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
+                {
+                    // every winged ant costs a pair of wings (docs/progression.md 1c): a guarded web on the home flank
+                    // holds ten dead flies, two more than the two broods of four the objective asks for, and four dead
+                    // hornets, so one brood can hatch as stingers. Living wasps are no prey for an army with no web ants.
+                    var larder = OpenGround(home + toFoe * 38 + side * 46);
+                    ClearAround(larder, 13);
+                    AddLarder("Spider's larder", larder, 3, AntType.Wasp, Part.Wings, 10);
+                    for (int i = 0; i < 4; i++) AddRemains(larder + MathX.Dir(i * 1.57f + 0.2f) * 8.6f, AntType.Wasp, Part.Sting, i * 2.3f);
+                }
+                Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Each winged ant needs a pair of wings: a spider on the flank (the marker) keeps a larder of dead flies in its web, and a few dead hornets. Kill the spiders and the workers carry the wings home; with a sting in store a winged ant hatches as a stinger. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
                 Add(Expedition.Obj.Group, "Burn the watch posts", "While any watch post stands the red queen cannot be harmed. Strike them one by one (gold rings on the map). Posts left: {0}.", b: -2);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "Her shield is down. Send everything down the red shaft before she raises new guards.");
                 break;
@@ -598,6 +607,9 @@ public sealed partial class Sim
                     GroupBug(sg, AntType.Spider, corner - side * 4, 1);
                     foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
                     for (int k = 0; k < 4; k++) Webs.Add(new WebZone { Pos = corner + MathX.Dir(k * 1.57f + 0.4f) * 6.5f, R = 2.4f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
+                    // the spitter's catch hangs in its hollow: eight dead flies, the wings for two broods of stingers once the
+                    // wasp's core is home (only stingers outlast the Hornet Mother; the stings come from her daughters)
+                    for (int k = 0; k < 8; k++) AddRemains(corner + MathX.Dir(k * 0.785f + 0.1f) * 3.4f, AntType.Wasp, Part.Wings, k * 1.3f);
                     // the Hornet Mother's sentinel, on the road to the paper nest: it carries the wasp's core
                     var post = OpenGround(home.Lerp(W.Nests[1].Pos, 0.5f) + side * 36);
                     ClearAround(post, 12);
@@ -612,13 +624,13 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Group, "Bring down the silk spitter", "The colony feels a core in the far corner (the gold ring): a spitting spider in a hollow strung with silk. Spitter's band left: {0}.", b: 1);
                 Add(Expedition.Obj.Extract, "Cut out the spider's core", "Select workers and right-click the glowing core in the spitter's body. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy, its carrier slow, and wasps hunt what moves in the open. Distance: {0}.");
-                Add(Expedition.Obj.Hatch, "Hatch web ants", "The queen has changed: she lays web ants (the Hatch tab). Their silk pins a flyer to the ground. Web ants: {0}/{1}.", a: (int)AntType.WebAnt, b: 4);
+                Add(Expedition.Obj.Hatch, "Hatch web ants", "The queen has changed: she lays web ants (the Hatch tab). Their silk pins a flyer to the ground. Each ant needs a spider's silk gland: workers bring it home with the remains of every spider killed. Web ants: {0}/{1}.", a: (int)AntType.WebAnt, b: 4);
                 Add(Expedition.Obj.Waves, "Break the hornet raid", "The Hornet Mother has smelled the change and sends her daughters at your mound. Raiders left: {0}.", b: 1);
                 m.WaveStep = 4;
                 Add(Expedition.Obj.Group, "Bring down the sentinel", "The Mother's sentinel hangs over the road to the paper nest (the gold ring), and the colony feels a core inside it. Hornets left: {0}.", b: m.SentinelGroup);
                 Add(Expedition.Obj.Extract, "Cut out the wasp's core", "Select workers and right-click the glowing core in the sentinel's body. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The swarm wants its sister back. Distance: {0}.");
-                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Her wounds close as fast as jaws can open them: only venom that keeps burning outlasts her. The paper nest is the gold ring. Hornets left: {0}.", b: 0);
+                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Her wounds close as fast as jaws can open them: only venom that keeps burning outlasts her. Hatch stingers: winged ants laid with wings (the flies in the spitter's hollow) and a sting from a dead hornet in store. The paper nest is the gold ring. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
             case 11: // The Long March
@@ -678,6 +690,10 @@ public sealed partial class Sim
                 for (int k = 0; k < 7; k++) Webs.Add(new WebZone { Pos = web + MathX.Dir(k * 0.8976f) * 4.6f, R = 2.3f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
                 m.SilkOf.Add((g, web, 9f));
                 m.Gland = AddCore(web, "the fly's core", AntType.Wasp, Mutation.Winged); // the body: a bloated fly (stand-in mesh until its art target is approved)
+                // the spider's other catches hang on the home side of the web: each dead fly holds a pair of wings, the part
+                // every winged ant costs (docs/progression.md 1c). Eight: two broods of four. STAND-IN: the game
+                // has no fly creature, so wings come from flies a spider has caught (the wasp's body until the fly has one).
+                for (int k = 0; k < 8; k++) AddRemains(web - away * 3.2f + side * ((k - 3.5f) * 1.5f) + away * (k % 2 * 1.3f), AntType.Wasp, Part.Wings, k * 1.3f);
                 {
                     // behind the web, a curtain of silk no ant can walk through hides the spider's brood: only wings cross it
                     var sac = OpenGround(web + away * 30);
@@ -694,7 +710,7 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Sense, "Follow the sixth sense", "Every ant feels it: a faint pulse through the fog, far out on the flank (the violet ring on the map). Send a squad toward it until the colony can sense the source. Distance: {0}.");
                 Add(Expedition.Obj.Extract, "Cut out the core", "A bloated fly hangs dead in the web, and the glow is inside it. The web spider sits on its catch, and the silk holds whatever walks into it. Select workers and right-click the glowing core; four cut at once. Cut: {0}%.");
                 Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy: its carrier staggers at half pace, and hunters smell it on the move. Distance: {0}.");
-                Add(Expedition.Obj.Hatch, "Hatch winged ants", "The queen has changed: she lays winged ants (F). Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 4);
+                Add(Expedition.Obj.Hatch, "Hatch winged ants", "The queen has changed: she lays winged ants (F). Each ant needs a pair of wings: the flies the spider caught still hang in its web, and the workers carry them home. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 4);
                 Add(Expedition.Obj.Group, "Destroy the brood behind the silk", "Past the web the spider's brood lies behind a curtain of silk (the gold ring). No ant can walk through it. Spiderlings left: {0}.", b: m.CurtainGroup);
                 Add(Expedition.Obj.Waves, "Break the red raid", "The red scouts smelled the core and came for your shaft. Raiders left: {0}.", b: 1);
                 m.WaveStep = 2;
@@ -720,6 +736,8 @@ public sealed partial class Sim
                     ClearAround(p, 12);
                     int g = AddGroup("Lair", p, larder: true);
                     for (int i = 0; i < 4; i++) GroupBug(g, bugs, p + MathX.Dir(i * 1.57f) * 3.5f, i == 0 ? 2 : 1);
+                    // the spiders' catch: four dead flies, a pair of wings each (docs/progression.md 1c)
+                    if (bugs == AntType.Spider) for (int i = 0; i < 4; i++) AddRemains(p + MathX.Dir(i * 1.57f + 0.78f) * 6f, AntType.Wasp, Part.Wings, i * 1.3f);
                 }
                 {
                     // Ashling lies where she fell, between the mounds, and her body glows. The red scouts come to carry
@@ -1014,7 +1032,11 @@ public sealed partial class Sim
         switch (o.Kind)
         {
             case Expedition.Obj.Gather: m.Have = (int)(c.Gathered - m.GatherBase); m.Need = (int)o.Amount; break;
-            case Expedition.Obj.Hatch: m.Have = c.Count[o.A]; m.Need = o.B; break;
+            case Expedition.Obj.Hatch:
+                m.Have = c.Count[o.A]; m.Need = o.B;
+                // a mutation unit with too few parts in store for a brood: the marker shows the nearest remains that hold one, or the nearest prey
+                if (m.Have < m.Need && !c.Queue.Exists(q => Config.UnitOf(q.Kind) == (AntType)o.A) && PartSource(0, BodyParts.NeedsFor((AntType)o.A, c.Mutations), home, Config.SquadSize((AntType)o.A)) is { } source) m.MarkerPos = source;
+                break;
             case Expedition.Obj.Raise: m.Have = m.SoldiersHatched; m.Need = o.B; break;
             case Expedition.Obj.Evolve: m.Have = Evolved(); m.Need = o.B; break;
             case Expedition.Obj.Haul: m.Have = (int)(c.OrganicGathered - m.OrganicBase); m.Need = (int)o.Amount; m.MarkerPos = GroupMarker(-1, home); break;

@@ -63,6 +63,18 @@ public static class LevelValidation
         return ids;
     }
 
+    /// Sends one worker to each of the nearest bodies that hold the part this brood is short of (a player's right-click).
+    static void FetchParts(Sim s, ProdKind k, Part? extra = null)
+    {
+        byte want = extra is { } e ? (byte)((int)e + 1) : s.PartNeed(0, k);
+        if (want == 0 || s.Col[0].Parts[want - 1] >= Sim.PartCount(k)) return;
+        var home = s.W.Nests[0].Pos;
+        var bodies = s.W.Food.FindAll(f => f.Part == want && f.Alive && f.Layer == 0);
+        bodies.Sort((a, b) => a.Pos.DistanceSquaredTo(home).CompareTo(b.Pos.DistanceSquaredTo(home)));
+        var workers = Workers(s, 40).FindAll(w => !s.Ants[w].Carrying && s.Ants[w].PartP1 == 0 && s.Ants[w].Assigned is not { Part: > 0 });
+        for (int i = 0; i < bodies.Count && i < workers.Count && i < Sim.PartCount(k); i++) s.CmdGather(new List<int> { workers[i] }, bodies[i]);
+    }
+
     static void Hatch(Sim s, ProdKind k, int upTo)
     {
         var c = s.Col[0];
@@ -214,17 +226,30 @@ public static class LevelValidation
                         if (lair >= 0 && army.Count >= 18) s.CmdMove(army, s.Mission.GroupPos[lair], true);
                         else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
+                    case Expedition.Obj.Hatch when m.MarkerPos != home:
+                        // no part in store for the unit the objective asks for: the army hunts where the marker points (the
+                        // nearest remains that hold one, else the nearest prey); the workers bring the parts home on their own
+                        if (!marching && army.Count >= gatherAt) { marching = true; strike = army.Count; }
+                        else if (marching && army.Count < Math.Max(3, strike / 3)) marching = false;
+                        if (marching) s.CmdMove(army, m.MarkerPos, true);
+                        else s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
+                        break;
                     case Expedition.Obj.Group when m.CurtainGroup >= 0 && o.B == m.CurtainGroup:
                     {
                         // behind the silk curtain: only the winged ants go; everyone else keeps out of the silk
                         var wings = army.FindAll(a => s.Ants[a].Type == AntType.Flyer);
                         var ground = army.FindAll(a => s.Ants[a].Type != AntType.Flyer);
                         if (wings.Count >= 8) s.CmdMove(wings, m.CurtainAt, true); else s.CmdMove(wings, home, false);
+                        // a second brood of winged ants needs four more pairs of wings: workers are sent for the flies still in the web, as a player would
+                        if (wings.Count < 8 && t % 300 == 0) FetchParts(s, ProdKind.Flyer);
                         s.CmdMove(ground, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
                     }
                     case Expedition.Obj.Group:
                     case Expedition.Obj.Taste:
+                        // the Hornet Mother: only stingers outlast her, so workers are sent for the flies' wings (the sentinel's
+                        // dead daughters give the stings) and the queen lays winged ants while both are in store
+                        if (id == 10 && s.Has(0, Mutation.Stinger) && t % 300 == 0) { FetchParts(s, ProdKind.Flyer); FetchParts(s, ProdKind.Flyer, Part.Sting); }
                         if (!marching && army.Count >= gatherAt) { marching = true; strike = army.Count; }
                         else if (marching && army.Count < Math.Max(3, strike / 3)) marching = false;
                         if (!marching) { s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false); break; }
@@ -550,6 +575,7 @@ public static class LevelValidation
             // venom: a stinging winged ant's strike keeps burning
             var at = t.W.Nests[0].Pos + new Vector2(30, 30);
             int fly = t.Spawn(0, AntType.Flyer, at, 0), bug = t.Spawn(Config.Wild, AntType.Beetle, at + new Vector2(0.8f, 0), 0, 3);
+            t.GiveSting(fly); // a stinger: hatched with a wasp's sting in store (Parts.cs)
             t.Ants[fly].Alt = t.Ants[bug].Alt;
             for (int k = 0; k < 90 && t.Ants[bug].PoisonT <= 0; k++) { t.CmdAttack(new List<int> { fly }, bug); t.Tick(1f / 30); }
             Check(t.Ants[bug].PoisonT > 0, "A stinging winged ant's strike did not poison");
