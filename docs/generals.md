@@ -1,8 +1,6 @@
 # Generals: levels 1-10, a shared skill pool, the royal insignia
 
-> **Levelling rule changed 2026-11-15: see [progression.md](progression.md).** Generals level up from the colony's
-> organic matter balance through the evolve tree. The per-general eating described below is how the code works today
-> and is to be reworked.
+A general's levels are bought with the colony's organic matter in the evolve tree ([progression.md](progression.md), `Evolve.GeneralCost`, `Sim.LevelGeneral`, order `CmdKind.Evolve`). Eating and killing never level a general.
 
 The heroes are called **generals** in player-facing text. Each general has levels 1 to 10, and every level is a **skill point**. Which skills a general has is data
 (`data/loadouts.json`, see below); ranks unlock Warcraft III style.
@@ -98,10 +96,10 @@ levels draw on. Cooldowns are shown on the buttons, in seconds, with a dark swee
 **Auto-eat** (button in the ability bar for any selected fighters or generals, hotkey **J**) is a standing order per ant,
 kept per squad (new recruits take it):
 - **ON**: after a kill the killer and its squad mates within 15 eat the remains as soon as the fight is over, and
-  evolve (a general levels). The kill is *claimed* for 25 s, so the colony's haulers leave it alone.
+  mend. The kill is *claimed* for 25 s, so the colony's haulers leave it alone. A whole ant does not eat.
 - **OFF**: the kill is left whole for the workers to haul home as organic matter for the queen and the brood.
-- Default: **generals ON** (eating is their only way to level), **fighters OFF** (carcasses go to the queen unless the
-  player decides the army should grow instead). A small drop of hemolymph over an ant shows it will eat.
+- Default: **generals ON** (they mend between fights), **fighters OFF** (carcasses go to the reserve, where the
+  evolve tree spends them). A small drop of hemolymph over an ant shows it will eat.
 - An explicit "eat this" order (right-click remains) also claims the remains from your own haulers.
 
 **Collection** (the Remains order "Haul"): the colony notices fresh remains on its own anywhere inside a ring around
@@ -120,29 +118,16 @@ more remains are hauled home than before.
 Learning, casting, autocast toggles and auto-eat are Cmds (`Learn`, `Cast`, `SkillAuto`, `AutoEat`), replayed by multiplayer and saved
 games. All target choice is in the sim and is index-stable. Protocol `mandible-mp-15`.
 
-## XP curve
+## Level costs
 
-`Config.HeroXp = { 0, 0, 90, 210, 370, 580, 850, 1180, 1580, 2060, 2650 }` at 12.5 XP per organic: about 215 organic
-from level 1 to 10 (was about 290). The early levels come in the first fights, so the first skills show up early;
-the ultimate ranks are earned. In Lane War the hero still levels by feasting and the herd's honeydew, and kill
-bounties pay food.
-
-## The insignia
-
-Under every general lies a royal seal instead of the selection ring (targets I1-I3 in
-`docs/art-targets/REVIEW-insignia.jpg`, approved by the owner on 2026-11-07):
-
-- levels 1-3: aged bronze ring of antenna links with six leg spokes;
-- levels 4-7: chased gold with laurel and a crown of mandibles;
-- levels 8-10: red-gold with amber cabochons that glow faintly.
-
-The seal is lit as real metal with a relief normal from the engraving; the raised metal is solid and the enamel
-between it lets the soil show through. It brightens within each tier as the general levels, glows when selected
-and flares when a skill is cast. The crown always points up the screen.
+`Evolve.GeneralCost`: 7, 10, 13, 17, 22, 26, 32, 38, 47 organic matter for levels 2 to 10, about 210 in all. The
+early levels are cheap, so the first skills show up early; the ultimate's ranks compete with the queen's levels and the
+unit branches for the same balance. The campaign's rival generals stop at level 6 (`Config.RivalHeroCap`). Lane War is
+a match of its own: its general still levels within the match on `Config.HeroXp` (kills, feasting, the herd's honeydew).
 
 ## Tests
 
-- `--generaltest` (headless): each general eats to level 10, learns every rank through Learn orders (gates checked),
+- `--generaltest` (headless): each general is levelled to 10 through Evolve orders on organic matter (none without it), learns every rank through Learn orders (gates checked),
   and casts every skill at every rank through Cast orders: Pheromone victim count, tier and level caps and expiry;
   Brood Call types per rank, hardening and fading; each other skill's effect.
 - `--general-capture=DIR` (windowed, via `godot-run.sh`): insignia at levels 1, 5 and 10, the skill bar and tree,

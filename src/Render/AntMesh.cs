@@ -103,12 +103,28 @@ public static class AntMesh
 
     /// `far`: the distant-crowd build of a colony caste, drawn once an ant is far enough from the camera that the
     /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
+    /// The caste whose mesh a mutation unit borrows until its own merged body is approved and built.
+    public static AntType? StandIn(AntType t) => t == AntType.WebAnt ? AntType.Soldier : t == AntType.Armoured ? AntType.Major : null;
+
     public static ArrayMesh Build(AntType type, bool far = false, int team = 0, Detail? detail = null)
     {
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
         if (type == AntType.Spider) return Spider();
         if (type == AntType.Wasp) return Wasp();
+        if (StandIn(type) is { } like)
+        {
+            // STAND-IN, not final art: the mutation units' merged bodies (ant + spider, ant + beetle) wait for approved
+            // concept targets (docs/art-pipeline.md, docs/progression.md art rule). Until then they borrow a caste's mesh.
+            var borrowed = Build(like, far, team, detail);
+            int tm = team == 1 ? 1 : 0;
+            if (Neck.TryGetValue(like, out var n0)) Neck[type] = n0;
+            if (NeckOfTeam.TryGetValue((like, tm), out var n1)) NeckOfTeam[(type, tm)] = n1;
+            if (TipOfTeam.TryGetValue((like, tm), out var t1)) TipOfTeam[(type, tm)] = t1;
+            if (WaistOfTeam.TryGetValue((like, tm), out var w1)) WaistOfTeam[(type, tm)] = w1;
+            if (DetailOfTeam.TryGetValue((like, tm), out var d1)) DetailOfTeam[(type, tm)] = d1;
+            return borrowed;
+        }
         var model = Model(type, team == 1 ? 1 : 0, detail ?? (far ? Detail.Far : Detail.Mid));
         if (model != null) return model;
         far = far || detail == Detail.Far;

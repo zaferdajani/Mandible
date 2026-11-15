@@ -112,17 +112,16 @@ public static class GoreValidation
                 Check(game.Guide.Target.HasValue && game.Guide.Target.Value.DistanceTo(big.Pos) < 0.5f, "The guide does not point at the richest remains");
                 game.Hud.Banner("", "", 0); // the banner has had its moment
                 await Shot(phone ? "p13-guide-remains" : "13-guide-remains", lesson + perp * 3f, 22f);
-                // 14: the soldiers eat; two bars over them, and the moment one of them moults
+                // 14: the soldiers eat and mend
                 sim.SetRemains(0, RemainsOrder.Leave); // left on the ground for the army
-                foreach (int id in hunters) sim.Ants[id].Evo = Config.StageCost(1) - 2.5f; // well fed already: a few mouthfuls of the beetle tip one over
+                foreach (int id in hunters) sim.Ants[id].Hp = sim.Ants[id].MaxHp * 0.4f;
                 sim.CmdFeast(hunters, big);
-                int evolved = -1;
-                Check(await Until(() => { foreach (int id in hunters) if (sim.Ants[id].Alive && sim.Ants[id].Stage > 0) { evolved = id; return true; } return false; }, 90), "No soldier evolved by eating");
+                int evolved = hunters[0];
+                Check(await Until(() => { foreach (int id in hunters) if (sim.Ants[id].Alive && sim.Ants[id].Hp > sim.Ants[id].MaxHp * 0.7f) { evolved = id; return true; } return false; }, 90), "No soldier mended by eating");
                 await Run(0.15f);
-                await Shot(phone ? "p14-evolution-moment" : "14-evolution-moment", sim.Ants[evolved].Pos, 9f);
+                await Shot(phone ? "p14-feast" : "14-feast", sim.Ants[evolved].Pos, 9f);
                 await Select(new List<int> { evolved });
                 game.Hud.Banner("", "", 0); // the banner has had its moment
-                await Shot(phone ? "p15-two-bars" : "15-two-bars", sim.Ants[evolved].Pos, 7f);
                 // 16: nothing left to eat nearby: the guide points at the nearest lair to hunt
                 foreach (var f in sim.W.Food) if (f.Kind == FoodKind.Corpse) f.Amount = 0;
                 await Run(0.5f);

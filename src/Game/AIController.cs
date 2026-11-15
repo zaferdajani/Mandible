@@ -95,6 +95,8 @@ public sealed class AIController : IColonyAI
         Produce(c);
         GeneralAI.Learn(_sim, _team, Orders);
         Remains(c);
+        EvolveTree(c);
+        Cores(c);
         March();
         Reinforce(c);
         Defend(c);
@@ -106,33 +108,88 @@ public sealed class AIController : IColonyAI
 
     /// The computer plays by the same rule as the player: only eating makes its army stronger. Workers haul remains home
     /// (the standing order stays at Haul); idle fighters and heroes near uneaten remains are sent to eat them, and once
-    /// the queen's next ascension is paid for, heroes at home are fed from the reserve.
+    /// the rest is left to the haulers.
     void Remains(Colony c)
     {
         if (!_sim.EatRules || _sim.Time < _nextFeast) return;
         _nextFeast = _sim.Time + 3f;
         var nest = _sim.W.Nests[_team].Pos;
         var claimed = new Dictionary<int, float>(); // food id -> organic already promised to an eater
-        var heroesHome = new List<int>();
         for (int i = 0; i < _sim.High; i++)
         {
             ref var a = ref _sim.Ants[i];
             if (!a.Alive || a.Team != _team || !_sim.Eats(a) || _marching.Contains(i) || a.FeastOrder) continue;
             if (a.State != AntState.Idle && a.State != AntState.Hold) continue;
-            if (_sim.EvolutionNeed(a) <= 0) continue;
-            if (Config.IsHero(a.Type) && a.Pos.DistanceTo(nest) < Config.ReinforceRadius) heroesHome.Add(i);
+            if (a.Hp >= a.MaxHp * 0.9f) continue; // eating mends; a whole ant leaves the remains to the haulers
             var f = _sim.BestRemains(_team, a.Pos, 22f, _sim.Cannibal(a), a.Layer);
             if (f == null) continue;
             claimed.TryGetValue(f.Id, out float taken);
             if (taken >= Sim.RemainsValue(f)) continue; // enough mouths on it already
-            claimed[f.Id] = taken + Mathf.Max(2f, _sim.EvolutionNeed(a));
+            claimed[f.Id] = taken + 3f;
             var cmd = Cmd.Units(CmdKind.Feast, _team, new List<int> { i }, _sim);
             cmd.FoodId = f.Id;
             Orders.Issue(cmd);
         }
-        // the campaign's rival does not feed its heroes the reserve: its levels set its strength (Sim.GrantXp caps its heroes too)
-        if (heroesHome.Count > 0 && _sim.Mission == null && c.Organic > _sim.QueenOrganic(_team) + 25f)
-            Orders.Issue(Cmd.Units(CmdKind.FeedReserve, _team, heroesHome, _sim));
+    }
+
+    float _nextEvolve, _nextCore;
+
+    /// The evolve tree: once the queen's next level is paid for, organic matter above it goes to the generals' levels
+    /// and then to the unit branches the colony's cores have opened. The campaign's rival does not: its chapters set
+    /// its strength.
+    void EvolveTree(Colony c)
+    {
+        if (_sim.Mission != null || !_sim.EvolveRules || _sim.Time < _nextEvolve) return;
+        _nextEvolve = _sim.Time + 4f;
+        float keep = c.T(Upgrade.Queen) < Config.MaxTier(Upgrade.Queen) ? _sim.QueenOrganic(_team) + 10f : 10f;
+        for (int i = 0; i < _sim.High; i++)
+        {
+            ref var a = ref _sim.Ants[i];
+            if (!a.Alive || a.Team != _team || !Config.IsHero(a.Type) || _sim.CanLevelGeneral(i) != EvolveResult.Ok) continue;
+            if (c.Organic - Evolve.GeneralCost(a.Level + 1) < keep) continue;
+            Orders.Issue(Cmd.Units(CmdKind.Evolve, _team, new List<int> { i }, _sim));
+            return;
+        }
+        // the cheapest open rank first, so every branch grows
+        int best = -1; float bestCost = float.MaxValue;
+        foreach (var d in Evolve.Nodes)
+        {
+            if (_sim.CanEvolve(_team, d.Node) != EvolveResult.Ok) continue;
+            float cost = Evolve.Cost(d.Node, c.Evo[(int)d.Node] + 1);
+            if (c.Organic - cost >= keep && cost < bestCost) { bestCost = cost; best = (int)d.Node; }
+        }
+        if (best >= 0) Orders.Issue(new Cmd { Kind = CmdKind.Evolve, Team = (byte)_team, Arg = (byte)best });
+    }
+
+    /// Mutation cores: a core the colony can feel, lying in a dead body with nobody on it, gets four workers and
+    /// whatever idle fighters stand near the nest as their escort.
+    void Cores(Colony c)
+    {
+        if (_sim.Mission != null || _sim.Time < _nextCore) return;
+        _nextCore = _sim.Time + 5f;
+        foreach (var core in _sim.Cores)
+        {
+            if (core.Home || !_sim.Senses(_team, core)) continue;
+            if (core.Carried && _sim.Ants[core.Carrier].Team == _team) continue;
+            int mine = 0;
+            for (int i = 0; i < _sim.High; i++) if (_sim.Ants[i].Alive && _sim.Ants[i].Team == _team && _sim.Ants[i].MutaP1 == core.Id + 1) mine++;
+            if (mine >= Mutations.MaxCarvers) continue;
+            var crew = new List<(float d, int id)>();
+            for (int i = 0; i < _sim.High; i++)
+            {
+                ref var a = ref _sim.Ants[i];
+                if (!a.Alive || a.Team != _team || a.Layer != 0 || a.MutaP1 > 0 || a.Nurse) continue;
+                if (a.Type == AntType.Worker) crew.Add((a.Pos.DistanceTo(core.Pos), i));
+            }
+            crew.Sort((x, y) => x.d.CompareTo(y.d));
+            var ids = new List<int>();
+            for (int k = 0; k < crew.Count && ids.Count < Mutations.MaxCarvers - mine; k++) ids.Add(crew[k].id);
+            if (ids.Count == 0) continue;
+            var cmd = Cmd.Units(CmdKind.Extract, _team, ids, _sim);
+            cmd.FoodId = core.Id;
+            Orders.Issue(cmd);
+            return;
+        }
     }
 
     /// Battered squads that are not fighting go home to heal and refill.
@@ -231,7 +288,7 @@ public sealed class AIController : IColonyAI
         if (workers < 32 && workers < wantWorkers) { Q(ProdKind.Worker); return; }
         // a hero whenever one is available and not alive, saved for only while a home guard stands
         foreach (var hk in new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
-            if (Config.Unlocked(hk, c.Tier) && c.Count[(int)Config.UnitOf(hk)] == 0 && !c.Queue.Exists(q => q.Kind == hk))
+            if (Config.Unlocked(hk, c.Tier, c.Mutations) && c.Count[(int)Config.UnitOf(hk)] == 0 && !c.Queue.Exists(q => q.Kind == hk))
             {
                 if (Q(hk) == QueueResult.Ok) return;
                 if (c.Food < Config.ProdCost(hk) && warriors >= 12) return;
@@ -239,17 +296,19 @@ public sealed class AIController : IColonyAI
         int gunners = c.Count[(int)AntType.Gunner], flyers = c.Count[(int)AntType.Flyer];
         ProdKind pick;
         if (workers < wantWorkers && workers < soldiers * 2 + 20) pick = ProdKind.Worker;
-        else if (Config.Unlocked(ProdKind.Major, c.Tier) && majors * 4 < soldiers) pick = ProdKind.Major;
-        else if (Config.Unlocked(ProdKind.Gunner, c.Tier) && gunners * (c.Race == Race.BlackGarden ? 3 : 7) < soldiers) pick = ProdKind.Gunner; // fire ants have no acid
-        else if (Config.Unlocked(ProdKind.Flyer, c.Tier) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
+        else if (Config.Unlocked(ProdKind.Major, c.Tier, c.Mutations) && majors * 4 < soldiers) pick = ProdKind.Major;
+        else if (Config.Unlocked(ProdKind.Gunner, c.Tier, c.Mutations) && gunners * (c.Race == Race.BlackGarden ? 3 : 7) < soldiers) pick = ProdKind.Gunner; // fire ants have no acid
+        else if (Config.Unlocked(ProdKind.Flyer, c.Tier, c.Mutations) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
+        else if (Config.Unlocked(ProdKind.WebAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.WebAnt] * 8 < soldiers) pick = ProdKind.WebAnt;
+        else if (Config.Unlocked(ProdKind.Armoured, c.Tier, c.Mutations) && c.Count[(int)AntType.Armoured] * 5 < soldiers) pick = ProdKind.Armoured;
         else pick = ProdKind.Soldier;
         Q(pick); // a major simply waits until the food is there
     }
 
-    // the colony's tech path: queen first, then forges, wings and silk cutters as she unlocks them
+    // the colony's tech path: the queen's levels first, then forges and silk cutters as she unlocks them
     static readonly (Upgrade u, int tier, float after)[] Plan =
     {
-        (Upgrade.Queen, 2, 150), (Upgrade.Mandibles, 1, 200), (Upgrade.Chitin, 1, 240), (Upgrade.Wings, 1, 300),
+        (Upgrade.Queen, 2, 150), (Upgrade.Mandibles, 1, 200), (Upgrade.Chitin, 1, 240),
         (Upgrade.Queen, 3, 330), (Upgrade.Mandibles, 2, 420), (Upgrade.Chitin, 2, 460), (Upgrade.SilkCutters, 1, 500),
         (Upgrade.Queen, 4, 560), (Upgrade.Mandibles, 3, 650), (Upgrade.Chitin, 3, 700), (Upgrade.Queen, 5, 780),
     };

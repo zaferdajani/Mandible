@@ -11,7 +11,7 @@ public enum RivalKind { None, Young, Grown, Awake, Empress }
 
 /// Star-bought extras that change what the player's colony may do; fixed when a level starts.
 [System.Flags]
-public enum Perk { None = 0, Matron = 1, Gunner = 2, Marshal = 4, Flyer = 8, Veteran = 16 }
+public enum Perk { None = 0, Matron = 1, Gunner = 2, Marshal = 4, Larder = 8, Veteran = 16 }
 
 /// One level on the map. `Id` is the scenario: 1-4 are the PR #6 episodes (their rules live in Expedition.cs
 /// and Campaign.cs), 5-12 the levels below, 13-14 the mutation chapters. `Number` is its place on the map.
@@ -33,6 +33,7 @@ public sealed class LevelInfo
 public static class Levels
 {
     public const int Count = 14;
+    public const float LarderOrganic = 30f; // the "stocked larder" star unlock
     public static readonly int[] Order = { 1, 5, 6, 7, 13, 2, 14, 3, 10, 8, 9, 4, 11, 12 };
     /// The four acts of the colony's story (LevelInfo.Season is the act).
     public static readonly string[] Seasons = { "Act I", "Act II", "Act III", "Act IV" };
@@ -82,23 +83,23 @@ public static class Levels
         new() { Id = 7, Season = 1, Name = "The Matron's Road", Novelty = "The red colony and an escort", Rival = RivalKind.Young, Seed = 20261107, RivalFood = 0.4f,
             Blurb = "Red ants walk your trails. Bring Vetch, the tube's Acid Matron, home through their ground and break their raid.",
             Stars = new[] { (StarGoal.Time, 900f, Under(15)), (StarGoal.Escort, 0f, "Vetch lives to the end") } },
-        new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "Economy puzzle: the lairs are the larder", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
-            Blurb = "The yard is bare. Hunt the bug lairs for their feasts and outlast the red colony.",
-            Stars = new[] { (StarGoal.Time, 1560f, Under(26)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
-        new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Wings research, acid gunners, watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
-            Blurb = "Grow wings, burn three watch posts that shield the red queen, then end her.",
+        new() { Id = 8, Season = 2, Name = "The Dry Spell", Novelty = "The lairs are the larder; armoured ants", Rival = RivalKind.Grown, Seed = 20261108, RivalFood = 0.35f,
+            Blurb = "The yard is bare. Hunt the lairs for their feasts, win the beetle's core at the last seep before the red colony does, and end its queen.",
+            Stars = new[] { (StarGoal.Time, 1800f, Under(30)), (StarGoal.Lairs, 0f, "Clear all three lairs before the win") } },
+        new() { Id = 9, Season = 2, Name = "Wings and Acid", Novelty = "Acid gunners and watch posts", Rival = RivalKind.Grown, Seed = 20261109, RivalFood = 0.3f,
+            Blurb = "Burn three watch posts that shield the red queen, from the air and from range, then end her.",
             Stars = new[] { (StarGoal.Time, 1200f, Under(20)), (StarGoal.Lost, 50f, "Lose no more than 50 ants") } },
-        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Generals, wasps and a boss who raids", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
-            Blurb = "The Hornet Mother raids from her paper nest. Lead old Burr, the Warlord, against her and end her.",
+        new() { Id = 10, Season = 2, Name = "The Hornet Mother", Novelty = "Wasps, web ants and stinger ants", Rival = RivalKind.Grown, Seed = 20261110, RivalFood = 0.3f,
+            Blurb = "The Hornet Mother raids from her paper nest, out of every ant's reach. Win the spider's core and the wasp's, and end her.",
             Stars = new[] { (StarGoal.Time, 1500f, Under(25)), (StarGoal.AllSteps, 0f, "Slay the Hornet Mother before the queen") } },
         new() { Id = 11, Season = 3, Name = "The Long March", Novelty = "Time pressure: eight minutes, one army", Rival = RivalKind.Awake, Seed = 20261111,
             Blurb = "A strike army, an awake red colony and eight minutes before their mound seals.",
             Stars = new[] { (StarGoal.Time, 240f, Under(4)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
-        new() { Id = 13, Season = 1, Name = "The Silk Trap", Novelty = "Mutagen, the sixth sense and the venom stingers", Rival = RivalKind.Young, Seed = 20261113, RivalFood = 0.3f,
-            Blurb = "A dead queen wasp hangs in a spider's web, and something in her glows. Carve out the gland, haul it home and feed it to the Glass Queen.",
-            Stars = new[] { (StarGoal.Time, 840f, Under(14)), (StarGoal.Master, 0f, "Slay the web spider") } },
-        new() { Id = 14, Season = 1, Name = "The Royal Larva", Novelty = "The general mutation: a royal larva, a cocoon, the first general", Rival = RivalKind.Young, Seed = 20261114, RivalFood = 0.4f,
-            Blurb = "Ashling's body glows. Feed it to the queen, raise the royal larva on remains, guard the cocoon that closes over old Burr, and blood the new Warlord on a red queen.",
+        new() { Id = 13, Season = 1, Name = "The Silk Trap", Novelty = "The sixth sense, the first mutation core and winged ants", Rival = RivalKind.Young, Seed = 20261113, RivalFood = 0.3f,
+            Blurb = "A dead fly hangs in a spider's web, and something in it glows. Win the core from the spider and carry it to the Glass Queen.",
+            Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Master, 0f, "Slay the web spider") } },
+        new() { Id = 14, Season = 1, Name = "The Royal Larva", Novelty = "A queen's core: a royal larva, a cocoon, the first general", Rival = RivalKind.Young, Seed = 20261114, RivalFood = 0.4f,
+            Blurb = "Ashling's body glows where she fell, and the red scouts are coming for it. Win her core, raise the royal larva on remains, guard the cocoon that closes over old Burr, and blood the new Warlord on a red queen.",
             Stars = new[] { (StarGoal.Time, 1260f, Under(21)), (StarGoal.LarvaSafe, 0f, "No raider ever wounds the larva") } },
         new() { Id = 12, Season = 3, Name = "The Ember Empress", Novelty = "The finale: every tool against an awake Empress", Rival = RivalKind.Empress, Seed = 20261112,
             Blurb = "Both mounds fortified, the Old Stag awake and an Empress who raids. End her.",
@@ -137,12 +138,12 @@ public static class Levels
         13 => new[]
         {
             "The batch did not break empty. Something spilled with the ants of the tube, and the creatures that fed on it carry it still: it glows faintly, and it pulses.",
-            "Tonight every ant of the colony feels that pulse. It comes from a queen wasp hanging dead in a spider's web. Find her, deal with the spider however you can, carve out the glowing gland and haul it home. The gland is heavy, and hunters smell it on the move.",
+            "Tonight every ant of the colony feels that pulse. It comes from a bloated fly hanging dead in a spider's web, and the spider sits on its catch. Whatever walks into that silk stays in it. Win the core that glows inside the fly and bring it to the Glass Queen: the core is heavy, and hunters smell it on the move. Past the web, behind silk no ant can walk through, the spider's brood is hatching.",
         },
         14 => new[]
         {
-            "Ashling's body glowed when the workers dragged it home. The Glass Queen has felt it all night.",
-            "Feed it to her and she will lay something no ant has laid: a royal larva. Dig its nursery, keep the remains coming and guard it, for its glow carries through the soil and every hunter in the woods will come for it. When it spins its cocoon, old Burr will lie down beside it and the silk will close over them both. When the cocoon breaks, blood the Warlord on the red scouts' queen.",
+            "Ashling's body glows in the grass where she fell, and the Glass Queen has felt it all night. So have the red scouts: a burial party is coming to carry their queen home.",
+            "Reach her first, cut out the core and bring it to the Glass Queen, and she will lay something no ant has laid: a royal larva. Dig its nursery, keep the remains coming and guard it, for its glow carries through the soil and every hunter in the woods will come for it. When it spins its cocoon, old Burr will lie down beside it and the silk will close over them both. When the cocoon breaks, blood the Warlord on the red scouts' queen.",
         },
         2 => new[]
         {
@@ -157,17 +158,17 @@ public static class Levels
         10 => new[]
         {
             "Something with wings has found you. From a paper nest in the woods the Hornet Mother sends her daughters at every colony she can smell, and yours is the closest.",
-            "In the air her daughters are out of reach: no ground ant can bite a wasp until it comes down to sting, and her paper nest hums with them. Before her raids come, find the answer: in the far corner lives a silk spitter, a spider whose body holds a fragment of mutagen: with it, the colony could learn to pull wasps out of the sky. Then send Burr at the paper nest. With the Hornet Mother gone, the red colony stands alone.",
+            "In the air her daughters are out of reach: no ground ant can bite a wasp until it comes down to sting, and her paper nest hums with them. Before her raids come, find the answer: in the far corner lives a silk spitter, and the colony feels a core in it. A queen who ate it could lay ants that pull wasps out of the sky. The Mother's sentinel carries a core of its own, and the Mother herself heals faster than jaws can wound her. With her gone, the red colony stands alone.",
         },
         8 => new[]
         {
             "No rain for weeks. The seed caches are gone and the berries have dried to husks. The only feasts left in the woods are the bugs themselves.",
-            "Hunt the lairs: every beetle, spider and wasp Burr's army brings down is a meal for the workers to haul home. The red colony is starving too. Outlast it, then end its queen.",
+            "Hunt the lairs: every beetle, spider and wasp Burr's army brings down is a meal for the workers to haul home. The last wet ground in the yard is held by a great beetle with a core in it, and the red colony, starving too, wants both. Its gunners have turned the way to its mound into a killing ground for bare chitin.",
         },
         9 => new[]
         {
             "The Ember Empress has sent a cautious daughter to the clearing. Three watch posts of rooted guards stand around her mound, and while any of them stands she cannot be harmed.",
-            "The Glass Queen is an Empress herself now, and her colony can grow wings. Flying ants cross the clearing fast and acid gunners burn guards from range: burn the posts, then go down the shaft.",
+            "The Glass Queen is an Empress herself now, and she lays acid gunners. Winged ants cross the clearing fast and gunners burn guards from range: burn the posts, then go down the shaft.",
         },
         4 => new[]
         {
@@ -193,9 +194,9 @@ public static class Levels
         5 => "The storm breaks over a full larder. In the wet grass Burr's new squad finds a dead ant none of them knows: red, with a sting in its tail.",
         6 => "The wolf spider is dead and the log is quiet. On its far end, red ants stand in a silent line, watching the black colony count its dead. Then they turn and walk away, toward your trails.",
         7 => "Vetch sleeps in the royal chamber beside the Glass Queen, healed, and the red raid lies broken in the grass. But the raiders' young queen is still alive across the clearing.",
-        13 => "The Glass Queen ate the gland, and by dawn the winged daughters had grown stings. Far off, other things that fed on the spill have started to stir.",
+        13 => "The Glass Queen ate the core, and by dawn her new daughters had wings. Far off, other things that fed on the spill have started to stir.",
         14 => "Old Burr broke out of the cocoon a Warlord, into a nursery full of light, and by nightfall the red scouts' queen was dead. Somewhere in the woods, Queen Cinder has heard of the black ants from the glass.",
-        2 => "Ashling is dead, and her body glows faintly as the workers carry it home. The Glass Queen will not stop looking at it.",
+        2 => "Ashling is dead, and her body glows faintly in the grass where she fell. The Glass Queen will not stop looking toward it.",
         3 => "Queen Cinder is dead. Among her guards your soldiers find a mark they do not know: the sign of the Ember Empress, Cinder's mother.",
         10 => "The paper nest is torn open and the Hornet Mother is dead. Burr wears her sting scar with pride.",
         8 => "The red queen starved and fell. When the rain came back, it found only the Glass Queen's colony to feed.",
@@ -226,7 +227,7 @@ public static class Levels
         new() { Stars = 15, Name = "Early acid gunners", Kind = "Caste", Text = "Acid gunners (and the Empress research they need) from Level 9 on.", Perk = Perk.Gunner },
         new() { Stars = 18, Name = "Saffron colony colour", Kind = "Colour", Text = "Crests and banner in warm saffron.", Colour = 2 },
         new() { Stars = 21, Name = "Sky Marshal", Kind = "General", Text = "Raise the Sky Marshal from a royal larva from Level 9 on.", Perk = Perk.Marshal },
-        new() { Stars = 24, Name = "Early flying ants", Kind = "Caste", Text = "Hatch flying ants (and research wings) from Level 9 on.", Perk = Perk.Flyer },
+        new() { Stars = 24, Name = "A stocked larder", Kind = "Colony", Text = "Every chapter begins with 30 more organic matter for the evolve tree.", Perk = Perk.Larder },
         new() { Stars = 27, Name = "Stag Crest emblem", Kind = "Emblem", Text = "The Old Stag's antlers, borne by the colony it fights for.", Emblem = 3 },
         new() { Stars = 30, Name = "Rosewood colony colour", Kind = "Colour", Text = "Crests and banner in deep rosewood.", Colour = 3 },
         new() { Stars = 33, Name = "Veteran brood", Kind = "Perk", Text = "Every level from Level 2 on starts with an extra veteran squad.", Perk = Perk.Veteran },
@@ -279,7 +280,17 @@ public sealed partial class Expedition
     public readonly List<Wave> Waves = new();
     public int WaveNext, StopGroup = -1;
     public int WaveStep = -1;     // the raids begin when the player reaches this objective (-1: at WaveAt)
-    public MutagenSource Gland;   // the chapter's mutagen source (the Silk Trap)
+    public MutationCore Gland;   // the core the chapter's objectives follow now (a keeper's death puts its core here)
+    public readonly List<int> CoreKeepers = new(); // living creatures whose bodies will hold a core (Sim.GiveCore)
+    public int SentinelGroup = -1, CurtainGroup = -1;
+    public Vector2 CurtainAt;
+    public readonly List<(int group, Vector2 at, float r)> SilkOf = new(); // silk that sags once the spiders that keep it are dead
+    public int TreeBuys;         // evolve-tree purchases this chapter (Obj.Evolve)
+    // the rival wants the same core: a burial party of workers and their escort comes for it, again and again
+    public bool RivalWantsCore;
+    public float RivalDelay, RivalPartyAt = -1;
+    public int RivalEscort;
+    public readonly List<(int id, int serial)> RivalParty = new();
     public float WaveAt = -1, WaveGap;
     public bool WaveRepeat;
     public Vector2 WaveFrom;
@@ -468,7 +479,7 @@ public sealed partial class Sim
                 Muster(0, AntType.Worker, 6, home);
                 Muster(0, AntType.Soldier, 30, home + toFoe * 9);
                 Muster(0, AntType.Major, 6, home + toFoe * 12);
-                GrownRival(foe, toFoe, workers: 8, soldiers: 12, majors: 1);
+                GrownRival(foe, toFoe, workers: 8, soldiers: 12, majors: 1, gunners: 8);
                 Col[1].Food = 100;
                 ClearCorridor(home, foe, -1);
                 // the drought: every seed cache, berry and honeydew drop has dried up; the far corners keep a trickle
@@ -487,7 +498,24 @@ public sealed partial class Sim
                 m.WaveAt = 330; m.WaveGap = 300;
                 Add(Expedition.Obj.Group, "Raid a lair", "Your workers have nothing to forage. March the army on a bug lair (the gold rings): every bug it kills is a carcass to haul home. Lairs left: {0}.", b: -1);
                 Add(Expedition.Obj.Haul, "Haul the feast home", "Workers carry the remains home on their own: they feed the larder as well as the reserve. Hatch more (Z) to haul faster, and hunt the next lair. Organic matter: {0}/{1}.", amount: 80);
-                Add(Expedition.Obj.Evolve, "Feed a fighter", "Remains do more than fill the stores: a fighter that eats them evolves. Bring a squad to the nest and feed it from the reserve (select it, then Feed from the reserve), or right-click remains with it. Evolved fighters: {0}/{1}.", b: 1);
+                {
+                    // the last wet seep in the yard, and the mutated beetle that holds it: its shell turns every bite from
+                    // the front, and its brood closes round whatever stands before it. Its body holds the beetle's core.
+                    var seep = OpenGround(home + toFoe * 82 + side * 44);
+                    ClearAround(seep, 16);
+                    int sg = AddGroup("The seep", seep);
+                    int keeper = GroupBug(sg, AntType.Beetle, seep, 5);
+                    for (int i = 0; i < 3; i++) GroupBug(sg, AntType.Beetle, seep + MathX.Dir(i * 2.1f + 0.5f) * 4.5f, 2);
+                    foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
+                    GiveCore(keeper, Mutation.Armoured);
+                    m.CoreKeepers.Add(keeper);
+                    m.RivalWantsCore = true; m.RivalDelay = 20; m.RivalEscort = 8; // the red colony is starving: it wants the seep and the core
+                    Add(Expedition.Obj.Group, "Take the seep", "The colony feels a core at the last wet ground in the yard (the gold ring), inside a great beetle whose shell turns every bite. Beetles left: {0}.", b: sg);
+                }
+                Add(Expedition.Obj.Extract, "Cut out the beetle's core", "Select workers and right-click the glowing core in the beetle's body. The red colony has smelled it too. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy and its carrier slow, and the red raids cross its road. If the red colony carries it home instead, the chapter is lost. Distance: {0}.");
+                Add(Expedition.Obj.Hatch, "Hatch armoured ants", "The queen has changed: she lays armoured ants (the Hatch tab). The red mound's approach is a killing ground for bare chitin. Armoured ants: {0}/{1}.", a: (int)AntType.Armoured, b: 3);
+                Add(Expedition.Obj.Evolve, "Spend in the evolve tree", "Organic matter is spent in the evolve tree (V): the queen's level, a general's level, or a rank on a unit's branch. Ranks bought: {0}/{1}.", b: 1);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The red colony is starving and its raids are thin. Gather the army and send everyone down the red shaft.");
                 break;
             case 9: // Wings and Acid
@@ -517,8 +545,7 @@ public sealed partial class Sim
                 m.WaveFrom = foe + (home - foe).Normalized() * 12;
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 10), (AntType.Major, 1, 2) } });
                 m.WaveAt = 420; m.WaveGap = 0;
-                Add(Expedition.Obj.Research, "Grow wings", "Open the Research tab and research Wings (W). Flying ants hatch only from a winged colony.", a: (int)Upgrade.Wings, b: 1);
-                Add(Expedition.Obj.Hatch, "Hatch flying ants", "Hatch flying ants (F) and acid gunners (D). Flyers cross the yard fast; gunners burn guards from range. Flyers: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
+                Add(Expedition.Obj.Hatch, "Hatch winged ants", "Hatch winged ants (F) and acid gunners (D). Winged ants cross the yard fast; gunners burn guards from range. Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 6);
                 Add(Expedition.Obj.Group, "Burn the watch posts", "While any watch post stands the red queen cannot be harmed. Strike them one by one (gold rings on the map). Posts left: {0}.", b: -2);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "Her shield is down. Send everything down the red shaft before she raises new guards.");
                 break;
@@ -530,6 +557,7 @@ public sealed partial class Sim
                 Muster(0, AntType.Worker, 14, home);
                 Muster(0, AntType.Soldier, 20, home + toFoe * 9);
                 Muster(0, AntType.Major, 4, home + toFoe * 12);
+                Muster(0, AntType.Flyer, 8, home + toFoe * 10);
                 { int hero = Spawn(0, AntType.Warlord, OpenGround(home + toFoe * 12), toFoe.AngleD()); if (hero >= 0) Ants[hero].State = AntState.Idle; } // old Burr, out of the royal cocoon (the roster brings the real one)
                 GrownRival(foe, toFoe, workers: 10, soldiers: 8, majors: 1, queenTier: 2);
                 ClearCorridor(home, foe, -1);
@@ -538,7 +566,7 @@ public sealed partial class Sim
                     ClearAround(nest, 20);
                     ClearCorridor(home, nest, -1);
                     int g = AddGroup("Paper nest", nest);
-                    GroupBug(g, AntType.Wasp, nest, 5);
+                    { int mother = GroupBug(g, AntType.Wasp, nest, 5); Ants[mother].Regrows = true; } // only lasting venom outlasts her
                     for (int i = 0; i < 4; i++) GroupBug(g, AntType.Wasp, nest + MathX.Dir(i * 1.57f) * 4, 2);
                     for (int i = 0; i < 2; i++) GroupBug(g, AntType.Spider, nest + MathX.Dir(0.8f + i * 3.1f) * 6, 2);
                     m.WaveFrom = nest; m.StopGroup = g; m.WaveRepeat = true;
@@ -547,8 +575,9 @@ public sealed partial class Sim
                     m.WaveAt = -1; m.WaveGap = 160; // the raids come once the colony has its answer (WaveStep)
                 }
                 {
-                    // the silk spitter: a rare spitting spider in the free corner of the yard, its hollow strung with its own webs.
-                    // Its body holds a fragment of mutagen: the colony's answer to the wasps.
+                    // the silk spitter: a rare spitting spider in the free corner of the yard, its hollow strung with its own webs:
+                    // a massed charge is rooted in the silk and bitten where it stands.
+                    // Its body holds the spider's core: web ants, the colony's answer to the wasps.
                     var mid = home.Lerp(foe, 0.5f);
                     var corner = OpenGround(ClampMap(mid - side * home.DistanceTo(foe) * 0.42f));
                     ClearAround(corner, 16);
@@ -562,30 +591,43 @@ public sealed partial class Sim
                         if (b.Home.DistanceTo(home.Lerp(corner, along)) < 45f) { b.Alive = false; WildCount--; _free.Push(i); }
                     }
                     int sg = AddGroup("Silk spitter", corner);
-                    m.FragmentGroup = sg;
-                    GroupBug(sg, AntType.Spider, corner, 4);
+                    int spitter = GroupBug(sg, AntType.Spider, corner, 4);
+                    GiveCore(spitter, Mutation.Web);
+                    m.CoreKeepers.Add(spitter);
                     GroupBug(sg, AntType.Spider, corner + side * 4, 1);
                     GroupBug(sg, AntType.Spider, corner - side * 4, 1);
                     foreach (var (bug, _) in m.Groups[sg]) Ants[bug].Home = Ants[bug].Pos;
                     for (int k = 0; k < 4; k++) Webs.Add(new WebZone { Pos = corner + MathX.Dir(k * 1.57f + 0.4f) * 6.5f, R = 2.4f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
-                    m.Fixed = Mutation.WebThrowing;
+                    // the Hornet Mother's sentinel, on the road to the paper nest: it carries the wasp's core
+                    var post = OpenGround(home.Lerp(W.Nests[1].Pos, 0.5f) + side * 36);
+                    ClearAround(post, 12);
+                    int pg = AddGroup("The sentinel", post);
+                    int sentinel = GroupBug(pg, AntType.Wasp, post, 4);
+                    for (int k = 0; k < 3; k++) GroupBug(pg, AntType.Wasp, post + MathX.Dir(k * 2.1f) * 5, 2);
+                    foreach (var (bug, _) in m.Groups[pg]) Ants[bug].Home = Ants[bug].Pos;
+                    GiveCore(sentinel, Mutation.Stinger);
+                    m.CoreKeepers.Add(sentinel);
+                    m.SentinelGroup = pg;
                 }
-                Add(Expedition.Obj.Group, "Hunt the silk spitter", "The colony feels mutagen in the far corner: a spitting spider whose silk could bring wasps down. Its hollow is strung with webs that pin ants; send the army in force (the gold ring). Spiders left: {0}.", b: 1);
-                Add(Expedition.Obj.Extract, "Cut out its spinneret", "Select workers and right-click the glowing spinneret in the spitter's body. Carved: {0}%.");
-                Add(Expedition.Obj.Deliver, "Carry it home", "The fragment is heavy and the wasps smell it. Keep soldiers beside the carrier. Distance: {0}.");
-                Add(Expedition.Obj.Mutate, "Feed the queen the fragment", "Open the mutation card (beside the objectives): Web Throwing. Soldiers will fling silk that pins a wasp to the ground, where every ant can bite it.", a: (int)Mutation.WebThrowing);
-                Add(Expedition.Obj.Waves, "Break the hornet raid", "The Hornet Mother has smelled the change and sends her daughters at your mound. Keep soldiers close: their silk pins a wasp to the ground, and then every ant can bite it. Raiders left: {0}.", b: 1);
+                Add(Expedition.Obj.Group, "Bring down the silk spitter", "The colony feels a core in the far corner (the gold ring): a spitting spider in a hollow strung with silk. Spitter's band left: {0}.", b: 1);
+                Add(Expedition.Obj.Extract, "Cut out the spider's core", "Select workers and right-click the glowing core in the spitter's body. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy, its carrier slow, and wasps hunt what moves in the open. Distance: {0}.");
+                Add(Expedition.Obj.Hatch, "Hatch web ants", "The queen has changed: she lays web ants (the Hatch tab). Their silk pins a flyer to the ground. Web ants: {0}/{1}.", a: (int)AntType.WebAnt, b: 4);
+                Add(Expedition.Obj.Waves, "Break the hornet raid", "The Hornet Mother has smelled the change and sends her daughters at your mound. Raiders left: {0}.", b: 1);
                 m.WaveStep = 4;
-                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Take the army to the paper nest (gold ring) and kill her. While she lives the raids keep coming. Hornets left: {0}.", b: 0);
+                Add(Expedition.Obj.Group, "Bring down the sentinel", "The Mother's sentinel hangs over the road to the paper nest (the gold ring), and the colony feels a core inside it. Hornets left: {0}.", b: m.SentinelGroup);
+                Add(Expedition.Obj.Extract, "Cut out the wasp's core", "Select workers and right-click the glowing core in the sentinel's body. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The swarm wants its sister back. Distance: {0}.");
+                Add(Expedition.Obj.Group, "Slay the Hornet Mother", "Her wounds close as fast as jaws can open them: only venom that keeps burning outlasts her. The paper nest is the gold ring. Hornets left: {0}.", b: 0);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The yard is quiet. Gather the army, march on the red mound and send everyone down the shaft.");
                 break;
             case 11: // The Long March
                 SettleColony(0, brood: 3, stores: 2);
-                player.Tier[(int)Upgrade.Queen] = 3; player.Tier[(int)Upgrade.Wings] = 1; Col[0].Chambers[0].Tier = 3;
+                player.Tier[(int)Upgrade.Queen] = 3; Col[0].Chambers[0].Tier = 3;
                 ApplyLevel(ref Ants[player.QueenId]); Ants[player.QueenId].Hp = Ants[player.QueenId].MaxHp;
                 player.Food = 600;
                 Muster(0, AntType.Worker, 10, home);
-                // a squad and two majors more since the rival heals by eating (Reveal.Evolution): the gate fight was close
+                // a squad and two majors more since the rival heals by eating (Reveal.Feasting): the gate fight was close
                 Muster(0, AntType.Soldier, 36, home + toFoe * 9);
                 Muster(0, AntType.Major, 8, home + toFoe * 12);
                 Muster(0, AntType.Gunner, 6, home + toFoe * 14);
@@ -611,42 +653,54 @@ public sealed partial class Sim
                 Add(Expedition.Obj.Group, "Break the gate guards", "Four guards grown into the red mound shield the queen. Break them with everything. Guards left: {0}.", b: -3);
                 Add(Expedition.Obj.KillQueen, "Kill the red queen", "The gate is open. Down the shaft, before the seal.");
                 break;
-            case 13: // The Silk Trap: the first mutagen
+            case 13: // The Silk Trap: the first core (a fly's: winged ants)
             {
                 SettleColony(0, brood: 2, stores: 1);
                 player.Tier[(int)Upgrade.Queen] = 2; Col[0].Chambers[0].Tier = 2;
                 ApplyLevel(ref Ants[player.QueenId]); Ants[player.QueenId].Hp = Ants[player.QueenId].MaxHp;
                 player.Food = 350;
                 Muster(0, AntType.Worker, 10, home);
-                Muster(0, AntType.Soldier, 14, home + toFoe * 9);
-                Muster(0, AntType.Major, 2, home + toFoe * 12);
-                Muster(0, AntType.Flyer, 6, home + toFoe * 10); // the strain's first winged daughters
+                Muster(0, AntType.Soldier, 20, home + toFoe * 9);
+                Muster(0, AntType.Major, 4, home + toFoe * 12);
                 YoungRival(foe, toFoe, 6);
                 ClearCorridor(home, foe, -1);
-                // the web is strung between grass stems on the far flank; its spider sits at the hub above the wasp
+                // the web is strung between grass stems on the far flank; its spider sits at the hub above the fly it caught.
+                // Ants that charge the web are rooted in it and eaten where they stand.
                 var web = OpenGround(centre + side * 100 - toFoe * 8);
                 ClearAround(web, 18);
                 ClearCorridor(home, web, -1);
                 int g = AddGroup("The web", web);
                 m.MasterGroup = g;
                 var away = (web - home).Normalized();
-                GroupBug(g, AntType.Spider, web + away * 6.5f, 4);
+                GroupBug(g, AntType.Spider, web + away * 6.5f, 3);
                 GroupBug(g, AntType.Spider, web + away * 9 + side * 5, 1);
                 foreach (var (bug, _) in m.Groups[g]) Ants[bug].Home = Ants[bug].Pos; // each keeps to its own strand
-                m.Gland = AddMutagen(web, "the queen wasp's gland", AntType.Wasp, Mutations.ExtractWork, 1, 2);
-                m.Fixed = Mutation.Stinger;
-                // the red scouts smell the mutation too: their raid comes once the colony has changed
+                for (int k = 0; k < 7; k++) Webs.Add(new WebZone { Pos = web + MathX.Dir(k * 0.8976f) * 4.6f, R = 2.3f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
+                m.SilkOf.Add((g, web, 9f));
+                m.Gland = AddCore(web, "the fly's core", AntType.Wasp, Mutation.Winged); // the body: a bloated fly (stand-in mesh until its art target is approved)
+                {
+                    // behind the web, a curtain of silk no ant can walk through hides the spider's brood: only wings cross it
+                    var sac = OpenGround(web + away * 30);
+                    ClearAround(sac, 16);
+                    int bg = AddGroup("The brood", sac);
+                    for (int k = 0; k < 2; k++) { int b = GroupBug(bg, AntType.Spider, sac + MathX.Dir(k * 3.14f) * 1.6f, 1); Ants[b].Home = Ants[b].Pos; }
+                    for (int k = 0; k < 14; k++) Webs.Add(new WebZone { Pos = sac + MathX.Dir(k * 0.4488f) * 7.5f, R = 3.2f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
+                    foreach (var (b, _) in m.Groups[bg]) Ants[b].State = AntState.Hold; // they keep to the sac
+                    m.CurtainGroup = bg; m.CurtainAt = sac; m.SilkOf.Add((bg, sac, 14f));
+                }
+                // the red scouts smell the core on the move: their raid comes while it is on the road
                 m.WaveFrom = foe + (home - foe).Normalized() * 12;
                 m.Waves.Add(new Expedition.Wave { Team = 1, Bugs = new[] { (AntType.Soldier, 1, 9), (AntType.Major, 1, 1) } });
-                Add(Expedition.Obj.Sense, "Follow the sixth sense", "Every ant feels it: a faint pulse through the fog, far out on the flank (the violet ring on the map). Send a squad toward it (F2, then right-click near it) until the colony can sense the source. Distance: {0}.");
-                Add(Expedition.Obj.Extract, "Carve out the gland", "A dead queen wasp hangs in the web, and the glow is inside her. Fight the web spider, lure it off with soldiers, or slip workers past it: select workers and right-click the glowing gland. Four carve at once. Carved: {0}%.");
-                Add(Expedition.Obj.Deliver, "Haul it home", "The gland is heavy: its carrier staggers at half pace, and hunters smell it on the move. Keep soldiers beside it all the way to the nest mouth. Distance: {0}.");
-                Add(Expedition.Obj.Mutate, "Feed it to the queen", "The gland is in the queen's reserve. Open the mutation card (the glowing gland beside the objectives) and let her consume it: the first mutation, Venom Stingers.", a: (int)Mutation.Stinger);
-                Add(Expedition.Obj.Waves, "Sting the red raid", "The red scouts smelled the change and come for your shaft. Send the winged ants (F4) at them: every sting keeps burning. Raiders left: {0}.", b: 1);
-                m.WaveStep = 4;
+                Add(Expedition.Obj.Sense, "Follow the sixth sense", "Every ant feels it: a faint pulse through the fog, far out on the flank (the violet ring on the map). Send a squad toward it until the colony can sense the source. Distance: {0}.");
+                Add(Expedition.Obj.Extract, "Cut out the core", "A bloated fly hangs dead in the web, and the glow is inside it. The web spider sits on its catch, and the silk holds whatever walks into it. Select workers and right-click the glowing core; four cut at once. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "The core is heavy: its carrier staggers at half pace, and hunters smell it on the move. Distance: {0}.");
+                Add(Expedition.Obj.Hatch, "Hatch winged ants", "The queen has changed: she lays winged ants (F). Winged ants: {0}/{1}.", a: (int)AntType.Flyer, b: 4);
+                Add(Expedition.Obj.Group, "Destroy the brood behind the silk", "Past the web the spider's brood lies behind a curtain of silk (the gold ring). No ant can walk through it. Spiderlings left: {0}.", b: m.CurtainGroup);
+                Add(Expedition.Obj.Waves, "Break the red raid", "The red scouts smelled the core and came for your shaft. Raiders left: {0}.", b: 1);
+                m.WaveStep = 2;
                 break;
             }
-            case 14: // The Royal Larva: the hero mutation
+            case 14: // The Royal Larva: a mutated queen's core, and the first general
             {
                 SettleColony(0, brood: 2, stores: 1);
                 player.Tier[(int)Upgrade.Queen] = 2; Col[0].Chambers[0].Tier = 2;
@@ -667,7 +721,14 @@ public sealed partial class Sim
                     int g = AddGroup("Lair", p, larder: true);
                     for (int i = 0; i < 4; i++) GroupBug(g, bugs, p + MathX.Dir(i * 1.57f) * 3.5f, i == 0 ? 2 : 1);
                 }
-                m.Fixed = Mutation.RoyalLarva;
+                {
+                    // Ashling lies where she fell, between the mounds, and her body glows. The red scouts come to carry
+                    // their queen home: whoever brings the core to a queen keeps it.
+                    var body = OpenGround(home.Lerp(foe, 0.58f) + side * 10);
+                    ClearAround(body, 10);
+                    m.Gland = AddCore(body, "Ashling's core", AntType.Queen, Mutation.RoyalLarva, Mutations.ExtractWork * 4);
+                    m.RivalWantsCore = true; m.RivalDelay = 4; m.RivalEscort = 8;
+                }
                 // the larva's glow draws hunters from the bramble on the flank, straight down the shaft for the nursery
                 m.WaveFrom = OpenGround(home + (centre - home).Normalized() * 70 - side * 30);
                 ClearAround(m.WaveFrom, 10);
@@ -677,9 +738,10 @@ public sealed partial class Sim
                 m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Beetle, 2, 3), (AntType.Spider, 2, 2) } });
                 m.Waves.Add(new Expedition.Wave { Team = Config.Wild, Bugs = new[] { (AntType.Spider, 2, 3), (AntType.Beetle, 2, 2) } });
                 m.WaveGap = 85; // a breath between raids: the army rebuilds before the next (70 wiped it out again and again)
-                m.WaveStep = 2;
-                Add(Expedition.Obj.Mutate, "Feed the queen Ashling's mutagen", "The gland from Ashling's body is in the reserve. Open the mutation card (beside the objectives) and let the queen consume it: The Royal Larva.", a: (int)Mutation.RoyalLarva);
-                Add(Expedition.Obj.Dig, "Dig the royal nursery", "The queen holds the royal larva until it has a chamber of its own. Workers dig the nursery by themselves: keep a few at home. Dug: {0}/{1}.", a: (int)ChamberKind.Nursery, b: 1);
+                m.WaveStep = 3;
+                Add(Expedition.Obj.Extract, "Cut the core out of Ashling", "Ashling's body glows in the grass between the mounds (the violet ring), and a red burial party is on its way to carry her home. Select workers and right-click the core. Cut: {0}%.");
+                Add(Expedition.Obj.Deliver, "Carry the core to the queen", "If the red scouts bring Ashling's core to their own queen, the chapter is lost. Distance: {0}.");
+                Add(Expedition.Obj.Dig, "Dig the royal nursery", "The queen has changed: she holds a royal larva until it has a chamber of its own. Workers dig the nursery by themselves: keep a few at home. Dug: {0}/{1}.", a: (int)ChamberKind.Nursery, b: 1);
                 Add(Expedition.Obj.Larva, "Feed the royal larva", "Three nurses feed it from the organic reserve. Hunt the lairs (gold rings) and haul the remains home, and keep the army at the mound: its glow brings raiders down the shaft for the nursery. Fed: {0}/{1}.");
                 Add(Expedition.Obj.Cocoon, "Guard the cocoon", "The larva has spun its cocoon: it throbs with light, and the raids grow desperate. Hold the nursery until it bursts. Hatching in {0}s.");
                 Add(Expedition.Obj.KillQueen, "Blood the Warlord", "Old Burr is reborn: a Warlord who cleaves through crowds. Lead him and the army down the red scouts' shaft and end their queen.");
@@ -721,12 +783,13 @@ public sealed partial class Sim
 
     void Track(int group, int id) { if (id >= 0) Mission.Groups[group].Add((id, Ants[id].Serial)); }
 
-    void GroupBug(int group, AntType type, Vector2 p, int level)
+    int GroupBug(int group, AntType type, Vector2 p, int level)
     {
         int id = Spawn(Config.Wild, type, OpenGround(p), Rng.R(0, DMath.Tau), level);
-        if (id < 0) return;
+        if (id < 0) return -1;
         Ants[id].State = AntState.Idle; Ants[id].Home = Mission.GroupPos[group];
         Track(group, id);
+        return id;
     }
 
     /// No red colony in this level: remove it quietly (a death event would award a queen kill).
@@ -784,7 +847,7 @@ public sealed partial class Sim
     }
 
     /// Group -1: every larder lair; -2: every watch post; -3: the red mound guardians; -4: the Old Stag (until roused).
-    int GroupLeft(int g)
+    public int GroupLeft(int g)
     {
         var m = Mission;
         if (g == -3) { int k = 0; for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Guardian && Ants[i].Team == 1 && Ants[i].Pos.DistanceTo(W.Nests[1].Pos) < 16) k++; return k; }
@@ -804,7 +867,7 @@ public sealed partial class Sim
         var m = Mission;
         // waves
         bool stopped = m.StopGroup >= 0 && Living(m.Groups[m.StopGroup]) == 0
-                       || m.Fixed == Mutation.RoyalLarva && m.HeroesBorn > 0; // the larva's glow drew the hunters: once the hero is out, they stop coming
+                       || m.Episode == Reveal.RoyalLarvaId && m.HeroesBorn > 0; // the larva's glow drew the hunters: once the general is out, they stop coming
         if (m.WaveAt >= 0 && Time >= m.WaveAt && !stopped && (m.WaveNext < m.Waves.Count || m.WaveRepeat) && m.Waves.Count > 0)
         {
             var w = m.Waves[Mathf.Min(m.WaveNext, m.Waves.Count - 1)];
@@ -833,6 +896,8 @@ public sealed partial class Sim
             m.LossReason = m.DeadlineLoss;
             Winner = Config.Enemy; return;
         }
+        TickCoreRace(m);
+        if (Winner >= 0) return;
         UpdateLevel();
         while (m.Step < m.Steps && LevelStepDone(m.Objectives[m.Step]))
         {
@@ -879,8 +944,7 @@ public sealed partial class Sim
             Expedition.Obj.KillQueen => !Col[1].Alive,
             Expedition.Obj.Sense => m.Gland != null && Senses(0, m.Gland),
             Expedition.Obj.Extract => m.Gland != null && (m.Gland.Free || m.Gland.Home),
-            Expedition.Obj.Deliver => c.MutagenGathered >= 1,
-            Expedition.Obj.Mutate => (c.Mutations & o.A) != 0,
+            Expedition.Obj.Deliver => m.Gland is { Home: true, HomeTeam: 0 },
             Expedition.Obj.Larva => c.LarvaStage == 3 || m.HeroesBorn > 0,
             Expedition.Obj.Cocoon => m.HeroesBorn > 0,
             _ => false,
@@ -895,8 +959,44 @@ public sealed partial class Sim
         return c.GatheredBy[kind] > m.KindBase[kind];
     }
 
-    /// The player's fighters that have evolved at least once by eating.
-    int Evolved() { int n = 0; for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Stage > 0) n++; return n; }
+    /// Ranks and levels the player has bought in the evolve tree this chapter.
+    int Evolved() => Mission.TreeBuys;
+
+    /// The rival's race for the chapter's core, and the silk curtain that falls with the brood behind it.
+    void TickCoreRace(Expedition m)
+    {
+        for (int k = m.SilkOf.Count - 1; k >= 0; k--)
+        {
+            var (grp, at, r) = m.SilkOf[k];
+            if (GroupLeft(grp) > 0) continue;
+            // its spiders are dead: the silk sags and lets go of whatever it held
+            Webs.RemoveAll(w => w.Max > 1e5f && w.Pos.DistanceTo(at) < r);
+            m.SilkOf.RemoveAt(k);
+        }
+        var g = m.Gland;
+        if (g == null) return;
+        if (g.Home && g.HomeTeam == Config.Enemy)
+        {
+            m.LossReason = "The red colony carried the core home to its own queen. What it would have given yours, it gives hers.";
+            Winner = Config.Enemy;
+            return;
+        }
+        if (!m.RivalWantsCore || g.Home || !Col[1].Alive || Ticks % 30 != 0) return;
+        if (m.RivalPartyAt < 0) m.RivalPartyAt = Time + m.RivalDelay;
+        if (Time < m.RivalPartyAt || Living(m.RivalParty) > 0) return;
+        m.RivalParty.Clear();
+        var from = W.Nests[1].Pos + (g.Pos - W.Nests[1].Pos).Normalized() * 8;
+        var ids = new List<int>();
+        for (int k = 0; k < 4 + m.RivalEscort; k++)
+        {
+            int id = Spawn(1, k < 4 ? AntType.Worker : AntType.Soldier, OpenGround(from + Rng.InDisk(3)), 0);
+            if (id < 0) break;
+            m.RivalParty.Add((id, Ants[id].Serial));
+            ids.Add(id);
+        }
+        CmdExtract(ids, g);
+        m.RivalPartyAt = Time + 110; // the next party, once this one is dead
+    }
 
     int CountLarders() { int n = 0; foreach (bool l in Mission.Larder) if (l) n++; return n; }
 
@@ -958,7 +1058,6 @@ public sealed partial class Sim
                     m.Have = near == float.MaxValue ? 999 : Mathf.Max(0, (int)(near - Mutations.SenseRange));
                 }
                 break;
-            case Expedition.Obj.Mutate: m.MarkerPos = home; break;
             case Expedition.Obj.Larva: m.Have = (int)c.LarvaFed; m.Need = (int)c.LarvaNeed; m.MarkerPos = c.Organic < 4 && GroupLeft(-1) > 0 ? GroupMarker(-1, home) : Nursery(0) is { } nr ? ChamberPos(0, nr) : home; break;
             case Expedition.Obj.Cocoon: m.Have = (int)Mathf.Ceil(c.CocoonT); if (Nursery(0) is { } nc) m.MarkerPos = ChamberPos(0, nc); break;
         }

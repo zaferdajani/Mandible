@@ -70,7 +70,7 @@ public sealed partial class Sim
     public static ChamberKind KindOf(Upgrade u) => u switch
     {
         Upgrade.Queen => ChamberKind.Royal, Upgrade.Mandibles => ChamberKind.Forge, Upgrade.Chitin => ChamberKind.Armory,
-        Upgrade.Wings => ChamberKind.Wings, _ => ChamberKind.Silk,
+        _ => ChamberKind.Silk,
     };
 
     public static string ChamberName(ChamberKind k) => k switch
@@ -204,7 +204,7 @@ public sealed partial class Sim
     {
         int brood = ChamberCount(c.Team, ChamberKind.Brood, true);
         int stores = ChamberCount(c.Team, ChamberKind.Storage, true);
-        int slots = c.Team == 0 ? Mutations.SlotsPerLevel * (c.Level - 1) : 0; // the campaign colony's level: room for more
+        int slots = Evolve.BroodRoom * (c.T(Upgrade.Queen) - 1); // a greater queen: room for more
         c.PopCap = c.Founded ? Mathf.Min(Config.MaxPopCap + slots, Config.StartPopCap + Config.ChamberPop * brood + slots) : Config.FoundingPop;
         c.FoodCap = Mode == GameMode.Lanes ? 1e9f : Config.BaseFoodCap + Config.StorageFoodCap * stores;
     }

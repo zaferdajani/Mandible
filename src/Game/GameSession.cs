@@ -405,10 +405,12 @@ public partial class GameSession : Node3D
 
     static string LockReason(ProdKind k) => k switch
     {
-        ProdKind.Major or ProdKind.Warlord => $"{Config.ProdName(k)} needs a Matriarch queen (Royal Jelly, Q)",
-        ProdKind.Gunner or ProdKind.Matron => $"{Config.ProdName(k)} needs an Empress queen (Royal Jelly, Q)",
-        ProdKind.Marshal => "The Sky Marshal needs an Ancient Empress and the Wing Chamber",
-        _ => "Flying ants need the Wing Chamber (W)",
+        ProdKind.Major or ProdKind.Warlord => $"{Config.ProdName(k)} needs a Matriarch queen (the queen's level, Q)",
+        ProdKind.Gunner or ProdKind.Matron => $"{Config.ProdName(k)} needs an Empress queen (the queen's level, Q)",
+        ProdKind.Marshal => "The Sky Marshal needs an Ancient Empress and winged ants",
+        ProdKind.WebAnt => "Web ants need a spider's mutation core, carried to the queen",
+        ProdKind.Armoured => "Armoured ants need a beetle's mutation core, carried to the queen",
+        _ => "Winged ants need a fly's mutation core, carried to the queen",
     };
 
     public void TryResearch(Upgrade u, Vector2? at = null)
@@ -729,8 +731,8 @@ public partial class GameSession : Node3D
         var c = Cmd.Units(CmdKind.AutoEat, Local.Me, ids, Sim);
         c.Arg = (byte)(allOn ? 0 : 1);
         Issue(c);
-        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home to the queen"
-                        : "Auto-eat ON: they eat what they kill and evolve", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
+        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home"
+                        : "Auto-eat ON: they eat what they kill and mend", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
         Audio.Ui("ui_click", -4);
     }
 
@@ -922,9 +924,9 @@ public partial class GameSession : Node3D
     public void Issue(Cmd c) => Orders.Issue(c);
 
     /// The first lesson of this world, shown once, at the first kill: killing makes no one stronger, eating does.
-    public void EatLesson() => Hud.Banner(Sim.Mission != null ? "Fighters evolve by eating" : "Victory alone makes no one stronger", Settings.Touch
-        ? "Eat the remains: select the ant you want to grow, then tap the carcass. Or let the workers haul it home as organic matter for the queen."
-        : "Eat the remains: right-click the carcass with the ant you want to grow. Or let the workers haul it home as organic matter for the queen.", 10f);
+    public void EatLesson() => Hud.Banner("Victory alone makes no one stronger", Settings.Touch
+        ? "The workers haul remains home as organic matter, spent in the evolve tree. A hurt fighter mends by eating: select it, then tap the carcass."
+        : "The workers haul remains home as organic matter, spent in the evolve tree. A hurt fighter mends by eating: right-click the carcass with it.", 10f);
 
     void UpdateFood()
     {
@@ -1015,35 +1017,31 @@ public partial class GameSession : Node3D
                     }
                     break;
                 case EvKind.Evolve:
-                    if (seen && Config.IsHero(e.Type) && e.Who > 0) GeneralBurst(e.Who - 1, Mathf.Clamp(e.Tier, 1, 3)); // a general's moult: it grows stronger in a burst
-                    if (seen)
+                    // a rank bought on a unit's branch of the evolve tree: every ant of that caste changes at once
+                    if (e.Team == Local.Me && !Demo && e.Amount > 0)
                     {
-                        // the moult: a flare of light over the ant, a ring on the soil, a deep note
-                        Effects.Burst(wp + Vector3.Up * 1.2f, 12, 2, 4f, 0.12f, 1.1f);
-                        Effects.Marker(wp, new Color(1f, 0.68f, 0.22f), 1.4f);
-                        if (Audible(e.Pos)) Audio.At("levelup", wp, 2, 0.1f);
-                        if (!Demo && e.Team == Local.Me)
-                        {
-                            string[] roman = { "", "I", "II", "III" };
-                            Hud.Banner($"{Config.Of(e.Type).Name} evolved: Stage {roman[Mathf.Clamp(e.Tier, 0, 3)]}",
-                                $"{Config.StageNames[Mathf.Clamp(e.Tier, 0, 3)]}: {Config.StageGain(e.Tier)}", 4.5f);
-                        }
+                        var node = Evolve.Of((EvoNode)(e.Amount - 1));
+                        Hud.Banner($"{node.Name}: rank {e.Tier}", node.Text, 4.5f);
+                        Audio.Ui("levelup");
                     }
                     break;
+                case EvKind.CoreWaits:
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The core waits in the nest", $"{Mutations.Name((Mutation)e.Tier)} need {Mutations.Name(Mutations.Needs((Mutation)e.Tier)).ToLowerInvariant()} first: the queen will take this core when she has them.", 6f);
+                    break;
                 case EvKind.MutagenFree:
-                    if (e.Team == Local.Me && !Demo) Hud.Banner("The gland is free", "Its glow pulses in the workers' jaws. Get it home: hunters smell it on the move.", 4f);
+                    if (e.Team == Local.Me && !Demo) Hud.Banner("The core is free", "Its glow pulses in the workers' jaws. Get it home: hunters smell it on the move.", 4f);
                     break;
                 case EvKind.MutagenDropped:
-                    if (e.Team == Local.Me && !Demo) Hud.Alert("The carrier fell: the gland lies on the ground. Send workers to take it up.", new Color(0.85f, 0.7f, 1f));
+                    if (e.Team == Local.Me && !Demo) Hud.Alert("The carrier fell: the core lies on the ground. Send workers to take it up.", new Color(0.85f, 0.7f, 1f));
                     break;
                 case EvKind.MutagenHome:
-                    if (e.Team == Local.Me && !Demo) { Hud.Banner("Mutagen in the reserve", "The queen can consume it now: the mutation card is on the objectives.", 4.5f); Audio.Ui("research"); }
+                    if (e.Team != Local.Me && !Demo && Sim.Mission != null) Hud.Alert("The red colony has carried a core home.", new Color(1f, 0.45f, 0.35f));
                     break;
                 case EvKind.Mutate:
                     if (e.Team == Local.Me && !Demo)
                     {
                         var mu = (Mutation)e.Tier;
-                        Hud.Banner($"The colony mutates: {Mutations.Name(mu)}", Mutations.Text(mu), 6f);
+                        Hud.Banner($"The queen mutates: {Mutations.Name(mu)}", Mutations.Text(mu), 6f);
                     }
                     MutationMoment(e);
                     break;

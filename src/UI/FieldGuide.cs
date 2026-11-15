@@ -461,7 +461,7 @@ public partial class FieldGuide : ColorRect
         tabs.AddThemeConstantOverride("separation", 6);
         foreach (var name in new[] { "Colonies", "The Nest", "Castes", "Wildlife", "Foraging", "Food", "Feeding", "Mutation", "Colony Needs" })
         {
-            if (name == "Feeding" && !CampaignProgress.MetEvolution) continue; // eating to evolve is a later chapter's lesson
+            if (name == "Feeding" && !CampaignProgress.MetEvolution) continue; // the evolve tree arrives with the first core
             if (name == "Mutation" && !CampaignProgress.MetMutation) continue; // the campaign's own track, from the Silk Trap
             var b = new Button { Text = name, ToggleMode = true, CustomMinimumSize = new Vector2(130, 38) };
             b.Pressed += () => Show(name);
@@ -547,12 +547,14 @@ public partial class FieldGuide : ColorRect
         if (t == AntType.Queen) return $"HP {st.Hp}.  Lays all brood. Feed her royal jelly (research) to unlock new castes and stronger generals.";
         var k = t switch
         {
-            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner,
+            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
         };
         string squad = Config.SquadSize(t) > 1 ? $"Hatches as a squad of {Config.SquadSize(t)}.  " : "";
-        if (t == AntType.Flyer && team == 0 && CampaignProgress.MetMutation) squad += $"MUTATION  {Mutations.Name(Mutation.Stinger)}: {Mutations.Text(Mutation.Stinger)}  ";
-        if (Config.IsHero(t) && team == 0 && CampaignProgress.MetMutation) squad += "In the campaign every hero is born from a royal larva.  ";
+        if (t == AntType.Flyer) squad += $"MUTATION  from {Mutations.Source(Mutation.Winged)}. With {Mutations.Source(Mutation.Stinger)}: {Mutations.Text(Mutation.Stinger)}  ";
+        if (t == AntType.WebAnt) squad += $"MUTATION  from {Mutations.Source(Mutation.Web)}.  ";
+        if (t == AntType.Armoured) squad += $"MUTATION  from {Mutations.Source(Mutation.Armoured)}.  ";
+        if (Config.IsHero(t) && team == 0 && CampaignProgress.MetMutation) squad += "In the campaign every general is born from a royal larva.  ";
         string race = "";
         var r = Config.RaceOf(team);
         if (t == AntType.Gunner) race = r == Race.BlackGarden ? "  Black garden ants: +30% (formic acid)." : "  Red fire ants: −25% (no acid gland).";
@@ -647,12 +649,12 @@ public partial class FieldGuide : ColorRect
         return v;
     }
 
-    /// The mutation track: strain M-7, mutagen, the sixth sense and every mutation the colony can take.
+    /// Mutation: strain M-7, the cores, the sixth sense and every unit a core gives the queen.
     static Control MutationPage()
     {
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 10);
-        var intro = UiTheme.Text("The tube's label read: Lasius niger, strain M-7. Do not release. The colony is a lab strain bred to take up mutagen without limit, and the batch that broke with it spilled into the woods. Creatures that fed on the spill carry it: queens, nest masters, rare bosses. Their bodies glow faintly and pulse, and every ant of the colony feels that pulse through the fog (the sixth sense).\n\nTwo tracks grow the colony. EVOLUTION: remains eaten make single ants and the queen stronger. MUTATION: mutagen, carved out of a glowing body and carried home (heavy, slow, and hunters smell it), is consumed by the queen and changes the whole colony with things real ants do not have. Every queen or nest master defeated also raises the colony's level (more room, tougher fighters). Every mutation adds instability: the woods' predators and rival strains grow tougher with it.", 15);
+        var intro = UiTheme.Text("The tube's label read: Lasius niger, strain M-7. Do not release. The colony is a lab strain bred to take up mutagen, and the batch that broke with it spilled into the woods. Creatures that fed on the spill carry a glowing core. It pulses, and every ant of the colony feels that pulse through the fog (the sixth sense).\n\nTwo things grow the colony, and they are not the same. MUTATION: a core, cut out of a mutated creature's body and carried home (heavy, slow, and hunters smell it), is eaten by the queen, and she lays a NEW KIND OF ANT, part ant and part that creature. One core, one new unit. Nothing is saved up, and no core makes the whole colony stronger. EVOLUTION: organic matter, spent in the evolve tree (P), levels up the queen and her generals and grows each mutation unit's branch.\n\nA core is found in the chapter that cannot be won without its unit, and it is never unguarded. Both stay with the colony in every chapter after.", 15, null, UiTheme.Ink);
         intro.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         v.AddChild(intro);
         foreach (var m in Mutations.All)
@@ -664,24 +666,23 @@ public partial class FieldGuide : ColorRect
         return v;
     }
 
-    /// Feeding and Evolution: what to eat, what each meal gives, where to find it.
+    /// Evolution: organic matter, where it comes from and what the evolve tree buys with it.
     static Control Feeding()
     {
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 12);
         v.AddChild(Rich(
-            "[b]Victory alone makes no one stronger.[/b]  In the wild an ant grows on what it eats, and so it is here: [b]killing teaches nothing; eating the remains does.[/b] " +
-            "Every creature that dies leaves remains on the ground. They are [color=#dc8a2a][b]organic matter[/b][/color], the evolving material, and there are only two things to do with them.\n\n" +
-            "[color=#e8c27a]Eat them.[/color]  Select the ant you want to grow and [b]right-click the remains[/b] (on a phone: tap them). It stands over them and eats, a mouthful a second, healing as it goes. " +
-            "A soldier, major, flyer or gunner fills its [color=#dc8a2a]evolution bar[/color], the second line under its health, and moults into the next stage; a general turns what it eats into experience and levels up. " +
-            "An ant that is eating is not fighting: guard it, or eat after the battle.\n\n" +
-            "[color=#e8c27a]Haul them home.[/color]  Workers drag big carcasses home in teams and cut small ones up, filling the colony's [color=#dc8a2a]organic reserve[/color] (the amber figure beside food). " +
-            "The queen ascends only on organic matter, larvae need a little of it besides food, and fighters brought home can be [b]fed from the reserve[/b] (the button under the evolution bar). " +
+            "[b]Victory alone makes no one stronger.[/b]  Every creature that dies leaves remains on the ground. They are [color=#dc8a2a][b]organic matter[/b][/color], and the colony's balance of it (the amber figure beside food) is what its evolution is paid with.\n\n" +
+            "[color=#e8c27a]Haul them home.[/color]  Workers drag big carcasses home in teams and cut small ones up, filling the reserve. Larvae need a little of it besides food, and the royal larva is raised on it. " +
             "In Colony Command, [b]Remains[/b] tells the workers whether to haul remains home or leave them on the ground for the army.\n\n" +
+            "[color=#e8c27a]Spend it in the evolve tree (P).[/color]  [b]The queen[/b] levels up: every ant she lays afterwards hatches stronger, the nest holds more, and her higher levels open the heavier castes. " +
+            "[b]A general[/b] levels up: each level is a skill point, for stronger skills and then new ones. [b]Every mutation unit[/b] the queen has gained grows a branch of its own. " +
+            "The balance decides how much of the tree can be opened, so the choice is always the queen, a general, or a unit.\n\n" +
+            "[color=#e8c27a]Eat in the field to mend.[/color]  A fighter or general with nothing to fight can eat remains where they lie: [b]right-click them[/b] (on a phone: tap them). Each mouthful heals. An ant that is eating is not fighting.\n\n" +
             "[color=#e8c27a]Only other kinds feed you.[/color]  A colony gets nothing from its own race: its dead are carried to the midden. Wild bugs and the other colony's ants are the only prey, so protect your fallen from the enemy, who will happily eat them. " +
             $"The one exception is the fire ants' Warlord: [b]{Config.DevourName}[/b]. {Config.DevourDesc}\n\n" +
-            "[color=#e8c27a]In the campaign[/color]  the colony's squads still rank up in battle, as they always have; from The Dry Spell on, eating evolves them on top of that."));
-        // the stages, and what each costs
+            "[color=#e8c27a]It all carries over.[/color]  In the campaign everything bought in the tree stays with the colony in every later chapter, like its mutations."));
+        // what the tree costs
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 24);
         grid.AddThemeConstantOverride("v_separation", 6);
@@ -690,10 +691,10 @@ public partial class FieldGuide : ColorRect
             var l = UiTheme.Text(a, 15, UiTheme.Title, UiTheme.Gold); grid.AddChild(l);
             var r = UiTheme.Text(b, 15, null, UiTheme.Ink); r.AutowrapMode = TextServer.AutowrapMode.WordSmart; r.CustomMinimumSize = new Vector2(520, 0); grid.AddChild(r);
         }
-        for (int s = 1; s <= Config.MaxStage; s++)
-            Row($"STAGE {new string('I', s)}  {Config.StageNames[s].ToUpper()}", $"{Config.StageCost(s):0} organic matter eaten.  {Config.StageGain(s)} (each stage adds to the last); darker, scarred chitin.");
-        Row("QUEEN", $"Ascends on organic matter alone: {Config.QueenOrganic(2):0}, {Config.QueenOrganic(3):0}, {Config.QueenOrganic(4):0}, {Config.QueenOrganic(5):0} for each title in turn.");
-        Row("GENERALS", $"{Config.HeroXpPerOrganic:0.#} experience for each unit of organic matter eaten; kills give none.");
+        Row("QUEEN", $"{Evolve.QueenCost(2):0}, {Evolve.QueenCost(3):0}, {Evolve.QueenCost(4):0}, {Evolve.QueenCost(5):0} organic matter for each level in turn. Per level: brood hatches with +{Evolve.BroodHp * 100:0}% health and +{Evolve.BroodBite * 100:0}% bite, and the nest holds {Evolve.BroodRoom} more.");
+        Row("GENERALS", $"{Evolve.GeneralCost(2):0} organic matter for level 2, rising to {Evolve.GeneralCost(10):0} for level 10. Every level is a skill point.");
+        foreach (var d in Evolve.Nodes)
+            Row(d.Name.ToUpperInvariant(), $"{Mutations.Name(d.Branch)}.  {d.Text}  {d.Ranks} ranks, from {d.Cost:0} organic matter.");
         v.AddChild(grid);
         // what each prey is worth
         var prey = new GridContainer { Columns = 3 };

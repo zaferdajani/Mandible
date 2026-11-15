@@ -133,13 +133,13 @@ public static class ColonyValidation
             GD.Print($"[campaign-test] island queen fight: {s.Time - fightFrom:0}s, soldiers {squadBefore} -> {squadAfter}");
             Check(squadAfter < squadBefore, "The mutated queen killed nobody: she does not fight back");
             Until(s, () => s.Mission.GlandId >= 0, 5, "her gland can be carved once she falls");
-            var gland = s.MutagenById(s.Mission.GlandId);
+            var gland = s.CoreById(s.Mission.GlandId);
             Check(gland != null && !gland.Home, "No gland in the island queen");
-            int mutagenBefore = c.Mutagen;
+            int mutationsBefore = c.Mutations;
             crew = Units(s, AntType.Worker);
             s.CmdExtract(crew.GetRange(0, Math.Min(3, crew.Count)), gland);
             Until(s, () => s.Winner == 0, 300, "workers cross, carve the dead queen's gland and carry it to the queen");
-            Check(gland.Home && c.Mutagen == mutagenBefore, "The story gland changed the colony's mutagen reserve");
+            Check(gland.Home && c.Mutations == mutationsBefore, "The story gland mutated the queen");
             Check(c.Gathered > 0, "No actual food was gathered");
             Check(s.Mission.Stage == ExpeditionStage.Complete, "Wrong victory condition");
             capacity = c.PopCap;
@@ -151,7 +151,7 @@ public static class ColonyValidation
             // A separate unrestricted simulation verifies the full roster without touching episode gates.
             var other = new Node3D(); app.AddChild(other);
             var sk = new Sim(WorldBuilder.Build(other, 20261031)); sk.BeginSkirmish();
-            foreach (var kind in new[] { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
+            foreach (var kind in new[] { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured, ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal })
                 Check(sk.CanEnqueue(0, kind) == QueueResult.Ok, $"Skirmish caste locked: {kind}");
             Check(sk.Col[0].Chambers.Count == 7 && sk.Col[1].Chambers.Count == 7, "Skirmish lacks the seven chamber identities");
             int skirmishCapacity = sk.Col[0].PopCap;
@@ -313,7 +313,7 @@ public static class ColonyValidation
     {
         var s = Open(app, 3, out var rival); var m = s.Mission; var c = s.Col[0];
         var home = s.W.Nests[0].Pos; var foe = s.W.Nests[1].Pos;
-        Check(s.CanEnqueue(0, ProdKind.Gunner) == QueueResult.Locked && s.CanResearch(0, Upgrade.Wings) == ResearchResult.Locked && s.CanResearch(0, Upgrade.Queen) != ResearchResult.Locked, "Episode 3 gates failed");
+        Check(s.CanEnqueue(0, ProdKind.Gunner) == QueueResult.Locked && s.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.Locked && s.CanResearch(0, Upgrade.Queen) != ResearchResult.Locked, "Episode 3 gates failed");
         Check(m.PostLeft == 3 && s.Col[1].Alive, "Episode 3 rival or outpost missing");
         int scout = -1, scoutSerial = 0;
         bool marching = false;

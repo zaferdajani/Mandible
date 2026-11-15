@@ -84,19 +84,19 @@ public static class FlightValidation
         for (int k = 0; k < 30 * 25 && s.Ants[wasp].Alive; k++) { s.Tick(1f / 30); low = Mathf.Min(low, s.Ants[wasp].Hp); } // a wild wasp mends once it stops fighting
         Check(!s.Ants[wasp].Alive || low < hp, "Soldiers never caught a wasp as it came down to sting");
         GD.Print($"[flight-test] PASS soldiers bite a wasp only when it comes down to sting (its health fell to {100 * low / hp:0}%)");
-        // Web Throwing: a soldier of a colony with the mutation pins the wasp, which comes down
+        // web ants (the spider's core): one in reach pins the wasp, which comes down
         s = Quiet(root);
-        s.Col[0].Mutations |= (int)Mutation.WebThrowing; s.Col[0].WebRank = 1;
+        s.GiveMutation(0, Mutation.Web);
         wasp = s.Spawn(Config.Wild, AntType.Wasp, p, 0);
         s.Ants[wasp].State = AntState.Hold; s.Ants[wasp].Alt = Config.CruiseAlt(AntType.Wasp);
-        soldier = s.Spawn(0, AntType.Soldier, p + new Vector2(4, 0), 0);
+        soldier = s.Spawn(0, AntType.WebAnt, p + new Vector2(4, 0), 0);
         s.Ants[soldier].State = AntState.Hold;
         bool pinned = false;
         for (int k = 0; k < 60 && !pinned; k++) { s.Tick(1f / 30); pinned = s.Ants[wasp].PinT > 0; }
-        Check(pinned, "A web-throwing soldier did not pin a wasp in reach");
+        Check(pinned, "A web ant did not pin a wasp in reach");
         Run(s, 20);
         Check(!s.Airborne(s.Ants[wasp]), "The pinned wasp did not come down");
-        GD.Print($"[flight-test] PASS Web Throwing (rank 1) pins a wasp for {Mutations.PinTime(1):0.#} s within {Mutations.WebRange(1):0} units");
+        GD.Print($"[flight-test] PASS a web ant (Spinneret rank 1) pins a wasp for {Mutations.PinTime(1):0.#} s within {Mutations.WebRange(1):0} units");
     }
 
     static void StartAreas(Node3D root)

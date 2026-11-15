@@ -1060,7 +1060,6 @@ public sealed partial class Sim
         return 0;
     }
 
-    /// Validation hooks (GeneralValidation): never called by the game itself.
-    public void TestFeed(int id, float organic) => Nourish(id, ref Ants[id], organic);
+    /// Validation hook (GeneralValidation): never called by the game itself.
     public void TestSetRank(int id, int slot, int rank) { SetRank(ref Ants[id], slot, rank); SetCd(ref Ants[id], slot, 0); }
 }

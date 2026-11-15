@@ -4,7 +4,7 @@ using Godot;
 
 namespace Mandible;
 
-public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, FeedReserve, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Mutate, Straw }
+public enum CmdKind : byte { Move, AttackMove, Attack, Gather, Stop, Hold, Enqueue, CancelLast, Research, CancelResearch, Rally, Reinforce, Ability, BuyItem, Dig, Remains, Feast, Entrance, Learn, Cast, SkillAuto, AutoEat, Extract, Evolve, Straw }
 
 /// One player order. In multiplayer these are the only thing sent over the network:
 /// every machine applies the same orders on the same tick and so stays in sync.
@@ -16,7 +16,7 @@ public sealed class Cmd
     public int[] Serials = System.Array.Empty<int>();
     public Vector2 P;
     public int Target = -1, TargetSerial, FoodId = -1;
-    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind, RemainsOrder, a general's skill slot or a Mutation's bit index
+    public byte Arg;   // ProdKind, Upgrade, item, ChamberKind, RemainsOrder, a general's skill slot or an EvoNode
     public byte Layer; // Move / AttackMove: 0 the surface, 1 + team inside that nest (garrison or raid)
 
     public static Cmd Units(CmdKind k, int team, List<int> ids, Sim sim)
@@ -84,10 +84,10 @@ public sealed class Cmd
                 if (ids.Count > 0 && f != null && f.Alive) sim.CmdFeast(ids, f);
                 break;
             }
-            case CmdKind.Extract: if (ids.Count > 0) sim.CmdExtract(ids, sim.MutagenById(FoodId)); break;
+            case CmdKind.Extract: if (ids.Count > 0) sim.CmdExtract(ids, sim.CoreById(FoodId)); break;
             case CmdKind.Straw: if (ids.Count > 0) sim.CmdStraw(ids, sim.Mission?.StrawById(FoodId)); break; // level 1's bridge: carry a straw together
-            case CmdKind.Mutate: if (Arg < 31) sim.Mutate(Team, (Mutation)(1 << Arg)); break;
-            case CmdKind.FeedReserve: if (ids.Count > 0) sim.FeedFromReserve(Team, ids); break;
+            // the evolve tree: with a general selected, its next level; otherwise one rank of a unit branch's node
+            case CmdKind.Evolve: if (ids.Count > 0) sim.LevelGeneral(ids[0]); else sim.EvolveNode(Team, (EvoNode)Arg); break;
             case CmdKind.Learn: if (ids.Count > 0) sim.LearnSkill(ids[0], Arg); break;     // spend a general's skill point
             case CmdKind.Cast: if (ids.Count > 0) sim.CmdCast(ids[0], Arg, Target, TargetSerial, P); break;
             case CmdKind.AutoEat: if (ids.Count > 0) sim.SetAutoEat(ids, Arg != 0); break;

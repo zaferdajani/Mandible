@@ -337,8 +337,9 @@ public static class Capture
         }
         // a fully developed colony: every chamber dug, heroes and new castes on parade
         var col = s.Sim.Col[Config.Player];
-        foreach (var (u, tier) in new[] { (Upgrade.Queen, 5), (Upgrade.Wings, 1), (Upgrade.Mandibles, 3), (Upgrade.Chitin, 3), (Upgrade.SilkCutters, 1) })
+        foreach (var (u, tier) in new[] { (Upgrade.Queen, 5), (Upgrade.Mandibles, 3), (Upgrade.Chitin, 3), (Upgrade.SilkCutters, 1) })
             for (int k = col.T(u) + 1; k <= tier; k++) col.Tier[(int)u] = k;
+        foreach (var mu in Mutations.All) if (mu != Mutation.RoyalLarva) s.Sim.GiveMutation(Config.Player, mu);
         s.Sim.DevelopNest(Config.Player);
         var home = s.World.Nests[Config.Player].Pos;
         var toC = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - home).Normalized();
@@ -805,10 +806,8 @@ public static class Capture
                 GD.Print($"[simtest] t={sim.Time / 60:0}m wild={sim.WildCount} veterans {v0}/{v1} top Lv{top} squads {sq0}/{sq1} full {full} ranked {ranked}");
                 string Organic(int t)
                 {
-                    int[] st = new int[Config.MaxStage + 1];
-                    for (int i = 0; i < sim.High; i++) { ref var x = ref sim.Ants[i]; if (x.Alive && x.Team == t && sim.Evolves(x)) st[x.Stage]++; }
                     var c = sim.Col[t];
-                    return $"organic {c.Organic:0} (hauled {c.OrganicGathered:0} eaten {c.OrganicEaten:0}) queen T{c.T(Upgrade.Queen)} stages {st[0]}/{st[1]}/{st[2]}/{st[3]} buried {c.Buried}";
+                    return $"organic {c.Organic:0} (hauled {c.OrganicGathered:0} eaten {c.OrganicEaten:0}) queen L{c.T(Upgrade.Queen)} mutations {c.Mutations} tree ranks {string.Join("", c.Evo)} buried {c.Buried}";
                 }
                 GD.Print($"[simtest]    black {Organic(0)} | red {Organic(1)}");
                 string Heroes(int team)
@@ -850,7 +849,7 @@ public static class Capture
                     return $"cap {c.FoodCap:0} rooms {c.Chambers.Count} assigned {diggers} [{string.Join(", ", parts)}]";
                 }
                 GD.Print($"[simtest]    digs black: {Digs(c0)} | red: {Digs(c1)}");
-                GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} wings {c0.T(Upgrade.Wings)}/{c1.T(Upgrade.Wings)} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities} skill casts {_skillCasts}");
+                GD.Print($"[simtest]    queen {c0.T(Upgrade.Queen)}/{c1.T(Upgrade.Queen)} forge {c0.T(Upgrade.Mandibles)}/{c1.T(Upgrade.Mandibles)} chitin {c0.T(Upgrade.Chitin)}/{c1.T(Upgrade.Chitin)} mutations {c0.Mutations}/{c1.Mutations} heroes [{Heroes(0)}] vs [{Heroes(1)}] gunners {c0.Count[9]}/{c1.Count[9]} flyers {c0.Count[8]}/{c1.Count[8]} webs {sim.Webs.Count} abilities {_abilities} skill casts {_skillCasts}");
                 GD.Print($"[simtest] t={sim.Time / 60:0}m ants={alive} | black {p.Count[0]}w {p.Count[1]}s {p.Count[2]}m pop {p.PopUsed}/{p.PopCap} food {p.Food:0} gathered {p.Gathered:0} killed {p.Killed} | red {e.Count[0]}w {e.Count[1]}s {e.Count[2]}m pop {e.PopUsed}/{e.PopCap} food {e.Food:0} gathered {e.Gathered:0} killed {e.Killed} | tick avg {total / ticks:0.00}ms worst {worst:0.0}ms");
                 worst = 0;
             }

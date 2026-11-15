@@ -9,7 +9,7 @@ namespace Mandible;
 public sealed class Veteran
 {
     public AntType Type;
-    public int Level = 1, Kills, Joined, Stage;  // Stage: evolution by eating (from Reveal.Evolution)
+    public int Level = 1, Kills, Joined;
     public Veteran Copy() => (Veteran)MemberwiseClone();
     public int Skills;                           // a general's learnt skill ranks, one per byte (Q, W, E); 0: none recorded
     public string Name = "";
@@ -24,11 +24,14 @@ public sealed class ColonyRoster
 {
     public int QueenTier = 1;
     public readonly List<ChamberKind> Chambers = new();
-    public readonly int[] Plain = new int[13];          // unnamed rank-1 ants by type
+    public readonly int[] Plain = new int[Config.TypeCount];          // unnamed rank-1 ants by type
     public readonly List<Veteran> Veterans = new();     // veterans, heroes and named ants
-    // the mutation track: mutations taken (Mutation bits), mutagen in the reserve, the colony's level and instability
-    public int Mutations, Mutagen, Level = 1, Instability, WebRank;
-    public int Cores, Power;                            // core strength in the reserve; colony power from consumed cores
+    // progression (docs/progression.md): the units the queen's cores have given her (Mutation bits), a core waiting
+    // in the nest for another, and the ranks bought in the evolve tree. The queen's level is QueenTier; a general's
+    // level and skills are on its Veteran. All of it carries to every later chapter.
+    public const string Format = "p2";                  // the fifth part's layout: bumped when it changes
+    public int Mutations, Waiting;
+    public readonly byte[] Evo = new byte[Evolve.Count];
     public int Total { get { int n = Veterans.Count; foreach (int p in Plain) n += p; return n; } }
 
     public string Save()
@@ -39,8 +42,9 @@ public sealed class ColonyRoster
         sb.Append('|');
         for (int t = 0; t < Plain.Length; t++) sb.Append(Plain[t]).Append(',');
         sb.Append('|');
-        foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Stage).Append(':').Append(v.Skills).Append(';');
-        sb.Append('|').Append(Mutations).Append(',').Append(Mutagen).Append(',').Append(Level).Append(',').Append(Instability).Append(',').Append(WebRank).Append(',').Append(Cores).Append(',').Append(Power);
+        foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Skills).Append(';');
+        sb.Append('|').Append(Format).Append(',').Append(Mutations).Append(',').Append(Waiting);
+        foreach (byte e in Evo) sb.Append(',').Append(e);
         return sb.ToString();
     }
 
@@ -48,7 +52,8 @@ public sealed class ColonyRoster
     {
         if (string.IsNullOrEmpty(s)) return null;
         var parts = s.Split('|');
-        if (parts.Length < 4) return null;
+        // a roster from before the progression rework (cores as power, mutagen counted) cannot be carried over
+        if (parts.Length < 5 || !parts[4].StartsWith(Format + ",")) return null;
         var r = new ColonyRoster { QueenTier = int.Parse(parts[0]) };
         foreach (var c in parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries)) r.Chambers.Add((ChamberKind)int.Parse(c));
         var plain = parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -56,32 +61,12 @@ public sealed class ColonyRoster
         foreach (var v in parts[3].Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var f = v.Split(':');
-            r.Veterans.Add(new Veteran { Type = (AntType)int.Parse(f[0]), Level = int.Parse(f[1]), Kills = int.Parse(f[2]), Joined = int.Parse(f[3]), Name = f.Length > 4 ? f[4] : "", Stage = f.Length > 5 ? int.Parse(f[5]) : 0, Skills = f.Length > 6 ? int.Parse(f[6]) : 0 });
+            r.Veterans.Add(new Veteran { Type = (AntType)int.Parse(f[0]), Level = int.Parse(f[1]), Kills = int.Parse(f[2]), Joined = int.Parse(f[3]), Name = f.Length > 4 ? f[4] : "", Skills = f.Length > 5 ? int.Parse(f[5]) : 0 });
         }
-        if (parts.Length > 4)
-        {
-            // saves from before the mutation track have no fifth part: no mutations, level 1
-            var mu = parts[4].Split(',');
-            if (mu.Length >= 4) { r.Mutations = int.Parse(mu[0]); r.Mutagen = int.Parse(mu[1]); r.Level = int.Parse(mu[2]); r.Instability = int.Parse(mu[3]); }
-            if (mu.Length >= 5) r.WebRank = int.Parse(mu[4]);
-            if (mu.Length >= 7) { r.Cores = int.Parse(mu[5]); r.Power = int.Parse(mu[6]); }
-        }
+        var mu = parts[4].Split(',');
+        r.Mutations = int.Parse(mu[1]); r.Waiting = int.Parse(mu[2]);
+        for (int n = 0; n < r.Evo.Length && n + 3 < mu.Length; n++) r.Evo[n] = byte.Parse(mu[n + 3]);
         return r;
-    }
-
-    /// The colony takes a mutation between chapters (the result card's choice): the queen consumes one mutagen.
-    public bool Take(Mutation m)
-    {
-        bool rankUp = m == Mutation.WebThrowing && (Mutations & (int)m) != 0 && WebRank < 3;
-        if (Mutagen < 1 || !Mandible.Mutations.CanTake(m, Mutations, WebRank)) return false; // the queen climbs her trees in order
-        int gain = Mandible.Mutations.CoreTake(Mutagen, Cores);
-        Cores = Math.Max(0, Cores - gain);
-        Power = Math.Min(Mandible.Mutations.PowerCap, Power + gain);
-        Mutagen--;
-        Mutations |= (int)m;
-        Instability++;
-        if (m == Mutation.WebThrowing) WebRank = System.Math.Max(1, WebRank + (rankUp ? 1 : 0));
-        return true;
     }
 }
 
@@ -131,7 +116,7 @@ public sealed partial class Sim
         m.Roster = roster;
         var c = Col[0];
         // what the level musters for this chapter, by caste: the floor and ceiling for the carried colony
-        var design = new int[13];
+        var design = new int[Config.TypeCount];
         var levelAnts = new List<int>();
         for (int i = 0; i < High; i++)
         {
@@ -142,14 +127,14 @@ public sealed partial class Sim
         var toCentre = (new Vector2(Config.MapSize, Config.MapSize) * 0.5f - home).Normalized();
         Vector2 Muster(AntType t) => OpenGround(home + toCentre * (t == AntType.Worker ? 0 : t == AntType.Major ? 12 : 9) + Rng.InDisk(t == AntType.Worker ? 5 : 3.5f));
         // keep the level's ants where they stand (for ambush positions and episode scripts) and swap their identity
-        var have = new int[13];
+        var have = new int[Config.TypeCount];
         foreach (var v in roster.Veterans) have[(int)v.Type]++;
-        for (int t = 0; t < 13; t++) have[t] += roster.Plain[t];
+        for (int t = 0; t < Config.TypeCount; t++) have[t] += roster.Plain[t];
         var plainLeft = (int[])roster.Plain.Clone();
         var vets = roster.Veterans.ConvertAll(v => v.Copy()); // the chapter edits its own copies: a retry starts from the saved colony untouched
         // heroes and veterans first, strongest first, so a ceiling trims the rank and file
         vets.Sort((x, y) => y.Level.CompareTo(x.Level));
-        var placed = new int[13];
+        var placed = new int[Config.TypeCount];
         var byLevel = new Dictionary<(AntType, int), List<int>>();
         var fresh = new List<int>();
         int Cap(int t) => design[t] == 0 ? 12 : design[t] * 3 / 2 + 6;
@@ -163,13 +148,12 @@ public sealed partial class Sim
             int id = Spawn(0, v.Type, Muster(v.Type), toCentre.AngleD(), v.Level);
             if (id < 0) continue;
             if (v.Skills != 0 && Config.IsHero(v.Type)) RestoreSkills(ref Ants[id], v.Skills); // the skills it learnt come with it
-            if (v.Stage > 0) { Ants[id].Stage = Math.Min(v.Stage, Config.MaxStage); ApplyLevel(ref Ants[id]); Ants[id].Hp = Ants[id].MaxHp; }
             Ants[id].State = v.Type == AntType.Worker ? AntState.Forage : AntState.Idle;
             m.Tracked[id] = (Ants[id].Serial, v);
             placed[t]++;
             if (Config.InSquads(v.Type)) { if (!byLevel.TryGetValue((v.Type, v.Level), out var l)) byLevel[(v.Type, v.Level)] = l = new List<int>(); l.Add(id); }
         }
-        for (int t = 0; t < 13; t++)
+        for (int t = 0; t < Config.TypeCount; t++)
         {
             var type = (AntType)t;
             if (type == AntType.Queen) continue;
@@ -247,10 +231,9 @@ public sealed partial class Sim
     {
         var m = Mission;
         var c0 = Col[0];
-        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Mutagen = c0.Mutagen, Level = c0.Level, Instability = c0.Instability, WebRank = c0.WebRank, Cores = c0.Cores, Power = c0.Power };
-        // a dead queen's body holds mutagen, and every queen or nest master the colony defeats raises its level
-        if (m != null && Winner == Config.Player && !Col[1].Alive && m.EndsWithQueen && chapter >= Reveal.FirstQueenKill) { r.Mutagen++; r.Cores += Mandible.Mutations.QueenCore; r.Level++; }
-        if (m != null) r.Level += m.MastersSlain;
+        // what the queen has become and what the colony bought in the evolve tree go with it to every later chapter
+        var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Waiting = c0.Waiting };
+        for (int n = 0; n < r.Evo.Length; n++) r.Evo[n] = c0.Evo[n];
         foreach (var ch in Col[0].Chambers) if (ch.Built) r.Chambers.Add(ch.Kind);
         int named = 0;
         if (m?.Roster != null) foreach (var v in m.Roster.Veterans) if (v.Name != "" && Array.IndexOf(VeteranNames, v.Name) >= 0) named++;
@@ -261,18 +244,18 @@ public sealed partial class Sim
             if (!a.Alive || a.Team != 0 || a.Type == AntType.Queen || a.Guardian || a.Summoned || a.CharmP1 > 0) continue; // callows and borrowed minds stay behind
             if (m != null && m.Tracked.TryGetValue(i, out var t) && t.serial == a.Serial)
             {
-                t.vet.Level = a.Level; t.vet.Type = a.Type; t.vet.Stage = a.Stage; t.vet.Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0;
+                t.vet.Level = a.Level; t.vet.Type = a.Type; t.vet.Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0;
                 r.Veterans.Add(t.vet);
                 continue;
             }
             bool hero = Config.IsHero(a.Type);
-            if (a.Level >= 2 || a.Stage >= 1 || hero)
+            if (a.Level >= 2 || hero)
             {
                 // generals come out of the royal cocoon: the Warlord is old Burr when he went into the silk (tracked above);
                 // a Warlord nobody went into the silk for is a stranger, Hemlock
-                string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "Hemlock" } : a.Level >= 3 || a.Stage >= 2 ? VeteranNames[named++ % VeteranNames.Length] : "";
+                string name = hero ? a.Type switch { AntType.Matron => "Vetch", AntType.Marshal => "Kestrel", _ => "Hemlock" } : a.Level >= 3 ? VeteranNames[named++ % VeteranNames.Length] : "";
                 if (hero && m != null && m.Fallen.Exists(f => f.Name == name)) name = ""; // the named general fell; this one is new
-                var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Stage = a.Stage, Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0 };
+                var v = new Veteran { Type = a.Type, Level = a.Level, Joined = chapter, Name = name, Skills = Config.IsHero(a.Type) ? PackSkills(a) : 0 };
                 r.Veterans.Add(v);
             }
             else r.Plain[(int)a.Type]++;

@@ -46,7 +46,7 @@ public static class CarrionValidation
             for (int k = 0; k < 6 * 30; k++) { sim.Tick(dt); fed |= sim.Ants[hero].Feasting; }
             ref var h = ref sim.Ants[hero];
             GD.Print($"[carrion-test] feast: hp {hp0:0} -> {h.Hp:0}, xp {xp0:0} -> {h.Xp:0}, mouthfuls {spider.Feasted}, state {h.State}, feasting {h.Feasting}, distance {h.Pos.DistanceTo(spider.Pos):0.0}");
-            Check(fed && spider.Feasted >= 3 && h.Hp > hp0 && h.Xp > xp0, "The idle, wounded hero did not feast");
+            Check(fed && spider.Feasted >= 3 && h.Hp > hp0 && h.Xp == xp0 && h.Level == 1, "The idle, wounded general did not feast and mend (or eating levelled it)");
 
             // the drag
             var field = Clear(home + outv * 26 + perp * 10);
@@ -119,29 +119,24 @@ public static class CarrionValidation
                 Check(kept && c.Buried > buried, "A nestmate who died below was not carried out");
             }
 
-            // a soldier evolves only by eating: kills give nothing, a beetle's remains take it to its first stage
+            // a kill alone makes no one stronger, and eating in the field only mends (docs/progression.md: levels come
+            // from the evolve tree)
             var mess = Clear(home + outv * 20 + perp * 20);
             int fighter = sim.Spawn(0, AntType.Soldier, mess + new Vector2(1.6f, 0), 0);
             int victim = sim.Spawn(1, AntType.Soldier, mess + new Vector2(2.4f, 0), 0);
             sim.Ants[victim].Hp = 1;
+            float hp1 = sim.Ants[fighter].MaxHp; int level1 = sim.Ants[fighter].Level;
             for (int k = 0; k < 4 * 30 && sim.Ants[victim].Alive; k++) sim.Tick(dt);
-            Check(!sim.Ants[victim].Alive && sim.Ants[fighter].Evo == 0 && sim.Ants[fighter].Stage == 0, "A kill alone made the soldier stronger");
+            Check(!sim.Ants[victim].Alive && sim.Ants[fighter].Level == level1 && sim.Ants[fighter].MaxHp == hp1, "A kill alone made the soldier stronger");
             sim.SetRemains(0, RemainsOrder.Leave); // the workers leave it for the army
             var prey = Carcass(AntType.Beetle, Config.Wild, mess);
-            float hp1 = sim.Ants[fighter].MaxHp;
+            sim.Ants[fighter].Hp = hp1 * 0.4f;
             sim.CmdFeast(new List<int> { fighter }, prey);
-            for (int k = 0; k < 60 * 30 && sim.Ants[fighter].Stage == 0; k++) sim.Tick(dt);
+            for (int k = 0; k < 60 * 30 && sim.Ants[fighter].Hp < hp1 * 0.999f; k++) sim.Tick(dt);
             ref var fa = ref sim.Ants[fighter];
-            GD.Print($"[carrion-test] evolution: soldier stage {fa.Stage} ({Config.StageNames[fa.Stage]}), evo {fa.Evo:0.0}, max hp {hp1:0} -> {fa.MaxHp:0}, beetle left {Sim.RemainsValue(prey):0.0} organic");
-            Check(fa.Stage == 1 && fa.MaxHp > hp1, "Eating a beetle did not evolve the soldier");
+            GD.Print($"[carrion-test] eating: soldier mended to {100 * fa.Hp / fa.MaxHp:0}%, max hp {hp1:0} -> {fa.MaxHp:0}, beetle left {Sim.RemainsValue(prey):0.0} organic");
+            Check(fa.Hp >= hp1 * 0.99f && fa.MaxHp == hp1 && fa.Level == level1, "Eating a beetle must mend the soldier and nothing more");
             sim.SetRemains(0, RemainsOrder.Haul);
-
-            // the reserve feeds the army: a second soldier at the nest eats from it
-            int recruit = sim.Spawn(0, AntType.Soldier, home + outv * 4, 0);
-            sim.Col[0].Organic = 100;
-            sim.FeedFromReserve(0, new List<int> { recruit });
-            GD.Print($"[carrion-test] reserve: soldier fed to stage {sim.Ants[recruit].Stage}, reserve 100 -> {sim.Col[0].Organic:0.0}");
-            Check(sim.Ants[recruit].Stage == 1 && sim.Col[0].Organic < 100, "Feeding from the reserve did not evolve the soldier");
 
             // the queen ascends on organic matter, and larvae need some
             sim.Col[0].Organic = 0;
@@ -170,7 +165,7 @@ public static class CarrionValidation
             sim.CmdFeast(new List<int> { redWarlord }, redDead);
             Ticks(6);
             GD.Print($"[carrion-test] devour: red Warlord xp {xpR:0} -> {sim.Ants[redWarlord].Xp:0}, hp {hpR:0} -> {sim.Ants[redWarlord].Hp:0}, its own dead left {redDead.Amount:0.0} loads");
-            Check(sim.Ants[redWarlord].Xp > xpR && sim.Ants[redWarlord].Hp > hpR, "Devour the Fallen gave nothing");
+            Check(sim.Ants[redWarlord].Xp == xpR && sim.Ants[redWarlord].Hp > hpR, "Devour the Fallen did not mend the Warlord (or eating taught it)");
 
             // rot
             var old = Carcass(AntType.Soldier, 1, Clear(home + outv * 30));
