@@ -48,8 +48,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
 - Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): a colony whose queen has the spider's core (`Mutation.Web`, `Sim.HasSilk`)
   builds on the surface from **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
   `WantsStraw`, never counted as food). Building: a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + `SilkRank` = 1 + the Spinneret node, placed within `SilkReach` of the mound):
-  **Spinnery** = the web ants' building: it raises web ants (`AntType.WebAnt`, the same caste the queen lays; they pin flyers with `ThrowWeb`
-  and snare ground enemies with `ThrowSnare`; there is no separate "silk ant"); **Web Post** =
+  **Spinnery** = the web ants' building: it raises web ants (`AntType.WebAnt`, the same caste the queen lays: all pin flyers with `ThrowWeb`;
+  those raised at the Spinnery carry `Ant.Silk` and also snare ground enemies with `ThrowSnare`); **Web Post** =
   defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
   **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.
   `Sim.Traps`: root 3 s, +30% bites (`Ant.Snared`), 3 catches, respun; majors rip them, acid burns them, Silk Cutters

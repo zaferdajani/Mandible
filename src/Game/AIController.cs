@@ -325,7 +325,7 @@ public sealed class AIController : IColonyAI
             if (w.Kind == SilkKind.Spinnery) spinnery = w;
             else { posts++; if (w.Kind == SilkKind.Tower || w.Upgrading && w.UpTo == SilkKind.Tower) towers++; if (w.Kind == SilkKind.TrapNest || w.Upgrading && w.UpTo == SilkKind.TrapNest) nests++; }
         }
-        for (int i = 0; i < _sim.High; i++) if (_sim.Ants[i].Alive && _sim.Ants[i].Team == _team && _sim.Ants[i].Type == AntType.WebAnt) silkAnts++;
+        for (int i = 0; i < _sim.High; i++) if (_sim.Ants[i].Alive && _sim.Ants[i].Team == _team && _sim.Ants[i].Silk) silkAnts++;
         var want = spinnery == null ? SilkKind.Spinnery : SilkKind.Post;
         if (_sim.CanBuildSilk(_team, want) == SilkResult.Ok && c.Food > Sim.FoodCost(want) + 80)
         { Orders.Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)_team, Arg = (byte)want, P = _sim.DefaultSilkSpot(_team, want) }); return; }

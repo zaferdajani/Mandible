@@ -15,7 +15,7 @@ public sealed class TrapWeb
 }
 
 /// What the colony builds above ground from straw once it has silk (the spider's core: Mutation.Web, docs/progression.md).
-/// Spinnery: the offence, the web ants' building beside the mound: it raises web ants (AntType.WebAnt: they pin flyers and snare ground enemies).
+/// Spinnery: the offence, the web ants' building beside the mound: it raises web ants (AntType.WebAnt) that, besides pinning flyers, snare ground enemies (Ant.Silk).
 /// Post: the defence, a web post that keeps one trap web; it is improved into one of two kinds:
 /// Tower (web ants up the stems fling webs at whatever comes in reach) or TrapNest (three trap webs, re-aimed by the player).
 public enum SilkKind : byte { Spinnery, Post, Tower, TrapNest }
@@ -68,8 +68,9 @@ public sealed partial class Sim
         return null;
     }
 
-    /// Workers fetch straw while a site is waiting for it, or while the small store by the mound (for improving posts) is low.
-    public bool WantsStraw(int team) => HasSilk(team) && (StrawSite(team) != null || Col[team].Straw < Config.StrawWant);
+    /// Workers fetch straw while a site is waiting for it, or, once the colony has a silk structure, while the small store
+    /// by the mound (for improving posts) is low. A colony that builds no silk never takes foragers off food for it.
+    public bool WantsStraw(int team) => HasSilk(team) && (StrawSite(team) != null || SilkCount(team) > 0 && Col[team].Straw < Config.StrawWant);
 
     /// Where a loaded ant takes what it carries: straw goes straight to the building site that needs it.
     public (Vector2 pos, byte layer) DeliveryFor(in Ant a)
@@ -173,7 +174,7 @@ public sealed partial class Sim
         return c.Food < Config.SilkAntFood ? SilkResult.NoFood : SilkResult.Ok;
     }
 
-    /// A spinnery raises a web ant (the same caste the queen lays once she has the spider's core).
+    /// A spinnery raises a web ant: the caste the queen lays once she has the spider's core, taught here to snare on the ground too (Ant.Silk).
     public SilkResult HatchSilk(int team, int id)
     {
         var w = WorkById(id);
@@ -302,7 +303,10 @@ public sealed partial class Sim
                 {
                     var p = nest + dir * r;
                     if (p.X < 8 || p.Y < 8 || p.X > Config.MapSize - 8 || p.Y > Config.MapSize - 8 || W.Blocked(p, 2.5f)) continue;
-                    WorldBuilder.Spawn(W, new Rng((uint)(7717 + team * 31 + n)), FoodKind.Straw, p, Config.StrawPile, 2.0f);
+                    var pile = WorldBuilder.Spawn(W, new Rng((uint)(7717 + team * 31 + n)), FoodKind.Straw, p, Config.StrawPile, 2.0f);
+                    // dry grass lies flat: ants walk over it. A pile must never stand in the way of a colony that builds no silk
+                    // (as an obstacle beside the mound it cost the Dry Spell's haulers their carcasses).
+                    if (pile.Block != null) pile.Block.R = pile.Block.BaseR = -8f;
                     n++;
                     break;
                 }
@@ -310,7 +314,7 @@ public sealed partial class Sim
         }
     }
 
-    /// A web ant flings a snare at the nearest ground enemy in reach: it is held where it stands for a moment.
+    /// A spinnery-raised web ant flings a snare at the nearest ground enemy in reach: it is held where it stands for a moment.
     void ThrowSnare(int i, ref Ant a)
     {
         int best = -1;
@@ -400,7 +404,7 @@ public sealed partial class Sim
                     w.HatchT = 0; w.Queue--;
                     var d = Approach(w.Team);
                     int id = Spawn(w.Team, AntType.WebAnt, w.Pos + d * 2.2f, 0);
-                    if (id >= 0) { Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = w.Pos, To = Ants[id].Pos, HatchP1 = id + 1, Team = w.Team, Type = AntType.WebAnt }); }
+                    if (id >= 0) { Ants[id].Silk = true; Events.Add(new SimEvent { Kind = EvKind.Spawn, Pos = w.Pos, To = Ants[id].Pos, HatchP1 = id + 1, Team = w.Team, Type = AntType.WebAnt }); }
                     break;
                 case SilkKind.Tower:
                     w.ShotCd -= dt;

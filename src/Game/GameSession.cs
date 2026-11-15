@@ -1170,7 +1170,7 @@ public partial class GameSession : Node3D
                     {
                         var (title, text) = (SilkKind)e.Tier switch
                         {
-                            SilkKind.Spinnery => ("The spinnery stands", "It raises web ants: they pin flyers and fling snares at enemies on the ground. Use Raise web ant in the Silk panel."),
+                            SilkKind.Spinnery => ("The spinnery stands", "It raises web ants that also fling snares at enemies on the ground. Use Raise web ant in the Silk panel."),
                             SilkKind.Post => ("A web post stands", "It keeps one trap web on the ground before it. Improve it into a Web Tower (flings webs at whatever comes near) or a Trap Nest (three trap webs you can aim)."),
                             SilkKind.Tower => ("A web tower stands", "Web ants up the stems fling a web at the nearest enemy in reach, on the ground or in the air, every few seconds."),
                             _ => ("A trap nest stands", "It keeps three trap webs. Use Aim trap web, then pick a spot near it, to move one."),

@@ -47,7 +47,7 @@ public partial class ColonyCommandHud : Control
     static readonly Color Edge = new("a77e32"), Gold = new("f4cd70"), Background = new(0.035f, 0.031f, 0.022f, 0.96f);
     static readonly ChamberKind[] Rooms = { ChamberKind.Brood, ChamberKind.Storage, ChamberKind.Royal, ChamberKind.Wings, ChamberKind.Forge, ChamberKind.Armory, ChamberKind.Silk };
     static readonly ProdKind[] Units = { ProdKind.Worker, ProdKind.Soldier, ProdKind.Major, ProdKind.Flyer, ProdKind.Gunner, ProdKind.WebAnt, ProdKind.Armoured };
-    static readonly string[] Keys = { "Z", "X", "C", "F", "D" };
+    static readonly string[] Keys = { "Z", "X", "C", "F", "D", "W", "M" }; // one per entry of Units
 
     static T At<T>(T control, float x, float y, float w, float h) where T : Control
     { control.Position = new Vector2(x, y); control.Size = new Vector2(w, h); return control; }
@@ -370,7 +370,7 @@ public partial class ColonyCommandHud : Control
             return b;
         }
         string K(string key) => _touch ? "" : $"  {key}";
-        _silkSpin = B("Spinnery" + K("K"), $"Offence. The web ants' building: it raises web ants, which pin flyers and snare enemies on the ground. One worker to weave it, {Config.SpinneryStraw:0} straw brought to it, {Config.SpinneryFood:0} food.", 0, 0, () => Game.Input.BeginSilk(SilkKind.Spinnery));
+        _silkSpin = B("Spinnery" + K("K"), $"Offence. The web ants' building: it raises web ants that also snare enemies on the ground. One worker to weave it, {Config.SpinneryStraw:0} straw brought to it, {Config.SpinneryFood:0} food.", 0, 0, () => Game.Input.BeginSilk(SilkKind.Spinnery));
         _silkPost = B("Web Post" + K(","), $"Defence. Keeps a trap web; improve it into a Web Tower or a Trap Nest. One worker to weave it, {Config.PostStraw:0} straw brought to it.", 1, 0, () => Game.Input.BeginSilk(SilkKind.Post));
         _silkTower = B("Web Tower", $"Improve a web post: web ants fling webs at the nearest enemy in reach. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 0, 1, () => Game.TrySilkUp(SilkKind.Tower));
         _silkNest = B("Trap Nest", $"Improve a web post: three trap webs you can aim. {Config.SilkUpStraw:0} straw, {Config.SilkUpFood:0} food.", 1, 1, () => Game.TrySilkUp(SilkKind.TrapNest));

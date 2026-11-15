@@ -108,13 +108,14 @@ public static class FlightValidation
         s.Tick(1f / 30);
         int piles = 0; foreach (var f in s.W.Food) if (f.Kind == FoodKind.Straw) piles++;
         Check(piles >= 2, $"No dry grass lies round the mound of a colony with silk ({piles} piles)");
-        Check(s.NearestFood(home, 40, null, 0)?.Kind == FoodKind.Straw && s.NearestFood(home, 40, null) == null, "Workers do not look for straw when the colony wants it (or others do)");
+        Check(s.NearestFood(home, 40, null, 0) == null && s.NearestFood(home, 40, null) == null, "Workers look for straw before the colony builds anything from it");
         col.Straw = Config.StrawCap;
         Check(s.BuildSilk(0, SilkKind.Post, home + new Vector2(Config.SilkReach + 4, 0)) == SilkResult.TooFar, "A web post could be placed out of reach of the mound");
         var postAt = s.DefaultSilkSpot(0, SilkKind.Post);
         int workersBefore = col.Count[(int)AntType.Worker];
         Check(s.BuildSilk(0, SilkKind.Post, postAt) == SilkResult.Ok, "A web post could not be marked out");
         var post = s.Works[0];
+        Check(s.NearestFood(home, 40, null, 0)?.Kind == FoodKind.Straw && s.NearestFood(home, 40, null) == null, "Workers do not look for straw when a site waits for it (or others do)");
         Run(s, 30 * 12);
         Check(post.WeaverIn && col.Count[(int)AntType.Worker] == workersBefore - 1, "No worker went into the site to become its weaver");
         Check(post.Done <= post.Got / post.Need + 0.001f, "The weaver built faster than the straw reached the site");
@@ -183,7 +184,7 @@ public static class FlightValidation
         var hatch = s.HatchSilk(0, sp.Id);
         Check(hatch == SilkResult.Ok, $"The spinnery would not raise a web ant ({hatch}; built {sp.Built} done {sp.Done} weaver in {sp.WeaverIn} got {sp.Got}/{sp.Need} food {col.Food} pop {col.PopUsed}/{col.PopCap})");
         Run(s, (int)((Config.SilkAntTime + 1) * 30));
-        int silkAnt = -1; for (int k = 0; k < s.High; k++) if (s.Ants[k].Alive && s.Ants[k].Type == AntType.WebAnt) silkAnt = k;
+        int silkAnt = -1; for (int k = 0; k < s.High; k++) if (s.Ants[k].Alive && s.Ants[k].Silk) silkAnt = k;
         Check(silkAnt >= 0 && s.Ants[silkAnt].Type == AntType.WebAnt && s.Ants[silkAnt].Team == 0, "No web ant hatched at the spinnery");
         s.Ants[silkAnt].State = AntState.Hold;
         raider = s.Spawn(1, AntType.Worker, s.Ants[silkAnt].Pos + s.Approach(0) * 5f, 0); s.Ants[raider].State = AntState.Hold;

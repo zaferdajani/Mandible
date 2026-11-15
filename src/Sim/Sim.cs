@@ -29,6 +29,7 @@ public struct Ant
     public float Root;       // seconds left stuck in spider silk
     public bool Snared;      // caught by a colony's trap web: bitten harder until it tears free (Spinnery.cs)
     public float SnareCd;    // just out of a trap web: cannot be caught again yet
+    public bool Silk;        // a web ant raised at a spinnery: it also snares enemies on the ground with thrown silk
     public int WeaveP1;      // a worker on her way to a building site to become its weaver (the site's id + 1)
     public float AbilityCd;  // special attack cooldown
     public int Forge;        // mandible-forge tier this warrior hatched with
@@ -726,7 +727,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(a.Brood); Mix(a.CoreP1); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix((uint)a.WeaveP1);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1);
         }
         foreach (var c in Col)
         {
@@ -1068,9 +1069,9 @@ public sealed partial class Sim
 
         if (think && a.Team < 2 && a.Layer == 0 && !Config.Flies(a.Type) && !a.Guardian && a.Type != AntType.Queen)
         {
-            // web ants (the spider core's unit, laid by the queen or raised at the Spinnery): silk pins a flyer, or snares an enemy on the ground
+            // web ants (the spider core's unit): every one pins a flyer with thrown silk; those raised at the Spinnery also snare enemies on the ground
             if (a.Type == AntType.WebAnt && a.SpecialCd <= 0) ThrowWeb(i, ref a);
-            if (a.Type == AntType.WebAnt && a.SpecialCd <= 0) ThrowSnare(i, ref a);
+            if (a.Silk && a.SpecialCd <= 0) ThrowSnare(i, ref a);
             if (a.CoverT <= 0 && a.State is AntState.Idle or AntState.Forage or AntState.Gather && a.MutaP1 == 0 && !a.Nurse && !(Valid(a.Target, a.TargetSerial) && CanReach(a, Ants[a.Target])))
             {
                 int h = Hunter(a.Pos, a.Team);
