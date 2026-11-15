@@ -53,6 +53,15 @@ public static class Config
     /// only flying ants, or a ground ant in the moment one comes down to sting, or one pinned to the ground by silk.
     public static bool Predator(AntType t) => t == AntType.Wasp;
     public const float ReachAlt = 1.3f;     // a flyer below this height can be bitten from the ground
+    // the spinnery and its trap webs (Spinnery.cs)
+    public const float SpinneryStraw = 40f, SpinneryFood = 40f, SpinneryTime = 20f, PostStraw = 25f, PostTime = 12f;
+    public const float SilkUpStraw = 30f, SilkUpFood = 30f, SilkUpTime = 15f, SilkReach = 32f, SilkGap = 6f;
+    public const float SilkAntFood = 35f, SilkAntTime = 8f, SnareRange = 7f, SnareRoot = 1.5f;
+    public const float TowerRange = 11f, TowerCd = 4f, TowerRoot = 2f;
+    public const float StrawWant = 30f, StrawCap = 60f, StrawLoad = 5f, StrawPile = 400f;
+    public const float TrapSpinTime = 14f, TrapRadius = 2.6f, TrapOut = 5f, TrapReach = 13f;
+    public const float TrapRoot = 3f, TrapPin = 2.5f, TrapGrace = 3f, TrapSnagAlt = 2.2f, SnareBite = 1.3f;
+    public const int TrapCharges = 3;
     public const float HoverAlt = 2.8f;     // a wasp at its prey hangs here between stings, out of reach
     public const float WaspFloor = 115f;    // no wasp lair this close to a starting nest (the owner's rule: no predators at the start)
     public static float CruiseAlt(AntType t) => t == AntType.Wasp ? 5f : t == AntType.Flyer ? 3.6f : t == AntType.Marshal ? 4.4f : 0f;
@@ -450,12 +459,12 @@ public static class Config
     public static string FoodName(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Crumbs", FoodKind.Berry => "Wild Berry", FoodKind.Sugar => "Honeydew",
-        FoodKind.Seed => "Seed Cache", _ => "Insect Carcass",
+        FoodKind.Seed => "Seed Cache", FoodKind.Straw => "Dry Grass", _ => "Insect Carcass",
     };
     public static string FoodNutrient(FoodKind k) => k switch
     {
         FoodKind.Crumb => "Bread and fruit scraps (carbohydrate)", FoodKind.Berry => "Fruit sugar and water", FoodKind.Sugar => "Pure sugar (carbohydrate)",
-        FoodKind.Seed => "Fat and protein, heavy", _ => "Protein",
+        FoodKind.Seed => "Fat and protein, heavy", FoodKind.Straw => "Building material, not food", _ => "Protein",
     };
     public static string FoodEffect(FoodKind k) => k switch
     {

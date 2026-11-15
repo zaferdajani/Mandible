@@ -13,6 +13,8 @@ public partial class GameSession : Node3D
     public World World;
     public Sim Sim;
     public AntRenderer Ants;
+    public SilkWorks Silk;
+    bool _silkTold;
     public Effects Effects;
     public Carnage Gore;
     public Guidance Guide;
@@ -92,6 +94,8 @@ public partial class GameSession : Node3D
         if (Campaign) { Glow = new MutagenGlow(this); Props = new MutagenProps(this); }
         if (World.FirstNest) Straws = new StrawProps(this);
         Ants.Brood = Interior;
+        Silk = new SilkWorks(this);
+        Ants.Silk = Silk;
         var nestPos = World.Nests[Local.Me].Pos;
         Shaders.SetNest(nestPos, World.HF.Sample(nestPos.X, nestPos.Y)); // shaders find the underground by this
         BuildLighting();
@@ -412,6 +416,84 @@ public partial class GameSession : Node3D
         ProdKind.Armoured => "Armoured ants need a beetle's mutation core, carried to the queen",
         _ => "Winged ants need a fly's mutation core, carried to the queen",
     };
+
+    // ---- silk above ground (Spinnery.cs): a spinnery for web ants, web posts improved into towers or trap nests
+    static string SilkWhy(SilkResult r, SilkKind kind) => r switch
+    {
+        SilkResult.NoStraw => $"The {Sim.SilkName(kind)} needs {Sim.StrawCost(kind):0} straw by the mound: workers are fetching dry grass",
+        SilkResult.NoWorker => "A worker must give herself to it as its weaver: the colony has none",
+        SilkResult.NoFood => $"The {Sim.SilkName(kind)} needs {Sim.FoodCost(kind):0} food",
+        SilkResult.Full => "The web ants can keep no more structures: the Spinneret in the evolve tree allows more",
+        SilkResult.TooFar => "Too far: the web ants build within the ring round the mound",
+        SilkResult.TooClose => "Too close to the mound or to another structure",
+        SilkResult.Blocked => "No room there",
+        SilkResult.Busy => "It is still being spun",
+        SilkResult.NoPop => "No room in the colony for another ant",
+        SilkResult.Dead => "The colony has fallen",
+        _ => "Silk needs a spider's mutation core, carried to the queen",
+    };
+
+    void SilkNo(SilkResult r, SilkKind kind) { Hud.Alert(SilkWhy(r, kind), new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); }
+
+    /// Places a spinnery or a web post at a spot on the surface. True when the order went out.
+    public bool TryBuildSilk(SilkKind kind, Vector2 at)
+    {
+        var r = Sim.CanBuildSilk(Local.Me, kind);
+        if (r == SilkResult.Ok) r = Sim.SiteCheck(Local.Me, at);
+        if (r != SilkResult.Ok) { SilkNo(r, kind); return false; }
+        Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)Local.Me, Arg = (byte)kind, P = at });
+        Effects.Marker(World.HF.Point(at), new Color(1f, 0.93f, 0.75f));
+        Audio.Ui("ui_queue");
+        Hud.Alert($"{Sim.SilkName(kind)} marked out: a worker goes in to weave it, the others bring {Sim.StrawCost(kind):0} straw", UiTheme.Dim);
+        return true;
+    }
+
+    /// Improves the first plain web post into a tower or a trap nest.
+    public void TrySilkUp(SilkKind to)
+    {
+        SilkWork post = null; var r = SilkResult.Locked;
+        foreach (var w in Sim.Works)
+        {
+            if (w.Team != Local.Me || w.Kind != SilkKind.Post) continue;
+            var rr = Sim.CanUpgradeSilk(Local.Me, w, to);
+            if (post == null || rr == SilkResult.Ok) { post = w; r = rr; }
+            if (rr == SilkResult.Ok) break;
+        }
+        if (post == null) { Hud.Alert("Build a Web Post first", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
+        if (r != SilkResult.Ok) { SilkNo(r, to); return; }
+        Issue(new Cmd { Kind = CmdKind.SilkUp, Team = (byte)Local.Me, Arg = (byte)to, FoodId = post.Id });
+        Audio.Ui("ui_queue");
+        Hud.Alert($"The web post is being woven into a {Sim.SilkName(to)}", UiTheme.Dim);
+        Camera.PanTo(post.Pos);
+    }
+
+    public void TrySilkHatch()
+    {
+        SilkWork spin = null;
+        foreach (var w in Sim.Works) if (w.Team == Local.Me && w.Kind == SilkKind.Spinnery && (spin == null || w.Queue < spin.Queue)) spin = w;
+        if (spin == null) { Hud.Alert("Web ants hatch in a Spinnery", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
+        var r = Sim.CanHatchSilk(Local.Me, spin);
+        if (r != SilkResult.Ok) { Hud.Alert(r == SilkResult.NoFood ? $"A web ant needs {Config.SilkAntFood:0} food" : r == SilkResult.Full ? "The spinnery is already raising three" : SilkWhy(r, SilkKind.Spinnery), new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
+        Issue(new Cmd { Kind = CmdKind.SilkHatch, Team = (byte)Local.Me, FoodId = spin.Id });
+        Audio.Ui("ui_queue");
+    }
+
+    /// Re-aims a trap web of the nearest web post or trap nest. True when the order went out.
+    public bool TryTrap(Vector2 at)
+    {
+        var r = Sim.TrapCheck(Local.Me, at);
+        if (r == SilkResult.Ok)
+        {
+            Issue(new Cmd { Kind = CmdKind.Trap, Team = (byte)Local.Me, P = at });
+            Effects.Marker(World.HF.Point(at), new Color(1f, 0.93f, 0.75f));
+            Hud.Alert("Trap web: the web ants will spin it here", UiTheme.Dim);
+            Audio.Ui("ui_click");
+            return true;
+        }
+        Hud.Alert(r == SilkResult.TooFar ? "Too far from a web post or trap nest" : r == SilkResult.Blocked ? "No room for a web there" : "Trap webs need a Web Post or a Trap Nest", new Color(1, 0.5f, 0.35f));
+        Audio.Ui("ui_error");
+        return false;
+    }
 
     public void TryResearch(Upgrade u, Vector2? at = null)
     {
@@ -873,6 +955,13 @@ public partial class GameSession : Node3D
         Interior.Update(Fog, NestView, _alpha);
         Glow?.Update(dt);
         Props?.Update(dt);
+        Silk?.Update(dt);
+        if (!_silkTold && !Demo && Sim.Time > 3 && Sim.HasSilk(Local.Me) && Sim.Col[Local.Me].Founded)
+        {
+            _silkTold = true;
+            if (Sim.SilkCount(Local.Me) == 0)
+                Hud.Banner("Silk above ground", "Your ants can build on the surface now. Mark out a Spinnery (it hatches web ants) or a Web Post (it defends the mound): one worker goes inside to weave it and the others bring it dry grass. See the Silk panel by the orders.", 8f);
+        }
         Straws?.Update(dt);
         if (!Demo) { UpdateGlass(dt); UpdateExposure(dt); }
         if (!Demo) Input?.UpdateHover();
@@ -1074,6 +1163,31 @@ public partial class GameSession : Node3D
                     break;
                 case EvKind.WebShot:
                     if (seen && Audible(e.Pos)) Audio.At("web", wp, 2, 0.1f);
+                    if (seen && e.Team < 2) Silk?.Fling(World.HF.Point(e.Pos, e.Radius > 0 ? e.Radius : 0.6f), World.HF.Point(e.To, e.Radius > 0 || e.Type != AntType.Soldier ? 0.4f : 2.2f)); // a thread from the thrower (or the tower's deck) to its mark
+                    break;
+                case EvKind.SpinneryDone:
+                    if (e.Team == Local.Me && !Demo)
+                    {
+                        var (title, text) = (SilkKind)e.Tier switch
+                        {
+                            SilkKind.Spinnery => ("The spinnery stands", "It raises web ants: they pin flyers and fling snares at enemies on the ground. Use Raise web ant in the Silk panel."),
+                            SilkKind.Post => ("A web post stands", "It keeps one trap web on the ground before it. Improve it into a Web Tower (flings webs at whatever comes near) or a Trap Nest (three trap webs you can aim)."),
+                            SilkKind.Tower => ("A web tower stands", "Web ants up the stems fling a web at the nearest enemy in reach, on the ground or in the air, every few seconds."),
+                            _ => ("A trap nest stands", "It keeps three trap webs. Use Aim trap web, then pick a spot near it, to move one."),
+                        };
+                        Hud.Banner(title, text, 6f);
+                    }
+                    break;
+                case EvKind.WeaverIn:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos)) Effects.Burst(wp, 8, 2, 1.6f, 0.3f, 0.9f);
+                    if (e.Team == Local.Me && !Demo) Hud.Alert($"A worker has gone into the {Sim.SilkName((SilkKind)e.Tier)} to weave it. She will not come out.", UiTheme.Dim);
+                    break;
+                case EvKind.TrapCatch:
+                    if (Demo || Fog == null || Fog.Visible(e.Pos))
+                    {
+                        Effects.Burst(wp, 10, 2, 2.4f, 0.25f, 0.9f);
+                        if (Audible(e.Pos)) Audio.At("web_land", wp, 0, 0.1f);
+                    }
                     break;
                 case EvKind.WebLand:
                     if (Demo || Fog == null || Fog.Visible(e.Pos))

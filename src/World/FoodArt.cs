@@ -39,6 +39,7 @@ public static class FoodArt
             case FoodKind.Crumb: Crumbs(w, rng, pile, size); break;
             case FoodKind.Seed: Seeds(w, rng, pile, size); break;
             case FoodKind.Sugar: Sugar(w, rng, pile, size); break;
+            case FoodKind.Straw: Straw(rng, pile, size); break;
             default: if (f.Radius > 4.8f) Apple(w, rng, pile, size); else Berries(w, rng, pile, size); break; // the sim's size picks the kind
         }
         // every piece sits on the soil where it lies
@@ -87,6 +88,22 @@ public static class FoodArt
             mi.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Right, rng.F() < 0.75f ? rng.R(-0.35f, 0.35f) : rng.R(1.2f, 1.9f)) * Basis.FromScale(Vector3.One * s);
             mi.Position = new Vector3(at.X, -p.Size.Y * s * 0.15f, at.Y);
             Add(pile, mi, chunk ? 0 : (float)i / n, m);
+        }
+    }
+
+    /// A drift of dry grass: the scanned straws of level 1, lying across one another.
+    static void Straw(Rng rng, Pile pile, float size)
+    {
+        int n = 9;
+        for (int i = 0; i < n; i++)
+        {
+            var straw = StrawProps.Make(i, i % 3 != 0);
+            if (straw == null) return;
+            var at = rng.InDisk(size * 0.55f);
+            straw.Basis = new Basis(Vector3.Up, rng.R(0, Mathf.Tau)) * new Basis(Vector3.Forward, rng.R(-0.12f, 0.12f)) * Basis.FromScale(Vector3.One * rng.R(0.45f, 0.7f));
+            straw.Position = new Vector3(at.X, 0.03f + 0.05f * (i % 4), at.Y);
+            pile.Root.AddChild(straw);
+            pile.Pieces.Add((straw, (float)i / n));
         }
     }
 

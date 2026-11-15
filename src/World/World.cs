@@ -10,7 +10,7 @@ public sealed class Obstacle
     public float BaseR;
 }
 
-public enum FoodKind { Crumb = 0, Berry = 1, Sugar = 2, Seed = 3, Corpse = 4 }
+public enum FoodKind { Crumb = 0, Berry = 1, Sugar = 2, Seed = 3, Corpse = 4, Straw = 5 }
 
 public sealed class FoodSource
 {

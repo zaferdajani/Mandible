@@ -44,7 +44,20 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   the queen's level is `Upgrade.Queen`, paid in organic matter), `src/UI/EvolveTree.cs` (the tree screen, key P, N1's look).
   PROGRESSION RULES ARE IN `docs/progression.md`; how each chapter uses them (core challenges, the rival's race for a core)
   is `docs/level-design.md` section 5. Mutation units: winged ants = `AntType.Flyer`, stingers = flyers with `Mutation.Stinger`,
-  `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets: not shippable). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+  `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+- Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): a colony whose queen has the spider's core (`Mutation.Web`, `Sim.HasSilk`)
+  builds on the surface from **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
+  `WantsStraw`, never counted as food). Building: a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + `SilkRank` = 1 + the Spinneret node, placed within `SilkReach` of the mound):
+  **Spinnery** = the web ants' building: it raises web ants (`AntType.WebAnt`, the same caste the queen lays; they pin flyers with `ThrowWeb`
+  and snare ground enemies with `ThrowSnare`; there is no separate "silk ant"); **Web Post** =
+  defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
+  **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.
+  `Sim.Traps`: root 3 s, +30% bites (`Ant.Snared`), 3 catches, respun; majors rip them, acid burns them, Silk Cutters
+  halve the hold. Red has silk once the story gives it the spider's core; the AI builds all of it (`AIController.Silk`). Player UI: the Silk panel
+  in `ColonyCommandHud` (keys K, comma, period: P and M belong to the evolve tree and armoured ants), placement ghost and reach ring in `SilkWorks`.
+- Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
+  (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`; art review not passed yet). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
+- Creature voices: `tools/gen_voices.py`, `AudioDirector.Voice/VoiceOf/VoiceRank`, `PlayerInput.Speak` (web ants use the "silk" call, armoured ants borrow the major's).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (Alone → Gather → ClearTrail → FreeQueen → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at
