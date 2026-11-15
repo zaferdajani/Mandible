@@ -2,7 +2,7 @@
 
 Status: **approved by the owner on 2026-11-15** ("Approve with B": the second versions of the web ant and the armoured ant). `REVIEW-mutation-units.jpg` shows all of them on one sheet.
 **Built on 2026-11-15** (see "The build" below): no stand-ins are left. In-game frames beside the targets:
-`frames-mutation-units.jpg`. The automated gate has not passed; the owner is the final judge.
+`frames-mutation-units.jpg`. **Accepted by the owner on 2026-11-15 ("Accept them")** after the second art pass and gate round 3, overriding the automated gate.
 
 Art rule (docs/progression.md): every mutation unit is one body that merges the ant with its source insect.
 

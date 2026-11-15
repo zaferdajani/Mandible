@@ -389,3 +389,7 @@ level), the carried straw is close in tone to ground litter, and the island soil
 Built and gated on `claude/progression-rework`; the record, the scores of both rounds and the open points are in
 `docs/art-targets/README-mutation-units.md`, the frames beside their targets in `docs/art-targets/frames-mutation-units.jpg`. No view passed
 the automated gate (unit art 1-3, readability 3, tree art 3-5); they go to the owner on that sheet, as the earlier rounds did.
+
+**P1-P6 accepted by the owner on 2026-11-15 ("Accept them")** after seeing the round-3 frames beside their targets
+(`docs/art-targets/frames-mutation-units.jpg`), overriding the automated gate. Weak points kept on record in the README: legs read as
+sticks up close, the web ant's net reads as an overlay, resting wings flutter, tree text is small at phone size.
