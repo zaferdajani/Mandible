@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3mvxvr3xw8gj"
-path="res://.godot/imported/ic_swiftbrood.png-fe53c1d74340a95a93cad4bf692fcaf6.ctex"
+uid="uid://dd44aluibko6k"
+path="res://.godot/imported/em_lastingvenom.png-e722cfb6936e68323a6e86132d422e8b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_swiftbrood.png"
-dest_files=["res://.godot/imported/ic_swiftbrood.png-fe53c1d74340a95a93cad4bf692fcaf6.ctex"]
+source_file="res://assets/ui/mutation/em_lastingvenom.png"
+dest_files=["res://.godot/imported/em_lastingvenom.png-e722cfb6936e68323a6e86132d422e8b.ctex"]
 
 [params]
 

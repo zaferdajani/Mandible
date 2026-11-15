@@ -128,10 +128,8 @@ public static class AntValidation
             }
             float fs = Config.Of(AntType.Flyer).Size;
             var flyerMat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), 0, AntType.Flyer, false);
-            flyerMat.SetShaderParameter("venom_bands", 1f);
             var flyerAt = Ground(stage, 0.6f);
-            Place(AntMesh.Build(AntType.Flyer, false, 0, AntMesh.Detail.Near), flyerMat, Facing(heading, fs), flyerAt);
-            if (AntMesh.Sting() != null) Place(AntMesh.Sting(), flyerMat, Facing(heading, fs), flyerAt);
+            Place(AntMesh.Stinger(0, AntMesh.Detail.Near) ?? AntMesh.Build(AntType.Flyer, false, 0, AntMesh.Detail.Near), flyerMat, Facing(heading, fs), flyerAt);
             Frame(1.6f * fs, 25, 0.35f, 0.75f); await Shot("h-sting-close");
             foreach (var c in showcase.GetChildren()) c.QueueFree();
 

@@ -44,7 +44,10 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   the queen's level is `Upgrade.Queen`, paid in organic matter), `src/UI/EvolveTree.cs` (the tree screen, key P, N1's look).
   PROGRESSION RULES ARE IN `docs/progression.md`; how each chapter uses them (core challenges, the rival's race for a core)
   is `docs/level-design.md` section 5. Mutation units: winged ants = `AntType.Flyer`, stingers = flyers with `Mutation.Stinger`,
-  `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+  `WebAnt`, `Armoured`. Their merged bodies (targets P1-P4) are built by `tools/blender/ant_models.py` `merged()` on the castes' scans
+  (`assets/ants/*_{Flyer,Stinger,WebAnt,Armoured}_*.res`; the stinger body is drawn for each winged ant with `Ant.Sting`, `AntRenderer.BatchOf`; the live portrait too, `Subject.Sting`; a dead stinger still lies as a winged ant);
+  the borrowed anatomy is marked per vertex in CUSTOM0.y (silk, shell, bands, velvet, fly eye) and coloured by the Ant shader. Chapter 5's fly: `MutagenProps.IsFly`,
+  `assets/mutation/fly`, `fly_hub`. Build record: `docs/art-targets/README-mutation-units.md`. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
 - Body parts (`Parts.cs`, progression.md 1c): every mutation ant hatched costs one part of its insect, so a brood costs its squad size
   (`Sim.PartCount`): `Part` Wings/Sting/Gland/Plates, `Colony.Parts[]` (in the roster, format `p3`), `BodyParts.Needs(ProdKind, mutations)`
   (a winged ant always costs wings). Stingers are per ant (`Ant.Sting`, not the colony's flag): with the wasp's core a brood of winged ants

@@ -31,7 +31,7 @@ public static class PortraitCapture
             await Frames(2);
             (int team, AntType type)[] who =
             {
-                (0, AntType.Queen), (0, AntType.Worker), (0, AntType.Soldier), (0, AntType.Major), (0, AntType.Flyer), (0, AntType.Gunner),
+                (0, AntType.Queen), (0, AntType.Worker), (0, AntType.Soldier), (0, AntType.Major), (0, AntType.Flyer), (0, AntType.Flyer) /* twice: the second sits as a stinger */, (0, AntType.Gunner),
                 (0, AntType.Warlord), (0, AntType.Matron), (0, AntType.Marshal), (0, AntType.WebAnt), (0, AntType.Armoured),
                 (Config.Wild, AntType.Beetle), (Config.Wild, AntType.Spider), (Config.Wild, AntType.StagBeetle), (Config.Wild, AntType.Wasp),
                 (1, AntType.Queen), (1, AntType.Soldier), (1, AntType.Warlord),
@@ -42,7 +42,7 @@ public static class PortraitCapture
             for (int i = 0; i < who.Length; i++)
             {
                 var (team, type) = who[i];
-                var s = new LivePortrait.Subject { Team = team, Type = type, Seed = 5, Health = 1, Voice = -1, Stage = Config.IsHero(type) ? 3 : 0 };
+                var s = new LivePortrait.Subject { Team = team, Type = type, Seed = 5, Health = 1, Voice = -1, Stage = Config.IsHero(type) ? 3 : 0, Sting = i > 0 && who[i - 1] == who[i] };
                 async Task<Image> Take(int col, float seconds)
                 {
                     for (float t = 0; t < seconds; t += 1f / 30) { p.Show(s); p.Advance(1f / 30); await Frames(1); }

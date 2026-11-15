@@ -59,7 +59,7 @@ public partial class ColonyCommandHud : Control
             Team = a.CharmP1 > 0 ? a.CharmP1 - 1 : a.Team, Type = a.Type, Seed = a.Serial, Health = a.Hp / Mathf.Max(1, a.MaxHp),
             HitFlash = a.HitFlash, Bite = a.AttackAnim, Lost = gore?.Lost(id, a.Serial) ?? 0, Etch = gore?.Etch(id, a.Serial) ?? 0,
             Stage = Config.IsHero(a.Type) ? AntRenderer.MutationTier(a.Level) : a.Brood,
-            Block = a.BlockT > 0, Charge = a.ChargeT > 0, Carry = a.Carrying,
+            Block = a.BlockT > 0, Charge = a.ChargeT > 0, Carry = a.Carrying, Sting = a.Sting,
             Speaking = queen && (Game.Telepathy is { Speaking: true } || Game.Audio.QueenSpeaking), Voice = queen && Game.Telepathy != null ? Game.Telepathy.Loudness : -1,
         });
         // a creature call just sounded: the portrait answers with it, for as long as it lasts

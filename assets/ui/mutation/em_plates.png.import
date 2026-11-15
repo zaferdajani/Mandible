@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bjf4govejf1ji"
-path="res://.godot/imported/ic_royallarva.png-d486e07bf69d07cb33042d88565130a8.ctex"
+uid="uid://bua5yegl0qcii"
+path="res://.godot/imported/em_plates.png-16bb01d4258fac8916c3ba09f097e565.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mutation/ic_royallarva.png"
-dest_files=["res://.godot/imported/ic_royallarva.png-d486e07bf69d07cb33042d88565130a8.ctex"]
+source_file="res://assets/ui/mutation/em_plates.png"
+dest_files=["res://.godot/imported/em_plates.png-16bb01d4258fac8916c3ba09f097e565.ctex"]
 
 [params]
 

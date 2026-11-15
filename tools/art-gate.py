@@ -63,6 +63,71 @@ VIEWS = {
                      "are told apart; the ants and the trail inside the visible area read; the edge is soft, not a hard cut."),
 }
 
+# The mutation units, the fly and the evolve tree (targets P1-P6, `--mutation-capture`). A unit's art check asks first
+# whether it is one merged body with the anatomy its target names; the tree is judged as a screen.
+VIEWS.update({
+    "unit-winged": ("p1-winged-ant.jpg", "a winged ant: an ant merged with a fly",
+                    "", "a fly's large red compound eyes; one pair of clear veined wings; halteres behind them; a bristly flight thorax; an ant's waist, gaster, elbowed antennae and six legs"),
+    "unit-stinger": ("p2-stinger-ant.jpg", "a stinger ant: the winged ant merged with a wasp",
+                     "", "the winged ant's red eyes and wings; a wasp's amber-and-black banded gaster hung from a narrow waist; a long curved sting with a bead of venom"),
+    "unit-webant": ("p3-web-ant.jpg", "a web ant: a black ant merged with a spider",
+                    "", "eight legs; a hairy gaster with spinnerets at its tip; a spider's extra eyes on an ant's head; a net of silk held ready in a front leg; an ant's head, antennae and waist"),
+    "unit-armoured": ("p4-armoured-ant.jpg", "an armoured ant: an ant merged with a beetle",
+                      "", "a beetle's pronotum shield over the thorax; ridged wing cases over the gaster; plated legs, six of them; bronze-black; an ant's head, jaws, antennae and waist"),
+    "units": (None, "the mutation units on the move: armoured ants, web ants, stinger ants and ordinary black ants",
+              "The four kinds are told apart at a glance: armoured ants by their domed bronze wing cases, web ants by "
+              "eight legs and a pale hairy gaster, stinger ants by a banded amber gaster and wings, ordinary ants plain "
+              "black. Each still reads as an ant and stands out from the soil."),
+    "fly": ("p5-fly-in-web.jpg", "chapter 5's core: a dead bloated fly wrapped at the hub of an orb web between grass stems, its abdomen glowing",
+            "A player sees at once that a web hangs between the stems, that a wrapped body sits at its hub inside a "
+            "ring of beaded silk, and that the body's abdomen glows violet-green: this is where the core is."),
+    "evolve-tree": ("p6-evolve-tree.jpg", "the evolve tree screen: six tunnels rising from the queen's chamber, a column of plates on each",
+                    "At phone size: six columns each sit on their own tunnel and none overlaps another; every plate's "
+                    "emblem is recognisable; bought (violet-green), affordable (amber) and locked (dark) plates are told "
+                    "apart; the column headings and the organic balance can be read."),
+})
+
+UNIT_ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
+Open ONLY this image: {img}
+Its left half is the approved concept TARGET; its right half is a close FRAME from the game ({what}) at about the
+target's framing. The art rule: the unit is ONE body that merges the ant with the other insect, never a tinted ant
+and never two creatures stuck together. The target asks for: {brief}.
+It need not match the composition or the pose. Judge the creature only, not the ground. Ignore any UI.
+
+Score the FRAME's creature 1-5 on each (5 = matches the target's standard):
+- brief: every feature the target asks for is present and can be seen
+- merge: it reads as one animal, part ant and part the other insect, as the target does
+- primitives: no part reads as a code primitive (blob, ellipsoid, sausage, stick, cone, flat card)
+- material: surfaces read as real cuticle, hair, membrane or silk, not plastic
+- light: warm directional sun, grounded contact shadows, no flat shading
+- palette: warm natural colour as in the target, no grey cast, no cartoon saturation
+
+Reply with JSON only:
+{{"view": "{view}", "check": "art", "scores": {{"brief": n, "merge": n, "primitives": n, "material": n,
+"light": n, "palette": n}}, "missing": ["features of the brief that cannot be seen"], "blockers": ["..."],
+"pass": true|false, "fix_first": "one sentence"}}
+pass is true only when every score is 4 or 5 and blockers is empty.
+"""
+
+UI_ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
+Open ONLY this image: {img}
+Its left half is the approved concept TARGET for a game screen; its right half is the screen as built ({what}).
+The built screen carries real names, numbers and states, which the target leaves blank: do not mark those down.
+
+Score the built screen 1-5 on each (5 = matches the target's standard):
+- layout: six tunnels rise from the queen's chamber and each column of plates sits on its own tunnel
+- emblems: every plate has its own painted emblem in the target's style, none is a placeholder
+- states: bought (violet-green), affordable (amber) and locked (dark) plates are distinct, as in the target
+- material: earth, chitin plates and light read as painted materials, not flat fills
+- palette: the target's warm amber and deep brown, violet-green only as the accent
+- legibility: text sits on calm ground and does not collide with plates, tunnels or other text
+
+Reply with JSON only:
+{{"view": "{view}", "check": "art", "scores": {{"layout": n, "emblems": n, "states": n, "material": n,
+"palette": n, "legibility": n}}, "blockers": ["..."], "pass": true|false, "fix_first": "one sentence"}}
+pass is true only when every score is 4 or 5 and blockers is empty.
+"""
+
 ART = """You are an independent art reviewer for a photoreal macro nature-documentary RTS about ants.
 Open ONLY this image: {img}
 Its left half is the approved TARGET; its right half is a close FRAME from the game ({what}) at about the
@@ -136,16 +201,32 @@ def main():
     frames, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
     lines = ["# Art gate", "", "Spawn one fresh reviewer per section with its prompt; give it nothing else.", ""]
-    for view, (target, what, spec) in VIEWS.items():
+    for view, entry in VIEWS.items():
+        target, what, spec = entry[:3]
+        brief = entry[3] if len(entry) > 3 else ""
         close = os.path.join(frames, view + "-close.png")
         play = os.path.join(frames, view + ".png")
-        if os.path.exists(close):
+        if view == "evolve-tree" and os.path.exists(play):
+            # the screen is one frame: its panel beside the target for the art check, and at phone size for reading
+            panel = Image.open(play).convert("RGB").crop((334, 153, 1266, 703))
+            img = os.path.abspath(os.path.join(out, view + "-art.jpg"))
+            tmp = os.path.join(out, view + "-panel.png")
+            panel.save(tmp)
+            side_by_side(os.path.join(TARGETS, target), tmp, img)
+            lines += [f"## {view} art", "", "```", UI_ART.format(img=img, what=what, view=view).strip(), "```", ""]
+            print(img)
+            img = os.path.abspath(os.path.join(out, view + "-read.jpg"))
+            panel.resize((760, round(760 * panel.height / panel.width)), Image.LANCZOS).save(img, quality=92)
+            lines += [f"## {view} read", "", "```", READ.format(img=img, what=what + ", shown at the size it has on a phone", view=view, spec=spec).strip(), "```", ""]
+            print(img)
+            continue
+        if os.path.exists(close) and target:
             img = os.path.abspath(os.path.join(out, view + "-art.jpg"))
             side_by_side(os.path.join(TARGETS, target), close, img)
-            prompt = ANT_ART if view.startswith("g-") else ART
-            lines += [f"## {view} art", "", "```", prompt.format(img=img, what=what, view=view).strip(), "```", ""]
+            prompt = ANT_ART if view.startswith("g-") else UNIT_ART if view.startswith("unit-") else ART
+            lines += [f"## {view} art", "", "```", prompt.format(img=img, what=what, view=view, brief=brief).strip(), "```", ""]
             print(img)
-        if os.path.exists(play):
+        if os.path.exists(play) and spec:
             img = os.path.abspath(os.path.join(out, view + "-read.jpg"))
             Image.open(play).convert("RGB").save(img, quality=90)
             lines += [f"## {view} read", "", "```", READ.format(img=img, what=what, view=view, spec=spec).strip(), "```", ""]

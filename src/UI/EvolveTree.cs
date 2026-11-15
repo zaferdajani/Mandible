@@ -4,7 +4,8 @@ using Godot;
 namespace Mandible;
 
 /// The evolve tree (docs/progression.md): the one place the colony's organic matter is spent. It climbs through the
-/// nest's earth from the queen's chamber, in the look of the approved target N1 (assets/ui/mutation): the queen's own
+/// nest's earth from the queen's chamber, in the look of the approved target P6 (docs/art-targets/p6-evolve-tree.jpg,
+/// art in assets/ui/mutation): six tunnels rise from her chamber and each column of plates sits on its own, the queen's own
 /// trunk (her levels: better brood), the generals' (their levels: stronger and new skills), and one branch for every
 /// unit a mutation core has given her. A branch whose core she has not taken lies dark and says whose core it needs.
 /// Bought plates glow violet-green, plates the balance can pay for burn amber. Every purchase is an order (Cmd), so it
@@ -25,11 +26,21 @@ public sealed partial class EvolveTree : PanelContainer
         return _tex[name] = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
     }
 
-    static string Icon(Mutation m) => m switch
+    const string QueenIcon = "em_queen.png", GeneralIcon = "em_generals.png";
+    /// One emblem per node of the tree.
+    static string Icon(EvoNode n) => n switch
     {
-        Mutation.Winged => "ic_hornetwings.png", Mutation.Stinger => "ic_stinger.png", Mutation.Web => "ic_webthrowing.png",
-        Mutation.Armoured => "ic_ironchitin.png", _ => "ic_royallarva.png",
+        EvoNode.FlightMuscle => "em_flightmuscle.png", EvoNode.LightShell => "em_wingcases.png",
+        EvoNode.VenomSac => "em_venomsac.png", EvoNode.LastingVenom => "em_lastingvenom.png",
+        EvoNode.Spinneret => "em_spinneret.png", EvoNode.SilkGlands => "em_silkglands.png",
+        EvoNode.Plates => "em_plates.png", _ => "em_mending.png",
     };
+    /// A branch the queen has no core for yet shows the emblem of its first node, dark.
+    static string Icon(Mutation m) { foreach (var d in Evolve.Nodes) if (d.Branch == m) return Icon(d.Node); return GeneralIcon; }
+
+    // where the backdrop's six tunnels run, as fractions of the screen (measured on evolve_bg.jpg as it is laid over
+    // the panel): the first tunnel's centre, the step between tunnels, and how far down they run straight
+    const float Tunnel0 = 0.1303f, TunnelStep = 0.1483f, TunnelFoot = 0.67f;
 
     // light added on top (glows, lit tunnels): additive, never a flat fill
     static CanvasItemMaterial Add => new() { BlendMode = CanvasItemMaterial.BlendModeEnum.Add };
@@ -80,26 +91,28 @@ public sealed partial class EvolveTree : PanelContainer
         _body.CustomMinimumSize = size;
         var sim = _game.Sim; var c = sim.Col[Local.Me];
         // the nest's earth: the queen's chamber glowing at the foot, the tunnels rising
-        if (Tex("tree_bg.jpg") is { } bg)
+        if (Tex("evolve_bg.jpg") is { } bg)
             _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = bg, Size = size, StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered, MouseFilter = MouseFilterEnum.Ignore });
         // a soft shade over the upper soil so the names read, fading out toward the queen's chamber (no hard edge)
-        var fade = new Gradient(); fade.SetColor(0, new Color(0.03f, 0.02f, 0.01f, 0.66f)); fade.SetColor(1, new Color(0.03f, 0.02f, 0.01f, 0f));
-        _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = new GradientTexture2D { Gradient = fade, FillFrom = new Vector2(0, 0), FillTo = new Vector2(0, 1), Width = 4, Height = 64 }, Size = new Vector2(size.X, size.Y * 0.8f), StretchMode = TextureRect.StretchModeEnum.Scale, MouseFilter = MouseFilterEnum.Ignore });
+        var fade = new Gradient(); fade.SetColor(0, new Color(0.03f, 0.02f, 0.01f, 0.8f)); fade.SetColor(1, new Color(0.03f, 0.02f, 0.01f, 0f));
+        _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = new GradientTexture2D { Gradient = fade, FillFrom = new Vector2(0, 0), FillTo = new Vector2(0, 1), Width = 4, Height = 64 }, Size = new Vector2(size.X, size.Y * 0.26f), StretchMode = TextureRect.StretchModeEnum.Scale, MouseFilter = MouseFilterEnum.Ignore });
 
-        var title = UiTheme.Text("THE EVOLVE TREE", (int)(30 * S), UiTheme.Title, new Color(1f, 0.78f, 0.42f));
+        var title = UiTheme.Text("THE EVOLVE TREE", (int)(26 * S), UiTheme.Title, new Color(1f, 0.78f, 0.42f));
         title.HorizontalAlignment = HorizontalAlignment.Center;
-        title.Position = new Vector2(0, 14 * S); title.Size = new Vector2(size.X, 40 * S);
+        title.Position = new Vector2(0, 6 * S); title.Size = new Vector2(size.X, 32 * S);
         title.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
         title.AddThemeConstantOverride("shadow_offset_y", 2);
         _body.AddChild(title);
-        var sub = UiTheme.Text("Organic matter levels up the queen and her generals. Every unit a mutation core gives her grows a branch of its own.", (int)(13 * S), UiTheme.Body, new Color(0.9f, 0.8f, 0.66f));
+        var sub = UiTheme.Text("Organic matter levels the queen and her generals. Every core grows a branch.", (int)(12 * S), UiTheme.Body, new Color(0.95f, 0.86f, 0.7f));
+        sub.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.95f));
         sub.HorizontalAlignment = HorizontalAlignment.Center;
-        sub.Position = new Vector2(0, 52 * S); sub.Size = new Vector2(size.X, 20 * S);
+        sub.Position = new Vector2(0, 37 * S); sub.Size = new Vector2(size.X, 16 * S);
         _body.AddChild(sub);
 
-        float colW = size.X / 6f;
-        float bottom = size.Y - 128 * S, step = 150 * S;
-        Vector2 At(int col, int row) => new(colW * (col + 0.5f), bottom - row * step);
+        // each column stands on its tunnel; the plates climb it from just above the queen's chamber
+        float colW = size.X * TunnelStep;
+        float bottom = size.Y * 0.545f, step = 108 * S;
+        Vector2 At(int col, int row) => new(size.X * (Tunnel0 + TunnelStep * col), bottom - row * step);
 
         // ---- the queen: her levels are better brood
         Head(0, colW, "THE QUEEN", "better brood");
@@ -114,10 +127,10 @@ public sealed partial class EvolveTree : PanelContainer
                 : can == ResearchResult.NoOrganic ? $"LEVEL {tier}  ·  NEEDS {cost:0} ORGANIC"
                 : can == ResearchResult.Busy ? $"LEVEL {tier}  ·  THE NEST IS BUSY"
                 : $"LEVEL {tier}  ·  NOT YET";
-            Plate(At(0, 0), "ic_swiftbrood.png", Config.QueenTitles[Mathf.Clamp(tier, 1, 5)].ToUpperInvariant(), state, tier > 1, !max && can == ResearchResult.Ok,
+            Plate(At(0, 0), QueenIcon, Config.QueenTitles[Mathf.Clamp(tier, 1, 5)].ToUpperInvariant(), state, tier > 1, !max && can == ResearchResult.Ok,
                 $"The queen's level.\nEvery ant she lays from then on hatches with +{Evolve.BroodHp * 100:0}% health and +{Evolve.BroodBite * 100:0}% bite per level, and the nest holds {Evolve.BroodRoom} more.\nHer levels also open the heavier castes.",
                 () => _game.TryResearch(Upgrade.Queen));
-            Tunnel(At(0, 0).X, size.Y - 42 * S, bottom + 76 * S, tier > 1);
+            Tunnel(At(0, 0).X, size.Y * TunnelFoot, bottom + 62 * S, tier > 1);
         }
 
         // ---- the generals: a level is a skill point
@@ -125,7 +138,7 @@ public sealed partial class EvolveTree : PanelContainer
         {
             var gens = Generals();
             if (gens.Count == 0)
-                Plate(At(1, 0), "ic_royallarva.png", "NO GENERAL YET", sim.Has(Local.Me, Mutation.RoyalLarva) || sim.Mission == null ? "LAY ONE FIRST" : "NEEDS A MUTATED QUEEN'S CORE", false, false,
+                Plate(At(1, 0), GeneralIcon, "NO GENERAL YET", sim.Has(Local.Me, Mutation.RoyalLarva) || sim.Mission == null ? "LAY ONE FIRST" : "NEEDS A MUTATED QUEEN'S CORE", false, false,
                     "A general's levels are bought here with organic matter. Each level is a skill point: stronger skills, then new ones.", null);
             for (int k = 0; k < gens.Count && k < 3; k++)
             {
@@ -137,12 +150,12 @@ public sealed partial class EvolveTree : PanelContainer
                 string state = can == EvolveResult.Maxed ? $"LEVEL {a.Level}  ·  THE HIGHEST"
                     : can == EvolveResult.Ok ? $"LEVEL {a.Level}  ·  NEXT: {cost:0} ORGANIC"
                     : can == EvolveResult.NoOrganic ? $"LEVEL {a.Level}  ·  NEEDS {cost:0} ORGANIC" : $"LEVEL {a.Level}";
-                Plate(At(1, k), "ic_royallarva.png", name.ToUpperInvariant(), state, a.Level > 1, can == EvolveResult.Ok,
+                Plate(At(1, k), GeneralIcon, name.ToUpperInvariant(), state, a.Level > 1, can == EvolveResult.Ok,
                     $"{Config.Of(a.Type).Name}, level {a.Level}.\nThe next level makes it stronger and gives one skill point for its skill tree (O).",
                     () => _game.Issue(Cmd.Units(CmdKind.Evolve, Local.Me, new List<int> { id }, sim)));
-                if (k > 0) Tunnel(At(1, k).X, At(1, k - 1).Y - 48 * S, At(1, k).Y + 76 * S, true);
+                if (k > 0) Tunnel(At(1, k).X, At(1, k - 1).Y - 43 * S, At(1, k).Y + 61 * S, true);
             }
-            Tunnel(At(1, 0).X, size.Y - 42 * S, bottom + 76 * S, gens.Count > 0);
+            Tunnel(At(1, 0).X, size.Y * TunnelFoot, bottom + 62 * S, gens.Count > 0);
         }
 
         // ---- one branch per mutation unit
@@ -171,17 +184,17 @@ public sealed partial class EvolveTree : PanelContainer
                         : can == EvolveResult.Ok ? $"RANK {rank} OF {d.Ranks}  ·  {cost:0} ORGANIC"
                         : $"RANK {rank} OF {d.Ranks}  ·  NEEDS {cost:0}";
                     var node = d.Node;
-                    Plate(At(col, row), Icon(mu), d.Name.ToUpperInvariant(), state, rank > 0, can == EvolveResult.Ok, $"{d.Name}\n{d.Text}",
+                    Plate(At(col, row), Icon(node), d.Name.ToUpperInvariant(), state, rank > 0, can == EvolveResult.Ok, $"{d.Name}\n{d.Text}",
                         () => _game.Issue(new Cmd { Kind = CmdKind.Evolve, Team = (byte)Local.Me, Arg = (byte)node }));
-                    if (row > 0) Tunnel(At(col, row).X, At(col, row - 1).Y - 48 * S, At(col, row).Y + 76 * S, true);
+                    if (row > 0) Tunnel(At(col, row).X, At(col, row - 1).Y - 43 * S, At(col, row).Y + 61 * S, true);
                     row++;
                 }
-                Tunnel(At(col, 0).X, size.Y - 42 * S, bottom + 76 * S, true);
+                Tunnel(At(col, 0).X, size.Y * TunnelFoot, bottom + 62 * S, true);
             }
             col++;
         }
 
-        var legend = UiTheme.Text("◆ BOUGHT  violet      ◆ CAN BUY  amber      ◆ LOCKED  dark", (int)(12 * S), UiTheme.Bold, new Color(0.86f, 0.76f, 0.62f));
+        var legend = UiTheme.Text("◆ BOUGHT  violet      ◆ CAN BUY  amber      ◆ LOCKED  dark", (int)(13.5f * S), UiTheme.Bold, new Color(0.86f, 0.76f, 0.62f));
         legend.Position = new Vector2(18 * S, size.Y - 30 * S);
         _body.AddChild(legend);
         var balance = UiTheme.Text($"ORGANIC MATTER  {(int)c.Organic}", (int)(16 * S), UiTheme.Title, new Color(1f, 0.8f, 0.45f));
@@ -192,15 +205,15 @@ public sealed partial class EvolveTree : PanelContainer
 
     void Head(int col, float colW, string name, string line)
     {
-        float cx = colW * (col + 0.5f);
-        var head = UiTheme.Text(name, (int)(15 * S), UiTheme.Title, new Color(1f, 0.76f, 0.4f));
+        float cx = CustomMinimumSize.X * (Tunnel0 + TunnelStep * col);
+        var head = UiTheme.Text(name, (int)(14 * S), UiTheme.Title, new Color(1f, 0.76f, 0.4f));
         head.HorizontalAlignment = HorizontalAlignment.Center;
-        head.Position = new Vector2(cx - colW / 2, 84 * S); head.Size = new Vector2(colW, 22 * S);
+        head.Position = new Vector2(cx - colW / 2, 54 * S); head.Size = new Vector2(colW, 22 * S);
         head.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.9f));
         _body.AddChild(head);
-        var sub = UiTheme.Text(line, (int)(11 * S), UiTheme.Body, new Color(0.82f, 0.72f, 0.58f));
+        var sub = UiTheme.Text(line, (int)(12.5f * S), UiTheme.Body, new Color(0.92f, 0.82f, 0.68f));
         sub.HorizontalAlignment = HorizontalAlignment.Center;
-        sub.Position = new Vector2(cx - colW / 2, 104 * S); sub.Size = new Vector2(colW, 16 * S);
+        sub.Position = new Vector2(cx - colW / 2, 71 * S); sub.Size = new Vector2(colW, 16 * S);
         _body.AddChild(sub);
     }
 
@@ -215,34 +228,37 @@ public sealed partial class EvolveTree : PanelContainer
 
     void Plate(Vector2 c, string icon, string name, string state, bool bought, bool afford, string tip, System.Action press)
     {
-        var w = new Vector2(104, 92) * S;
+        var w = new Vector2(96, 85) * S;
         Color? halo = afford ? Amber : bought ? Violet : null;
         if (halo is { } hc && Tex("plate.png") is { } pt)
-            _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = pt, Position = c - w * 0.62f, Size = w * 1.24f, StretchMode = TextureRect.StretchModeEnum.Scale, Modulate = hc * new Color(1.6f, 1.6f, 1.6f, 0.9f), Material = Add, MouseFilter = MouseFilterEnum.Ignore });
+            _body.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = pt, Position = c - w * 0.62f, Size = w * 1.24f, StretchMode = TextureRect.StretchModeEnum.Scale, Modulate = hc * new Color(1.6f, 1.6f, 1.6f, 0.9f) * (bought && !afford ? new Color(1.5f, 1.5f, 1.5f, 1f) : Colors.White), Material = Add, MouseFilter = MouseFilterEnum.Ignore });
         var b = new TextureButton
         {
             TextureNormal = Tex("plate.png"), IgnoreTextureSize = true, StretchMode = TextureButton.StretchModeEnum.Scale,
             Position = c - w / 2, Size = w, CustomMinimumSize = w,
             Disabled = !afford || press == null, FocusMode = FocusModeEnum.None, TooltipText = tip,
             MouseDefaultCursorShape = afford ? CursorShape.PointingHand : CursorShape.Arrow,
-            Modulate = bought || afford ? Colors.White : new Color(0.55f, 0.5f, 0.46f),
+            // a bought plate is steeped in the violet-green of the mutation; a locked one lies dark but its emblem still shows
+            Modulate = bought && !afford ? new Color(0.8f, 0.86f, 1.15f) : bought || afford ? Colors.White : new Color(0.62f, 0.57f, 0.52f),
             PivotOffset = w / 2,
         };
         _body.AddChild(b);
         if (Tex(icon) is { } ic)
             b.AddChild(new TextureRect { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Texture = ic, Position = w * 0.08f, Size = w * 0.84f, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered, MouseFilter = MouseFilterEnum.Ignore,
-                Modulate = bought ? Colors.White : afford ? new Color(1, 0.95f, 0.88f) : new Color(0.42f, 0.38f, 0.34f, 0.85f) });
+                Modulate = bought ? Colors.White : afford ? new Color(1, 0.95f, 0.88f) : new Color(0.82f, 0.76f, 0.7f, 0.95f) });
         b.MouseEntered += () => { if (afford) b.Scale = Vector2.One * 1.06f; };
         b.MouseExited += () => b.Scale = Vector2.One;
         if (press != null) b.Pressed += () => { press(); _game.Audio.Ui("research"); };
 
-        var plaque = new PanelContainer { Position = new Vector2(c.X - 86 * S, c.Y + w.Y * 0.5f - 2 * S), CustomMinimumSize = new Vector2(172 * S, 0), MouseFilter = MouseFilterEnum.Ignore };
-        plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.09f, 0.05f, 0.03f, 0.88f), afford ? Amber : bought ? Violet.Lerp(Green, 0.3f) : new Color(0.36f, 0.26f, 0.18f), 1, 7, 3));
+        // the plaque is as wide as a column allows, so neighbours never touch; its lines are clipped to it
+        state = state.Replace("  ·  ", " · ").Replace(" ORGANIC", " ORG");
+        var plaque = new PanelContainer { Position = new Vector2(c.X - 79 * S, c.Y + w.Y * 0.5f - 14 * S), CustomMinimumSize = new Vector2(158 * S, 0), Size = new Vector2(158 * S, 0), ClipContents = true, MouseFilter = MouseFilterEnum.Ignore };
+        plaque.AddThemeStyleboxOverride("panel", UiTheme.Box(bought && !afford ? new Color(0.13f, 0.07f, 0.2f, 0.94f) : new Color(0.09f, 0.05f, 0.03f, 0.9f), afford ? Amber : bought ? Violet.Lerp(Green, 0.3f) : new Color(0.36f, 0.26f, 0.18f), bought || afford ? 2 : 1, 7, 3));
         var v = new VBoxContainer(); v.AddThemeConstantOverride("separation", -2);
-        var nm = UiTheme.Text(name, (int)(11 * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
-        nm.HorizontalAlignment = HorizontalAlignment.Center;
-        var st = UiTheme.Text(state, (int)(9 * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
-        st.HorizontalAlignment = HorizontalAlignment.Center;
+        var nm = UiTheme.Text(name, (int)(12.5f * S), UiTheme.Title, bought || afford ? new Color(1f, 0.9f, 0.74f) : new Color(0.62f, 0.56f, 0.5f));
+        nm.HorizontalAlignment = HorizontalAlignment.Center; nm.ClipText = true;
+        var st = UiTheme.Text(state, (int)(11.5f * S), UiTheme.Bold, afford ? Amber : bought ? Green.Lerp(Violet, 0.3f) : new Color(0.6f, 0.53f, 0.46f));
+        st.HorizontalAlignment = HorizontalAlignment.Center; st.ClipText = true;
         v.AddChild(nm); v.AddChild(st);
         plaque.AddChild(v);
         _body.AddChild(plaque);

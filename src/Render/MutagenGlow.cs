@@ -183,7 +183,7 @@ void fragment() {
             if (veins != null)
             {
                 // the ruptured patch: veins spread over the body while the gland is in it, pulsing with it
-                veins.Visible = s.node.Visible && !m.Free;
+                veins.Visible = s.node.Visible && !m.Free && !MutagenProps.IsFly(m); // the fly's own abdomen carries its glowing veins
                 float span = 3.2f * (1 + 0.5f * zoom);
                 veins.Size = new Vector3(span, 3.5f, span);
                 veins.Position = s.node.Position + Vector3.Down * 0.3f; // centred on the gland: on the island queen's body, or round the wasp up in her web
@@ -209,11 +209,13 @@ void fragment() {
             // drawn just in front of the body toward the eye, so the gaster or the jaws never hide the light inside them
             var eye = _g.GetViewport().GetCamera3D();
             if (eye != null) halo.Position += (eye.GlobalPosition - halo.Position).Normalized() * (m.Free ? 0.4f : 0.9f);
-            halo.Scale = Vector3.One * (m.Free ? 1.3f : 4f) * (0.7f + 0.3f * rad) * (1 + 2.4f * zoom); // never a lost dot at play zoom
+            halo.Scale = MutagenProps.IsFly(m) && !m.Free ? Vector3.One * 2.6f * (1 + 0.9f * zoom) // a soft light round the abdomen: the fly's own veins do the glowing
+                : Vector3.One * (m.Free ? 1.3f : 4f) * (0.7f + 0.3f * rad) * (1 + 2.4f * zoom); // never a lost dot at play zoom
             var hm = (ShaderMaterial)halo.MaterialOverride;
-            hm.SetShaderParameter("patch_", m.Free ? 0f : 1f);
+            bool inFly = MutagenProps.IsFly(m) && !m.Free; // the fly's abdomen shows its own veins: only a soft light round it
+            hm.SetShaderParameter("patch_", m.Free || inFly ? 0f : 1f);
             hm.SetShaderParameter("t", _t + m.Id);
-            hm.SetShaderParameter("strength", 2f); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
+            hm.SetShaderParameter("strength", inFly ? 0.35f : 2f); // a violet-green pool on the soil round the carrier: the gland is findable from play zoom
             // the sixth sense: a faint ring of disturbed air spreads from a source the colony feels, even through the fog
             // from play zoom a carried gland keeps a faint, slow ripple under it, so the player can follow it across the yard
             bool sensed = (!m.Carried || zoom > 0.5f) && sim.Senses(Local.Me, m);

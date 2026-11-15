@@ -21,6 +21,7 @@ public partial class LivePortrait : TextureRect
         public float HitFlash, Bite; // the real ant's hit flash and attack swing
         public int Lost, Etch, Stage; // missing parts, acid pitting, evolution stage / general's tier (as the Ant shader takes them)
         public bool Block, Charge, Carry;
+        public bool Sting;          // a winged ant that carries a wasp's sting: drawn with the stinger's body
         public bool Speaking;       // the queen's telepathic voice is sounding
         public float Voice;         // how loud it is right now, 0..1, or below 0 when unknown
     }
@@ -63,7 +64,7 @@ public partial class LivePortrait : TextureRect
     CameraAttributesPractical _lens;
     MeshInstance3D _ground, _backdrop;
     Control _wound;
-    readonly Dictionary<(int, AntType), Model> _models = new();
+    readonly Dictionary<(int, AntType, bool), Model> _models = new();
     Model _cur;
     Subject _s;
     bool _has;
@@ -146,12 +147,13 @@ public partial class LivePortrait : TextureRect
         if (_lens != null) _lens.DofBlurFarEnabled = !Small;
     }
 
-    Model Load(int team, AntType type)
+    Model Load(int team, AntType type, bool sting = false)
     {
-        if (_models.TryGetValue((team, type), out var m)) return m;
+        if (_models.TryGetValue((team, type, sting), out var m)) return m;
         m = new Model { Root = new Node3D { Name = $"Portrait{team}_{type}", Visible = false }, Rig = RigOf(type) };
         _vp.AddChild(m.Root);
         var mesh = AntMesh.Build(type, false, team, team == Config.Wild ? null : AntMesh.Detail.Near);
+        if (sting && type == AntType.Flyer && team is 0 or 1 && AntMesh.Stinger(team, AntMesh.Detail.Near) is { } stinger) mesh = stinger;
         var mat = AntRenderer.AntMat(Shaders.Get(Shaders.Ant), team, type, false);
         mat.SetShaderParameter("leg_count", 0); // a portrait sitter stands at rest: no planted stride, or a foreleg is held out across her face
         m.Body = new Batch(m.Root, mesh, mat, false, "Body");
@@ -185,20 +187,20 @@ public partial class LivePortrait : TextureRect
         }
         m.Target.Y += m.Rig.Lift;
         m.Dist = r / Mathf.Tan(Mathf.DegToRad(13));
-        _models[(team, type)] = m;
+        _models[(team, type, sting)] = m;
         return m;
     }
 
     /// The HUD has something alive to show.
     public void Show(in Subject s)
     {
-        bool swap = !_has || s.Team != _s.Team || s.Type != _s.Type;
+        bool swap = !_has || s.Team != _s.Team || s.Type != _s.Type || s.Sting != _s.Sting;
         bool other = swap || s.Seed != _s.Seed;
         _s = s; _has = true;
         if (swap)
         {
             if (_cur != null) _cur.Root.Visible = false;
-            _cur = Load(s.Team, s.Type);
+            _cur = Load(s.Team, s.Type, s.Sting);
             _cur.Root.Visible = true;
             _ground.Position = new Vector3(0, _cur.Floor, 0);
             _yaw = 0; _pitch = 0; _kind = 0; _talk = 0; _buzz = 0.6f; _sacT = 0.4f;

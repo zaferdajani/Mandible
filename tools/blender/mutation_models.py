@@ -1,6 +1,6 @@
 """Models the mutation track's props in Blender, headless, and exports each as glTF (targets H1-H3).
 
-Run: blender --background --factory-startup --python tools/blender/mutation_models.py -- <out-dir>
+Run: blender --background --factory-startup --python tools/blender/mutation_models.py -- <out-dir> [gland wasp web nursery fly_hub]
 Writes <out-dir>/<name>/<name>.gltf: the queen wasp's glowing gland, the dead queen wasp, the orb web with its grass
 stems and bramble twig (and the silk that wraps her), the nursery's bed of chewed fibre and the living gauge: a heap
 of remains and seeds whose pieces are named heap_000.. in the order the nurses pile them. Everything is in game
@@ -681,8 +681,65 @@ def nursery():
     export("nursery")
 
 
-gland()
-wasp()
-web()
-nursery()
+# ---------------------------------------------------------------------------------------------- the fly's hub (P5)
+def fly_hub():
+    """Target P5 (docs/art-targets/p5-fly-in-web.jpg): the silk the dead fly hangs in, in the web's own space (x across,
+    z up), centred on the web's torn patch: a hub of thread spun over the tear, the loops that wrap the fly, and round
+    it a rope of many threads strung with dew. The fly itself is a generated scan (assets/mutation/fly)."""
+    reset()
+    rr = random.Random(23)
+    silk, dew, wrap = bmesh.new(), bmesh.new(), bmesh.new()
+    c = Vector((1.6, 0.0, 7.0))
+    # the hub: short radials and a tight spiral closing the tear behind the fly
+    for k in range(18):
+        ang = 2 * math.pi * k / 18 + rr.uniform(-0.1, 0.1)
+        d = Vector((math.cos(ang), 0, math.sin(ang)))
+        tube(silk, catenary(c + d * 0.2 + Vector((0, -0.25, 0)), c + d * rr.uniform(2.3, 2.7) + Vector((0, -0.05, 0)), rr.uniform(0.02, 0.08), 6), [0.008] * 6, sides=3, cap=False)
+    pts, r, ang = [], 0.25, 0.0
+    while r < 2.45:
+        pts.append(c + Vector((math.cos(ang) * r, -0.22 + 0.04 * math.sin(ang * 3.1), math.sin(ang) * r)))
+        ang += 0.42
+        r += 0.021
+    tube(silk, pts, [0.006] * len(pts), sides=3, cap=False)
+    # the ring: a rope of threads round the fly, sagging at the bottom where the dew hangs heaviest
+    def ring(a, wob=0.0, k=0):
+        s = 1.0 + 0.04 * math.sin(a * 5 + k) * wob
+        return c + Vector((math.cos(a) * 2.05 * s, 0.32 * math.sin(a * 2 + k) * wob, math.sin(a) * 1.6 * s - 0.14 * (1 - math.sin(a))))
+    for k in range(10):
+        off = Vector((rr.uniform(-0.05, 0.05), rr.uniform(-0.22, 0.22), rr.uniform(-0.05, 0.05)))
+        tube(silk, [ring(2 * math.pi * j / 44, 1.0, k) + off for j in range(45)], [rr.uniform(0.016, 0.028)] * 45, sides=4, cap=False)
+    for j in range(30):
+        a = math.pi + math.pi * (j + 0.5) / 30
+        s = rr.choice((0.08, 0.1, 0.12, 0.16, 0.2))
+        blob(dew, ring(a) + Vector((rr.uniform(-0.04, 0.04), rr.uniform(-0.2, 0.2), -s * 0.9)), (s, s, s * 1.15), subdiv=2, rough=0.0)
+    for j in range(12):
+        a = math.pi * (j + 0.5) / 12
+        s = rr.choice((0.06, 0.08, 0.1))
+        blob(dew, ring(a) + Vector((0, rr.uniform(-0.2, 0.2), -s)), (s, s, s * 1.1), subdiv=1, rough=0.0)
+    # ties from the ring out into the web
+    for k in range(9):
+        a = 2 * math.pi * k / 9 + 0.2
+        d = Vector((math.cos(a), 0, math.sin(a)))
+        tube(silk, catenary(ring(a), ring(a) + d * rr.uniform(0.8, 1.3), 0.05, 5), [0.007] * 5, sides=3, cap=False)
+    # the wrapping: loops of silk thrown round the fly's thorax and legs
+    for k in range(46):
+        centre = c + Vector((rr.uniform(-1.2, 0.1), rr.uniform(0.0, 0.3), rr.uniform(-0.45, 0.45)))
+        axis = Vector((rr.uniform(0.5, 1.0), rr.uniform(-0.4, 0.4), rr.uniform(-0.5, 0.5))).normalized()
+        perp = axis.orthogonal().normalized()
+        rad = rr.uniform(0.55, 0.95)
+        loop = []
+        for j in range(12):
+            q = Matrix.Rotation(2 * math.pi * j / 11, 3, axis) @ perp
+            loop.append(centre + q * rad + Vector((rr.uniform(-0.05, 0.05), rr.uniform(-0.05, 0.05), rr.uniform(-0.05, 0.05))))
+        tube(wrap, loop, [rr.uniform(0.014, 0.024)] * 12, sides=4, cap=False)
+    ob = obj("hub_silk", silk); paint(ob, lambda p, n: (0.98, 0.9, 0.76))
+    ob = obj("hub_wrap", wrap); paint(ob, lambda p, n: (0.96, 0.9, 0.78))
+    ob = obj("hub_dew", dew); paint(ob, lambda p, n: (0.9, 0.95, 1.0))
+    export("fly_hub")
+
+
+ONLY = sys.argv[sys.argv.index("--") + 2:]
+for make_prop in (gland, wasp, web, nursery, fly_hub):
+    if not ONLY or make_prop.__name__ in ONLY:
+        make_prop()
 print("[blender] done")
