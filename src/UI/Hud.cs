@@ -14,9 +14,9 @@ public partial class Hud : CanvasLayer
     readonly Button[] _prod = new Button[11];
     readonly Control[] _prodLock = new Control[11]; // one per ProdKind
     readonly Label[] _heroStatus = new Label[11];
-    readonly Button[] _res = new Button[5];
+    readonly Button[] _res = new Button[4]; // one per Upgrade
     PanelContainer _heroPanel;
-    readonly Label[] _resTier = new Label[5], _resCost = new Label[5];
+    readonly Label[] _resTier = new Label[4], _resCost = new Label[4];
     ProgressBar _resBar;
     Label _netLabel, _waiting;
     bool _desyncWarned;
@@ -469,7 +469,7 @@ public partial class Hud : CanvasLayer
         return $"{what}  [{key}]\n{role}{squad}\nEach: HP {s.Hp} · Bite {s.Damage}\nCost {Config.ProdCost(k):0} food · {Config.ProdTime(k):0.#}s · {Config.ProdPop(k)} brood";
     }
 
-    static readonly string[] ResKeys = { "Q", "W", "E", "R", "T" };
+    static readonly string[] ResKeys = { "Q", "E", "R", "T" }; // one per Upgrade (the Wings research is gone: winged ants come from the fly's core)
     readonly Button[] _dig = new Button[2];
 
     void RefreshDig(Colony c)
@@ -521,7 +521,7 @@ public partial class Hud : CanvasLayer
             row.AddChild(db);
             _dig[kind == ChamberKind.Brood ? 0 : 1] = db;
         }
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < _res.Length; i++)
         {
             var u = (Upgrade)i;
             var b = new Button { CustomMinimumSize = new Vector2(62, 62) };
@@ -1014,7 +1014,7 @@ public partial class Hud : CanvasLayer
             _prodLock[i].Visible = !unlocked;
         }
         if (sim.Mission is { ShowsHeroes: false }) _heroPanel.Visible = false;
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < _res.Length; i++)
         {
             var u = (Upgrade)i;
             int next = c.T(u) + 1;

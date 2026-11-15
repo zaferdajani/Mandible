@@ -429,19 +429,23 @@ public partial class ColonyCommandHud : Control
         if (_page is 1 or 3)
         {
             var list = _page == 1 ? Units : new[] { ProdKind.Warlord, ProdKind.Matron, ProdKind.Marshal };
+            // the row holds five full cards; with the mutation units (web ants, armoured ants) the cards narrow so every one stays in reach
+            int shown = 0; foreach (var k in list) if (Shown(k)) shown++;
+            float cw = shown > 5 ? Mathf.Floor((691f - 4 * (shown - 1)) / shown) : 129;
+            bool tight = cw < 129;
             for (int i = 0, slot = 0; i < list.Length; i++)
             {
                 var kind = list[i];
                 if (!Shown(kind)) continue;
                 string key = _page == 1 ? Keys[i] : new[] { "Y", "U", "I" }[i];
-                var b = Button(_cards, "", slot++ * 133, 0, 129, 125, () => Game.TryEnqueue(kind));
-                var title = Text(b, Config.ProdName(kind), 2, 4, 125, 24, 13); title.HorizontalAlignment = HorizontalAlignment.Center;
-                Art(b, UnitArt(kind), 3, 26, 123, 64);
+                var b = Button(_cards, "", slot++ * (cw + 4), 0, cw, 125, () => Game.TryEnqueue(kind));
+                var title = Text(b, Config.ProdName(kind), 2, 4, cw - 4, 24, tight ? 11 : 13); title.HorizontalAlignment = HorizontalAlignment.Center;
+                Art(b, UnitArt(kind), 3, 26, cw - 6, 64);
                 float protein = Game.Sim.OrganicCost(kind);
-                Text(b, protein > 0 ? $"{Config.ProdCost(kind):0} · {protein:0.#} org" : $"{Config.ProdCost(kind):0} food", 26, 91, 100, 17, _touch ? 13 : 12);
-                Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", 26, 106, 88, 17, _touch ? 13 : 12);
-                if (!_touch) Text(b, key, 105, 101, 20, 18, 13);
-                Art(b, Region(new Rect2(691, 820, 13, 22)), 8, 94, 13, 22);
+                Text(b, protein > 0 ? $"{Config.ProdCost(kind):0} · {protein:0.#} org" : $"{Config.ProdCost(kind):0} food", tight ? 22 : 26, 91, cw - (tight ? 24 : 29), 17, tight ? 11 : _touch ? 13 : 12);
+                Text(b, $"{Config.SquadSize(Config.UnitOf(kind))} ant{(Config.SquadSize(Config.UnitOf(kind)) == 1 ? "" : "s")}", tight ? 22 : 26, 106, cw - 41, 17, tight ? 11 : _touch ? 13 : 12);
+                if (!_touch) Text(b, key, cw - 24, 101, 20, 18, 13);
+                Art(b, Region(new Rect2(691, 820, 13, 22)), tight ? 5 : 8, 94, 13, 22);
                 _units.Add((b, kind));
             }
         }
@@ -480,7 +484,7 @@ public partial class ColonyCommandHud : Control
         }
         else
         {
-            for (int i = 0, slot = 0; i < 5; i++)
+            for (int i = 0, slot = 0; i < Game.Sim.Col[Local.Me].Tier.Length; i++)
             {
                 var u = (Upgrade)i;
                 if (!Shown(u)) continue;
