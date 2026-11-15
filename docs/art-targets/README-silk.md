@@ -25,6 +25,7 @@ Generation record: Higgsfield MCP `generate_image`, model `gpt_image_2_6`, 16:9,
 
 | 3, independent reviewer (real fibre texture `silk_fibre.png`, wandering ropes with stray fibres, brighter beads; frames `D:/MandibleBuilds/review/silk-r3`) | **not passed**: snare 2,2,2,3,2 / read 2; spinnery 3,3,2,2,3 / read 3; trap 3,3,2,3,3 / read 3. Blockers: near-white/grey sheets, snare unreadable at play zoom, spinnery reads as a bag, stems as thin rods. A warmer tint went in after this round (not re-reviewed) |
 
-**Plateau.** Three rounds of script-built geometry sit at 2-3, the same ceiling the mutation props hit. More rounds of
-the same method are unlikely to pass. Routes that could: image-to-3D of the approved concepts for the spinnery (as
-`core.glb` was made), photographed silk on alpha cards for the webs, or a hand-sculpted set.
+| 4, independent reviewer (owner chose "from concepts": spinnery = image-to-3D scan of `s2-spinnery-isolated.jpg`, snare and trap = photographed webs on cards; frames `frames-silk.jpg`) | **not passed, but up**: snare 2,3,3,4,3 / read 2; spinnery 3,4,3,4,3 / read 3; trap 2,3,2,3,3 / read 3. Material and palette now 3-4. Blockers: the snare lies too flat and is small at play zoom, the spinnery reads as a box on posts with a slab shadow, the trap's stems read as a fence and held raiders are not wrapped |
+
+Open after round 4: lift the snare dome higher and larger; shadows from the cards (alpha) instead of slabs; irregular
+grass for the trap's stems; silk over raiders held in a trap; the web post, tower and trap nest are still script-built.
