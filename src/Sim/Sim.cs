@@ -279,6 +279,7 @@ public sealed partial class Sim
                 Ants[id].Home = camp.Pos;
             }
         }
+        if (mode != GameMode.Lanes && !W.FirstNest) SeedSkirmishCores();
     }
 
     void ApplyLevel(ref Ant a)

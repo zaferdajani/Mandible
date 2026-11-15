@@ -661,8 +661,8 @@ public sealed partial class Sim
                 ApplyLevel(ref Ants[player.QueenId]); Ants[player.QueenId].Hp = Ants[player.QueenId].MaxHp;
                 player.Food = 350;
                 Muster(0, AntType.Worker, 10, home);
-                Muster(0, AntType.Soldier, 14, home + toFoe * 9);
-                Muster(0, AntType.Major, 2, home + toFoe * 12);
+                Muster(0, AntType.Soldier, 20, home + toFoe * 9);
+                Muster(0, AntType.Major, 4, home + toFoe * 12);
                 YoungRival(foe, toFoe, 6);
                 ClearCorridor(home, foe, -1);
                 // the web is strung between grass stems on the far flank; its spider sits at the hub above the fly it caught.
@@ -673,7 +673,7 @@ public sealed partial class Sim
                 int g = AddGroup("The web", web);
                 m.MasterGroup = g;
                 var away = (web - home).Normalized();
-                GroupBug(g, AntType.Spider, web + away * 6.5f, 4);
+                GroupBug(g, AntType.Spider, web + away * 6.5f, 3);
                 GroupBug(g, AntType.Spider, web + away * 9 + side * 5, 1);
                 foreach (var (bug, _) in m.Groups[g]) Ants[bug].Home = Ants[bug].Pos; // each keeps to its own strand
                 for (int k = 0; k < 7; k++) Webs.Add(new WebZone { Pos = web + MathX.Dir(k * 0.8976f) * 4.6f, R = 2.3f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
@@ -684,7 +684,7 @@ public sealed partial class Sim
                     var sac = OpenGround(web + away * 30);
                     ClearAround(sac, 16);
                     int bg = AddGroup("The brood", sac);
-                    for (int k = 0; k < 4; k++) { int b = GroupBug(bg, AntType.Spider, sac + MathX.Dir(k * 1.57f) * 1.6f, 1); Ants[b].Home = Ants[b].Pos; }
+                    for (int k = 0; k < 2; k++) { int b = GroupBug(bg, AntType.Spider, sac + MathX.Dir(k * 3.14f) * 1.6f, 1); Ants[b].Home = Ants[b].Pos; }
                     for (int k = 0; k < 14; k++) Webs.Add(new WebZone { Pos = sac + MathX.Dir(k * 0.4488f) * 7.5f, R = 3.2f, Life = 1e6f, Max = 1e6f, Root = 1.2f });
                     foreach (var (b, _) in m.Groups[bg]) Ants[b].State = AntState.Hold; // they keep to the sac
                     m.CurtainGroup = bg; m.CurtainAt = sac; m.SilkOf.Add((bg, sac, 14f));

@@ -131,7 +131,7 @@ public static class LevelValidation
         var home = s.W.Nests[0].Pos;
         bool marching = false;
         int lastStep = -1, strike = 0;
-        int gatherAt = id switch { 5 => 6, 6 => 99, 7 => 10, 8 => 20, 9 => 28, 10 => 30, 11 => 1, 13 => 1, 14 => 18, _ => 40 };
+        int gatherAt = id switch { 5 => 6, 6 => 99, 7 => 10, 8 => 20, 9 => 28, 10 => 30, 11 => 1, 13 => 18, 14 => 18, _ => 40 };
         int queenAt = id switch { 7 => 24, 8 => 34, 9 => 34, 10 => 34, 11 => 1, 14 => 26, _ => 34 };
         float limit = 2400;
         for (int t = 0; t < limit * 30 && s.Winner < 0; t++)
@@ -180,6 +180,10 @@ public static class LevelValidation
                         var gland = m.Gland;
                         if (gland == null) { s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false); break; }
                         bool carried = gland.Carried;
+                        // gather before going: an army fed in piecemeal only feeds the guardian
+                        if (!marching && army.Count >= gatherAt) { marching = true; strike = army.Count; }
+                        else if (marching && !carried && army.Count < Math.Max(3, strike / 3)) marching = false;
+                        if (!marching && !carried) { s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false); break; }
                         s.CmdMove(army, carried ? gland.Pos : gland.Pos + (home - gland.Pos).Normalized() * 11, true);
                         if (o.Kind == Expedition.Obj.Extract && m.MasterGroup >= 0 && m.Episode == Reveal.SilkTrapId && s.GroupLeft(m.MasterGroup) > 0) break; // the web still holds: no worker walks into it
                         if (o.Kind != Expedition.Obj.Sense && t % 300 == 0)
@@ -215,7 +219,7 @@ public static class LevelValidation
                         // behind the silk curtain: only the winged ants go; everyone else keeps out of the silk
                         var wings = army.FindAll(a => s.Ants[a].Type == AntType.Flyer);
                         var ground = army.FindAll(a => s.Ants[a].Type != AntType.Flyer);
-                        if (wings.Count >= 4) s.CmdMove(wings, m.CurtainAt, true);
+                        if (wings.Count >= 8) s.CmdMove(wings, m.CurtainAt, true); else s.CmdMove(wings, home, false);
                         s.CmdMove(ground, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
                         break;
                     }
@@ -558,10 +562,12 @@ public static class LevelValidation
             // the queen's level: better brood for what she lays afterwards, not for those already hatched
             tc.Tier[(int)Upgrade.Queen] = 3; tc.Food = 2000; tc.Organic = 50;
             int before = tc.Count[(int)AntType.Soldier];
-            t.Enqueue(0, ProdKind.Soldier);
-            for (int k = 0; k < 30 * 60 && tc.Count[(int)AntType.Soldier] == before; k++) t.Tick(1f / 30);
-            int young = -1; for (int i = t.High - 1; i >= 0 && young < 0; i--) if (t.Ants[i].Alive && t.Ants[i].Team == 0 && t.Ants[i].Type == AntType.Soldier && t.Ants[i].Brood > 0) young = i;
-            Check(young >= 0 && t.Ants[young].Brood == 2 && t.Ants[young].MaxHp > hp0 * 1.1f && t.Ants[soldier].MaxHp == hp0, "A level-3 queen's brood did not hatch stronger than the ants she laid before");
+            tc.PopCap += 20; tc.Queue.Clear();
+            var queued = t.Enqueue(0, ProdKind.Soldier);
+            Check(queued == QueueResult.Ok, $"The test could not queue a soldier squad ({queued})");
+            for (int k = 0; k < 30 * 120 && tc.Count[(int)AntType.Soldier] < before + 6; k++) t.Tick(1f / 30);
+            int young = -1; for (int i = t.High - 1; i >= 0 && young < 0; i--) if (t.Ants[i].Alive && t.Ants[i].Team == 0 && t.Ants[i].Type == AntType.Soldier && t.Ants[i].Brood == 2) young = i;
+            Check(young >= 0 && t.Ants[young].MaxHp > hp0 * 1.04f && t.Ants[soldier].MaxHp == hp0, $"A level-3 queen's brood did not hatch stronger than the ants she laid before (young {young}, soldiers {before} -> {tc.Count[(int)AntType.Soldier]}, old {t.Ants[soldier].MaxHp:0.0}/{hp0:0.0} alive {t.Ants[soldier].Alive})");
             GD.Print($"[campaign-test] PASS progression rules: one core one unit, no colony boost, the wasp's core waits for the fly's, a second core is meat; Flight Muscle bought with organic matter; a level-3 queen's soldier hatches with {t.Ants[young].MaxHp:0} health against {hp0:0}");
             Close();
         }

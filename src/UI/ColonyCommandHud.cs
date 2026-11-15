@@ -197,10 +197,10 @@ public partial class ColonyCommandHud : Control
         var p = Panel(_canvas, 944, 2, _resourcesSize.X, _resourcesSize.Y); _resources = p;
         Text(p, "FOOD", 12, 12 + d, 35, 16, 10);
         _food = Text(p, "", 50, 6 + d, 118, 25, 17, false, Gold);
-        // organic matter: the colony's reserve of remains, the evolving material for the queen and the army
+        // organic matter: the colony's reserve of remains, spent in the evolve tree
         var mark = At(new OrganicMark { MouseFilter = MouseFilterEnum.Ignore }, 160, 9 + d, 22, 22); p.AddChild(mark);
         _organic = Text(p, "", 186, 6 + d, 92, 25, 17, false, OrganicColor);
-        mark.TooltipText = _organic.TooltipText = "Organic matter: remains of bugs and enemy ants hauled home. The queen ascends on it, larvae need it, and fighters fed from it evolve.";
+        mark.TooltipText = _organic.TooltipText = "Organic matter: remains of bugs and enemy ants hauled home. It is spent in the evolve tree (P): the queen's level, a general's level, a mutation unit's branch. Larvae need a little too.";
         Text(p, "BROOD", 280, 12 + d, 42, 16, 10);
         _brood = Text(p, "", 326, 6 + d, 85, 25, 17);
         _queen = Text(p, "", 415, 10 + d, 136, 20, 11, false, Gold);
@@ -519,7 +519,7 @@ public partial class ColonyCommandHud : Control
             _counts.Text = $"{food.Amount:0} loads remaining";
             _detail.Text = food.Kind != FoodKind.Corpse || !Game.Sim.OrganicRules ? Config.FoodEffectShort(food.Kind)
                 : food.Team == Local.Me ? "One of ours. The workers carry our dead to the midden; they feed no one of our kind."
-                : $"{Sim.RemainsValue(food):0} organic matter. Haul it home for the queen and the brood, or have fighters eat it to evolve.";
+                : $"{Sim.RemainsValue(food):0} organic matter. Haul it home for the evolve tree and the brood, or have hurt fighters eat it to mend.";
         }
         if (n == 0 && Game.Sim.Valid(input.Inspect, input.InspectSerial))
         {

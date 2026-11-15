@@ -187,7 +187,6 @@ public partial class ExpeditionGuide : PanelContainer
         ("attack-move onto the red mound", "tap Attack and then the red mound"),
         ("raise the Warlord (Y)", "raise the Warlord"),
         // the level system's levels (Levels.cs)
-        ("Open the Research tab and research Wings (W).", "Open the Research tab and research Wings."),
         ("Hatch flying ants (F) and acid gunners (D).", "Hatch flying ants and acid gunners."),
         ("(right-click it with workers selected)", "(tap Workers, then tap it)"),
         ("(F2, then right-click them)", "(tap Army, then tap them)"),

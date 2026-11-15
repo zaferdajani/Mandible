@@ -105,6 +105,7 @@ public sealed partial class Sim
     public void BeginEpisode(int episode)
     {
         Mission = new Expedition { Episode = episode };
+        ClearSkirmishCores(); // a chapter's cores are its own script's (progression.md 1b)
         var m = Mission;
         var home = W.Nests[0].Pos;
         var foe = W.Nests[1].Pos;

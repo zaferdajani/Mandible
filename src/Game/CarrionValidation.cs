@@ -46,7 +46,7 @@ public static class CarrionValidation
             for (int k = 0; k < 6 * 30; k++) { sim.Tick(dt); fed |= sim.Ants[hero].Feasting; }
             ref var h = ref sim.Ants[hero];
             GD.Print($"[carrion-test] feast: hp {hp0:0} -> {h.Hp:0}, xp {xp0:0} -> {h.Xp:0}, mouthfuls {spider.Feasted}, state {h.State}, feasting {h.Feasting}, distance {h.Pos.DistanceTo(spider.Pos):0.0}");
-            Check(fed && spider.Feasted >= 3 && h.Hp > hp0 && h.Xp > xp0, "The idle, wounded hero did not feast");
+            Check(fed && spider.Feasted >= 3 && h.Hp > hp0 && h.Xp == xp0 && h.Level == 1, "The idle, wounded general did not feast and mend (or eating levelled it)");
 
             // the drag
             var field = Clear(home + outv * 26 + perp * 10);

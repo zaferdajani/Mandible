@@ -719,7 +719,7 @@ public partial class PlayerInput : Node
                 float d = f.Pos.DistanceTo(world) - f.Radius;
                 if (d < 1.8f && d < best) { best = d; food = f; }
             }
-            // remains: the fighters and heroes in the selection eat them (and evolve); the workers carry them home
+            // remains: the fighters and generals in the selection eat them (and mend); the workers carry them home
             if (food != null && food.Kind == FoodKind.Corpse && Sim.EatRules && Selection.Exists(i => Sim.Eats(Sim.Ants[i]) && Sim.CanEat(Sim.Ants[i], food)))
             {
                 var eaters = Selection.FindAll(i => Sim.Eats(Sim.Ants[i]));

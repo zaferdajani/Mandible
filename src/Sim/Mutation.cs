@@ -312,9 +312,50 @@ public sealed partial class Sim
             if (Mission is { } mm && mm.CoreKeepers.Contains(id)) mm.Gland = core;
         }
         var m = Mission;
-        if (m == null || m.MasterGroup < 0 || t.Team != Config.Wild || t.Level < 4) return; // the master, not its brood
+        if (m == null || m.MasterGroup < 0 || t.Team != Config.Wild || t.Level < 3) return; // the master, not its brood
         int serial = t.Serial;
         if (m.Groups[m.MasterGroup].Exists(g => g.id == id && g.serial == serial)) m.MastersSlain++;
+    }
+
+    /// Skirmish and multiplayer: the cores are in the lairs. Every lair's master (its highest-level bug, level 3 or
+    /// more) keeps the core of its kind, and two dead flies lie in the lairs nearest each colony's flank, guarded by
+    /// what lives there. Both colonies race for them; nothing is handed over.
+    void SeedSkirmishCores()
+    {
+        for (int i = 0; i < High; i++)
+        {
+            ref var a = ref Ants[i];
+            if (!a.Alive || a.Team != Config.Wild || a.Level < 3 || a.Boss) continue;
+            var gives = Mutations.CoreOf(a.Type);
+            if (gives == Mutation.None) continue;
+            // one keeper per lair: the first of its highest level
+            bool master = true;
+            for (int j = 0; j < High && master; j++)
+                if (j != i && Ants[j].Alive && Ants[j].Team == Config.Wild && Ants[j].Home.DistanceSquaredTo(a.Home) < 1f && (Ants[j].Level > a.Level || Ants[j].Level == a.Level && j < i)) master = false;
+            if (master) a.CoreP1 = (byte)((int)gives + 1);
+        }
+        var n0 = W.Nests[0].Pos; var n1 = W.Nests[1].Pos;
+        var along = (n1 - n0).Normalized(); var perp = new Vector2(along.Y, -along.X);
+        float span = n0.DistanceTo(n1);
+        var used = new List<Camp>();
+        foreach (var want in new[] { n0.Lerp(n1, 0.35f) + perp * span * 0.22f, n0.Lerp(n1, 0.65f) - perp * span * 0.22f })
+        {
+            Camp best = null; float bd = float.MaxValue;
+            foreach (var camp in W.Camps)
+            {
+                float d = camp.Pos.DistanceTo(want);
+                if (d < bd && !used.Contains(camp)) { bd = d; best = camp; }
+            }
+            if (best == null) continue;
+            used.Add(best);
+            Cores.Add(new MutationCore { Id = _nextCore++, Pos = best.Pos + perp * 2.5f, Name = "a fly's core", From = AntType.Wasp, Gives = Mutation.Winged, Heading = best.Facing });
+        }
+    }
+
+    void ClearSkirmishCores()
+    {
+        Cores.Clear(); _nextCore = 0;
+        for (int i = 0; i < High; i++) Ants[i].CoreP1 = 0;
     }
 
     /// Marks a living creature as the keeper of a core: when it dies the core lies in its body.
@@ -474,7 +515,7 @@ public sealed partial class Sim
             Events.Add(new SimEvent { Kind = EvKind.LarvaLost, Pos = at, Team = c.Team });
             if (Mission is { } m && c.Team == 0 && m.Objectives.Exists(o => o.Kind is Expedition.Obj.Larva or Expedition.Obj.Cocoon) && !m.Complete && m.HeroesBorn == 0)
             {
-                m.LossReason = "The raiders reached the nursery and devoured the royal larva. Without her the colony has no hero, and the woods close in.";
+                m.LossReason = "The raiders reached the nursery and devoured the royal larva. Without her the colony has no general, and the woods close in.";
                 Winner = Config.Enemy;
             }
             return;

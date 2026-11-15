@@ -80,7 +80,7 @@ public partial class GeneralSkills : Control
         _eat.AddThemeFontSizeOverride("font_size", 14);
         _eat.AddThemeStyleboxOverride("hover", Frame(new Color(0.12f, 0.06f, 0.04f, 0.96f), Gold));
         _eat.AddThemeStyleboxOverride("pressed", Frame(new Color(0.2f, 0.07f, 0.04f, 0.96f), Gold, 2));
-        _eat.TooltipText = "AUTO-EAT  (J)\nON: they eat whatever they kill and evolve (generals level up).\nOFF: they leave the carcass for the workers to haul home as organic matter for the queen and the brood.\nWorks for the whole squad. Generals start ON, fighters OFF.";
+        _eat.TooltipText = "AUTO-EAT  (J)\nON: hurt, they eat whatever they kill and mend.\nOFF: they leave the carcass for the workers to haul home as organic matter for the evolve tree and the brood.\nWorks for the whole squad. Generals start ON, fighters OFF.";
         _eat.Pressed += () => { Game.Audio.Ui("ui_click"); Game.ToggleAutoEat(); };
         _bar.AddChild(_eat);
     }

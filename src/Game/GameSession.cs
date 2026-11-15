@@ -731,8 +731,8 @@ public partial class GameSession : Node3D
         var c = Cmd.Units(CmdKind.AutoEat, Local.Me, ids, Sim);
         c.Arg = (byte)(allOn ? 0 : 1);
         Issue(c);
-        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home to the queen"
-                        : "Auto-eat ON: they eat what they kill and evolve", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
+        Hud.Alert(allOn ? "Auto-eat OFF: they leave their kills for the workers to haul home"
+                        : "Auto-eat ON: they eat what they kill and mend", allOn ? UiTheme.Dim : new Color(0.95f, 0.45f, 0.3f));
         Audio.Ui("ui_click", -4);
     }
 
@@ -924,9 +924,9 @@ public partial class GameSession : Node3D
     public void Issue(Cmd c) => Orders.Issue(c);
 
     /// The first lesson of this world, shown once, at the first kill: killing makes no one stronger, eating does.
-    public void EatLesson() => Hud.Banner(Sim.Mission != null ? "Fighters evolve by eating" : "Victory alone makes no one stronger", Settings.Touch
-        ? "Eat the remains: select the ant you want to grow, then tap the carcass. Or let the workers haul it home as organic matter for the queen."
-        : "Eat the remains: right-click the carcass with the ant you want to grow. Or let the workers haul it home as organic matter for the queen.", 10f);
+    public void EatLesson() => Hud.Banner("Victory alone makes no one stronger", Settings.Touch
+        ? "The workers haul remains home as organic matter, spent in the evolve tree. A hurt fighter mends by eating: select it, then tap the carcass."
+        : "The workers haul remains home as organic matter, spent in the evolve tree. A hurt fighter mends by eating: right-click the carcass with it.", 10f);
 
     void UpdateFood()
     {
