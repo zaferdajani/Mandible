@@ -313,7 +313,7 @@ public static class ColonyValidation
     {
         var s = Open(app, 3, out var rival); var m = s.Mission; var c = s.Col[0];
         var home = s.W.Nests[0].Pos; var foe = s.W.Nests[1].Pos;
-        Check(s.CanEnqueue(0, ProdKind.Gunner) == QueueResult.Locked && s.CanEnqueue(0, ProdKind.Flyer) == QueueResult.Locked && s.CanResearch(0, Upgrade.Queen) != ResearchResult.Locked, "Episode 3 gates failed");
+        Check(s.CanEnqueue(0, ProdKind.Gunner) == QueueResult.Locked && s.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.Locked && s.CanResearch(0, Upgrade.Queen) != ResearchResult.Locked, "Episode 3 gates failed");
         Check(m.PostLeft == 3 && s.Col[1].Alive, "Episode 3 rival or outpost missing");
         int scout = -1, scoutSerial = 0;
         bool marching = false;

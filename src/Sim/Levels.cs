@@ -97,7 +97,7 @@ public static class Levels
             Stars = new[] { (StarGoal.Time, 240f, Under(4)), (StarGoal.Lost, 60f, "Lose no more than 60 ants") } },
         new() { Id = 13, Season = 1, Name = "The Silk Trap", Novelty = "The sixth sense, the first mutation core and winged ants", Rival = RivalKind.Young, Seed = 20261113, RivalFood = 0.3f,
             Blurb = "A dead fly hangs in a spider's web, and something in it glows. Win the core from the spider and carry it to the Glass Queen.",
-            Stars = new[] { (StarGoal.Time, 840f, Under(14)), (StarGoal.Master, 0f, "Slay the web spider") } },
+            Stars = new[] { (StarGoal.Time, 1320f, Under(22)), (StarGoal.Master, 0f, "Slay the web spider") } },
         new() { Id = 14, Season = 1, Name = "The Royal Larva", Novelty = "A queen's core: a royal larva, a cocoon, the first general", Rival = RivalKind.Young, Seed = 20261114, RivalFood = 0.4f,
             Blurb = "Ashling's body glows where she fell, and the red scouts are coming for it. Win her core, raise the royal larva on remains, guard the cocoon that closes over old Burr, and blood the new Warlord on a red queen.",
             Stars = new[] { (StarGoal.Time, 1260f, Under(21)), (StarGoal.LarvaSafe, 0f, "No raider ever wounds the larva") } },

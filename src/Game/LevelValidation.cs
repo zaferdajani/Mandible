@@ -414,7 +414,7 @@ public static class LevelValidation
         s = Open(app, 3, out _, Perk.Veteran);
         Check(s.Col[0].Count[(int)AntType.Soldier] == soldiers + 6, "The veteran brood perk did not add its squad");
         Close();
-        GD.Print("[campaign-test] PASS level gates, the watch-post shield and star perks (Matron, early gunners and flyers, veteran brood)");
+        GD.Print("[campaign-test] PASS level gates, the watch-post shield and star perks (Matron, early gunners, the stocked larder, veteran brood)");
         Reveals(app);
     }
 

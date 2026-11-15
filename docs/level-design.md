@@ -268,7 +268,7 @@ Guidance names the goal only. No objective text tells the player how to beat a g
 5. **Destroy the brood behind the silk.**
 6. **Break the red raid.**
 
-Stars: under 14:00, slay the web spider.
+Stars: under 22:00, slay the web spider.
 
 ### Chapter 7, The Royal Larva
 

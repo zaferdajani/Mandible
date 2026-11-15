@@ -3,8 +3,8 @@
 The owner's rule (2026-11-09): every character has its own attack, defence and HP, and all three grow with its
 level at that character's own rate. Source of truth: `Config.Stats` (level 1) and `Config.GrowthOf` (per level);
 `Config.HpMul`, `DmgMul` and `DefenceAt` apply them, `Sim.Damage` caps defence at 75%. Attack is damage per second
-(bite / cooldown); defence is the share of each blow the chitin shrugs off. Colony bonuses (Chitin, Forge, moults,
-black-ant warriors) multiply on top. This table is generated from those numbers; regenerate it when they change.
+(bite / cooldown); defence is the share of each blow the chitin shrugs off. Colony bonuses (Chitin, Forge, the queen's level as brood quality, the evolve tree's unit
+branches, black-ant warriors) multiply on top; see [progression.md](progression.md). This table is generated from those numbers; regenerate it when they change.
 
 | Character | Growth per level (HP / attack / defence) | Level 1 HP · atk/s · def | Max level HP · atk/s · def |
 |---|---|---|---|
@@ -14,6 +14,8 @@ black-ant warriors) multiply on top. This table is generated from those numbers;
 | Queen | +15% / +10% / +3.0 pts | 3200 · 42.9 · 15% | L5: 5120 · 60.0 · 27% |
 | Flying Ant | +12% / +18% / +1.5 pts | 60 · 12.7 · 3% | L5: 89 · 21.9 · 9% |
 | Acid Gunner | +10% / +20% / +1.0 pts | 55 · 6.0 · 0% | L5: 77 · 10.8 · 4% |
+| Web Ant (spider core) | +12% / +12% / +1.5 pts | 64 · 7.1 · 4% | L5: 95 · 10.6 · 10% |
+| Armoured Ant (beetle core) | +20% / +10% / +4.0 pts | 190 · 10.6 · 32% | L5: 342 · 14.8 · 48% |
 | Ground Beetle | +40% / +22% / +3.0 pts | 290 · 16.7 · 25% | L5: 754 · 31.3 · 37% |
 | Wolf Spider | +35% / +32% / +1.0 pts | 240 · 30.0 · 5% | L5: 576 · 68.4 · 9% |
 | Stag Beetle | +40% / +25% / +3.0 pts | 800 · 36.0 · 30% | L5: 2080 · 72.0 · 42% |
