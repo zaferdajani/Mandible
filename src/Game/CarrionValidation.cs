@@ -150,6 +150,38 @@ public static class CarrionValidation
             Check(rr == ResearchResult.NoOrganic, "The queen ascended without organic matter");
             sim.Col[0].Organic = 50;
 
+            // body parts (docs/progression.md 1c): a mutation unit costs one part of its insect, carried home with the remains
+            {
+                var pc = sim.Col[0];
+                pc.Queue.Clear();
+                sim.GiveMutation(0, Mutation.Winged); sim.GiveMutation(0, Mutation.Web);
+                var bare = (sim.CanEnqueue(0, ProdKind.WebAnt), sim.CanEnqueue(0, ProdKind.Flyer), sim.CanEnqueue(0, ProdKind.Soldier));
+                Check(bare == (QueueResult.NoPart, QueueResult.NoPart, QueueResult.Ok), $"With no parts in store only the plain castes may be laid (web ant, winged ant, soldier: {bare})");
+                var den = Clear(home + outv * 16 + perp * 12);
+                int denSpider = sim.Spawn(Config.Wild, AntType.Spider, den, 0);
+                sim.Damage(denSpider, 99999, -1);
+                FoodSource body = null;
+                foreach (var f in sim.W.Food) if (f.Kind == FoodKind.Corpse && f.AntType == AntType.Spider && f.Part != 0) body = f;
+                Check(body != null && body.Part == (byte)Part.Gland + 1, "A dead spider did not keep its silk gland");
+                int ticks = 0;
+                for (; ticks < 150 * 30 && pc.Parts[(int)Part.Gland] == 0; ticks++) sim.Tick(dt);
+                Check(pc.Parts[(int)Part.Gland] == 1 && body.Part == 0, "The workers did not bring the silk gland home with the remains");
+                int squad = Sim.PartCount(ProdKind.WebAnt);
+                Check(squad == Config.SquadSize(ProdKind.WebAnt) && sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.NoPart, "One silk gland must not pay for a whole squad of web ants");
+                pc.Parts[(int)Part.Gland] = squad + 1;
+                Check(sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.Ok && sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "Silk glands must open web ants and nothing else");
+                sim.Enqueue(0, ProdKind.WebAnt);
+                Check(pc.Parts[(int)Part.Gland] == 1 && sim.CanEnqueue(0, ProdKind.WebAnt) == QueueResult.NoPart, "A brood must cost one part for each ant");
+                sim.CancelLast(0);
+                Check(pc.Parts[(int)Part.Gland] == squad + 1, "A cancelled brood did not give its parts back");
+                sim.GiveMutation(0, Mutation.Stinger);
+                pc.Parts[(int)Part.Wings] = 8;
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.NoPart, "With the wasp's core a winged ant must cost a sting, not wings");
+                pc.Parts[(int)Part.Sting] = Sim.PartCount(ProdKind.Flyer);
+                Check(sim.CanEnqueue(0, ProdKind.Flyer) == QueueResult.Ok, "Stings in store did not open a brood of stingers");
+                GD.Print($"[carrion-test] parts: the spider's silk gland came home in {ticks / 30f:0}s; a brood costs one part for each ant, a cancelled brood gives them back, stingers cost stings");
+            }
+
             // Devour the Fallen: only the fire ants' Warlord eats its own kind
             var pit = Clear(home + outv * 70 - perp * 30); // beyond the black colony's collection ring: its haulers would come for the red dead
             var redDead = Carcass(AntType.Soldier, 1, pit);

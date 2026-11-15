@@ -39,7 +39,7 @@ public sealed class SilkWork
     public float ShotAnim;           // rendering only
 }
 
-public enum SilkResult { Ok, Locked, NoFood, NoStraw, Full, TooFar, TooClose, Blocked, Dead, Busy, NoPop, NoWorker }
+public enum SilkResult { Ok, Locked, NoFood, NoStraw, Full, TooFar, TooClose, Blocked, Dead, Busy, NoPop, NoWorker, NoPart }
 
 public sealed partial class Sim
 {
@@ -171,6 +171,7 @@ public sealed partial class Sim
         if (w.Queue >= 3) return SilkResult.Full;
         var c = Col[team];
         if (c.PopUsed + (w.Queue + 1) * Config.Stats[(int)AntType.WebAnt].Pop > c.PopCap) return SilkResult.NoPop;
+        if (c.Parts[(int)Part.Gland] <= 0) return SilkResult.NoPart; // one silk gland, one web ant, wherever she is raised
         return c.Food < Config.SilkAntFood ? SilkResult.NoFood : SilkResult.Ok;
     }
 
@@ -181,6 +182,7 @@ public sealed partial class Sim
         var r = CanHatchSilk(team, w);
         if (r != SilkResult.Ok) return r;
         Col[team].Food -= Config.SilkAntFood; Col[team].Spent += Config.SilkAntFood;
+        Col[team].Parts[(int)Part.Gland]--;
         w.Queue++;
         return SilkResult.Ok;
     }

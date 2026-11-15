@@ -100,7 +100,7 @@ public static class FlightValidation
         // again; the post becomes a tower that flings webs or a trap nest with three webs; a spinnery hatches web ants that snare
         s = Quiet(root);
         var col = s.Col[0];
-        col.Mutations |= (int)Mutation.Web; col.Founded = true; col.Food += 600;
+        col.Mutations |= (int)Mutation.Web; col.Founded = true; col.Food += 600; col.Parts[(int)Part.Gland] = 6; // one silk gland a web ant (Parts.cs)
         var home = s.NestEntrance(0);
         for (int k = 0; k < 4; k++) s.Spawn(0, AntType.Worker, home + new Vector2(2 + k, 3), 0);
         // tests: the straw a site waits for arrives at once (hauling is checked on the first post below)

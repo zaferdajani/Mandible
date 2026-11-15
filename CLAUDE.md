@@ -45,6 +45,14 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   PROGRESSION RULES ARE IN `docs/progression.md`; how each chapter uses them (core challenges, the rival's race for a core)
   is `docs/level-design.md` section 5. Mutation units: winged ants = `AntType.Flyer`, stingers = flyers with `Mutation.Stinger`,
   `WebAnt`, `Armoured` (stand-in meshes via `AntMesh.StandIn` until their merged bodies have approved targets). Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+- Body parts (`Parts.cs`, progression.md 1c): every mutation ant hatched costs one part of its insect, so a brood costs its squad size
+  (`Sim.PartCount`): `Part` Wings/Sting/Gland/Plates, `Colony.Parts[]` (in the roster, format `p3`), `BodyParts.Needs(ProdKind, mutations)`
+  (a winged ant costs a sting once the queen has the wasp's core). A dead wasp/spider/beetle keeps its part in `FoodSource.Part`; the first
+  worker to cut a load takes it (`Ant.PartP1`), stored when she delivers. `CanEnqueue` -> `QueueResult.NoPart`, `CanHatchSilk` -> `SilkResult.NoPart`.
+  Campaign only: a carcass that crumbles with its part still in it leaves a **husk** (`FoodSource.Husk`: a separate one-load body that never
+  rots; foragers and eaters ignore it, so old levels play as before), and `PartErrands` sends foragers for parts only while the objective is
+  a hatch that is short of them. There is no fly creature: wings come from dead flies a spider caught (`AddRemains`, `AddLarder`; they use
+  the wasp's carcass until the fly has a body). The Dry Spell tips over if ordinary foraging changes at all: keep husks invisible to it.
 - Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): a colony whose queen has the spider's core (`Mutation.Web`, `Sim.HasSilk`)
   builds on the surface from **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
   `WantsStraw`, never counted as food). Building: a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + `SilkRank` = 1 + the Spinneret node, placed within `SilkReach` of the mound):

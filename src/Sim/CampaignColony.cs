@@ -29,9 +29,10 @@ public sealed class ColonyRoster
     // progression (docs/progression.md): the units the queen's cores have given her (Mutation bits), a core waiting
     // in the nest for another, and the ranks bought in the evolve tree. The queen's level is QueenTier; a general's
     // level and skills are on its Veteran. All of it carries to every later chapter.
-    public const string Format = "p2";                  // the fifth part's layout: bumped when it changes
+    public const string Format = "p3";                  // the fifth part's layout: bumped when it changes
     public int Mutations, Waiting;
     public readonly byte[] Evo = new byte[Evolve.Count];
+    public readonly int[] Parts = new int[BodyParts.Count]; // body parts in store (Parts.cs)
     public int Total { get { int n = Veterans.Count; foreach (int p in Plain) n += p; return n; } }
 
     public string Save()
@@ -45,6 +46,7 @@ public sealed class ColonyRoster
         foreach (var v in Veterans) sb.Append((int)v.Type).Append(':').Append(v.Level).Append(':').Append(v.Kills).Append(':').Append(v.Joined).Append(':').Append(v.Name.Replace(";", "").Replace(":", "")).Append(':').Append(v.Skills).Append(';');
         sb.Append('|').Append(Format).Append(',').Append(Mutations).Append(',').Append(Waiting);
         foreach (byte e in Evo) sb.Append(',').Append(e);
+        foreach (int n in Parts) sb.Append(',').Append(n);
         return sb.ToString();
     }
 
@@ -53,7 +55,8 @@ public sealed class ColonyRoster
         if (string.IsNullOrEmpty(s)) return null;
         var parts = s.Split('|');
         // a roster from before the progression rework (cores as power, mutagen counted) cannot be carried over
-        if (parts.Length < 5 || !parts[4].StartsWith(Format + ",")) return null;
+        // (a "p2" roster, from before body parts, is the same layout without the part counts: it loads with none in store)
+        if (parts.Length < 5 || !(parts[4].StartsWith(Format + ",") || parts[4].StartsWith("p2,"))) return null;
         var r = new ColonyRoster { QueenTier = int.Parse(parts[0]) };
         foreach (var c in parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries)) r.Chambers.Add((ChamberKind)int.Parse(c));
         var plain = parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -66,6 +69,7 @@ public sealed class ColonyRoster
         var mu = parts[4].Split(',');
         r.Mutations = int.Parse(mu[1]); r.Waiting = int.Parse(mu[2]);
         for (int n = 0; n < r.Evo.Length && n + 3 < mu.Length; n++) r.Evo[n] = byte.Parse(mu[n + 3]);
+        for (int n = 0; n < r.Parts.Length && n + 3 + r.Evo.Length < mu.Length; n++) r.Parts[n] = int.Parse(mu[n + 3 + r.Evo.Length]);
         return r;
     }
 }
@@ -232,6 +236,7 @@ public sealed partial class Sim
         // what the queen has become and what the colony bought in the evolve tree go with it to every later chapter
         var r = new ColonyRoster { QueenTier = c0.T(Upgrade.Queen), Mutations = c0.Mutations, Waiting = c0.Waiting };
         for (int n = 0; n < r.Evo.Length; n++) r.Evo[n] = c0.Evo[n];
+        for (int n = 0; n < r.Parts.Length; n++) r.Parts[n] = c0.Parts[n];
         foreach (var ch in Col[0].Chambers) if (ch.Built) r.Chambers.Add(ch.Kind);
         int named = 0;
         if (m?.Roster != null) foreach (var v in m.Roster.Veterans) if (v.Name != "" && Array.IndexOf(VeteranNames, v.Name) >= 0) named++;

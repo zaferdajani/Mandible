@@ -607,6 +607,7 @@ public sealed partial class Sim
         for (int i = 0; i < High; i++) if (Ants[i].Alive && Ants[i].Team == 0 && Ants[i].Type != AntType.Queen && !Config.IsHero(Ants[i].Type)) Ants[i].Brood = (byte)System.Math.Clamp(c.T(Upgrade.Queen) - 1, 0, 4);
         if (Mission != null && Mission.Perks.HasFlag(Perk.Larder)) c.Organic += Levels.LarderOrganic;
         if (roster != null) for (int n = 0; n < c.Evo.Length; n++) c.Evo[n] = roster.Evo[n];
+        if (roster != null) for (int n = 0; n < c.Parts.Length; n++) c.Parts[n] = roster.Parts[n];
         if (Has(0, Mutation.RoyalLarva) && c.Founded && ChamberOf(0, ChamberKind.Nursery) == null)
             AddChamber(0, ChamberKind.Nursery, Mutations.NurseryWork, true);
         if (Has(0, Mutation.Winged) && c.Founded && ChamberOf(0, ChamberKind.Wings) == null) AddChamber(0, ChamberKind.Wings, 60f, true);

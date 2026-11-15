@@ -397,6 +397,7 @@ public partial class GameSession : Node3D
             case QueueResult.Ok: Audio.Ui("ui_queue"); break;
             case QueueResult.NoFood: Hud.Alert("Not enough food", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.NoOrganic: Hud.Alert($"Not enough organic matter: larvae need protein ({Sim.OrganicCost(k):0.#}). Haul home the remains of bugs and enemy ants.", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
+            case QueueResult.NoPart: { var part = (Part)(Sim.PartNeed(Local.Me, k) - 1); int n = Sim.PartCount(k), have = Sim.PartsOf(Local.Me, part); Hud.Alert($"{(have == 0 ? "No" : $"Only {have}")} {BodyParts.Short(part)} in store: this brood needs {n}, one for each ant. {BodyParts.Hunt(part)}", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break; }
             case QueueResult.QueueFull: Hud.Alert("The brood chamber is full", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.MaxChambers: Hud.Alert("The nest cannot grow any deeper", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
             case QueueResult.HeroExists: Hud.Alert($"Only one {Config.ProdName(k)} may live at a time", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); break;
@@ -473,7 +474,7 @@ public partial class GameSession : Node3D
         foreach (var w in Sim.Works) if (w.Team == Local.Me && w.Kind == SilkKind.Spinnery && (spin == null || w.Queue < spin.Queue)) spin = w;
         if (spin == null) { Hud.Alert("Web ants hatch in a Spinnery", new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
         var r = Sim.CanHatchSilk(Local.Me, spin);
-        if (r != SilkResult.Ok) { Hud.Alert(r == SilkResult.NoFood ? $"A web ant needs {Config.SilkAntFood:0} food" : r == SilkResult.Full ? "The spinnery is already raising three" : SilkWhy(r, SilkKind.Spinnery), new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
+        if (r != SilkResult.Ok) { Hud.Alert(r == SilkResult.NoPart ? $"No silk glands in store: every web ant needs one. {BodyParts.Hunt(Part.Gland)}" : r == SilkResult.NoFood ? $"A web ant needs {Config.SilkAntFood:0} food" : r == SilkResult.Full ? "The spinnery is already raising three" : SilkWhy(r, SilkKind.Spinnery), new Color(1, 0.5f, 0.35f)); Audio.Ui("ui_error"); return; }
         Issue(new Cmd { Kind = CmdKind.SilkHatch, Team = (byte)Local.Me, FoodId = spin.Id });
         Audio.Ui("ui_queue");
     }
@@ -1114,6 +1115,9 @@ public partial class GameSession : Node3D
                         Hud.Banner($"{node.Name}: rank {e.Tier}", node.Text, 4.5f);
                         Audio.Ui("levelup");
                     }
+                    break;
+                case EvKind.PartHome:
+                    if (e.Team == Local.Me && !Demo) Hud.Alert($"A {BodyParts.Name((Part)e.Tier)} is home: {e.Amount:0} in store", new Color(0.95f, 0.82f, 0.45f));
                     break;
                 case EvKind.CoreWaits:
                     if (e.Team == Local.Me && !Demo) Hud.Banner("The core waits in the nest", $"{Mutations.Name((Mutation)e.Tier)} need {Mutations.Name(Mutations.Needs((Mutation)e.Tier)).ToLowerInvariant()} first: the queen will take this core when she has them.", 6f);

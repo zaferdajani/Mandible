@@ -38,6 +38,8 @@ public sealed class FoodSource
     public int ClaimTeam;              // colony + 1 whose eaters have claimed it (0: none), until ClaimUntil
     public float ClaimUntil, LastFeast;
     public int Queued;
+    public bool Husk;                  // a dried husk that still holds its part (Parts.cs): it never crumbles, foragers and eaters pass it by, and only a worker sent for the part takes it
+    public byte Part;                  // a body part (Part + 1) still in these remains: the first worker to cut a load carries it home (Parts.cs)
     public bool Alive => Amount > 0.01f;
 }
 

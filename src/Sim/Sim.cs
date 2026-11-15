@@ -61,6 +61,7 @@ public struct Ant
     public float FeastT;
     public AntType CarryType;         // what the carried carcass piece came from (rendering)
     public int CarryTeam;
+    public byte PartP1;               // a body part (Part + 1) taken from a carcass, in her jaws until she is home (Parts.cs)
     public bool FeastOrder;           // sent to eat the remains in FoodTarget
     // general skills (Skills.cs): ranks of Q W E, unspent points, autocast bits, the W and E cooldowns (Q uses AbilityCd)
     public byte Sk0, Sk1, Sk2, Sk3, SkPts, AutoMask; // ranks of the loadout's slots Q W E R
@@ -99,7 +100,8 @@ public enum EvKind { HerdArrives, HerdMilked, StagWakes, StagRoused, Bite, Death
     SkillLearned, Pheromone, Charmed, Frenzy, Summon, Fade, Cloud, TrailBlaze, TalonDive, Collect, RallyScent, Bridge, Scout, Thrall,
     MutagenFree, MutagenTaken, MutagenDropped, MutagenHome, StrawLaid, Mutate, LarvaLaid, Cocoon, HeroBorn, LarvaLost, CoreWaits,
     Woke, QueenFreed, // level 1's opening: a stunned nestmate joins (HatchP1 = its id + 1); the queen is dug out of the tube
-    SpinneryBegun, SpinneryDone, TrapSpun, TrapCatch, TrapTorn, WeaverIn } // silk above ground (Spinnery.cs)
+    SpinneryBegun, SpinneryDone, TrapSpun, TrapCatch, TrapTorn, WeaverIn,
+    PartHome } // a body part reached the nest (Tier = Part, Amount = how many are now in store) // silk above ground (Spinnery.cs)
 
 public struct SimEvent
 {
@@ -177,6 +179,7 @@ public sealed class ProdItem
 {
     public ProdKind Kind;
     public float Progress, Time;
+    public byte PartP1, PartN;        // the body part (Part + 1) this brood was paid with and how many: given back if it is cancelled
 }
 
 public sealed class Colony
@@ -211,6 +214,8 @@ public sealed class Colony
     public float Organic = Config.StartOrganic, OrganicGathered, OrganicEaten;
     // mutation (Mutation.cs): the units the queen's cores have given her; a core waiting for another (the wasp's for the fly's)
     public int Mutations, Waiting, CoresHome;
+    // body parts in store, one count per kind (Parts.cs): every mutation unit hatched costs one
+    public readonly int[] Parts = new int[BodyParts.Count];
     // evolution (Evolve.cs): ranks bought in the evolve tree's unit branches
     public readonly byte[] Evo = new byte[Evolve.Count];
     public float Straw;               // dry grass brought home: what the silk structures are strung on (Spinnery.cs)
@@ -231,7 +236,7 @@ public sealed class Colony
     public int PendingChambers() { int n = 0; foreach (var q in Queue) if (q.Kind == ProdKind.Chamber) n++; return n; }
 }
 
-public enum QueueResult { Ok, NoFood, NoOrganic, QueueFull, MaxChambers, Dead, Locked, HeroExists }
+public enum QueueResult { Ok, NoFood, NoOrganic, QueueFull, MaxChambers, Dead, Locked, HeroExists, NoPart }
 
 public sealed partial class Sim
 {
@@ -683,7 +688,10 @@ public sealed partial class Sim
             return QueueResult.Ok;
         }
         c.Organic -= OrganicCost(kind);
-        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind) });
+        byte part = PartNeed(team, kind);
+        byte partN = (byte)(part > 0 ? PartCount(kind) : 0);
+        if (part > 0) c.Parts[part - 1] -= partN; // one part, one ant: a squad costs one for each
+        c.Queue.Add(new ProdItem { Kind = kind, Time = Config.ProdTime(kind), PartP1 = part, PartN = partN });
         return QueueResult.Ok;
     }
 
@@ -699,6 +707,7 @@ public sealed partial class Sim
         if (Mission != null && team == 0 && Config.IsHeroKind(kind)) return CanLayHero(c, kind);
         if (!Config.Unlocked(kind, c.Tier, c.Mutations)) return QueueResult.Locked;
         if (Config.IsHeroKind(kind) && (c.Count[(int)Config.UnitOf(kind)] > 0 || c.Queue.Exists(q => q.Kind == kind))) return QueueResult.HeroExists;
+        if (!PartReady(team, kind)) return QueueResult.NoPart; // a mutation unit costs a part of its insect (docs/progression.md 1c)
         if (c.Queue.Count >= Config.QueueLimit) return QueueResult.QueueFull;
         if (kind == ProdKind.Chamber && c.PopCap + (c.PendingChambers() + 1) * Config.ChamberPop > Config.MaxPopCap) return QueueResult.MaxChambers;
         if (c.Food < Config.ProdCost(kind)) return QueueResult.NoFood;
@@ -727,7 +736,7 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive) continue;
             Mix((uint)i); Mix(a.Dormant ? 1u : 0u); Mix(F(a.Pos.X)); Mix(F(a.Pos.Y)); Mix(F(a.Hp)); Mix(F(a.Heading)); Mix((uint)a.State); Mix((uint)a.Level); Mix(a.Layer); Mix(F(a.ChargeT)); Mix(F(a.BlockT)); Mix(F(a.PoisonT)); Mix(a.Brood); Mix(a.CoreP1); Mix(F(a.PinT)); Mix(F(a.Alt));
-            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1);
+            Mix((uint)a.Team); Mix((uint)(a.Sk0 | a.Sk1 << 8 | a.Sk2 << 16 | a.Sk3 << 24)); Mix(a.SkPts); Mix(F(a.AbilityCd)); Mix(F(a.CdW)); Mix(F(a.CdE)); Mix(F(a.CdR)); Mix(F(a.CharmT)); Mix(F(a.LifeT)); Mix(F(a.FrenzyT)); Mix(F(a.HasteT)); Mix(F(a.SlowT)); Mix(F(a.MarkT)); Mix(a.AutoEat ? 1u : 0u); Mix(a.StrawP1); Mix(F(a.Root)); Mix(a.Snared ? 1u : 0u); Mix(F(a.SnareCd)); Mix(a.Silk ? 1u : 0u); Mix((uint)a.WeaveP1); Mix(a.PartP1);
         }
         foreach (var c in Col)
         {
@@ -736,7 +745,7 @@ public sealed partial class Sim
             foreach (var ch in c.Chambers) { Mix((uint)ch.Kind); Mix(F(ch.Done)); Mix(ch.Built ? 1u : 0u); }
             Mix((uint)c.Remains); Mix(F(c.MournT)); Mix((uint)c.Buried); Mix(F(c.Organic));
             Mix((uint)c.Mutations); Mix((uint)c.Waiting); foreach (byte ev in c.Evo) Mix(ev); Mix((uint)c.LarvaStage); Mix(F(c.LarvaFed)); Mix(F(c.LarvaHp)); Mix(F(c.CocoonT));
-            Mix(F(c.Straw));
+            Mix(F(c.Straw)); foreach (int n in c.Parts) Mix((uint)n);
         }
         foreach (var mg in Cores) { Mix(F(mg.Pos.X)); Mix(F(mg.Pos.Y)); Mix(F(mg.Done)); Mix((uint)mg.Gives); Mix((uint)(mg.Carrier + 1)); Mix(mg.Home ? 1u : 0u); }
         if (Mission != null) { Mix((uint)Mission.Stage); Mix(F(Mission.Dug)); Mix((uint)Mission.StrawsLaid); foreach (var st in Mission.Straws) { Mix(F(st.Pos.X)); Mix(F(st.Pos.Y)); Mix(st.Laid ? 1u : 0u); } }
@@ -751,7 +760,7 @@ public sealed partial class Sim
             Mix(HerdHere ? 1u : 0u); Mix(F(HerdBar)); Mix((uint)HerdTeam); Mix(F(HerdNext)); Mix((uint)StagId); Mix((uint)StagTeam); Mix(F(StagNext));
         }
         Mix((uint)W.Food.Count);
-        foreach (var f in W.Food) if (f.Kind == FoodKind.Corpse) { Mix(F(f.Pos.X)); Mix(F(f.Pos.Y)); Mix(F(f.Amount)); Mix((uint)f.ClaimTeam); Mix((uint)f.Queued); }
+        foreach (var f in W.Food) if (f.Kind == FoodKind.Corpse) { Mix(F(f.Pos.X)); Mix(F(f.Pos.Y)); Mix(F(f.Amount)); Mix((uint)f.ClaimTeam); Mix((uint)f.Queued); Mix(f.Part); Mix(f.Husk ? 1u : 0u); }
         foreach (var s in Squads) { Mix((uint)s.Count); Mix((uint)s.Level); Mix(F(s.Xp)); }
         return h;
     }
@@ -764,6 +773,7 @@ public sealed partial class Sim
         c.Queue.RemoveAt(c.Queue.Count - 1);
         c.Food += Config.ProdCost(q.Kind);
         c.Organic += OrganicCost(q.Kind);
+        if (q.PartP1 > 0) c.Parts[q.PartP1 - 1] += q.PartN;
         c.Spent -= Config.ProdCost(q.Kind);
     }
 
@@ -964,7 +974,7 @@ public sealed partial class Sim
         float bestD = radius * radius;
         foreach (var f in W.Food)
         {
-            if (!f.Alive || f.Layer != 0) continue; // a carcass inside a nest is the nurses' business
+            if (!f.Alive || f.Layer != 0 || f.Husk) continue; // a carcass inside a nest is the nurses' business; a husk is fetched only on purpose
             if (leave && f.Kind == FoodKind.Corpse && f.Team != team) continue;
             if (f.Kind == FoodKind.Straw && !(team is 0 or 1 && WantsStraw(team))) continue; // building material, fetched only while it is wanted
             float rr = radius + f.Radius;
@@ -1532,6 +1542,7 @@ public sealed partial class Sim
         {
             Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating Radius = t.Size * 0.45f,
             Team = t.Team, AntType = t.Type, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
+            Part = t.PartP1 != 0 ? t.PartP1 : BodyParts.Of(t.Type), // its own part, or the one a worker was carrying home
         };
         if (carcass.Alive) { W.Food.Add(carcass); if (killer >= 0) ClaimKill(killer, carcass); }
         Events.Add(new SimEvent { Kind = EvKind.Death, Pos = t.Pos, Team = t.Team, Type = t.Type, Who = id + 1, FoodP1 = carcass.Alive ? carcass.Id + 1 : 0,
@@ -1586,6 +1597,7 @@ public sealed partial class Sim
             {
                 a.Carrying = false;
                 var c = Col[a.Team];
+                if (a.PartP1 != 0) { StorePart(c, a.PartP1, delivery.pos); a.PartP1 = 0; }
                 if (a.CarryKind == FoodKind.Corpse && (CarrionRules || OrganicRules && a.CarryTeam != a.Team))
                 {
                     // remains are not food: they go into the organic reserve, the colony's evolving material
