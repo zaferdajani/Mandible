@@ -95,6 +95,7 @@ public sealed class AIController : IColonyAI
         Produce(c);
         GeneralAI.Learn(_sim, _team, Orders);
         Remains(c);
+        Silk(c);
         March();
         Reinforce(c);
         Defend(c);
@@ -254,11 +255,44 @@ public sealed class AIController : IColonyAI
         (Upgrade.Queen, 4, 560), (Upgrade.Mandibles, 3, 650), (Upgrade.Chitin, 3, 700), (Upgrade.Queen, 5, 780),
     };
 
+    /// Silk: one spinnery for silk ants, then web posts on the approach, improved turn about into a tower and a trap nest.
+    void Silk(Colony c)
+    {
+        if (Passive || !_sim.HasSilk(_team) || _sim.Time < 240) return;
+        SilkWork spinnery = null; int posts = 0, towers = 0, nests = 0, silkAnts = 0;
+        foreach (var w in _sim.Works)
+        {
+            if (w.Team != _team) continue;
+            if (w.Kind == SilkKind.Spinnery) spinnery = w;
+            else { posts++; if (w.Kind == SilkKind.Tower || w.Upgrading && w.UpTo == SilkKind.Tower) towers++; if (w.Kind == SilkKind.TrapNest || w.Upgrading && w.UpTo == SilkKind.TrapNest) nests++; }
+        }
+        for (int i = 0; i < _sim.High; i++) if (_sim.Ants[i].Alive && _sim.Ants[i].Team == _team && _sim.Ants[i].Silk) silkAnts++;
+        var want = spinnery == null ? SilkKind.Spinnery : SilkKind.Post;
+        if (_sim.CanBuildSilk(_team, want) == SilkResult.Ok && c.Food > Sim.FoodCost(want) + 80)
+        { Orders.Issue(new Cmd { Kind = CmdKind.Spin, Team = (byte)_team, Arg = (byte)want, P = _sim.DefaultSilkSpot(_team, want) }); return; }
+        foreach (var w in _sim.Works)
+        {
+            if (w.Team != _team || w.Kind != SilkKind.Post) continue;
+            var to = towers <= nests ? SilkKind.Tower : SilkKind.TrapNest;
+            if (_sim.CanUpgradeSilk(_team, w, to) == SilkResult.Ok && c.Food > Config.SilkUpFood + 80)
+            { Orders.Issue(new Cmd { Kind = CmdKind.SilkUp, Team = (byte)_team, Arg = (byte)to, FoodId = w.Id }); return; }
+        }
+        if (spinnery != null && silkAnts + spinnery.Queue < 4 && c.Food > Config.SilkAntFood + 120 && _sim.CanHatchSilk(_team, spinnery) == SilkResult.Ok)
+            Orders.Issue(new Cmd { Kind = CmdKind.SilkHatch, Team = (byte)_team, FoodId = spinnery.Id });
+    }
+
     /// Starts the next research when affordable; returns true while the colony is saving up for it.
     bool Research(Colony c)
     {
         if (c.Researching) return false;
         float pace = _diff switch { Difficulty.Easy => 1.5f, Difficulty.Hard => 0.8f, _ => 1f };
+        // the rival has trap webs out: sharpen the claws before anything else
+        if (_sim.SilkCount(1 - _team) > 0 && c.T(Upgrade.SilkCutters) == 0)
+        {
+            var rs = R(Upgrade.SilkCutters);
+            if (rs == ResearchResult.Ok) return false;
+            if (rs == ResearchResult.NoFood) return true;
+        }
         foreach (var (u, tier, after) in Plan)
         {
             if (c.T(u) >= tier) continue;

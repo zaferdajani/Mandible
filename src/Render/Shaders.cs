@@ -1438,27 +1438,6 @@ void fragment() {
 }
 ";
 
-    public const string Web = @"
-shader_type spatial;
-render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-varying float v_a;
-void vertex() { v_a = INSTANCE_CUSTOM.x; }
-void fragment() {
-    vec2 p = UV - 0.5;
-    float r = length(p) * 2.0;
-    float ang = atan(p.y, p.x);
-    float spokes = 1.0 - smoothstep(0.0, 0.04, abs(sin(ang * 7.0 + r * 0.6)) * max(r, 0.08));
-    float q = fract(r * 7.0 + sin(ang * 7.0) * 0.06);
-    float rings = 1.0 - smoothstep(0.0, 0.07, min(q, 1.0 - q));
-    float fade = 1.0 - smoothstep(0.75, 1.0, r);
-    float threads = max(spokes, rings * 0.85) * fade;
-    ALBEDO = vec3(0.93, 0.93, 0.9);
-    EMISSION = vec3(0.12);
-    ROUGHNESS = 0.3;
-    ALPHA = (threads * 0.9 + fade * 0.1) * v_a;
-}
-";
-
     public const string Silk = @"
 shader_type spatial;
 render_mode blend_mix, cull_back, depth_draw_opaque;

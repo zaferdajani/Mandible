@@ -116,7 +116,7 @@ public sealed class AntRenderer
         if (at.HasValue) { r.LookAt = at.Value; r.LookUntil = _now + len; }
     }
     readonly Batch[,] _dead = new Batch[3, 13];
-    readonly Batch[] _cargo = new Batch[5];
+    readonly Batch[] _cargo = new Batch[6];
     readonly Batch[] _broodCargo = new Batch[2];
     /// The nest's brood life: nurses drawn with the workers, and the callow pose of ants that just hatched.
     public NestInterior Brood;
@@ -165,7 +165,8 @@ public sealed class AntRenderer
     };
 
     readonly Dictionary<(int, AntType), Batch> _wings = new();
-    readonly Batch _cocoons, _webs, _blobs, _pools;
+    readonly Batch _cocoons, _pools;
+    internal SilkWorks Silk; // webs, trap webs and the spinnery; its silk ants are drawn with ours
 
     readonly Batch _pips;
     readonly Node3D _labelRoot;
@@ -205,9 +206,6 @@ public sealed class AntRenderer
         var silk = AntMesh.Silk();
         var silkMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Silk) };
         _cocoons = new Batch(root, silk, silkMat, true, "Cocoons");
-        _blobs = new Batch(root, silk, silkMat, true, "WebShots");
-        var webMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Web) };
-        _webs = new Batch(root, new PlaneMesh { Size = Vector2.One }, webMat, false, "Webs");
         var poolMat = new ShaderMaterial { Shader = Shaders.Get(Shaders.Pool) };
         _pools = new Batch(root, new PlaneMesh { Size = Vector2.One }, poolMat, false, "AcidPools");
         _pools.Node.SortingOffset = 2;
@@ -217,7 +215,7 @@ public sealed class AntRenderer
         _labelRoot = new Node3D { Name = "Labels" };
         root.AddChild(_labelRoot);
         for (int kind = 0; kind < _cargo.Length; kind++)
-            _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind), WorkerCargo.Material((FoodKind)kind), false, $"Carried{(FoodKind)kind}");
+            _cargo[kind] = new Batch(root, WorkerCargo.Mesh((FoodKind)kind == FoodKind.Straw ? FoodKind.Seed : (FoodKind)kind), WorkerCargo.Material((FoodKind)kind == FoodKind.Straw ? FoodKind.Seed : (FoodKind)kind), false, $"Carried{(FoodKind)kind}");
         for (int k = 0; k < 2; k++)
             _broodCargo[k] = new Batch(root, WorkerCargo.BroodMesh(k == 1), WorkerCargo.BroodMaterial(k == 1), false, k == 1 ? "CarriedLarva" : "CarriedEgg");
         for (int shape = 0; shape < 3; shape++)
@@ -344,7 +342,7 @@ public sealed class AntRenderer
         foreach (var cargo in _pieceCargo) cargo.Begin();
         _rings.Begin(); _bars.Begin(); _evoBars.Begin(); _pips.Begin(); _auraGround.Begin(); _auraHalo.Begin(); foreach (var ib in _insignia) ib.Begin(); _haze.Begin(); _drops.Begin(); _collectRing.Begin(); _queuedRing.Begin();
         foreach (var w in _wings.Values) w.Begin();
-        _cocoons.Begin(); _webs.Begin(); _blobs.Begin(); _pools.Begin();
+        _cocoons.Begin(); _pools.Begin();
         var hf = sim.W.HF;
         var camRight = cam.GlobalTransform.Basis.X.Normalized();
         var camUp = cam.GlobalTransform.Basis.Y.Normalized();
@@ -439,8 +437,6 @@ public sealed class AntRenderer
                 _haze.Add(Orient(up, 0, st.Size * 1.6f), new Vector3(o.X, gy + 0.06f, o.Z), new Color(0.85f, 0.5f, 0.16f, 0.22f * Mathf.Clamp(a.CharmT, 0, 1)));
             if (flies && _wings.TryGetValue((look, a.Type), out var wb))
                 wb.Add(b, o, new Color(a.Type == AntType.Wasp ? 46f : 36f, a.Alt > 0.6f ? 1f : 0.2f, 0, 0));
-            if (a.Root > 0)
-                _cocoons.Add(Orient(up, ih, size * 1.05f), o + up * (0.13f * size), new Color(Mathf.Clamp(a.Root * 2, 0.3f, 0.95f), 0, 0, 0));
             if (spoilCarry) _cargo[(int)FoodKind.Crumb].Add(b, o, data); // a pellet of sand: the crumb's mesh, its earthy colour
             if (a.Carrying && a.Type == AntType.Worker)
             {
@@ -607,13 +603,6 @@ public sealed class AntRenderer
             var no = new Vector3(nest.X, hf.Sample(nest.X, nest.Y) + 0.3f, nest.Y);
             _collectRing.Add(Basis.FromScale(new Vector3(r * 2, 1, r * 2)), no, new Color(0.95f, 0.62f, 0.22f, 0.65f));
         }
-        foreach (var z in sim.Webs)
-        {
-            if (!VisibleToPlayer(z.Pos)) continue;
-            float fade = Mathf.Clamp(z.Life / 1.2f, 0, 1) * Mathf.Clamp((z.Max - z.Life) * 5f + 0.2f, 0, 1);
-            var wo = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.12f, z.Pos.Y);
-            _webs.Add(new Basis(Vector3.Up, z.Pos.X * 1.7f) * Basis.FromScale(new Vector3(z.R * 2.3f, 1, z.R * 2.3f)), wo, new Color(fade, 0, 0, 0));
-        }
         foreach (var z in sim.Pools)
         {
             if (!VisibleToPlayer(z.Pos) && z.Team != Local.Me) continue;
@@ -621,13 +610,8 @@ public sealed class AntRenderer
             var po = new Vector3(z.Pos.X, hf.Sample(z.Pos.X, z.Pos.Y) + 0.1f, z.Pos.Y);
             _pools.Add(new Basis(Vector3.Up, z.Pos.Y * 1.3f) * Basis.FromScale(new Vector3(z.R * 2.4f, 1, z.R * 2.4f)), po, new Color(fade, (z.Pos.X * 0.37f) % 1f, 0, 0));
         }
-        foreach (var (from, to, t) in sim.WebShots())
-        {
-            var p = from.Lerp(to, t);
-            var wo = new Vector3(p.X, hf.Sample(p.X, p.Y) + 1.2f + 4f * t * (1 - t) * 3f, p.Y);
-            _blobs.Add(Basis.FromScale(Vector3.One * 1.6f), wo, new Color(0.95f, 0, 0, 0));
-        }
         Brood?.DrawNurses(this);
+        Silk?.DrawAnts(this);
         foreach (var b in _live) b?.End();
         foreach (var b in _close) b?.End();
         foreach (var b in _far) b?.End();
@@ -637,7 +621,7 @@ public sealed class AntRenderer
         foreach (var cargo in _pieceCargo) cargo.End();
         _rings.End(); _bars.End(); _evoBars.End(); _pips.End(); _auraGround.End(); _auraHalo.End(); foreach (var ib in _insignia) ib.End(); _haze.End(); _drops.End(); _collectRing.End(); _queuedRing.End();
         foreach (var w in _wings.Values) w.End();
-        _cocoons.End(); _webs.End(); _blobs.End(); _pools.End();
+        _cocoons.End(); _pools.End();
     }
 
     /// Each level a general gains warms its seal and halo one step: aged bronze, brass, gold, red-gold, and at the top a

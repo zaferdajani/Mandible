@@ -631,6 +631,8 @@ public sealed partial class Sim
         c.Mutations = (roster?.Mutations ?? 0) | story;
         c.WebRank = roster?.WebRank ?? (chapter > Reveal.WebThrowing ? 1 : 0);
         if (chapter > Reveal.WebThrowing) { c.Mutations |= (int)Mutation.WebThrowing; c.WebRank = System.Math.Max(c.WebRank, 1); }
+        // the red colony learns silk in the same season: it only ever builds the spinnery with it (ThrowWeb is the player's)
+        if (chapter > Reveal.WebThrowing) { Col[1].Mutations |= (int)Mutation.WebThrowing; Col[1].WebRank = System.Math.Max(Col[1].WebRank, 1); }
         c.Instability = roster != null ? System.Math.Max(roster.Instability, Mutations.Count(story)) : Mutations.Count(story);
         c.Level = roster?.Level ?? Levels.StoryLevel(chapter);
         c.Mutagen = roster?.Mutagen ?? 0;

@@ -44,6 +44,16 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   a core gives the queen a NEW UNIT; organic matter levels up queen and generals through the evolve tree. The code still
   has the old model (`Colony.Power` from core `Strength`, `Mutations.Trees` of trait picks, generals' XP from their own eating):
   rework it to the doc, do not extend it. Mutation VFX: `src/Render/MutationBurst.cs` (burst, cracks, sky beam), sounds `mutate`/`mutate_queen` (`tools/gen_audio.py mutate`).
+- Silk above ground (`Spinnery.cs`, owner's design 2026-11-15): with Web Throwing the colony builds on the surface from
+  **straw** (`Colony.Straw`; `FoodKind.Straw` piles seeded round each mound by `SeedStraw`, fetched by foragers while
+  `WantsStraw`, never counted as food). Building (owner, 2026-11-15): a site is marked out; the nearest worker walks in and becomes its weaver for good (`Ant.WeaveP1`, `SilkWork.WeaverIn`, removed from the colony), and straw carriers deliver straight to the site (`DeliveryFor`, `SilkWork.Got/Need`); she weaves only as fast as straw arrives. The store by the mound (`Colony.Straw`, cap 60) pays for improving posts. `Sim.Works` (cap 2 + WebRank, placed within `SilkReach` of the mound):
+  **Spinnery** = offence, hatches silk ants (`Ant.Silk` soldiers that snare ground enemies, `ThrowSnare`); **Web Post** =
+  defence, keeps one trap web and is improved once into a **Web Tower** (flings webs at ground and air in reach) or a
+  **Trap Nest** (three trap webs, re-aimed). Orders: `CmdKind.Spin` (Arg kind, P), `SilkUp`, `SilkHatch`, `Trap`.
+  `Sim.Traps`: root 3 s, +30% bites (`Ant.Snared`), 3 catches, respun; majors rip them, acid burns them, Silk Cutters
+  halve the hold. Red has silk from Chapter 10; the AI builds all of it (`AIController.Silk`). Player UI: the cards' tabs are Hatch · Build · Silk · Research · Generals · Remains (`ColonyCommandHud`, `TabOrder`); a tab glows when there is something to do on it (`RefreshEntry`, `Glow`), an idle incubator with food banked is named above the tabs, and the silk guide button there (`_silkGuide`, "Show me") walks the player through Spinnery, Web Post, improvement. Silk keys K, P, M; placement ghost and reach ring in `SilkWorks`.
+- Silk visuals: `src/Render/SilkWorks.cs` draws every web and structure from `assets/silk/silk.gltf`
+  (`tools/blender/silk_models.py`; targets S1-S3, `docs/art-targets/README-silk.md`). Frames: `--silk-capture=<dir>` (add `--mobile` for the HUD views).
 - Level 1 (The First Nest) is the confined founding lesson: `Expedition.cs` stage machine (ClearTrail → EscortQueen →
   Provision → DigEntrance → RoyalChamber → Incubator → Store → RaiseWorkers → Bridge → Fragment → Complete). Walkable area is
   `Mission.Constrain` (trail x 40-144, y 250-262, clearing radius 27 at (144,256), the path east to the pond at

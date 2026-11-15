@@ -13,7 +13,7 @@ public partial class Lockstep : Node, IOrders
 {
     public const int Port = 47010, DiscoveryPort = 47011;
     public const int TicksPerTurn = 3;
-    const string Version = "mandible-mp-20"; // 20 radiating mutagen cores (MutagenSource.Strength, Colony.Cores/Power); 19 level 1's founders drag the beetle whole to the clearing; 18 the combat scale (defence by type and level) and level 1's wild island queen; 17 level 1's straw bridge (Straw order, Ant.StrawP1); 16 everything together for 0.12: general skills (Learn, Cast, SkillAuto), auto-eat, Entrance, mutagen and the royal larva, flyers out of reach, web pins; 12 the level system and carrion; 13 organic matter and evolution by eating
+    const string Version = "mandible-mp-23"; // 23 building sites take straw from workers and a worker becomes the weaver (SilkWork.Got/WeaverIn, Ant.WeaveP1); 22 straw and the silk structures (Spin, Trap, SilkUp, SilkHatch orders; Sim.Works, Sim.Traps, Colony.Straw, Ant.Snared/Silk, FoodKind.Straw); 20 radiating mutagen cores (MutagenSource.Strength, Colony.Cores/Power); 19 level 1's founders drag the beetle whole to the clearing; 18 the combat scale (defence by type and level) and level 1's wild island queen; 17 level 1's straw bridge (Straw order, Ant.StrawP1); 16 everything together for 0.12: general skills (Learn, Cast, SkillAuto), auto-eat, Entrance, mutagen and the royal larva, flyers out of reach, web pins; 12 the level system and carrion; 13 organic matter and evolution by eating
     const int CheckEvery = 10; // turns between desync checks
 
     public enum Phase { Idle, Hosting, Connecting, Connected, InGame, Closed }
