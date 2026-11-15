@@ -19,6 +19,8 @@ public static class MutationCapture
             // MANDIBLE_MUTCAP=units shoots only the unit views (P1-P4), =fly stops after the web and the fly (P5); unset, everything
             string only = OS.GetEnvironment("MANDIBLE_MUTCAP");
             if (only == "units") { await Units(app, Shot, Wait); GD.Print("[mutation-capture] PASS"); app.GetTree().Quit(); return; }
+            // =scorpion: targets P7 and P8 (docs/art-targets/README-scorpion.md)
+            if (only == "scorpion") { await Units(app, Shot, Wait, true); GD.Print("[mutation-capture] PASS"); app.GetTree().Quit(); return; }
             void Run(GameSession g, int frames) { for (int i = 0; i < frames; i++) g.Sim.Tick(1f / 30); }
 
             // ---- H1: the queen wasp in the web, the colony's scouts below it
@@ -129,7 +131,10 @@ public static class MutationCapture
     /// Targets P1-P4 (docs/art-targets/README-mutation-units.md): each mutation unit of both colonies in a close frame
     /// like its target (`unit-<name>-close.png`, the red colony's `unit-<name>-red-close.png`), then all of them walking
     /// at play zoom (`units.png`), where the web ant's eight legs have to read as a gait.
-    static async System.Threading.Tasks.Task Units(Main app, Func<string, float, System.Threading.Tasks.Task> shot, Func<float, System.Threading.Tasks.Task> wait)
+    /// `scorpion`: targets P7-P8 instead: the scorpion ant as it hatches (`unit-scorpionant-close.png`), with its branch
+    /// bought (`unit-scorpionant-amber-close.png`), the red colony's, the Stone Mother with ants for scale
+    /// (`unit-scorpion-close.png`), all of them at play zoom (`scorpion-play.png`) and the evolve tree's seven columns.
+    static async System.Threading.Tasks.Task Units(Main app, Func<string, float, System.Threading.Tasks.Task> shot, Func<float, System.Threading.Tasks.Task> wait, bool scorpion = false)
     {
         app.StartSkirmish();
         var g = app.Session; var sim = g.Sim;
@@ -172,13 +177,23 @@ public static class MutationCapture
             ("winged", AntType.Flyer, false, -0.55f), ("stinger", AntType.Flyer, true, -0.3f),
             ("webant", AntType.WebAnt, false, -0.5f), ("armoured", AntType.Armoured, false, -0.3f),
         };
+        if (scorpion) views = new[] { ("scorpionant", AntType.ScorpionAnt, false, -0.45f), ("scorpionant-amber", AntType.ScorpionAnt, true, -0.45f), ("scorpion", AntType.Scorpion, false, -0.75f) };
+        var ahead = new Vector2(Mathf.Cos(heading), Mathf.Sin(heading)); var across = new Vector2(-ahead.Y, ahead.X);
         for (int team = 0; team < 2; team++)
             foreach (var (name, type, sting, yaw) in views)
             {
                 Clear();
-                if (sting) sim.Col[team].Mutations |= (int)Mutation.Stinger; else sim.Col[team].Mutations &= ~(int)Mutation.Stinger;
-                int id = sim.Spawn(team, type, stage, heading);
-                float sz = Config.Of(type).Size;
+                if (scorpion) { sim.Col[team].Evo[(int)EvoNode.DeepSting] = (byte)(sting ? 2 : 0); sim.Col[team].Evo[(int)EvoNode.NerveVenom] = (byte)(sting ? 3 : 0); }
+                else if (sting) sim.Col[team].Mutations |= (int)Mutation.Stinger; else sim.Col[team].Mutations &= ~(int)Mutation.Stinger;
+                if (type == AntType.Scorpion && team == 1) continue;
+                int id = type == AntType.Scorpion ? sim.Spawn(Config.Wild, type, stage, heading, 6) : sim.Spawn(team, type, stage, heading);
+                float sz = sim.Ants[id].Size;
+                if (type == AntType.Scorpion)
+                {
+                    // three garden ants in front of her, as in the target, for her scale
+                    sim.Ants[id].Home = stage; sim.Ants[id].State = AntState.Hold;
+                    for (int k = 0; k < 3; k++) sim.Spawn(0, AntType.Worker, stage + ahead * (sz * 0.62f + k * 0.5f) + across * (k * 1.5f - 2.6f), heading + Mathf.Pi);
+                }
                 // a winged ant is shown standing, as in its target: wings at rest, feet on the ground
                 Frame(1.75f * sz, 13, yaw, 0.2f * sz + sim.Ants[id].Alt);
                 await shot($"unit-{name}{(team == 1 ? "-red" : "")}-close", 0.8f);
@@ -186,6 +201,32 @@ public static class MutationCapture
             }
         // all of them on the move at play zoom: the black colony's stingers, web ants and armoured ants, the red colony's winged ants
         Clear();
+        if (scorpion)
+        {
+            // the plan at play zoom: armoured ants in front of her, scorpion ants and soldiers on her flanks
+            int mother = sim.Spawn(Config.Wild, AntType.Scorpion, stage + ahead * 7, heading + Mathf.Pi, 6);
+            sim.Ants[mother].Home = stage + ahead * 30;
+            var band = new System.Collections.Generic.List<int>();
+            int m = 0;
+            foreach (var t in new[] { AntType.Armoured, AntType.Armoured, AntType.ScorpionAnt, AntType.ScorpionAnt, AntType.ScorpionAnt, AntType.Soldier, AntType.Soldier, AntType.WebAnt, AntType.Worker })
+                band.Add(sim.Spawn(0, t, stage - ahead * 5 + across * (m++ * 2f - 8f), heading));
+            sim.Col[0].Evo[(int)EvoNode.DeepSting] = 0; sim.Col[0].Evo[(int)EvoNode.NerveVenom] = 0;
+            g.Camera.Cam.MakeCurrent();
+            g.Camera.JumpTo(stage + ahead * 2, 30);
+            g.SetPaused(false);
+            sim.CmdAttack(band, mother);
+            await shot("scorpion-play", 1.2f);
+            g.Camera.JumpTo(stage + ahead * 3, 15);
+            await shot("scorpion-play-near", 1.4f);
+            g.SetPaused(true);
+            foreach (var mu in new[] { Mutation.Winged, Mutation.Stinger, Mutation.Web, Mutation.Armoured, Mutation.Scorpion }) sim.Col[0].Mutations |= (int)mu;
+            sim.Col[0].Organic = 64; sim.Col[0].Evo[(int)EvoNode.DeepSting] = 1; sim.Col[0].Evo[(int)EvoNode.FlightMuscle] = 2;
+            g.Hud.Visible = true;
+            g.Hud.ToggleEvolveTree();
+            await shot("evolve-tree-scorpion", 1.2f);
+            lens.QueueFree();
+            return;
+        }
         sim.Col[0].Mutations |= (int)Mutation.Stinger; sim.Col[1].Mutations &= ~(int)Mutation.Stinger;
         var walkers = new System.Collections.Generic.List<int>();
         var along = new Vector2(Mathf.Cos(heading), Mathf.Sin(heading)); var side = new Vector2(-along.Y, along.X);

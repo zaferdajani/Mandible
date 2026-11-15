@@ -103,7 +103,7 @@ public static class LevelValidation
         if (o.Kind == Expedition.Obj.Raise && !c.Queue.Exists(q => q.Kind == ProdKind.Soldier) && s.CanEnqueue(0, ProdKind.Soldier) == QueueResult.Ok) s.Enqueue(0, ProdKind.Soldier);
         if (o.Kind == Expedition.Obj.Hatch)
         {
-            var k = (AntType)o.A switch { AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, _ => ProdKind.Soldier };
+            var k = (AntType)o.A switch { AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.ScorpionAnt => ProdKind.ScorpionAnt, _ => ProdKind.Soldier };
             Hatch(s, k, o.B + 6);
             if (c.Count[o.A] < o.B && c.Food < Config.ProdCost(k) * 2) return;
         }
@@ -115,6 +115,7 @@ public static class LevelValidation
         Hatch(s, ProdKind.Flyer, 12);
         Hatch(s, ProdKind.WebAnt, 8);
         Hatch(s, ProdKind.Armoured, 6);
+        Hatch(s, ProdKind.ScorpionAnt, 6);
         Hatch(s, ProdKind.Soldier, 60);
         if (!c.Researching)
             foreach (var u in new[] { Upgrade.Queen, Upgrade.Mandibles, Upgrade.Chitin })
@@ -221,6 +222,27 @@ public static class LevelValidation
                         var ground = army.FindAll(a => s.Ants[a].Type != AntType.Flyer);
                         if (wings.Count >= 8) s.CmdMove(wings, m.CurtainAt, true); else s.CmdMove(wings, home, false);
                         s.CmdMove(ground, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false);
+                        break;
+                    }
+                    case Expedition.Obj.Group when m.ScorpionGroup >= 0 && o.B == m.ScorpionGroup:
+                    {
+                        // the plan, not a charge: nobody goes near the stone. The army kills the beetles that graze on the
+                        // bank and waits by their carcasses; when she walks out to feed, the heavy ants take the mouth of
+                        // her burrow so she cannot go back, the web ants tie her tail, and everyone else bites
+                        if (!marching && army.Count >= gatherAt) { marching = true; strike = army.Count; }
+                        else if (marching && army.Count < Math.Max(3, strike / 3)) marching = false;
+                        if (!marching) { s.CmdMove(army, home + (s.W.Nests[1].Pos - home).Normalized() * 10, false); break; }
+                        var stone = m.GroupPos[m.ScorpionGroup];
+                        int mother = m.Groups[m.ScorpionGroup].Find(b => s.Valid(b.id, b.serial)).id;
+                        bool found = m.Groups[m.ScorpionGroup].Exists(b => s.Valid(b.id, b.serial));
+                        if (found && s.Ants[mother].Pos.DistanceTo(stone) > 8)
+                        {
+                            var heavy = army.FindAll(a => s.Ants[a].Type is AntType.Major or AntType.Armoured);
+                            var rest = army.FindAll(a => s.Ants[a].Type is not (AntType.Major or AntType.Armoured));
+                            s.CmdMove(heavy, stone, false);
+                            s.CmdAttack(rest, mother);
+                        }
+                        else s.CmdMove(army, m.BaitAt + (home - m.BaitAt).Normalized() * 4, true);
                         break;
                     }
                     case Expedition.Obj.Group:
@@ -518,6 +540,82 @@ public static class LevelValidation
             if (s.CanEvolve(0, d.Node) == EvolveResult.Ok) { new Cmd { Kind = CmdKind.Evolve, Team = 0, Arg = (byte)d.Node }.Apply(s); return; }
     }
 
+    /// `MANDIBLE_LEVELS=scorpion`: the scorpion's checks on their own (they also run inside `mutation`).
+    public static void ScorpionOnly(Main app)
+    {
+        const string path = "user://campaign_scorpion.cfg";
+        CampaignProgress.UsePath(path); CampaignProgress.Reset();
+        Scorpions(app);
+        Close();
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
+        CampaignProgress.UsePath("user://campaign.cfg");
+    }
+
+    /// The scorpion (docs/progression.md 1d): the core and its unit, the sting, the Stone Mother's rules, her chapter.
+    public static void Scorpions(Main app)
+    {
+        var t = Open(app, 9, out _);
+        var tc = t.Col[0];
+        var yard = t.W.Nests[0].Pos + (t.W.Nests[0].Pos - t.W.Nests[1].Pos).Normalized() * 30;
+        for (int pass = 0; pass < 2; pass++) for (int i = 0; i < t.High; i++) if (t.Ants[i].Alive && t.Ants[i].Team == Config.Wild) t.Slay(i); // an empty yard
+        t.Cores.Clear();
+        t.W.Food.RemoveAll(f => f.Kind == FoodKind.Corpse);
+        Check(t.CanEnqueue(0, ProdKind.ScorpionAnt) == QueueResult.Locked, "Scorpion ants could be hatched before the scorpion's core");
+        int before = tc.Mutations;
+        Deliver(t, 0, Mutation.Scorpion);
+        Check(t.Has(0, Mutation.Scorpion) && tc.Mutations == (before | (int)Mutation.Scorpion) && t.CanEnqueue(0, ProdKind.ScorpionAnt) != QueueResult.Locked, "The scorpion's core did not give the queen scorpion ants, and only them");
+        // the sting: goes between the plates, numbs, and cannot reach the air
+        int ant = t.Spawn(0, AntType.ScorpionAnt, yard, 0), plated = t.Spawn(1, AntType.Armoured, yard + new Vector2(1.2f, 0), 0, 3);
+        t.Ants[plated].State = AntState.Hold;
+        float hp = t.Ants[plated].Hp; t.Damage(plated, 10f, -1); float turned = hp - t.Ants[plated].Hp;
+        hp = t.Ants[plated].Hp; t.Damage(plated, 10f, -1, pierce: true); float through = hp - t.Ants[plated].Hp;
+        Check(turned < 7.5f && through > 9.9f, $"A piercing blow did not go between the plates ({turned:0.0} against {through:0.0})");
+        for (int k = 0; k < 150 && t.Ants[plated].NumbT <= 0; k++) { t.CmdAttack(new List<int> { ant }, plated); t.Tick(1f / 30); }
+        Check(t.Ants[plated].NumbT > 0 && t.Ants[plated].SlowT > 0 && t.Ants[ant].TailCd > 0, "A scorpion ant's sting did not numb");
+        int wasp = t.Spawn(Config.Wild, AntType.Wasp, yard + new Vector2(0, 3), 0); t.Ants[wasp].Alt = Config.CruiseAlt(AntType.Wasp);
+        Check(!t.CanReach(t.Ants[ant], t.Ants[wasp]), "A scorpion ant could reach a wasp in the air");
+        t.Slay(wasp); t.Slay(plated); t.Slay(ant);
+        t.W.Food.RemoveAll(f => f.Kind == FoodKind.Corpse);
+        // the Stone Mother under her stone: a massed charge feeds her
+        var stone = yard + (t.W.Nests[0].Pos - t.W.Nests[1].Pos).Normalized().Orthogonal() * 40;
+        int mother = t.Spawn(Config.Wild, AntType.Scorpion, stone, Mathf.Pi, 6);
+        t.Ants[mother].Home = t.Ants[mother].Anchor = stone; t.Ants[mother].State = AntState.Idle;
+        t.GiveCore(mother, Mutation.Scorpion);
+        var charge = new List<int>();
+        for (int k = 0; k < 24; k++) charge.Add(t.Spawn(0, AntType.Soldier, stone + new Vector2(-9 - k % 4, (k / 4 - 3) * 1.2f), 0));
+        for (int k = 0; k < 30 * 25; k++) { if (k % 30 == 0) t.CmdAttack(charge, mother); t.Tick(1f / 30); }
+        int left = charge.FindAll(a => t.Ants[a].Alive && t.Ants[a].Team == 0).Count;
+        Check(t.Ants[mother].Alive && t.Ants[mother].Hp > t.Ants[mother].MaxHp * 0.7f && left <= 12, $"A massed charge beat the Stone Mother under her stone (health {t.Ants[mother].Hp / t.Ants[mother].MaxHp:0.00}, {left} of 24 soldiers left)");
+        foreach (int a in charge) t.Slay(a);
+        t.W.Food.RemoveAll(f => f.Kind == FoodKind.Corpse);
+        t.Ants[mother].Hp = t.Ants[mother].MaxHp; t.Ants[mother].State = AntState.Idle; t.Ants[mother].Pos = stone;
+        for (int k = 0; k < 30 * 8; k++) t.Tick(1f / 30);
+        Check(t.Denned(t.Ants[mother]), "The Stone Mother left her stone with nothing to bring her out");
+        // meat on open ground brings her out
+        int prey = t.Spawn(Config.Wild, AntType.Beetle, stone + new Vector2(-16, 0), 0); t.Slay(prey);
+        for (int k = 0; k < 30 * 20 && t.Ants[mother].Pos.DistanceTo(stone) < 10; k++) t.Tick(1f / 30);
+        Check(t.Ants[mother].Pos.DistanceTo(stone) >= 10, "A fresh carcass on open ground did not bring the Stone Mother out");
+        // silk ties the tail: no sting while it holds
+        int web = t.Spawn(0, AntType.WebAnt, t.Ants[mother].Pos + (t.Ants[mother].Pos - stone).Normalized() * 7.2f, 0);
+        for (int k = 0; k < 30 * 6 && t.Ants[mother].PinT <= 0; k++) t.Tick(1f / 30);
+        Check(t.Ants[mother].PinT > 0, "A web ant did not tie the scorpion's tail");
+        // in the open she takes every blow in full; dead, her young spill off and the core lies in her body
+        hp = t.Ants[mother].Hp; t.Damage(mother, 100f, -1); float open = hp - t.Ants[mother].Hp;
+        Check(open > 60f, "The Stone Mother in the open shrugged off a blow as if under her stone");
+        int cores = t.Cores.Count;
+        t.Slay(mother, web);
+        int young = 0; for (int i = 0; i < t.High; i++) if (t.Ants[i].Alive && t.Ants[i].Type == AntType.Scorpling) young++;
+        Check(young == 8 && t.Cores.Count == cores + 1 && t.Cores[^1].Gives == Mutation.Scorpion, $"The Stone Mother's death did not leave her young and her core ({young} young)");
+        GD.Print("[campaign-test] PASS scorpion: the core gives scorpion ants and nothing else; the sting pierces plates and numbs; a charge at the stone fails, meat brings her out, silk ties her tail, her young spill off her body");
+        // ---- her chapter, played by the plan
+        Play(app, 9, out int stars9);
+        var s = LastSim; var m = s.Mission;
+        Check(m.Gland != null && m.Gland.Home && m.Gland.HomeTeam == 0 && s.Has(0, Mutation.Scorpion), "Wings and Acid was won without the scorpion's core");
+        Check(s.Col[0].Mutations == (Sim.StoryMutations(Reveal.Scorpion) | (int)Mutation.Scorpion), $"The queen did not take exactly the scorpion ants in Wings and Acid (mutations {s.Col[0].Mutations})");
+        Check(m.TailStings > 0, "No scorpion ant stung in Wings and Acid");
+        GD.Print($"[campaign-test] PASS Wings and Acid: the Stone Mother brought down in the open, her core carried home, {s.Col[0].Count[(int)AntType.ScorpionAnt]} scorpion ants alive, {m.TailStings} tail strikes, {m.EndTime:0}s, lost {m.EndLost}, stars {Count(stars9)}");
+    }
+
     public static void Mutations(Main app)
     {
         const string path = "user://campaign_mutation.cfg";
@@ -706,6 +804,7 @@ public static class LevelValidation
         Check(q.Has(0, Mutation.Winged) && q.Has(0, Mutation.RoyalLarva) && q.Evo(0, EvoNode.FlightMuscle) == 2 && (hemlock == null || q.Col[0].Count[(int)AntType.Warlord] > 0), "Queen Cinder's chapter did not begin with the mutations, the tree and the Warlord");
         if (hemlock != null) { int w = -1; for (int i = 0; i < q.High && w < 0; i++) if (q.Ants[i].Alive && q.Ants[i].Team == 0 && q.Ants[i].Type == AntType.Warlord) w = i; Check(q.Ants[w].Level == hemlock.Level, "The general's level did not carry over"); }
         Check(q.Col[0].PopCap >= Config.StartPopCap + Evolve.BroodRoom * (q.Col[0].T(Upgrade.Queen) - 1), "The queen's level added no room");
+        Scorpions(app); // last: its chapter writes its own harvest over the Royal Larva's
         Close();
         DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
         CampaignProgress.UsePath("user://campaign.cfg");

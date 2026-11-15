@@ -93,3 +93,11 @@ budget by `tools/asset-process.gd`. Made for this project; no third-party licenc
   Its silk hub, wrapping and beaded ring (`assets/mutation/fly_hub`) are modelled in `tools/blender/mutation_models.py` (`fly_hub()`). Made for this project.
 - The evolve tree's backdrop and ten emblems (`assets/ui/mutation/evolve_bg.jpg`, `em_*.png`): Higgsfield `gpt_image_2_6`, with the approved target
   `p6-evolve-tree.jpg` and the earlier emblems as references; the emblem sheet was cut and keyed to transparency. Made for this project.
+
+## The scorpion (2026-11-15)
+
+- `assets/bugs/scorpion/scorpion.glb`: generated for this game. Reference image by Higgsfield `gpt_image_2_6` (text prompt, target
+  P7-B's scorpion isolated on white), reconstructed with Higgsfield `tripo_h3_1_image_to_3d`, cleaned and oriented by
+  `tools/blender/scorpion_model.py`. No third-party model or photograph.
+- `assets/ui/mutation/evolve_bg.jpg` (eight tunnels), `em_deepsting.png`, `em_nervevenom.png`: Higgsfield `gpt_image_2_6`, the
+  backdrop redrawn from the earlier six-tunnel one.

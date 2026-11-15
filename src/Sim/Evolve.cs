@@ -7,7 +7,7 @@ namespace Mandible;
 /// general's levels strengthen its skills and unlock new ones (each level is a skill point); and every mutation unit
 /// the queen has gained adds its own branch. Nothing here is earned by an ant's own eating: eating heals, the tree
 /// evolves. Everything bought stays for the following chapters (ColonyRoster).
-public enum EvoNode : byte { FlightMuscle, LightShell, VenomSac, LastingVenom, Spinneret, SilkGlands, Plates, Mending }
+public enum EvoNode : byte { FlightMuscle, LightShell, VenomSac, LastingVenom, Spinneret, SilkGlands, Plates, Mending, DeepSting, NerveVenom }
 
 public enum EvolveResult { Ok, Locked, Maxed, NoOrganic }
 
@@ -26,9 +26,11 @@ public static class Evolve
         new(EvoNode.SilkGlands, Mutation.Web, "Silk Glands", "Web ants throw again 2 seconds sooner per rank.", 2, 25, 15),
         new(EvoNode.Plates, Mutation.Armoured, "Shell Plates", "Armoured ants shrug off 5% more of every blow per rank.", 3, 20, 10),
         new(EvoNode.Mending, Mutation.Armoured, "Mending Shell", "Armoured ants mend 1% of their health a second per rank, away from a fight.", 2, 25, 15),
+        new(EvoNode.DeepSting, Mutation.Scorpion, "Deep Sting", "The scorpion ants' sting numbs 1 second longer per rank, and their tails turn amber.", 2, 25, 15),
+        new(EvoNode.NerveVenom, Mutation.Scorpion, "Nerve Venom", "A numbed enemy takes 10% more from every bite per rank.", 3, 20, 10),
     };
 
-    public const int Count = 8;
+    public const int Count = 10;
     public static Def Of(EvoNode n) => Nodes[(int)n];
     public static float Cost(EvoNode n, int nextRank) => Of(n).Cost + Of(n).Step * (nextRank - 1);
 
@@ -37,6 +39,8 @@ public static class Evolve
     public const float VenomSacVenom = 0.14f, LastingVenomTime = 1.5f;   // +25% of the base 0.55 share per rank
     public const float SilkGlandsCd = 2f;
     public const float PlatesArmor = 0.05f, MendingRate = 0.01f;
+    public const float DeepStingTime = 1f, NerveVenomDmg = 0.1f;
+    public const int ScorpionRanks = 5;    // ranks in the scorpion ants' branch: the tail is black at none and amber at all (owner, 2026-11-15)
 
     /// Better brood: what each queen level above the first adds to every ant she lays from then on.
     public const float BroodHp = 0.06f, BroodBite = 0.05f;

@@ -19,7 +19,7 @@ There are two progressions. They use different things and give different rewards
 | Spider | Web ants | Throw silk, spin trap webs, live in the Spinnery above ground |
 | Fly | Winged ants | Flight |
 | Wasp | Stinger ants | The flying ants grow a wasp's venom sting (owner, 2026-11-15: "the flying ants will have stingers then") |
-| Scorpion (to build) | Ground stingers | The wasp's sting upgrades the flying ants only. Ground ants get a sting by defeating a scorpion and taking its stinger (owner, 2026-11-15). Not built: needs the scorpion, its core and an approved body target |
+| Scorpion | Scorpion ants (ground stingers) | The wasp's sting upgrades the flying ants only. Ground ants get a sting by defeating a scorpion and taking its stinger (owner, 2026-11-15). Rule: section 1d |
 | Beetle | Armoured ants | Thicker shell: higher armour and defence |
 | Mantis (later) | Mantis ants | A hybrid ant-mantis; needs a newly built body |
 
@@ -49,6 +49,42 @@ There are two progressions. They use different things and give different rewards
   see the problem, has the tools, and loses only to a bad plan. Guidance names the goal, never the solution.
 - Draw on real strategy-game craft (combined arms, tempo, scouting, economy against army, feints and flanks,
   holding a line while a strike force works) and on real ant behaviour.
+
+## 1d. The scorpion's sting: ground stingers (owner approved 2026-11-15)
+
+The owner's rule: the wasp's sting belongs to the flying ants; ground ants get theirs from a scorpion. The owner chose
+each point marked (open) below as proposed: a new caste, the piercing numbing sting, chapter 11.
+
+- **Who gets it (open).** Proposed: a new ground caste, the **scorpion ant**, grown on the soldier's body: a
+  scorpion's segmented tail arched over its back, ending in the bulb and curved sting, and the soldier's jaws kept.
+  One new unit from one core, like the web ant and the armoured ant. The alternative is that every soldier and major
+  the queen lays from then on grows the tail (the way winged ants became stingers); that needs two merged bodies per
+  colony and leaves no plain soldier.
+- **What the sting does (open).** It must not be a second copy of the wasp's venom.
+
+| | Stinger ants (wasp) | Scorpion ants (scorpion) |
+|---|---|---|
+| Where | in the air | on the ground; cannot reach anything airborne |
+| The venom | burns: damage that keeps running after the strike | numbs: the victim walks and bites 40% slower for 4 s |
+| Against a shell | armour takes its share | the sting goes between the plates: the strike ignores armour |
+| Rhythm | every strike | bites like a soldier; the tail strikes once every 5 s |
+| Best against | what heals (the Hornet Mother) and what flees | what is plated and heavy: beetles, majors, armoured ants, the Old Stag |
+| Weak to | silk, gunners | the air, acid at range, a swarm of cheap workers (one sting, one victim) |
+
+  Together they are the colony's two venoms: the ground sting holds a big enemy still and opens its shell, the
+  winged sting burns it down.
+- **The part (section 1c on main).** Each scorpion ant hatched costs one **scorpion's sting**, taken from a young
+  scorpion. Young scorpions live under stones in the dry ground from the scorpion's chapter on. NOT BUILT: the
+  parts rule is on main and this branch was cut before it; the young scorpions exist (`AntType.Scorpling`).
+- **The tree.** A seventh branch, "Scorpion ants", with two nodes: *Deep Sting* (the numbness lasts 1 s longer per
+  rank, 2 ranks) and *Nerve Venom* (a numbed enemy also takes 10% more from every bite per rank, 3 ranks). The
+  backdrop now has eight tunnels (made from target P6's backdrop): the queen, the generals, five units, and one
+  left empty for the mantis ants.
+- **The colour tells the rank (owner, 2026-11-15: "stingers start black but upgrading them turned yellow and
+  stronger").** A scorpion ant hatches with a black tail (target P8-B). Every rank bought in its branch turns the
+  tail and sting further towards amber-yellow (target P8-A at the full five ranks), so an upgraded sting is seen
+  on the field. (Read as the scorpion ants; the owner's sentence may have meant the winged stingers too.)
+- **Where the core is found (open):** chapter 11, see level-design.md section 5.
 
 ## 2. Evolution: organic matter levels up the queen and the generals
 

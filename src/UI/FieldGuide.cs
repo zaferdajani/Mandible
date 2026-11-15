@@ -547,13 +547,14 @@ public partial class FieldGuide : ColorRect
         if (t == AntType.Queen) return $"HP {st.Hp}.  Lays all brood. Feed her royal jelly (research) to unlock new castes and stronger generals.";
         var k = t switch
         {
-            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured,
+            AntType.Soldier => ProdKind.Soldier, AntType.Major => ProdKind.Major, AntType.Flyer => ProdKind.Flyer, AntType.Gunner => ProdKind.Gunner, AntType.WebAnt => ProdKind.WebAnt, AntType.Armoured => ProdKind.Armoured, AntType.ScorpionAnt => ProdKind.ScorpionAnt,
             AntType.Warlord => ProdKind.Warlord, AntType.Matron => ProdKind.Matron, AntType.Marshal => ProdKind.Marshal, _ => ProdKind.Worker,
         };
         string squad = Config.SquadSize(t) > 1 ? $"Hatches as a squad of {Config.SquadSize(t)}.  " : "";
         if (t == AntType.Flyer) squad += $"MUTATION  from {Mutations.Source(Mutation.Winged)}. With {Mutations.Source(Mutation.Stinger)}: {Mutations.Text(Mutation.Stinger)}  ";
         if (t == AntType.WebAnt) squad += $"MUTATION  from {Mutations.Source(Mutation.Web)}.  ";
         if (t == AntType.Armoured) squad += $"MUTATION  from {Mutations.Source(Mutation.Armoured)}.  ";
+        if (t == AntType.ScorpionAnt) squad += $"MUTATION  from {Mutations.Source(Mutation.Scorpion)}. Its tail is black when it hatches and turns amber as its branch of the evolve tree is bought.  ";
         if (Config.IsHero(t) && team == 0 && CampaignProgress.MetMutation) squad += "In the campaign every general is born from a royal larva.  ";
         string race = "";
         var r = Config.RaceOf(team);

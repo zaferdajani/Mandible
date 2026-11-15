@@ -256,6 +256,7 @@ The rules are in [progression.md](progression.md) and are not repeated here: a m
 | 9 The Hornet Mother | spider, web ants | wasps in the air cannot be touched from the ground; the hornet raids only break once silk brings them down | the silk spitter (level 4) and two spiders in a hollow strung with permanent silk that roots a massed charge |
 | 9 The Hornet Mother | wasp, stinger ants | the Hornet Mother regrows 6% of her health a second unless venom is in her | her sentinel (level 4) and three hornets hold the road to the paper nest; they are fought with web ants and winged ants together |
 | 10 The Dry Spell | beetle, armoured ants | eight red gunners hold the approach to the red mound | a level-5 beetle and its brood hold the last seep; the red colony sends parties for the same core and raids along its road home |
+| 11 Wings and Acid | scorpion, scorpion ants | the red watch posts that shield the queen are held by red armoured ants and majors; jaws barely mark their plates, and only a sting that goes between the plates opens the posts | the Stone Mother, a level-6 scorpion under a flat stone on the dry bank. One strike of her tail kills any ant in front of her, her claws hold two more, and hurt she backs under the stone and heals. See below |
 
 Guidance names the goal only. No objective text tells the player how to beat a guardian.
 
@@ -308,6 +309,40 @@ From then on, **generals in the campaign come only this way**: the Generals tab 
 4. **Spend in the evolve tree** (one rank or level).
 5. **Kill the red queen.**
 
+### Chapter 11, Wings and Acid: the Stone Mother (owner approved 2026-11-15)
+
+The scorpion is the hardest guardian so far and the first that uses every mutation unit the colony owns. Real
+behaviour carries the design: a scorpion hides under a stone by day and comes out for prey, grips with its claws and
+stings what it holds in front of it, and a mother carries her young on her back.
+
+- **Under the stone she cannot be beaten.** Only three ants fit the mouth of her burrow at once, she kills one with
+  each strike, and she heals there. A massed charge feeds her.
+- **She comes out for meat.** A fresh carcass on open ground within 26 units of the stone brings her out to feed
+  (`Sim.Bait`). Beetles graze on the bank inside that reach: killed there and left where they fall, they are the
+  bait. That is the moment to strike, and it costs the colony the remains it would have hauled home. (As built:
+  the colony cannot yet drag a carcass to a chosen spot, only home, so the bait is made where the prey stands.)
+- **Her front is death, her tail can be tied.** The tail strikes only in an arc ahead of her. Armoured ants are the
+  only caste that survives the claws, so they hold her front. Web ants throw silk over the tail: while it is pinned
+  (`Ant.PinT`) she cannot sting. Soldiers and majors bite from the flanks and behind. Winged stingers' venom keeps
+  burning while she turns.
+- **She runs for the stone at 35% health.** If nothing blocks the burrow she heals to full and the bait is spent.
+  Majors or armoured ants standing in the mouth keep her out (`Sim.DenBlocked`).
+- **The young.** When she dies the brood on her back spills off: eight young scorpions (`AntType.Scorpling`) that
+  come for the core once it moves (`Mutations.LureRange`). The escort home is the second fight. Their stings as the
+  part each scorpion ant costs wait for the parts rule (section 1c on main) to be merged with this branch.
+- **The rival.** A red party comes for the same core (`Expedition.RivalWantsCore`); the red armoured ants at the
+  posts are what the new unit is then used on.
+
+Steps as built (`Levels.cs` case 9): 1. **Hatch winged ants** (the chapter's old first step). 2. **Bring down the
+Stone Mother.** 3. **Cut out the scorpion's core.** 4. **Carry the core to the queen.** 5. **Hatch scorpion ants**
+(three). 6. **Burn the watch posts** (each now has two red armoured ants of level 3). 7. **Kill the red queen.**
+Stars: under 27:00 (was 20:00), lose no more than 70 ants (was 50). Guidance names the goals only; that she comes out for meat is learned from a dead beetle the
+level leaves near the stone at the start, which she walks out and eats.
+
+**(open)** The chapter: 11 is proposed because it has no core of its own and its watch posts give the sting a job.
+The alternatives are chapter 10 (the dry ground suits a scorpion, but it already holds the beetle's core) or a new
+chapter of its own.
+
 ### Start areas
 
 - No wasp lair lies within `Config.WaspFloor` (115) of a starting nest in any mode. Lairs nearer the nests that used to hold wasps hold spiders or beetles instead, so the first prey is never a flyer.
@@ -326,7 +361,7 @@ The older visuals of the track were built against targets **H1-H5**, approved by
 
 ### Tests
 
-`MANDIBLE_LEVELS=mutation` runs `LevelValidation.Mutations` alone: the Silk Trap and the Royal Larva played by the scripted player; one core one unit and no colony boost; the wasp's core waiting for the fly's; a second core eaten; a rank, a general's level and the queen's better brood bought with organic matter; a massed charge held by the web's silk; the red burial party carrying Ashling's core home when nobody stops it; the larva devoured; old Burr's cocoon; mutations and tree ranks carried into the next chapter; a roster from before the rework refused.
+`MANDIBLE_LEVELS=mutation` runs `LevelValidation.Mutations` alone: the Silk Trap and the Royal Larva played by the scripted player; one core one unit and no colony boost; the wasp's core waiting for the fly's; a second core eaten; a rank, a general's level and the queen's better brood bought with organic matter; a massed charge held by the web's silk; the scorpion (`LevelValidation.Scorpions`, alone with `MANDIBLE_LEVELS=scorpion`): its core gives scorpion ants and nothing else, the sting pierces plates and numbs, a charge at the stone fails, meat brings her out, silk ties her tail, her young spill off her body, and Wings and Acid is won by the plan; the red burial party carrying Ashling's core home when nobody stops it; the larva devoured; old Burr's cocoon; mutations and tree ranks carried into the next chapter; a roster from before the rework refused.
 
 ## 6. How it is built
 

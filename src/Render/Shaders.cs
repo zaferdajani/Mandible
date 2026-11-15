@@ -64,6 +64,7 @@ shader_type spatial;
 render_mode depth_draw_opaque, cull_disabled; // a scanned shell can stay open where a limb was cut: show its inside, not the soil
 " + Under + @"
 uniform vec3 body_color : source_color = vec3(0.03, 0.026, 0.024);
+uniform float tail_amber = 0.0; // scorpion ants: 0 a black tail as hatched, 1 amber with the whole branch bought
 uniform vec3 head_color : source_color = vec3(0.035, 0.03, 0.028);
 uniform vec3 gaster_color : source_color = vec3(0.025, 0.022, 0.02);
 uniform vec3 leg_color : source_color = vec3(0.06, 0.045, 0.035);
@@ -432,6 +433,20 @@ void fragment() {
             float hair = hash3(floor(v_local * 320.0));
             c = mix(gaster_color, vec3(0.3, 0.23, 0.17), 0.4) * (0.7 + 0.6 * hair) + vec3(0.05, 0.04, 0.03) * (0.4 + 1.6 * fres); // paler than any ant's gaster
             rough = 0.9; cc = 0.0; BACKLIGHT = vec3(0.12, 0.08, 0.05);
+        } else if (kind == 7.0) {
+            // a scorpion's tail grown out of the gaster: uv.x runs from the root to the point of the sting, uv.y along
+            // each segment. It hatches in the ant's own dark shell, warming to chestnut at the last segments (target
+            // P8-B); tail_amber, the colony's ranks in the scorpion branch, turns it amber-yellow (P8-A)
+            float tt = v_uv.x;
+            vec3 young = mix(gaster_color * 1.15 + vec3(0.012, 0.007, 0.004), vec3(0.2, 0.07, 0.025), smoothstep(0.5, 0.95, tt));
+            vec3 amber = mix(vec3(0.16, 0.05, 0.012), vec3(0.5, 0.21, 0.025), smoothstep(0.0, 0.9, tt));
+            c = mix(young, amber, tail_amber) * (0.7 + 0.6 * vnoise(v_local * 150.0));
+            float joint = smoothstep(0.0, 0.14, min(v_uv.y, 1.0 - v_uv.y));
+            c *= 0.5 + 0.5 * joint;                                              // the dark seams between the segments
+            c = mix(c, vec3(0.02, 0.012, 0.008), smoothstep(0.955, 1.0, tt));    // the point of the sting is black
+            c += vec3(0.1, 0.05, 0.015) * pow(fres, 2.5) * (0.4 + 0.6 * tail_amber);
+            rough = mix(0.5, 0.28, tail_amber); cc = 0.2 + 0.4 * tail_amber;
+            BACKLIGHT = vec3(0.5, 0.2, 0.02) * tail_amber * 0.5;
         }
     }
     if (part == 14.0) {

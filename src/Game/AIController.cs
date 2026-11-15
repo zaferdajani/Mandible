@@ -301,6 +301,7 @@ public sealed class AIController : IColonyAI
         else if (Config.Unlocked(ProdKind.Flyer, c.Tier, c.Mutations) && flyers * 5 < soldiers) pick = ProdKind.Flyer;
         else if (Config.Unlocked(ProdKind.WebAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.WebAnt] * 8 < soldiers) pick = ProdKind.WebAnt;
         else if (Config.Unlocked(ProdKind.Armoured, c.Tier, c.Mutations) && c.Count[(int)AntType.Armoured] * 5 < soldiers) pick = ProdKind.Armoured;
+        else if (Config.Unlocked(ProdKind.ScorpionAnt, c.Tier, c.Mutations) && c.Count[(int)AntType.ScorpionAnt] * 6 < soldiers) pick = ProdKind.ScorpionAnt;
         else pick = ProdKind.Soldier;
         Q(pick); // a major simply waits until the food is there
     }

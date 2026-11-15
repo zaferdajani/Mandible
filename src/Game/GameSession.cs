@@ -410,6 +410,7 @@ public partial class GameSession : Node3D
         ProdKind.Marshal => "The Sky Marshal needs an Ancient Empress and winged ants",
         ProdKind.WebAnt => "Web ants need a spider's mutation core, carried to the queen",
         ProdKind.Armoured => "Armoured ants need a beetle's mutation core, carried to the queen",
+        ProdKind.ScorpionAnt => "Scorpion ants need a scorpion's mutation core, carried to the queen",
         _ => "Winged ants need a fly's mutation core, carried to the queen",
     };
 

@@ -112,6 +112,7 @@ public static class AntMesh
     /// detail would be sub-pixel. `team` picks the species; `detail` overrides the level (Near for close-ups).
     public static ArrayMesh Build(AntType type, bool far = false, int team = 0, Detail? detail = null)
     {
+        if (ScorpionModel.Is(type)) return ScorpionModel.Mesh() ?? Beetle(false); // the scan; a beetle only if the file is missing
         if (type == AntType.Beetle) return Beetle(false);
         if (type == AntType.StagBeetle) return Beetle(true);
         if (type == AntType.Spider) return Spider();

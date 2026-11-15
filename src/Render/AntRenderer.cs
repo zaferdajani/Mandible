@@ -172,6 +172,9 @@ public sealed class AntRenderer
     /// The batch a creature is drawn in: its caste's, or for a winged ant of a colony with the sting, the stinger's.
     Batch BatchOf(Batch[,] set, Batch[] sting, int team, AntType type) =>
         type == AntType.Flyer && team is 0 or 1 && sting[team] != null && _sim != null && _sim.Has(team, Mutation.Stinger) ? sting[team] : set[team, (int)type];
+    // the scorpion ants' tails: black as hatched, amber with their branch of the evolve tree bought (the owner, 2026-11-15)
+    readonly ShaderMaterial[,] _tailMats = new ShaderMaterial[2, 2];
+    public static float TailAmber(Sim sim, int team) => Mathf.Clamp((sim.Evo(team, EvoNode.DeepSting) + sim.Evo(team, EvoNode.NerveVenom)) / (float)Evolve.ScorpionRanks, 0f, 1f);
     readonly Batch _cocoons, _webs, _blobs, _pools;
 
     readonly Batch _pips;
@@ -191,6 +194,7 @@ public sealed class AntRenderer
                 var mesh = AntMesh.Build((AntType)t, false, team);
                 var mat = AntMat(shader, team, (AntType)t, false);
                 var dmat = AntMat(shader, team, (AntType)t, true);
+                if ((AntType)t == AntType.ScorpionAnt && team < 2) { _tailMats[team, 0] = mat; _tailMats[team, 1] = dmat; }
                 _live[team, t] = new Batch(root, mesh, mat, true, $"Ants{team}_{t}");
                 _dead[team, t] = new Batch(root, mesh, dmat, true, $"Dead{team}_{t}");
                 if (team != Config.Wild && !Config.IsHero((AntType)t) && t != (int)AntType.Queen)
@@ -304,6 +308,7 @@ public sealed class AntRenderer
 
     internal static ShaderMaterial AntMat(Shader s, int team, AntType type, bool dead)
     {
+        if (ScorpionModel.Is(type)) return ScorpionModel.Material(type, dead);
         var m = new ShaderMaterial { Shader = s };
         if (team == Config.Wild)
         {
@@ -358,6 +363,8 @@ public sealed class AntRenderer
 
     public void Update(Sim sim, Camera3D cam, float alpha = 1f)
     {
+        for (int tm = 0; tm < 2; tm++)
+            for (int k = 0; k < 2; k++) _tailMats[tm, k]?.SetShaderParameter("tail_amber", TailAmber(sim, tm));
         _sim = sim;
         foreach (var b in _live) b?.Begin();
         for (int k = 0; k < 2; k++) { _stingLive[k]?.Begin(); _stingFar[k]?.Begin(); _stingClose[k]?.Begin(); _stingDead[k]?.Begin(); }

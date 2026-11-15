@@ -342,6 +342,7 @@ public partial class PlayerInput : Node
             case Godot.Key.Q: Game.TryResearch(Upgrade.Queen); return;
             case Godot.Key.W: Game.TryEnqueue(ProdKind.WebAnt); return;
             case Godot.Key.M: Game.TryEnqueue(ProdKind.Armoured); return;
+            case Godot.Key.K: Game.TryEnqueue(ProdKind.ScorpionAnt); return;
             case Godot.Key.P: Game.Hud.ToggleEvolveTree(); return;
             case Godot.Key.E: Game.TryResearch(Upgrade.Mandibles); return;
             case Godot.Key.R: Game.TryResearch(Upgrade.Chitin); return;
