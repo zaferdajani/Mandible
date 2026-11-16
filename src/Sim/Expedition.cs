@@ -102,8 +102,8 @@ public sealed partial class Expedition
         ExpeditionStage.Alone => "The tube fell and broke, and old Burr was thrown clear. Click Burr to select him, then right-click the ground to walk. A soldier of his colony lies stunned just down the alley: walk Burr up to her.",
         ExpeditionStage.Gather => $"A stunned ant wakes when a nestmate walks up to it, and follows. Find the rest of Burr's soldiers along the alley. Woken: {Joined}/{SoldierSpots.Length}.",
         ExpeditionStage.ClearTrail => "Press F2 to select Burr's soldiers. A ground beetle blocks the alley: right-click it, or press A and click beyond it. Its shell is hard, so attack together.",
-        ExpeditionStage.FreeQueen => "The queen and her workers are alive inside the broken tube, shut in: the cotton plug and packed sand stop its mouth. Bring Burr's soldiers to the mouth (F2, then right-click it): "
-            + $"ants beside it dig. One ant alone is very slow; every extra pair of jaws digs faster. Dug open: {(int)Dug}%.",
+        ExpeditionStage.FreeQueen => "The queen and her workers are alive inside the broken tube, shut in: the cotton plug and packed sand stop its mouth. Click the tube's mouth and every ant comes to dig: "
+            + $"they tear at it in turns. One ant alone is very slow; every extra pair of jaws digs faster. Dug open: {(int)Dug}%.",
         ExpeditionStage.EscortQueen => "With your attackers selected, right-click the food clearing. The queen and workers follow them along the protected trail.",
         ExpeditionStage.Provision => "Why wait? A queen won't found a nest until the site holds food and protein for her first brood, and the fall lost everything the tube held. "
             + StockNeeded + ". "
@@ -111,7 +111,7 @@ public sealed partial class Expedition
                            : "Workers are gathering: the nest can be dug as soon as both bars are full."),
         ExpeditionStage.DigEntrance => "The site is stocked. Press DIG THE NEST at the top (or Enter): the workers at the clearing dig the shaft and the royal chamber.",
         ExpeditionStage.RoyalChamber => "Workers are excavating. The queen will enter the royal chamber as soon as it is ready.",
-        ExpeditionStage.Incubator => "Press N, choose Brood Chamber, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
+        ExpeditionStage.Incubator => "Press N, choose Incubator, then click beside the royal chamber. This incubator hatches eggs and adds 50 population capacity.",
         ExpeditionStage.Store => "Choose Storage and click beside a connected room. Workers gather seeds and insect protein and carry them home.",
         ExpeditionStage.RaiseWorkers => $"Hatch {WorkerGoal} new workers with Z or the Worker portrait. Hatched: {WorkersHatched}/{WorkerGoal}. New workers leave the incubator and gather food.",
         ExpeditionStage.RaiseSoldiers => $"Hatch one squad with X or the Soldier portrait. Hatched: {SoldiersHatched}/{SoldierGoal}. This episode ends when your colony can support its first army.",
@@ -359,10 +359,22 @@ public sealed partial class Sim
             ref var a = ref Ants[i];
             if (!a.Alive || a.Team != 0 || a.Dormant || a.State == AntState.Engage || a.Pos.DistanceSquaredTo(Expedition.DigSite) > r2) continue;
             n++;
-            if (a.Speed > 0.5f) continue;
-            // jaws in the plug: they face it and bite at it, each to its own beat
+            // each digger has a place in a fan around the plug and works in turns: it tears at the cotton and sand
+            // for a few seconds, then backs out a few steps with its mouthful and comes in again
+            int turn = (Ticks + i * 53) % 210;
+            bool hauling = turn >= 150;
+            float fan = ((i * 5) % 7 - 3) * 0.42f;
+            var outward = (Expedition.DigSite - site).Normalized();
+            var side = new Vector2(-outward.Y, outward.X);
+            var slot = site + outward * (hauling ? 3.4f : 0.9f + (i % 2) * 0.55f) + side * fan * (hauling ? 2.2f : 1f);
+            if (a.State is AntState.Idle or AntState.Hold or AntState.Move && a.Goal.DistanceSquaredTo(Expedition.DigSite) < r2)
+            {
+                if (a.Pos.DistanceSquaredTo(slot) > 0.2f) { a.State = AntState.Move; a.Goal = slot; a.GoalLayer = 0; }
+            }
+            if (a.Speed > 0.5f || hauling) continue;
+            // jaws in the plug: it faces it and bites, each to its own beat
             a.Heading = (site - a.Pos).AngleD();
-            if ((Ticks + i * 7) % 24 == 0) a.AttackAnim = 1f;
+            if ((Ticks + i * 7) % 11 == 0) a.AttackAnim = 1f;
         }
         m.Diggers = n;
         m.Dug = Mathf.Min(100f, m.Dug + Expedition.DigRate(n) * dt);

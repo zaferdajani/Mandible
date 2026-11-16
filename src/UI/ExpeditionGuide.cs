@@ -70,7 +70,7 @@ public partial class ExpeditionGuide : PanelContainer
             {
                 guiding = true;
                 Game.Guide.Show(Expedition.DigSite, $"THE TUBE'S MOUTH · DIG TOGETHER · {(int)m.Dug}%",
-                    m.Diggers == 1 ? "One ant alone is very slow: bring everyone" : Settings.Mobile ? "Tap Army, then tap here: ants at the mouth dig it open" : "Soldiers (F2), then right-click here: ants at the mouth dig it open");
+                    m.Diggers == 1 ? "One ant alone is very slow: bring everyone" : Settings.Mobile ? "Tap here: everyone comes and digs it open" : "Click here: everyone comes and digs it open");
             }
             else if (m.Stage == ExpeditionStage.ClearTrail && beetle >= 0)
             {
@@ -189,7 +189,7 @@ public partial class ExpeditionGuide : PanelContainer
         ("(F3, then right-click the glowing gland)", "(tap Workers, then tap the glowing gland)"),
         ("(F2, then right-click her)", "(tap Army, then tap her)"),
         ("Press F3 to select workers, then click Dig entrance below.", "Tap Workers to select them, then tap Dig entrance below."),
-        ("Press N, choose Brood Chamber, then click beside the royal chamber.", "Tap Build, choose Brood Chamber, then tap beside the royal chamber."),
+        ("Press N, choose Incubator, then click beside the royal chamber.", "Tap Build, choose Incubator, then tap beside the royal chamber."),
         ("Choose Storage and click beside a connected room.", "Choose Storage and tap beside a connected room."),
         (" with Z or the Worker portrait", " with the Worker portrait"),
         (" with X or the Soldier portrait", " with the Soldier portrait"),

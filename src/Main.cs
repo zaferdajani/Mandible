@@ -30,6 +30,7 @@ public partial class Main : Node
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
             if (a == "--still-menu") _stillMenu = true;
+            if (a.StartsWith("--probe-look=")) { var pl = a["--probe-look=".Length..].Split(','); _probeLook = new Vector2(float.Parse(pl[0]), float.Parse(pl[1])); if (pl.Length > 2) _probeDist = float.Parse(pl[2]); }
             if (a.StartsWith("--probe-shot=")) { var ps = a["--probe-shot=".Length..].Split('@'); _probeShot = ps[0]; _probeFrame = ps.Length > 1 ? int.Parse(ps[1]) : 30; }
             if (a.StartsWith("--layout=")) _layout = a.Substring(9);
             if (a == "--mobile") Settings.ForceMobile = true;
@@ -87,7 +88,7 @@ public partial class Main : Node
         ShowMenu();
         GD.Print($"[startup] menu built at {Time.GetTicksMsec()} ms");
         int drawn = 0;
-        void Drawn() { drawn++; if (drawn == 1 || drawn == 30) GD.Print($"[startup] frame {drawn} drawn at {Time.GetTicksMsec()} ms"); if (_probeShot != null && drawn == _probeFrame) GetViewport().GetTexture().GetImage().SaveJpg(_probeShot, 0.9f); if (drawn == System.Math.Max(30, _probeFrame + 1)) { RenderingServer.FramePostDraw -= Drawn; if (args.Contains("--startup-probe")) GetTree().Quit(); } }
+        void Drawn() { drawn++; if (_probeLook is { } pl && drawn == 5 && _session != null) { _session.Sim.SkipOpening(); _session.Camera.Focus = new Vector3(pl.X, 0, pl.Y); _session.Camera.PanTo(pl); _session.Camera.Distance = _session.Camera.TargetDistance = _probeDist; } if (drawn == 1 || drawn == 30) GD.Print($"[startup] frame {drawn} drawn at {Time.GetTicksMsec()} ms"); if (_probeShot != null && drawn == _probeFrame) GetViewport().GetTexture().GetImage().SaveJpg(_probeShot, 0.9f); if (drawn == System.Math.Max(30, _probeFrame + 1)) { RenderingServer.FramePostDraw -= Drawn; if (args.Contains("--startup-probe")) GetTree().Quit(); } }
         RenderingServer.FramePostDraw += Drawn;
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
@@ -179,7 +180,7 @@ public partial class Main : Node
     /// phone cool and the battery full while the player reads the menu.
     public bool StillMenu => (OS.HasFeature("mobile") || _stillMenu) && !TestRun;
     bool _stillMenu;
-    string _probeShot; int _probeFrame = 30;
+    string _probeShot; int _probeFrame = 30; Vector2? _probeLook; float _probeDist = 34; // --probe-look=x,z[,distance]: point the camera there before the shot
 
     public void ShowMenu()
     {

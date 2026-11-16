@@ -136,7 +136,7 @@ public partial class Tutorial : Control
             "Each food has a different effect: sugar speeds workers, fruit heals, insect protein makes the queen lay faster. Your race also prefers some foods.",
             () => Game.Input.InspectFood != null, () => NearestFood(nest));
         Add("Dig a brood chamber",
-            "Open build mode (click the hole or press N), press V or the Brood Chamber button, then click the ground where the room should go: the ring is green within reach of the entrance or another room. Workers dig a gallery to it and the room itself.",
+            "Open build mode (click the hole or press N), press V or the Incubator button, then click the ground where the room should go: the ring is green within reach of the entrance or another room. Workers dig a gallery to it and the room itself.",
             "Every room must connect to the tunnel network, like roads in a Settlers town. Brood chambers set how many ants you can keep (BROOD in the top bar); stores (L) set how much food you can hold. Click a room under the roof to see what it holds. Esc cancels a placement.",
             () => Sim.ChamberCount(Local.Me, ChamberKind.Brood, false) > _startCount,
             begin: () => _startCount = Sim.ChamberCount(Local.Me, ChamberKind.Brood, false));

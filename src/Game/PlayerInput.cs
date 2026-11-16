@@ -580,6 +580,23 @@ public partial class PlayerInput : Node
             if (room >= 0) { SetSelection(new List<int>()); SelectedRoom = room; Game.Audio.Ui("ui_click", -6); return; }
             if (dn < 7) { SelectNest(false); return; }
         }
+        // the opening: one click on the tube's blocked mouth sends every awake ant to dig it open
+        if (Sim.Mission is { Episode: 1, Stage: ExpeditionStage.FreeQueen } && Cam.ScreenToGround(screen, out var tg) && new Vector2(tg.X, tg.Z).DistanceTo(Expedition.DigSite) < 4.5f)
+        {
+            var diggers = new List<int>();
+            for (int i = 0; i < Sim.High; i++) if (Sim.Ants[i].Alive && Sim.Ants[i].Team == Local.Me && !Sim.Ants[i].Dormant && Sim.Ants[i].Type != AntType.Queen) diggers.Add(i);
+            if (diggers.Count > 0)
+            {
+                SetSelection(diggers);
+                var dc = Cmd.Units(CmdKind.Move, Local.Me, diggers, Sim);
+                dc.P = Expedition.DigSite;
+                Game.Issue(dc);
+                Game.Ants.Ack(diggers, Expedition.DigSite);
+                Game.Effects.Marker(Game.World.HF.Point(Expedition.DigSite), new Color(1f, 0.85f, 0.4f));
+                Speak(diggers, true);
+                return;
+            }
+        }
         if (!shift) SetSelection(new List<int>());
         // clicking an enemy or wild bug shows its details
         int other = Pick(screen, false);

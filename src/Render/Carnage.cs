@@ -247,6 +247,15 @@ public sealed class Carnage
         }
     }
 
+    /// How far a carcass on its back must be raised to lie ON the ground: the bulky bugs are much deeper through the
+    /// body than an ant, and at an ant's lift half of them sank into the sand (owner, 2026-11-16).
+    static float BodyLift(AntType t) => t switch
+    {
+        AntType.Beetle or AntType.StagBeetle or AntType.Scorpion or AntType.Armoured => 2.0f,
+        AntType.Spider or AntType.Wasp or AntType.Scorpling or AntType.Major or AntType.Warlord => 1.6f,
+        _ => 1.25f,
+    };
+
     /// Every frame: droplets fly and land, stains soak in, severed limbs twitch and settle, the wounded leak, and
     /// every carcass and the midden are drawn through the ant renderer's dead batches.
     public void Draw(Sim sim, AntRenderer ants, Func<Vector2, bool> visible)
@@ -358,7 +367,7 @@ public sealed class Carnage
                 var pc = look.Pieces[k];
                 var b = AntRenderer.Orient(n, f.Heading + pc.Yaw, s);
                 if (pc.Flip) b = new Basis(-b.X, -b.Y, b.Z);
-                var o = new Vector3(p.X, floor, p.Y) + frame * pc.Off + n * (pc.Raise * s);
+                var o = new Vector3(p.X, floor, p.Y) + frame * pc.Off + n * (pc.Raise * s * BodyLift(f.AntType));
                 ants.AddDead(f.Team, f.AntType, b, o, DeadData(f.Id * 5 + k, look.Born, pc.Mask), f.Sting);
             }
         }

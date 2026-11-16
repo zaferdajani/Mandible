@@ -172,15 +172,97 @@ def voice(r, dur, f0, f1, formants, rough=0.3, jitter=0.04, breath=0.2, vib=0.0,
 
 
 # ------------------------------------------------------------------ the kingdom
-# Every caste has a throat of its own on top of its mechanics (owner, 2026-11-15: "ant sounds should be unique to each").
-# What tells them apart, by ear: pitch (worker highest, stag lowest), how the pitch moves, how long, and the rhythm.
+# Owner, 2026-11-16: the calls sounded like spitting (breath and acid hiss in every one). The ants are rebuilt from
+# three ingredients with no breath or hiss in them: cricket chirps (chirp), slow chitin creaks (creak) and wet,
+# sticky gurgles (goo), over a low growl for the big ones (growl): crickety, gooey, monstrous.
+# What tells the castes apart, by ear: the chirp's pitch (worker highest, Warlord lowest), its rhythm, and how much
+# creak, goo and growl sits under it.
 SOLDIER = [(1700, 10, 1.0), (2900, 8, 0.6), (4300, 6, 0.3)]
 MAJOR = [(420, 9, 1.0), (760, 8, 0.7), (1300, 6, 0.4)]
 WARLORD = [(300, 10, 1.0), (560, 9, 0.8), (980, 7, 0.5), (2100, 5, 0.25)]
 
 
+def chirp(r, carrier, syllables, syl=0.03, gap=0.022, teeth=9, q=28, drift=0.0, harsh=0.0):
+    """A cricket chirp: each syllable is one stroke of the file, a short run of teeth ringing a wing that sings
+    at `carrier`. drift bends the pitch across the chirp; harsh adds a rougher second mode a fifth above."""
+    out = []
+    for i in range(syllables):
+        n = int(syl * SR * r.uniform(0.85, 1.15))
+        e = np.zeros(n + int(0.03 * SR))
+        step = n / teeth
+        for k in range(teeth):
+            s = int(k * step * r.uniform(0.9, 1.1))
+            if s + 3 <= len(e):
+                e[s:s + 3] += r.uniform(0.6, 1.0) * np.array([1.0, -0.6, 0.2])
+        f = carrier * (1 + drift * (i / max(1, syllables - 1) - 0.5)) * r.uniform(0.985, 1.015)
+        y = nrm(resonator(e, f, q))
+        if harsh:
+            y = nrm(y + nrm(resonator(e, f * 1.5, q * 0.6)) * harsh)
+        y[:n] *= np.sin(np.pi * np.linspace(0, 1, n)) ** 0.5
+        y[n:] *= np.exp(-np.linspace(0, 6, len(y) - n))
+        out.append((i * (syl + gap) * r.uniform(0.95, 1.05), y, r.uniform(0.8, 1.0)))
+    return nrm(mix(out))
+
+
+def creak(r, dur, rate0, rate1, modes, jitter=0.3):
+    """Chitin plates grinding: slow, uneven teeth through low, ringing modes. A door of shell opening."""
+    n = int(dur * SR)
+    e = np.zeros(n + SR // 6)
+    t = r.uniform(0, 0.01)
+    while t < dur:
+        k = t / dur
+        s = int(t * SR)
+        ln = int(r.uniform(0.0008, 0.002) * SR)
+        e[s:s + ln] += np.hanning(ln) * r.uniform(0.5, 1.0) * np.sin(np.pi * min(1, k + 0.05)) ** 0.5
+        t += (1.0 / (rate0 + (rate1 - rate0) * k)) * (1 + r.uniform(-jitter, jitter))
+    y = np.zeros_like(e)
+    for f, q, g in modes:
+        y += nrm(resonator(e, f * r.uniform(0.97, 1.03), q)) * g
+    return nrm(lp(y, 5000))
+
+
+def goo(r, dur, low=180, high=900, pops=6, thick=0.5):
+    """Wet and sticky: a thick gurgle whose mouth opens and closes, with bubbles that swell and burst in it.
+    No hiss: nothing above a few kHz."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    # the gurgle: a slow irregular flutter of low pulses through a moving formant
+    x = np.zeros(n + 2000)
+    tt = r.uniform(0, 0.01)
+    while tt < dur:
+        ln = int(r.uniform(0.004, 0.009) * SR)
+        s = int(tt * SR)
+        x[s:s + ln] += np.hanning(ln) * r.uniform(0.4, 1.0)
+        tt += r.uniform(0.012, 0.03) * (1.3 - thick)
+    x = x[:n]
+    k = 0.5 + 0.5 * np.sin(2 * np.pi * r.uniform(2.5, 5) * t + r.uniform(0, 6))
+    y = nrm(resonator(x, low * 1.6, 5)) * (1 - k) + nrm(resonator(x, high, 6)) * k
+    y = nrm(lp(y, 2600))
+    for _ in range(pops):
+        ln = int(r.uniform(0.02, 0.05) * SR)
+        s = int(r.uniform(0, max(0.01, dur - 0.06)) * SR)
+        if s + ln >= n:
+            continue
+        bt = np.arange(ln) / SR
+        f = r.uniform(low * 1.5, high * 1.4)
+        ph = 2 * np.pi * f * (bt + 1.2 * bt * bt / (ln / SR))  # a bubble rises in pitch until it bursts
+        y[s:s + ln] += np.sin(ph) * np.hanning(ln) ** 0.4 * r.uniform(0.4, 0.9)
+    env = np.minimum(1, t / 0.02) * np.clip((dur - t) / (dur * 0.35), 0, 1)
+    return nrm(y * env)
+
+
+def growl(r, dur, f0, f1, mouth, trem=0.0, trem_hz=18):
+    """The monster under the insect: a rough low throat with every other pulse weak, and no breath in it."""
+    return voice(r, dur, f0, f1, mouth, 0.6, 0.08, 0.0, trem=trem, trem_hz=trem_hz, attack=0.03, release=min(0.2, dur * 0.4), bend=0.7)
+
+
+def snap(r, modes, burst=0.004):
+    """Jaws or shell: a knock into chitin modes with no bright spit on top."""
+    return clack(r, modes, burst, 0.08)
+
+
 def worker(r, v, ack):
-    # small and eager: two or three high pips, each sliding up
+    # small and eager (the owner likes these as they are: unchanged): two or three high pips, each sliding up
     mouth = [(2400, 8, 1), (3800, 7, 0.6)]
     def pip(f, d=0.055):
         return voice(r, d, f, f * 1.45, mouth, 0.05, 0.02, 0.1, attack=0.006, release=0.03)
@@ -191,128 +273,133 @@ def worker(r, v, ack):
 
 
 def soldier(r, v, ack):
-    # a short hard bark with a jaw snap in front of it: "kra!"
-    mouth = [(900, 6, 1), (1700, 7, 0.8), (2900, 6, 0.4)]
-    def bark(d, f=300):
-        return voice(r, d, f, f * 0.62, mouth, 0.45, 0.06, 0.3, attack=0.008, release=0.06, bend=0.6)
+    # harder and lower: a harsh chirp with a jaw knock in front and a short creak of the head plates
+    plates = [(620, 14, 1), (1100, 10, 0.6), (1900, 8, 0.3)]
     if ack:
-        return mix([(0, clack(r, SOLDIER), 0.6), (0.03, bark(0.13, 320 + 20 * v), 1.0)])
+        return mix([(0, snap(r, SOLDIER), 0.6), (0.03, chirp(r, 3100 + 120 * v, 2, 0.03, 0.02, 8, 22, harsh=0.4), 1.0)])
     if v == 0:
-        return mix([(0, clack(r, SOLDIER), 0.6), (0.04, bark(0.2), 1.0)])
+        return mix([(0, snap(r, SOLDIER), 0.6), (0.04, chirp(r, 3000, 3, 0.032, 0.022, 8, 22, harsh=0.4), 1.0), (0.05, creak(r, 0.18, 40, 90, plates), 0.45)])
     if v == 1:
-        return mix([(0, bark(0.11, 330), 1.0), (0.16, bark(0.17, 290), 1.0), (0.14, clack(r, SOLDIER), 0.5)])
-    return mix([(0, clack(r, SOLDIER), 0.6), (0.09, clack(r, SOLDIER), 0.5), (0.13, bark(0.22, 280), 1.0)])
+        return mix([(0, creak(r, 0.16, 90, 45, plates), 0.5), (0.1, chirp(r, 3200, 2, 0.034, 0.02, 8, 22, -0.05, 0.4), 1.0), (0.24, snap(r, SOLDIER), 0.55)])
+    return mix([(0, snap(r, SOLDIER), 0.6), (0.08, snap(r, SOLDIER), 0.5), (0.13, chirp(r, 2850, 4, 0.028, 0.02, 8, 22, harsh=0.45), 1.0)])
 
 
 def silk(r, v, ack):
-    # the web ant: a thin rising "zip" of silk through the spinneret, twice, over a fast dry trill
-    trill = scrape(r, 0.1 if ack else 0.16, 70, 150, [(5200, 14, 1), (7400, 10, 0.6)], 0.15, 0.001, (3500, 12000))
-    def zip_(f, d=0.12):
-        return voice(r, d, f, f * 2.3, [(3000, 9, 1), (4600, 8, 0.6)], 0.0, 0.015, 0.08, attack=0.01, release=0.02, bend=1.6)
+    # the web ant: the thinnest, fastest trill in the colony, and silk drawn tight
+    def trill(nn, f=6400):
+        return chirp(r, f, nn, 0.014, 0.01, 6, 34)
     if ack:
-        return mix([(0, zip_(1500 + 100 * v, 0.1), 1.0), (0.02, trill, 0.35)])
-    f = (1400, 1650, 1250)[v]
-    return mix([(0, trill, 0.4), (0.03, zip_(f), 1.0), (0.2, zip_(f * 1.2, 0.15), 1.0)])
+        return mix([(0, trill(4, 6500 + 150 * v), 1.0), (0.02, squeak(r, 0.09, 2600, 4200), 0.3)])
+    f = (6300, 6700, 6000)[v]
+    return mix([(0, trill(6, f), 1.0), (0.17, trill(4, f * 1.06), 0.9), (0.03, squeak(r, 0.2, 2400, 4400), 0.3),
+                (0.3, goo(r, 0.06, 700, 1800, 1, 0.3), 0.25)])
 
 
 def major(r, v, ack):
-    # heavy: a slow low grunt from a great head, and the thick clack of oversized jaws
+    # heavy: a slow deep chirp like a great cricket, the creak of a huge head, and a growl under it
     mouth = [(340, 6, 1), (620, 6, 0.8), (1150, 5, 0.35)]
-    def grunt(d, f=92):
-        return voice(r, d, f, f * 0.74, mouth, 0.5, 0.07, 0.22, attack=0.03, release=0.14)
+    head = [(260, 16, 1), (470, 12, 0.7), (820, 9, 0.4)]
+    def big(nn, f=1500):
+        return chirp(r, f, nn, 0.05, 0.04, 9, 20, harsh=0.3)
     if ack:
-        return mix([(0, clack(r, MAJOR, 0.005, 0.35), 0.7), (0.05, grunt(0.22, 98), 1.0)])
+        return mix([(0, snap(r, MAJOR, 0.005), 0.7), (0.04, big(2, 1550), 1.0), (0.03, growl(r, 0.2, 80, 64, mouth), 0.6)])
     if v == 0:
-        return mix([(0, clack(r, MAJOR, 0.005, 0.35), 0.7), (0.07, grunt(0.5), 1.0)])
+        return mix([(0, snap(r, MAJOR, 0.005), 0.7), (0.06, big(3), 1.0), (0.04, growl(r, 0.42, 76, 58, mouth), 0.7)])
     if v == 1:
-        return mix([(0, grunt(0.26, 100), 1.0), (0.3, grunt(0.38, 84), 1.0), (0.66, clack(r, MAJOR, 0.005, 0.35), 0.7)])
-    return mix([(0, grunt(0.55, 86), 1.0), (0.5, clack(r, MAJOR, 0.005, 0.35), 0.7)])
+        return mix([(0, creak(r, 0.4, 22, 55, head), 0.8), (0.18, big(2, 1400), 1.0), (0.1, growl(r, 0.4, 70, 60, mouth), 0.6), (0.5, snap(r, MAJOR, 0.005), 0.7)])
+    return mix([(0, growl(r, 0.5, 82, 56, mouth), 0.8), (0.12, big(3, 1600), 0.9), (0.4, creak(r, 0.2, 50, 24, head), 0.6)])
 
 
 FLY = [(900, 4, 0.6), (2400, 5, 0.5), (4200, 5, 0.3)]
 
 
 def flyer(r, v, ack):
-    # wings first, then a bright trilled whine that climbs: "prrrEE"
-    def trill(d, f=560):
-        return voice(r, d, f, f * 1.35, [(1500, 6, 1), (2700, 7, 0.7)], 0.1, 0.02, 0.12, trem=0.85, trem_hz=31, attack=0.015, release=0.05)
+    # wings first, then a quick climbing run of chirps: a cicada taking off
+    def run(nn, f=5200, d=0.08):
+        return chirp(r, f, nn, 0.018, 0.012, 7, 30, drift=d)
     if ack:
-        return mix([(0, buzz(r, 0.14, 205, 250, FLY, flutter=0.3), 0.5), (0.03, trill(0.16, 600 + 30 * v), 1.0)])
+        return mix([(0, buzz(r, 0.14, 205, 250, FLY, breath=0.0, flutter=0.3), 0.5), (0.03, run(4, 5300 + 120 * v), 1.0)])
     if v == 0:
-        return mix([(0, buzz(r, 0.3, 195, 238, FLY, flutter=0.35), 0.55), (0.1, trill(0.3), 1.0)])
+        return mix([(0, buzz(r, 0.3, 195, 238, FLY, breath=0.0, flutter=0.35), 0.55), (0.1, run(7), 1.0)])
     if v == 1:
-        return mix([(0, trill(0.18, 520), 1.0), (0.22, trill(0.24, 640), 1.0), (0.05, buzz(r, 0.36, 230, 190, FLY, flutter=0.4, flutter_hz=17), 0.45)])
-    return mix([(0, buzz(r, 0.18, 200, 225, FLY, flutter=0.2), 0.55), (0.16, trill(0.34, 500), 1.0)])
+        return mix([(0, run(4, 5000), 1.0), (0.2, run(5, 5500, 0.12), 1.0), (0.05, buzz(r, 0.36, 230, 190, FLY, breath=0.0, flutter=0.4, flutter_hz=17), 0.45)])
+    return mix([(0, buzz(r, 0.18, 200, 225, FLY, breath=0.0, flutter=0.2), 0.55), (0.16, run(8, 4900, 0.14), 1.0)])
 
 
 def gunner(r, v, ack):
-    # wet: a gargling croak from the acid gland, then the spray sizzling
-    def croak(d, f=165):
-        return voice(r, d, f, f * 0.85, [(520, 5, 1), (1050, 5, 0.7), (2300, 5, 0.3)], 0.35, 0.08, 0.3, trem=0.9, trem_hz=17, attack=0.02, release=0.08)
+    # the gooiest: a thick gurgle from the acid gland with bubbles bursting, and a wet low chirp
+    mouth = [(520, 5, 1), (1050, 5, 0.7), (2100, 5, 0.25)]
+    def wet(nn, f=2300):
+        return chirp(r, f, nn, 0.036, 0.03, 7, 14, harsh=0.2)
     if ack:
-        return mix([(0, croak(0.16, 180), 1.0), (0.12, hiss(r, 0.14, (2500, 9000), (1500, 6000), 2, attack=0.006), 0.6)])
+        return mix([(0, goo(r, 0.2, 200, 950, 4, 0.7), 1.0), (0.08, wet(2), 0.7)])
     if v == 0:
-        return mix([(0, croak(0.32), 1.0), (0.26, hiss(r, 0.36, (2500, 9000), (1200, 6000), 6), 0.7)])
+        return mix([(0, goo(r, 0.5, 180, 900, 9, 0.7), 1.0), (0.12, wet(3), 0.7), (0.0, growl(r, 0.3, 150, 120, mouth, 0.9, 17), 0.45)])
     if v == 1:
-        return mix([(0, hiss(r, 0.3, (1200, 5000), (3000, 10000), 5), 0.6), (0.2, croak(0.36, 150), 1.0)])
-    return mix([(0, croak(0.18, 175), 1.0), (0.22, croak(0.24, 155), 1.0), (0.4, hiss(r, 0.28, (2800, 9500), (1300, 5500), 4, attack=0.008), 0.65)])
+        return mix([(0, wet(2, 2500), 0.7), (0.14, goo(r, 0.5, 220, 1100, 10, 0.8), 1.0)])
+    return mix([(0, growl(r, 0.22, 160, 125, mouth, 0.9, 15), 0.5), (0.1, goo(r, 0.42, 170, 800, 8, 0.75), 1.0), (0.42, wet(2, 2200), 0.65)])
 
 
 def armoured(r, v, ack):
-    # an ant inside a beetle's shell: a hollow knock, then a low purr rattling the plates
+    # an ant inside a beetle's shell: a hollow knock, plates creaking, and a low slow chirp from inside
     shell = [(310, 16, 1), (560, 12, 0.6), (980, 9, 0.35)]
-    def purr(d, f=62):
-        return voice(r, d, f, f * 1.08, [(240, 7, 1), (480, 6, 0.7), (900, 5, 0.3)], 0.2, 0.05, 0.12, trem=0.95, trem_hz=26, attack=0.03, release=0.1)
+    def inside(nn, f=2000):
+        return chirp(r, f, nn, 0.04, 0.03, 8, 18)
     if ack:
-        return mix([(0, clack(r, shell, 0.004, 0.25), 0.9), (0.06, purr(0.2, 68), 1.0)])
+        return mix([(0, snap(r, shell), 0.9), (0.06, inside(2, 2050 + 60 * v), 0.9)])
     if v == 0:
-        return mix([(0, clack(r, shell, 0.004, 0.25), 0.9), (0.08, purr(0.42), 1.0)])
+        return mix([(0, snap(r, shell), 0.9), (0.08, creak(r, 0.3, 28, 60, shell), 0.8), (0.2, inside(3), 0.9)])
     if v == 1:
-        return mix([(0, purr(0.4, 58), 1.0), (0.42, clack(r, shell, 0.004, 0.25), 0.9), (0.54, clack(r, shell, 0.004, 0.25), 0.7)])
-    return mix([(0, clack(r, shell, 0.004, 0.25), 0.9), (0.12, clack(r, shell, 0.004, 0.25), 0.7), (0.2, purr(0.36, 66), 1.0)])
+        return mix([(0, creak(r, 0.34, 60, 26, shell), 0.8), (0.3, inside(2, 1900), 0.9), (0.46, snap(r, shell), 0.8), (0.56, snap(r, shell), 0.6)])
+    return mix([(0, snap(r, shell), 0.9), (0.12, snap(r, shell), 0.7), (0.2, inside(3, 2100), 0.9), (0.22, creak(r, 0.24, 30, 50, shell), 0.6)])
 
 
 def warlord(r, v, ack):
-    # the Warlord: his jaws crack, then a long roar that falls
+    # the Warlord: the monster of the colony. Jaws crack, a long growl falls, and a huge slow chirp grinds over it
     def jaws():
-        return mix([(0, clack(r, [(64, 5, 1)], 0.008, 0.0), 0.8), (0, clack(r, WARLORD, 0.006, 0.4), 1.0)])
-    mouth = [(420, 5, 1), (780, 5, 0.9), (1500, 5, 0.5), (2600, 4, 0.25)]
-    def roar(d, a=150, b=78):
-        return voice(r, d, a, b, mouth, 0.6, 0.09, 0.4, vib=0.03, vib_hz=9, attack=0.04, release=0.25, bend=0.7)
+        return mix([(0, clack(r, [(64, 5, 1)], 0.008, 0.0), 0.8), (0, snap(r, WARLORD, 0.006), 1.0)])
+    mouth = [(420, 5, 1), (780, 5, 0.9), (1500, 5, 0.5)]
+    plates = [(190, 18, 1), (340, 14, 0.8), (610, 10, 0.5)]
+    def roar(d, a=92, b=52):
+        return growl(r, d, a, b, mouth)
+    def grind(nn, f=1050):
+        return chirp(r, f, nn, 0.07, 0.05, 10, 16, -0.08, 0.5)
     if ack:
-        return mix([(0, jaws(), 0.8), (0.05, roar(0.34, 160, 105), 1.0)])
+        return mix([(0, jaws(), 0.8), (0.05, roar(0.34, 100, 70), 1.0), (0.1, grind(2), 0.7)])
     if v == 0:
-        return mix([(0, jaws(), 0.8), (0.08, roar(0.85), 1.0)])
+        return mix([(0, jaws(), 0.8), (0.08, roar(0.85), 1.0), (0.2, grind(3), 0.7), (0.1, creak(r, 0.5, 18, 40, plates), 0.5)])
     if v == 1:
-        return mix([(0, roar(0.3, 120, 150), 1.0), (0.32, roar(0.6, 160, 72), 1.0), (0.3, jaws(), 0.7)])
-    return mix([(0, jaws(), 0.8), (0.12, jaws(), 0.7), (0.2, roar(0.75, 140, 70), 1.0)])
+        return mix([(0, creak(r, 0.4, 40, 16, plates), 0.7), (0.1, roar(0.8, 84, 48), 1.0), (0.4, grind(3, 950), 0.75), (0.3, jaws(), 0.7)])
+    return mix([(0, jaws(), 0.8), (0.12, jaws(), 0.7), (0.2, roar(0.75, 96, 50), 1.0), (0.32, grind(2, 1150), 0.7), (0.5, goo(r, 0.3, 120, 500, 3, 0.8), 0.4)])
 
 
 def matron(r, v, ack):
-    # the Acid Matron: a breathy, wavering wail over the seethe of her gland
-    def wail(d, a=340, b=250):
-        return voice(r, d, a, b, [(700, 5, 1), (1250, 6, 0.8), (2900, 5, 0.4)], 0.15, 0.03, 0.55, vib=0.05, vib_hz=6.5, attack=0.08, release=0.25)
+    # the Acid Matron: her gland boils. A slow thick gurgle, a growl through it, and a wet chirp that wavers
+    mouth = [(600, 5, 1), (1150, 6, 0.8), (2300, 5, 0.3)]
+    def wet(nn, f=2700, d=0.1):
+        return chirp(r, f, nn, 0.045, 0.035, 8, 16, d, 0.25)
     if ack:
-        return mix([(0, wail(0.32, 360, 300), 1.0), (0.04, hiss(r, 0.26, (1800, 8000), (900, 4500), 3, (250, 700), 0.55), 0.5)])
-    a, b = ((340, 250), (270, 350), (360, 230))[v]
-    seethe = hiss(r, 0.8, (1800, 8000), (700, 4500), 8, (250, 700), 0.6, 0.06)
-    return mix([(0, seethe, 0.5), (0.05, wail(0.8, a, b), 1.0)])
+        return mix([(0, goo(r, 0.3, 160, 800, 5, 0.8), 0.9), (0.06, wet(2), 0.8), (0.0, growl(r, 0.28, 130, 110, mouth, 0.8, 9), 0.5)])
+    d = (0.1, -0.1, 0.16)[v]
+    return mix([(0, goo(r, 0.85, 150, 850, 14, 0.85), 1.0), (0.05, growl(r, 0.7, (125, 105, 140)[v], 90, mouth, 0.8, 8), 0.6),
+                (0.2, wet(4, (2700, 2500, 2900)[v], d), 0.8)])
 
 
 SKY = [(380, 4, 0.8), (900, 4, 0.6), (2000, 5, 0.4)]
 
 
 def marshal(r, v, ack):
-    # the Sky Marshal: a raptor's falling screech over great slow wings
-    def screech(d, a=1150, b=720):
-        return voice(r, d, a, b, [(1900, 6, 1), (3100, 7, 0.9), (4600, 6, 0.4)], 0.4, 0.05, 0.3, attack=0.015, release=0.15, bend=0.8)
+    # the Sky Marshal: great slow wings, and a long falling run of chirps like a cicada's scream
+    def scream(nn, f=4300, d=-0.25):
+        return chirp(r, f, nn, 0.022, 0.012, 8, 24, d, 0.35)
+    mouth = [(700, 5, 1), (1300, 5, 0.7)]
     if ack:
-        return mix([(0, screech(0.24, 1200, 900), 1.0), (0, buzz(r, 0.26, 130, 165, SKY, 0.04), 0.45)])
+        return mix([(0, scream(6, 4400), 1.0), (0, buzz(r, 0.26, 130, 165, SKY, 0.04, 0.0), 0.45)])
     if v == 0:
-        return mix([(0, buzz(r, 0.7, 120, 152, SKY, 0.04, 0.45), 0.5), (0.12, screech(0.5), 1.0)])
+        return mix([(0, buzz(r, 0.7, 120, 152, SKY, 0.04, 0.0), 0.5), (0.12, scream(12), 1.0), (0.15, growl(r, 0.4, 150, 110, mouth), 0.4)])
     if v == 1:
-        return mix([(0, screech(0.2, 1050, 900), 1.0), (0.26, screech(0.42, 1250, 700), 1.0), (0, buzz(r, 0.6, 150, 112, SKY, 0.04, 0.45), 0.45)])
-    return mix([(0, buzz(r, 0.3, 162, 130, SKY, 0.04, 0.45), 0.5), (0.25, screech(0.55, 1100, 640), 1.0)])
+        return mix([(0, scream(5, 4600, -0.1), 1.0), (0.24, scream(10, 4200, -0.3), 1.0), (0, buzz(r, 0.6, 150, 112, SKY, 0.04, 0.0), 0.45)])
+    return mix([(0, buzz(r, 0.3, 162, 130, SKY, 0.04, 0.0), 0.5), (0.25, scream(13, 4100, -0.3), 1.0), (0.3, growl(r, 0.4, 140, 100, mouth), 0.4)])
 
 
 # ------------------------------------------------------------------ the wild

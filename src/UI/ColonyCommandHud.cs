@@ -265,6 +265,34 @@ public partial class ColonyCommandHud : Control
     }
     static Upgrade? RoomUpgrade(ChamberKind k) => k switch
     { ChamberKind.Royal => Upgrade.Queen, ChamberKind.Forge => Upgrade.Mandibles, ChamberKind.Armory => Upgrade.Chitin, ChamberKind.Silk => Upgrade.SilkCutters, _ => null };
+    Button _queueFirst;
+    float _pulse, _fullNag;
+
+    /// Draws the eye to what the colony needs next: the Incubator card (and the empty queue slot) while there is no
+    /// incubator, the Storage card while the stores are full. A slow gold glow, not a flash.
+    void PulseWanted(Sim sim, Colony c, float dt)
+    {
+        _pulse += dt;
+        float glow = 0.5f + 0.5f * Mathf.Sin(_pulse * 5f);
+        var lit = new Color(1f + 0.55f * glow, 1f + 0.4f * glow, 1f + 0.05f * glow);
+        bool noBrood = c.Founded && sim.ChamberCount(c.Team, ChamberKind.Brood, false) == 0 && sim.CanDig(c.Team, ChamberKind.Brood) == Sim.DigResult.Ok;
+        bool full = c.Founded && c.Food >= c.FoodCap - 0.5f;
+        bool wantStore = (full || sim.Mission is { Episode: 1, Stage: ExpeditionStage.Store }) && sim.CanDig(c.Team, ChamberKind.Storage) == Sim.DigResult.Ok;
+        if (_cards.GetNodeOrNull<Button>("room_" + ChamberKind.Brood) is { } bb) bb.SelfModulate = noBrood ? lit : Colors.White;
+        if (_cards.GetNodeOrNull<Button>("room_" + ChamberKind.Storage) is { } sb) sb.SelfModulate = wantStore ? lit : Colors.White;
+        if (_queueFirst != null) _queueFirst.SelfModulate = noBrood ? lit : Colors.White;
+        // the food counter says FULL in red for as long as food is going to waste, and the colony is reminded
+        _food.Text = full ? $"{(int)c.Food} FULL" : $"{(int)c.Food} / {(int)c.FoodCap}";
+        _food.AddThemeColorOverride("font_color", full ? new Color(1f, 0.45f, 0.3f) : Gold);
+        _food.TooltipText = full ? "The stores are full: every load the workers bring now is wasted. Dig another Storage chamber, or spend the food on brood." : "";
+        _fullNag = full ? _fullNag - dt : 0;
+        if (full && _fullNag <= 0)
+        {
+            _fullNag = 40;
+            Game.Hud.Alert(wantStore ? "The stores are full and food is going to waste: dig another Storage chamber (the glowing card)" : "The stores are full and food is going to waste: spend it on brood", new Color(1, 0.55f, 0.35f));
+        }
+    }
+
     void OrderRoom(ChamberKind kind)
     { if (RoomUpgrade(kind) is { } u) Game.TryResearch(u); else Game.TryDig(kind); }
     void ResearchCancel(Button button, Upgrade upgrade)
@@ -361,7 +389,8 @@ public partial class ColonyCommandHud : Control
         _cards = At(new Control { MouseFilter = MouseFilterEnum.Ignore }, 0, cardsY, 691, 125); _cardsBlock.AddChild(_cards);
         Text(_cardsBlock, _touch ? "COLONY QUEUE  ·  HOLD TO CANCEL" : "COLONY QUEUE", 0, queueY, 290, 17, _touch ? 12 : 11);
         queueY += 19;
-        var first = Button(_cardsBlock, "", 0, queueY, 304, q, () => { });
+        // with no incubator yet this slot is the way to build one: it says so, glows, and one click starts the dig
+        var first = _queueFirst = Button(_cardsBlock, "", 0, queueY, 304, q, () => { if (Game.Sim.ChamberCount(Local.Me, ChamberKind.Brood, false) == 0) OrderRoom(ChamberKind.Brood); });
         first.TooltipText = "Right-click to cancel the last queued batch and refund its food.";
         SecondaryAction(first, () => Game.Issue(new Cmd { Kind = CmdKind.CancelLast, Team = (byte)Local.Me }));
         float d = (q - 43) / 2;
@@ -547,6 +576,7 @@ public partial class ColonyCommandHud : Control
             {
                 var kind = rooms[i];
                 var b = Button(_cards, "", i * 98, 0, 94, 125, () => OrderRoom(kind));
+                b.Name = "room_" + kind; // found again by PulseWanted
                 Art(b, RoomArt(kind), 3, 4, 88, 64);
                 var l = Text(b, Sim.ChamberName(kind), 5, 74, 85, 45, 11); l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
                 b.TooltipText = kind == ChamberKind.Brood ? "Incubator: eggs, larvae and cocoons. +50 population capacity. 100 food." : Sim.ChamberName(kind);
@@ -574,7 +604,7 @@ public partial class ColonyCommandHud : Control
         RefreshLive(dt);
         _refresh -= dt; if (_refresh > 0) return; _refresh = 0.12f;
         var sim = Game.Sim; var c = sim.Col[Local.Me];
-        _food.Text = $"{(int)c.Food} / {(int)c.FoodCap}"; _brood.Text = $"{c.PopUsed} / {c.PopCap}";
+        PulseWanted(sim, c, 0.12f); _brood.Text = $"{c.PopUsed} / {c.PopCap}";
         _queen.Text = Config.QueenTitles[c.T(Upgrade.Queen)].ToUpperInvariant();
         _organic.Text = $"{c.Organic:0}";
         RefreshSilk(sim, c);
@@ -697,11 +727,22 @@ public partial class ColonyCommandHud : Control
         _detail.Text = _touch
             ? n > 0 ? "Tap the ground to move or an enemy to attack. Hold for attack-move." : "Tap ants to command them. Tap the nest hole or Build to see the chambers."
             : n > 0 ? "Right-click to move or attack. Workers gather food and dig chambers." : "Select ants to command them. Click a chamber to inspect it. N opens the nest.";
+        if (n > 0)
+        {
+            // what the selected creature is: its numbers and its match-ups (the highest-ranking type speaks for a mixed group)
+            int lead = -1;
+            foreach (int id in input.Selection) if (Game.Sim.Ants[id].Alive && (lead < 0 || AudioDirector.VoiceRank(Game.Sim.Ants[id].Type) > AudioDirector.VoiceRank(Game.Sim.Ants[lead].Type))) lead = id;
+            var la = Game.Sim.Ants[lead];
+            var (strong, weak) = Matchups.Of(la.Type);
+            if (n > 1) _selection.Text = $"{n} SELECTED  ·  {Config.Of(la.Type).Name.ToUpperInvariant()}";
+            _detail.Text = $"{Matchups.Numbers(la)}\nStrong: {strong}\nWeak: {weak}";
+        }
         RefreshEvolution(c, input, n);
         if (input.InspectFood is { Alive: true } food && n == 0)
         {
             _selection.Text = food.Kind == FoodKind.Corpse ? $"{Config.Of(food.AntType).Name} remains" : Config.FoodName(food.Kind);
             _counts.Text = $"{food.Amount:0} loads remaining";
+            _selectedArt.Texture = RoomPortrait(ChamberKind.Storage); // food shows the harvest, not the queen
             _detail.Text = food.Kind != FoodKind.Corpse || !Game.Sim.OrganicRules ? Config.FoodEffectShort(food.Kind)
                 : food.Team == Local.Me ? "One of ours. The workers carry our dead to the midden; they feed no one of our kind."
                 : $"{Sim.RemainsValue(food):0} organic matter. Haul it home for the evolve tree and the brood, or have hurt fighters eat it to mend.";
@@ -713,7 +754,8 @@ public partial class ColonyCommandHud : Control
             if (Config.IsHero(enemy.Type) && HeroArt.Bust(enemy.Type, enemy.Team) is { } enemyBust) _selectedArt.Texture = enemyBust;
             _health.Value = enemy.Hp / enemy.MaxHp;
             _counts.Text = $"{enemy.Hp:0} / {enemy.MaxHp:0} health";
-            _detail.Text = enemy.Team == Config.Wild ? "Wild insect. Defeat it for experience and protein." : "Enemy colony. Select your attackers and right-click to attack.";
+            var (es, ew) = Matchups.Of(enemy.Type);
+            _detail.Text = $"{Matchups.Numbers(enemy)}\nStrong: {es}\nWeak: {ew}";
         }
     }
     /// Below the health bar: how far the selected fighters (or hero) have eaten toward their next stage, what it gives,
@@ -738,7 +780,7 @@ public partial class ColonyCommandHud : Control
     {
         bool active = c.Queue.Count > 0;
         _queueArt.Visible = active;
-        _queueName.Text = active ? $"{Config.ProdName(c.Queue[0].Kind)} ×{Config.SquadSize(Config.UnitOf(c.Queue[0].Kind))}" : Game.Sim.ChamberCount(c.Team, ChamberKind.Brood, true) > 0 ? "Incubator ready" : "Build an incubator";
+        _queueName.Text = active ? $"{Config.ProdName(c.Queue[0].Kind)} ×{Config.SquadSize(Config.UnitOf(c.Queue[0].Kind))}" : Game.Sim.ChamberCount(c.Team, ChamberKind.Brood, true) > 0 ? "Incubator ready: pick an ant to hatch (Ants tab)" : Game.Sim.ChamberCount(c.Team, ChamberKind.Brood, false) > 0 ? "Incubator being dug" : "No incubator yet: click here to dig one";
         _queueProgress.Value = active ? c.Queue[0].Progress / c.Queue[0].Time : 0;
         _queueTime.Text = active ? c.PopBlocked ? "Full" : $"{Mathf.Ceil(c.Queue[0].Time - c.Queue[0].Progress):0}s" : "";
         if (active) _queueArt.Texture = UnitArt(c.Queue[0].Kind);

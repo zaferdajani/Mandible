@@ -235,7 +235,7 @@ public partial class Hud : CanvasLayer
     readonly Button[] _buildBtn = new Button[7];
     static readonly (string key, string name, ChamberKind kind, Upgrade? up)[] BuildRooms =
     {
-        ("V", "Brood Chamber", ChamberKind.Brood, null), ("L", "Storage", ChamberKind.Storage, null),
+        ("V", "Incubator", ChamberKind.Brood, null), ("L", "Storage", ChamberKind.Storage, null),
         ("Q", "Royal Chamber", ChamberKind.Royal, Upgrade.Queen),
         ("E", "Mandible Forge", ChamberKind.Forge, Upgrade.Mandibles), ("R", "Chitin Armory", ChamberKind.Armory, Upgrade.Chitin),
         ("T", "Silk Cutters", ChamberKind.Silk, Upgrade.SilkCutters),
@@ -482,7 +482,7 @@ public partial class Hud : CanvasLayer
             int built = sim.ChamberCount(Local.Me, k, true), all = sim.ChamberCount(Local.Me, k, false);
             _dig[i].Modulate = r == Sim.DigResult.Ok ? Colors.White : new Color(1, 1, 1, 0.4f);
             _dig[i].TooltipText = k == ChamberKind.Brood
-                ? $"Brood Chamber  [V]\nWorkers dig a warm room near the surface for eggs and larvae: +{Config.ChamberPop} brood capacity.\n{built} built{(all > built ? $", {all - built} being dug" : "")}.  Cost {Sim.BroodCost:0} food, about {Sim.BroodWork / Sim.MaxDiggers:0}s with {Sim.MaxDiggers} workers."
+                ? $"Incubator  [V]\nWorkers dig a warm room near the surface for eggs and larvae: +{Config.ChamberPop} brood capacity.\n{built} built{(all > built ? $", {all - built} being dug" : "")}.  Cost {Sim.BroodCost:0} food, about {Sim.BroodWork / Sim.MaxDiggers:0}s with {Sim.MaxDiggers} workers."
                 : $"Storage  [L]\nWorkers dig a store at mid depth: the colony can hold {Config.StorageFoodCap:0} more food (now {c.FoodCap:0}).\n{built} of {Sim.MaxStorages} built.  Cost {Sim.StorageCost:0} food, about {Sim.StorageWork / Sim.MaxDiggers:0}s with {Sim.MaxDiggers} workers.";
         }
     }

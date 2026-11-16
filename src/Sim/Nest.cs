@@ -75,7 +75,7 @@ public sealed partial class Sim
 
     public static string ChamberName(ChamberKind k) => k switch
     {
-        ChamberKind.Royal => "Royal Chamber", ChamberKind.Brood => "Brood Chamber", ChamberKind.Storage => "Storage",
+        ChamberKind.Royal => "Royal Chamber", ChamberKind.Brood => "Incubator", ChamberKind.Storage => "Storage",
         ChamberKind.Forge => "Mandible Forge", ChamberKind.Armory => "Chitin Armory", ChamberKind.Wings => "Wing Chamber", ChamberKind.Nursery => "Royal Nursery", _ => "Silk Cutters",
     };
 
