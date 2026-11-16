@@ -20,6 +20,8 @@ Read this instead of re-surveying the codebase. Keep it short and current.
   (level ids, not numbers; `MANDIBLE_CAMPAIGN_TRACE=1` prints progress). Full campaign is ~25 min: release only.
 - Others: `--savetest` (GPU queue), `--transport-test`, `--carrion-test`, `--generaltest`, two-process `--nettest=host,120` + `--nettest=join,120`,
   screenshot tour `--capture=<dir>` (12 self-tests). Launch timing: `--startup-probe [--still-menu] [--probe-shot=path@frame]`.
+  One-shot looks at Level 1 (`--episode=1 --startup-probe`): `--probe-look=x,z,dist` (skips the opening, story and briefing), `--probe-yaw=deg`,
+  `--probe-ants` (puts the colony there), `--probe-nohud`, `--probe-found` (plays forward to a dug nest), `--probe-nest` (build view).
 - Godot import rewrites many `.import` files with LF endings only: discard them (`git checkout -- '*.import'`), never commit.
 
 ## Release recipe (only when the owner asks)
@@ -94,6 +96,8 @@ Assets must be named Mandible-Windows.zip / Mandible-macOS.zip / Mandible-Androi
   `docs/combat-scale.md` (regenerate when numbers change). Changing it needs the full campaign test.
 - Group hauling of carcasses: `Carrion.cs` (`Haulers`, `Config.HaulNeed`) is the model for multi-ant carrying. Level 1's founders drag the
   beetle whole to the clearing (`FounderDrag`); it is stored when it arrives.
+- Looks that went wrong once (owner's playtest, 0.17): the fog's out-of-sight veil must stay warm and dark (a grey one reads as a milky film from a low camera);
+  the excavation's skirt must dive under the yard (`NestGeometry.BuildMesh`); the pond takes no engine sky reflection; plain ants need their polished head and gaster.
 - Fog of war is one screen pass that rebuilds world positions from depth (`FogOverlay.cs`). Anything drawn in the
   transparent pass (the build-view roof, `Shaders.TerrainRoof`) is not in that depth: the pass projects such pixels to the ground.
 - Startup/menu: `Main.cs` (`Swap` builds sessions behind `LoadingCurtain`; phones use a still menu backdrop),

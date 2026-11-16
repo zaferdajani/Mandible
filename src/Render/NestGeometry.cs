@@ -133,6 +133,10 @@ public sealed class NestGeometry
                 // the rock face's own relief, pressed into the bank so its ledges and cracks catch the sun
                 if (WallRelief != null) y -= bank * ReliefDepth * (WallRelief(p) - 0.5f);
                 y = Mathf.Clamp(y, -Depth, -0.03f); // the bumps and relief never break the floor or the surface
+                // beyond the lip the skirt dives under the yard. It used to run flat at the entrance's level for 2.7 units, and
+                // wherever the real ground lay a little lower it broke the surface as flat pale patches with the grid's
+                // stair-stepped outline (build view, owner's playtest). It is only there so no sky shows through the fringe.
+                y -= Mathf.SmoothStep(0.3f, 1.3f, d) * 2.0f;
                 mesh.Add(new Vector3(p.X, y, p.Y), Vector3.Up, Colors.White, new Vector2(d, -FloorDepth(p)), Vector2.Zero);
             }
         for (int z = 0; z < nz; z++)

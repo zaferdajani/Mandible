@@ -148,10 +148,10 @@ public sealed class AntRenderer
     public bool ShowAllBars;
 
     // Lasius niger: a warm brown-black with browner legs; Solenopsis: reddish amber over a dark brown gaster (target G)
-    static readonly Color[] Body = { new(0.11f, 0.075f, 0.05f), new(0.24f, 0.085f, 0.03f) };
-    static readonly Color[] HeadC = { new(0.1f, 0.07f, 0.047f), new(0.27f, 0.095f, 0.035f) };
-    static readonly Color[] GasterC = { new(0.09f, 0.064f, 0.044f), new(0.085f, 0.035f, 0.022f) };
-    static readonly Color[] LegC = { new(0.16f, 0.11f, 0.07f), new(0.32f, 0.12f, 0.055f) };
+    static readonly Color[] Body = { new(0.15f, 0.098f, 0.062f), new(0.24f, 0.085f, 0.03f) };
+    static readonly Color[] HeadC = { new(0.135f, 0.09f, 0.058f), new(0.27f, 0.095f, 0.035f) };
+    static readonly Color[] GasterC = { new(0.125f, 0.084f, 0.054f), new(0.085f, 0.035f, 0.022f) };
+    static readonly Color[] LegC = { new(0.21f, 0.14f, 0.085f), new(0.32f, 0.12f, 0.055f) };
 
     // wild bugs: body, head, shell/abdomen, legs per species
     static readonly Dictionary<AntType, Color[]> BugColors = new()
