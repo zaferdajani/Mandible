@@ -1564,7 +1564,7 @@ public sealed partial class Sim
         // every death leaves a carcass where it fell, above ground or in the galleries
         var carcass = new FoodSource
         {
-            Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating Radius = t.Size * 0.45f,
+            Id = W.NextFoodId++, Kind = FoodKind.Corpse, Pos = t.Pos, Amount = t.Summoned ? 0 : st.CorpseFood, Max = st.CorpseFood, // a callow leaves nothing worth eating. Radius stays 0 ON PURPOSE: `Radius = t.Size * 0.45f` was lost behind this comment in 0.12 and every level since is tuned without it (restoring it, 2026-11-16: The Dry Spell stalls at 64/80 of the feast). Carnage draws such a carcass at its caste's size.
             Team = t.Team, AntType = t.Type, Sting = t.Sting, Heading = t.Heading, Layer = t.Layer, Natural = Mission == null, // the campaign's tuned raids keep carcasses whole until they vanish
             Part = t.PartP1 != 0 ? t.PartP1 : BodyParts.Of(t.Type), // its own part, or the one a worker was carrying home
         };
