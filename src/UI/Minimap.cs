@@ -15,7 +15,13 @@ public partial class Minimap : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Stop;
+        ClipContents = true;
     }
+
+    /// The square of the world the panel shows. A confined level (Level 1: one trail, a clearing and a pond) uses a thin
+    /// strip of the yard; on the whole map that strip was a few pixels in a black panel, so the panel frames the level.
+    Rect2 View => Game?.Sim?.Mission is { Episode: 1 } ? new Rect2(30, 128, 192, 192) : new Rect2(0, 0, Config.MapSize, Config.MapSize);
+    Vector2 ToWorld(Vector2 panel) { var v = View; return v.Position + panel / Size * v.Size; }
 
     void Init()
     {
@@ -52,7 +58,9 @@ public partial class Minimap : Control
                     int fx = x * fogN / _res, fz = y * fogN / _res;
                     float m = Mathf.SmoothStep(0.08f, 0.75f, fog.ExploredValue(fx, fz)) * Mathf.Lerp(0.42f, 1f, fog.VisibleValue(fx, fz)); // unknown ground is black
                     int i = (y * _res + x) * 4;
-                    _px[i] = (byte)(_px[i] * m); _px[i + 1] = (byte)(_px[i + 1] * m); _px[i + 2] = (byte)(_px[i + 2] * m);
+                    // unknown ground is dark bare earth, not a black hole: nothing of the land shows, but the panel reads as a map
+                    float u = 1f - m;
+                    _px[i] = (byte)(_px[i] * m + 34 * u); _px[i + 1] = (byte)(_px[i + 1] * m + 24 * u); _px[i + 2] = (byte)(_px[i + 2] * m + 15 * u);
                 }
         foreach (var f in sim.W.Food)
         {
@@ -87,6 +95,9 @@ public partial class Minimap : Control
     public override void _Draw()
     {
         if (_tex == null) return;
+        // everything below is laid out for the whole map; one transform frames the part in view
+        var view = View; float zoom = Config.MapSize / view.Size.X;
+        DrawSetTransform(-view.Position / Config.MapSize * Size * zoom, 0, new Vector2(zoom, zoom));
         DrawTextureRect(_tex, new Rect2(Vector2.Zero, Size), false);
         if (Game.Guide?.Target is { } guide)
         {
@@ -160,6 +171,7 @@ public partial class Minimap : Control
             var p = n.Pos / Config.MapSize * Size;
             DrawArc(p, 7, 0, Mathf.Tau, 20, Config.TeamUi(n.Team), 2, true);
         }
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
         DrawRect(new Rect2(Vector2.Zero, Size), UiTheme.Bronze, false, 1);
     }
 
@@ -167,7 +179,7 @@ public partial class Minimap : Control
     {
         if (e is InputEventMouseButton mb)
         {
-            var world = mb.Position / Size * Config.MapSize;
+            var world = ToWorld(mb.Position);
             if (mb.ButtonIndex == MouseButton.Left)
             {
                 _dragging = mb.Pressed;
@@ -178,7 +190,7 @@ public partial class Minimap : Control
         }
         else if (e is InputEventMouseMotion mm && _dragging)
         {
-            Game.Camera.PanTo(mm.Position / Size * Config.MapSize);
+            Game.Camera.PanTo(ToWorld(mm.Position));
             AcceptEvent();
         }
     }

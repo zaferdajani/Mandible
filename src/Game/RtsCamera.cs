@@ -142,8 +142,9 @@ public partial class RtsCamera : Node3D
         // Gameplay views stay sharp edge to edge: the tilt-shift blur smeared the soil grain the ground sets carry
         // (the art gate's first finding). Only the far horizon softens, beyond the play area.
         Attr.DofBlurNearEnabled = false;
-        Attr.DofBlurFarDistance = d * 2.6f;
-        Attr.DofBlurFarTransition = d * 1.5f;
+        // zoomed in and low, 2.6 focus distances is still inside the yard (the far bank of Level 1's pond went soft): never nearer than 70
+        Attr.DofBlurFarDistance = Mathf.Max(d * 2.6f, 70f);
+        Attr.DofBlurFarTransition = Mathf.Max(d * 1.5f, 50f);
         Attr.DofBlurFarEnabled = Settings.Gfx != Settings.Quality.Low && !NestView;
     }
 

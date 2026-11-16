@@ -451,7 +451,16 @@ void fragment() {
             c *= 1.0 - 0.45 * pit * (1.0 - smoothstep(10.0, 18.0, -VERTEX.z));
             rough += 0.12 * pit;
         }
-        cc = 0.0; rough = max(rough, 0.72); // satin, not lacquer: the sheen comes from the setae and the sculpture
+        if (hero > 0.5) { cc = 0.0; rough = max(rough, 0.72); } // the rugose Warlord: satin, not lacquer
+        else {
+            // a black garden ant in the sun: the head and gaster are polished and carry a soft highlight, the thorax is satin,
+            // and the cuticle is dark brown that warms toward the edges. At play zoom this is what separates the segments
+            // and the legs; the old all-matte near-black body read as a flat silhouette (owner's playtest).
+            bool polished = part == 12.0 || part == 13.0;
+            rough = polished ? clamp(rough - 0.22, 0.34, 0.46) : clamp(rough - 0.06, 0.5, 0.62);
+            cc = polished ? 0.45 : 0.15;
+            c += vec3(0.075, 0.046, 0.024) * fres * (polished ? 1.0 : 0.7);
+        }
         // the pale seams between tergites and the stretched membrane of a replete
         float mem = clamp(v_cus.x, 0.0, 1.0);
         c = mix(c, mix(vec3(0.16, 0.1, 0.05), vec3(0.62, 0.36, 0.1), step(0.5, mem)), mem);
@@ -574,11 +583,13 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.35;
     ROUGHNESS = clamp(rough + dead * 0.3, 0.05, 1.0);
     METALLIC = metal;
-    SPECULAR = pattern == 0 ? 0.14 : 0.32;
+    SPECULAR = pattern == 0 ? (hero > 0.5 ? 0.14 : 0.5) : 0.32;
     CLEARCOAT = cc;
     CLEARCOAT_ROUGHNESS = 0.42;
-    RIM = pattern == 2 ? 0.6 : 0.35;
-    RIM_TINT = 0.6;
+    // the rim takes the light's colour on a plain ant: tinted by a near-black cuticle it was invisible
+    bool plainAnt = pattern == 0 && hero < 0.5;
+    RIM = pattern == 2 ? 0.6 : (plainAnt ? 0.75 : 0.35);
+    RIM_TINT = plainAnt ? 0.2 : 0.6;
     // brief warm flicker when bitten; kept subtle so big targets under constant attack keep their colour
     EMISSION = vec3(1.0, 0.3, 0.1) * v_flash * v_flash * (pattern == 0 ? 0.3 : 0.08) + eyeEm;
     // a beetle behind its shell wall: the wing cases gleam hard along their edges
@@ -739,7 +750,11 @@ void fragment() {
     if (detail > 0) {
         vec2 ul = uv / 40.0 + 0.71;
         float tL = smoothstep(0.0, 0.25, wLitter - hBase * 0.4 - 0.2);
-        col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
+        // one litter tile spans 40 units: at ant framing that is a smear, so near the camera the same set is read five times finer
+        float nearL = 1.0 - smoothstep(14.0, 40.0, length(CAMERA_POSITION_WORLD - wpos));
+        vec3 litC = texture(g_litter_d, ul).rgb; vec3 litN = texture(g_litter_n, ul).rgb;
+        if (nearL > 0.001) { litC = mix(litC, texture(g_litter_d, ul * 5.0).rgb, nearL); litN = mix(litN, texture(g_litter_n, ul * 5.0).rgb, nearL); }
+        col = mix(col, litC, tL); nmT = mix(nmT, litN, tL);
     }
     col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
     // close to the camera, a macro layer: the pebbly ground set at a tenth of the base tile, so at ant framing the
@@ -1249,7 +1264,9 @@ void fragment() {
     /// two drifting ripple normals catch the sun and the sky. Refracted, never a flat painted sheet.
     public const string Pond = @"
 shader_type spatial;
-render_mode blend_mix, depth_draw_always, cull_back, specular_schlick_ggx;
+// ambient_light_disabled: the engine's sky reflection is blue-grey and, at a low camera, Fresnel laid it over the whole
+// sheet as a milky film (owner's playtest). The water reflects the warm sky colour below instead; the sun still glints.
+render_mode blend_mix, depth_draw_always, cull_back, specular_schlick_ggx, ambient_light_disabled;
 uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D ripple_a : hint_normal, filter_linear_mipmap, repeat_enable;
@@ -1304,7 +1321,8 @@ void fragment() {
         if (sv.z > rp.z && sv.z - rp.z < 1.2) { mirror = textureLod(screen_tex, uv, 0.0).rgb; got = 1.0; break; }
     }
     float shine = mix(0.04, 0.4, got) * smoothstep(0.05, 0.6, thick);
-    col = mix(col, mirror, max(shine, refl * 0.4));
+    float fres = min(0.02 + 0.98 * pow(1.0 - facing2, 5.0), 0.4) * smoothstep(0.05, 0.6, thick);
+    col = mix(col, mirror, max(max(shine, refl * 0.4), fres));
     // the meniscus: a thin bright line where the water climbs the mud, then the wet dark band above it (terrain AO)
     float lip = smoothstep(0.0, 0.012, thick) * (1.0 - smoothstep(0.025, 0.08, thick));
     ALBEDO = vec3(0.0);

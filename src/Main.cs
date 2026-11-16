@@ -25,7 +25,7 @@ public partial class Main : Node
             DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://test_args.txt"));
         }
         if (args.Count > 0) GD.Print($"[args] {string.Join(" ", args)}");
-        TestRun = args.Exists(a => a is not ("--startup-probe" or "--still-menu" or "--mobile") && !a.StartsWith("--gfx=") && !a.StartsWith("--probe-shot=")); // these only measure or emulate a player's launch
+        TestRun = args.Exists(a => a is not ("--startup-probe" or "--still-menu" or "--mobile") && !a.StartsWith("--gfx=") && !a.StartsWith("--probe-shot=") && !a.StartsWith("--probe-look=") && !a.StartsWith("--probe-yaw=") && a is not ("--probe-nest" or "--probe-ants" or "--probe-nohud" or "--probe-found")); // these only measure or emulate a player's launch
         foreach (var a in args)
         {
             if (a.StartsWith("--capture=")) _capture = a.Substring(10);
@@ -88,7 +88,7 @@ public partial class Main : Node
         ShowMenu();
         GD.Print($"[startup] menu built at {Time.GetTicksMsec()} ms");
         int drawn = 0;
-        void Drawn() { drawn++; if (_probeLook is { } pl && drawn == 5 && _session != null) { _session.Sim.SkipOpening(); _session.Camera.Focus = new Vector3(pl.X, 0, pl.Y); _session.Camera.PanTo(pl); _session.Camera.Distance = _session.Camera.TargetDistance = _probeDist; } if (drawn == 1 || drawn == 30) GD.Print($"[startup] frame {drawn} drawn at {Time.GetTicksMsec()} ms"); if (_probeShot != null && drawn == _probeFrame) GetViewport().GetTexture().GetImage().SaveJpg(_probeShot, 0.9f); if (drawn == System.Math.Max(30, _probeFrame + 1)) { RenderingServer.FramePostDraw -= Drawn; if (args.Contains("--startup-probe")) GetTree().Quit(); } }
+        void Drawn() { drawn++; if (_probeLook is { } pl && drawn == 5 && _session != null) { _session.Sim.SkipOpening(); if (_session.Hud.StoryOpen) _session.Hud.Story.QueueFree(); _session.Hud.CloseBriefing(); if (args.Contains("--probe-ants")) { int k = 0; var sm = _session.Sim; for (int i = 0; i < sm.High; i++) if (sm.Ants[i].Alive && sm.Ants[i].Team == 0 && !sm.Ants[i].Dormant) { sm.Ants[i].Pos = pl + new Vector2(-5 + (k % 5) * 1.3f, -2 + (k / 5) * 1.3f); k++; } } if (args.Contains("--probe-found")) ProbeFound.Run(_session.Sim); foreach (var ya in args) if (ya.StartsWith("--probe-yaw=")) _session.Camera.SetYaw(Mathf.DegToRad(float.Parse(ya[12..])), true); if (args.Contains("--probe-nohud")) _session.Hud.Visible = false; if (args.Contains("--probe-nest")) { _session.SetNestView(true); _session.Camera.NestView = true; } _session.Camera.Focus = new Vector3(pl.X, 0, pl.Y); _session.Camera.PanTo(pl); _session.Camera.Distance = _session.Camera.TargetDistance = _probeDist; } if (drawn == 1 || drawn == 30) GD.Print($"[startup] frame {drawn} drawn at {Time.GetTicksMsec()} ms"); if (_probeShot != null && drawn == _probeFrame) GetViewport().GetTexture().GetImage().SaveJpg(_probeShot, 0.9f); if (drawn == System.Math.Max(30, _probeFrame + 1)) { RenderingServer.FramePostDraw -= Drawn; if (args.Contains("--startup-probe")) GetTree().Quit(); } }
         RenderingServer.FramePostDraw += Drawn;
         if (_capture != null) _ = Capture.Run(this, _capture);
         if (_layout != null) _ = Capture.Layout(this, _layout);
