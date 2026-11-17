@@ -754,11 +754,9 @@ void fragment() {
     if (detail > 0) {
         vec2 ul = uv / 40.0 + 0.71;
         float tL = smoothstep(0.0, 0.25, wLitter - hBase * 0.4 - 0.2);
-        // one litter tile spans 40 units: at ant framing that is a smear, so near the camera the same set is read five times finer
-        float nearL = 1.0 - smoothstep(14.0, 40.0, length(CAMERA_POSITION_WORLD - wpos));
-        vec3 litC = texture(g_litter_d, ul).rgb; vec3 litN = texture(g_litter_n, ul).rgb;
-        if (nearL > 0.001) { litC = mix(litC, texture(g_litter_d, ul * 5.0).rgb, nearL); litN = mix(litN, texture(g_litter_n, ul * 5.0).rgb, nearL); }
-        col = mix(col, litC, tL); nmT = mix(nmT, litN, tL);
+        // 0.17.2 read the litter set a second time, five times finer, near the camera: on a GTX 1650 that halved the
+        // frame rate on every tier (Low 60 -> 18 fps), so the litter is read once again.
+        col = mix(col, texture(g_litter_d, ul).rgb, tL); nmT = mix(nmT, texture(g_litter_n, ul).rgb, tL);
     }
     col *= mix(1.0, occ, 0.8) * (0.9 + 0.2 * n1);
     // close to the camera, a macro layer: the pebbly ground set at a tenth of the base tile, so at ant framing the
