@@ -79,6 +79,7 @@ uniform float hero = 0.0;     // metal-inlaid armour of hero ants
 uniform vec3 accent : source_color = vec3(0.95, 0.68, 0.2); // crests, plate rims, inlay: the colony's metal, or a bug's own
 uniform vec3 acid = vec3(0.0); // glowing acid sac (Acid Matron)
 uniform float sculpture = 0.08; // the cuticle's micro-relief: fine imbricate on a worker, coarse rugose on the Warlord
+uniform float gaster_close = 0.035; // how far the gaster is drawn forward to meet the waist (model units)
 uniform vec3 waist = vec3(0.0, 0.14, -0.105); // the gaster nods (and curls to spray) about this model-space point
 // a body made from a real specimen scan (Antscan micro-CT): its sutures, punctures and setae sockets, baked
 uniform sampler2D detail_normal : hint_normal, filter_linear_mipmap, repeat_disable;
@@ -292,6 +293,9 @@ void vertex() {
         if (part == 13.0) {
             p.y += sin(TIME * 2.0 + id) * 0.004;
             if (pattern == 0) {
+                // the scanned bodies were parted at the waist and the gaster was left hanging behind it with sand showing
+                // between (owner, 2026-11-17). A real Lasius gaster overhangs the petiole and all but touches the mesosoma.
+                p.z += gaster_close;
                 vec3 q = p - waist;
                 float g = sin(2.0 * phase - 0.6) * 0.05 * amp;
                 // a formicine sprays from the acidopore: the gaster swings down and forward under the body on the shot

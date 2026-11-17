@@ -345,6 +345,7 @@ public sealed class AntRenderer
         {
             m.SetShaderParameter("neck", AntMesh.NeckOf(type, team));
             m.SetShaderParameter("waist", AntMesh.WaistOf(type, team));
+            m.SetShaderParameter("gaster_close", type is AntType.Major or AntType.Warlord or AntType.Armoured ? 0.065f : 0.035f); // the big castes were parted wider
             var detail = AntMesh.DetailOf(type, team);
             if (detail != null) { m.SetShaderParameter("detail_normal", detail); m.SetShaderParameter("has_detail", 1f); }
         }
