@@ -951,7 +951,7 @@ public partial class GameSession : Node3D
         WatchFrameRate(delta);
         StepSimulation((float)delta);
         Input?.Prune();
-        if (World.Trap != null) World.Trap.Dug = Sim.Mission is { Episode: 1 } tm ? tm.Dug / 100f : 1f;
+        if (World.Trap != null) { World.Trap.Sim = Sim; World.Trap.Dug = Sim.Mission is { Episode: 1 } tm ? tm.Dug / 100f : 1f; }
         Ants.ShowAllBars = !Demo && Godot.Input.IsKeyPressed(Key.Alt);
         Fog?.Update(Sim, dt);
         Interior.Update(Fog, NestView, _alpha);

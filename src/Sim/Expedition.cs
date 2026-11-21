@@ -366,7 +366,8 @@ public sealed partial class Sim
             float fan = ((i * 5) % 7 - 3) * 0.42f;
             var outward = (Expedition.DigSite - site).Normalized();
             var side = new Vector2(-outward.Y, outward.X);
-            var slot = site + outward * (hauling ? 3.4f : 0.9f + (i % 2) * 0.55f) + side * fan * (hauling ? 2.2f : 1f);
+            // the haul ends inside the gold ring the player sees (radius ~2.3 about DigSite): diggers never leave the dig
+            var slot = site + outward * (hauling ? 2.4f : 0.9f + (i % 2) * 0.55f) + side * fan * (hauling ? 1.1f : 1f);
             if (a.State is AntState.Idle or AntState.Hold or AntState.Move && a.Goal.DistanceSquaredTo(Expedition.DigSite) < r2)
             {
                 if (a.Pos.DistanceSquaredTo(slot) > 0.2f) { a.State = AntState.Move; a.Goal = slot; a.GoalLayer = 0; }

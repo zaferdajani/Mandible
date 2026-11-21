@@ -1747,6 +1747,22 @@ public sealed partial class Sim
     void Move(int i, ref Ant a, UnitStats st, Vector2 desired, float speedMul, float dt)
     {
         if (a.Guardian) { a.Speed = 0; return; } // rooted in its mound
+        // Level 1's pond: once the straw bridge stands, anyone bound to or from the island walks to the bridge first and
+        // crosses on it. Without this an ant aimed straight at the island slid round the shore for ever (only one that
+        // happened to come at the bridge head-on got over).
+        if (Mission is { Confined: true } bm && bm.Bridged && a.Layer == 0 && desired.LengthSquared() > 1e-6f)
+        {
+            var dest = a.Pos + desired;
+            var pond = Expedition.Pond;
+            bool toIsland = dest.DistanceTo(pond) < Expedition.IslandR + 0.5f;
+            bool onIsland = a.Pos.DistanceTo(pond) < Expedition.IslandR + 0.3f;
+            bool onBridge = Mathf.Abs(a.Pos.Y - pond.Y) < 1.1f && a.Pos.X > pond.X - Expedition.WaterR - 1.6f && a.Pos.X < pond.X;
+            if (toIsland != onIsland && !onBridge)
+            {
+                var foot = onIsland ? pond + new Vector2(-Expedition.IslandR + 0.4f, 0) : new Vector2(pond.X - Expedition.WaterR - 1.3f, pond.Y);
+                desired = foot - a.Pos;
+            }
+        }
         float radius = a.Size * 0.3f;
         float targetSpeed = 0;
         bool fly = Config.Flies(a.Type) || OnBridge(a) > 0; // on a living bridge, rocks are no obstacle

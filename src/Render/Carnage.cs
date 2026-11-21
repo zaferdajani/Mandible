@@ -18,7 +18,14 @@ public sealed class Carnage
     struct Blot { public Vector3 Pos; public float R, Born, Life, Seed; public int Kind; }
     struct Bit { public Vector3 Pos; public float Heading, Born, Size; public int Team, Mask; public AntType Type; public bool Flip, Sting; }
     sealed class Piece { public int Mask; public Vector3 Off; public float Yaw, Raise; public bool Flip; }
-    sealed class Look { public readonly List<Piece> Pieces = new(); public float Born; public Vector2 Shown; public bool Placed, Whole = true; }
+    sealed class Look
+    {
+        public readonly List<Piece> Pieces = new(); public float Born; public Vector2 Shown; public bool Placed, Whole = true;
+        // what was drawn last frame, so a body that is gone from the simulation (butchered at the clearing, eaten) is cut
+        // away over a few seconds instead of vanishing in one frame (owner, 2026-11-21: it flicked out of sight)
+        public readonly List<(Basis b, Vector3 o, Color data)> Drawn = new();
+        public int Team; public AntType Type; public bool Sting; public float Seen, GoneAt = -1;
+    }
 
     readonly Batch _drops, _stains;
     readonly List<Drop> _dropList = new();
@@ -362,14 +369,30 @@ public sealed class Carnage
             // workers carry it off a piece at a time: loose legs first, the thorax last
             int count = look.Pieces.Count;
             int shown = look.Whole ? count : Mathf.Clamp(Mathf.CeilToInt(count * f.Amount / f.Max), 1, count);
+            look.Drawn.Clear(); look.Team = f.Team; look.Type = f.AntType; look.Sting = f.Sting; look.Seen = _now; look.GoneAt = -1;
+            if (f.Layer != 0) look.Seen = -100; // underground: carried into the nest, not cut up in the open
             for (int k = count - shown; k < count; k++)
             {
                 var pc = look.Pieces[k];
                 var b = AntRenderer.Orient(n, f.Heading + pc.Yaw, s);
                 if (pc.Flip) b = new Basis(-b.X, -b.Y, b.Z);
                 var o = new Vector3(p.X, floor, p.Y) + frame * pc.Off + n * (pc.Raise * s * BodyLift(f.AntType));
-                ants.AddDead(f.Team, f.AntType, b, o, DeadData(f.Id * 5 + k, look.Born, pc.Mask), f.Sting);
+                var data = DeadData(f.Id * 5 + k, look.Born, pc.Mask);
+                ants.AddDead(f.Team, f.AntType, b, o, data, f.Sting);
+                look.Drawn.Add((b, o, data));
             }
+        }
+        // bodies that left the simulation this moment, in the open: the workers cut them up where they lie, so they
+        // shrink away into the soil over three seconds instead of vanishing (the stock was counted already)
+        foreach (var (id, look) in _looks)
+        {
+            if (look.Drawn.Count == 0 || look.Seen < 0) continue;
+            if (look.Seen >= _now - 0.001f) continue;            // drawn this frame: still there
+            if (look.GoneAt < 0) look.GoneAt = _now;
+            float k = 1f - (_now - look.GoneAt) / 3f;
+            if (k <= 0) { look.Drawn.Clear(); continue; }
+            float sc = Mathf.SmoothStep(0f, 1f, k);
+            foreach (var (b, o, data) in look.Drawn) ants.AddDead(look.Team, look.Type, b.Scaled(Vector3.One * sc), o, data, look.Sting);
         }
         // forget the looks of carcasses that are gone
         if (_looks.Count > 64 && _rng.F() < 0.05f)

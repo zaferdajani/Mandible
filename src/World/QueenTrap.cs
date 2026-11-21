@@ -12,26 +12,80 @@ public partial class QueenTrap : Node3D
 {
     /// How far the mouth is dug open, 0..1; the session copies it from the simulation every frame.
     public float Dug;
-    readonly List<(Node3D node, Vector3 from, Vector3 to, Basis rest, Vector3 turn, float at)> _pieces = new();
+    /// The running simulation (set by the session): the diggers are read from it so every piece leaves in an ant's jaws.
+    public Sim Sim;
+    sealed class Piece
+    {
+        public Node3D Node; public Vector3 From, To; public Basis Rest; public Vector3 Turn; public float At;
+        public int Carrier = -1, Serial; public float Held; public bool Dropped; public Vector3 Scale = Vector3.One;
+    }
+    readonly List<Piece> _pieces = new();
     float _shown = -1;
 
     public void Add(Node3D node, Vector3 to, float at, Vector3 turn)
     {
         AddChild(node);
-        _pieces.Add((node, node.Position, to, node.Basis, turn, at));
+        _pieces.Add(new Piece { Node = node, From = node.Position, To = to, Rest = node.Basis, Turn = turn, At = at, Scale = node.Scale });
+    }
+
+    /// A digger at the mouth with free jaws (not already holding a piece), nearest the plug.
+    int FreeDigger(Vector3 near)
+    {
+        if (Sim == null) return -1;
+        int best = -1; float bd = 9f;
+        for (int i = 0; i < Sim.High; i++)
+        {
+            ref var a = ref Sim.Ants[i];
+            if (!a.Alive || a.Team != 0 || a.Dormant || a.Type == AntType.Queen || a.Layer != 0) continue;
+            float d = a.Pos.DistanceSquaredTo(Expedition.DigSite);
+            if (d > Expedition.DigRadius * Expedition.DigRadius) continue;
+            bool busy = false;
+            foreach (var p in _pieces) if (p.Carrier == i && !p.Dropped) { busy = true; break; }
+            if (busy) continue;
+            float dn = a.Pos.DistanceSquaredTo(new Vector2(near.X, near.Z));
+            if (dn < bd) { bd = dn; best = i; }
+        }
+        return best;
     }
 
     public override void _Process(double delta)
     {
-        float d = _shown < 0 ? Dug : Mathf.MoveToward(_shown, Dug, (float)delta * 0.5f);
-        if (Mathf.IsEqualApprox(d, _shown)) return;
+        float dt = (float)delta;
+        float d = _shown < 0 ? Dug : Mathf.MoveToward(_shown, Dug, dt * 0.5f);
         _shown = d;
-        foreach (var (node, from, to, rest, turn, at) in _pieces)
+        foreach (var p in _pieces)
         {
-            // each piece is worked loose, lifted over the others and dropped clear
-            float k = Mathf.SmoothStep(at, Mathf.Min(1f, at + 0.22f), d);
-            node.Position = from.Lerp(to, k) + Vector3.Up * (Mathf.Sin(k * Mathf.Pi) * 0.3f);
-            node.Basis = Basis.FromEuler(turn * k) * rest;
+            if (p.Dropped) continue;
+            float k = Mathf.SmoothStep(p.At, Mathf.Min(1f, p.At + 0.22f), d);
+            if (k <= 0) continue;
+            // the moment a piece comes loose, a digger at the mouth takes it in its jaws (owner, 2026-11-21: the ants
+            // must really carry the plug and the sand away, not stand by while the pieces fly off on their own)
+            if (p.Carrier < 0 && Sim != null) { p.Carrier = FreeDigger(p.Node.Position); if (p.Carrier >= 0) p.Serial = Sim.Ants[p.Carrier].Serial; }
+            bool held = p.Carrier >= 0 && Sim != null && Sim.Valid(p.Carrier, p.Serial);
+            if (held)
+            {
+                ref var a = ref Sim.Ants[p.Carrier];
+                p.Held += dt;
+                // in the jaws: shrunk to a mouthful an ant can lift, just ahead of its head
+                var head = a.Pos + MathX.Dir(a.Heading) * a.Size * 0.48f;
+                var target = new Vector3(head.X, Sim.W.HF.Sample(head.X, head.Y) + a.Size * 0.32f, head.Y);
+                p.Node.Position = p.Node.Position.Lerp(target, 1f - Mathf.Exp(-dt * 18f));
+                p.Node.Scale = p.Node.Scale.Lerp(p.Scale * 0.42f, 1f - Mathf.Exp(-dt * 6f));
+                p.Node.Basis = Basis.FromEuler(p.Turn * Mathf.Min(1f, p.Held * 0.6f)) * p.Rest.Orthonormalized() * Basis.FromScale(p.Node.Scale);
+                // set down at the edge of the dig, once it has been carried out of the mouth (or the dig has moved on)
+                bool out_ = a.Pos.DistanceTo(Expedition.Mouth) > 2.0f && p.Held > 1.2f;
+                if (out_ || k >= 1f || p.Held > 9f)
+                {
+                    p.Dropped = true;
+                    var at = new Vector2(p.Node.Position.X, p.Node.Position.Z);
+                    p.Node.Position = new Vector3(at.X, Sim.W.HF.Sample(at.X, at.Y) + 0.05f, at.Y);
+                }
+                continue;
+            }
+            // no free jaws (or no simulation, as in a still capture): the old drag aside
+            p.Node.Position = p.From.Lerp(p.To, k) + Vector3.Up * (Mathf.Sin(k * Mathf.Pi) * 0.3f);
+            p.Node.Basis = Basis.FromEuler(p.Turn * k) * p.Rest;
+            if (k >= 1f) p.Dropped = true;
         }
     }
 }

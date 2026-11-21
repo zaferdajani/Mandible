@@ -105,6 +105,8 @@ public partial class Main : Node
         foreach (var a in args) if (a.StartsWith("--ant-capture=")) _ = AntValidation.Capture(this, a["--ant-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--interior-capture=")) _ = NestArtValidation.Capture(this, a["--interior-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--brood-capture=")) _ = NestArtValidation.Brood(this, a["--brood-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--dig-capture=")) _ = DeathCapture.Dig(this, a["--dig-capture=".Length..]);
+        foreach (var a in args) if (a.StartsWith("--death-capture=")) _ = DeathCapture.Run(this, a["--death-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--gore-capture=")) _ = GoreValidation.Capture(this, a["--gore-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--general-capture=")) _ = GeneralValidation.Capture(this, a["--general-capture=".Length..]);
         foreach (var a in args) if (a.StartsWith("--transport-capture="))_ = FoodTransportValidation.Capture(this, a["--transport-capture=".Length..]);

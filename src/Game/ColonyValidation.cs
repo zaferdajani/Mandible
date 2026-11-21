@@ -183,7 +183,13 @@ public static class ColonyValidation
             int mutationsBefore = c.Mutations;
             crew = Units(s, AntType.Worker);
             s.CmdExtract(crew.GetRange(0, Math.Min(3, crew.Count)), gland);
-            Until(s, () => s.Winner == 0, 300, "workers cross, carve the dead queen's gland and carry it to the queen");
+            for (int t = 0; t < 300 && s.Winner != 0; t += 20)
+            {
+                for (int i = 0; i < 600 && s.Winner != 0; i++) s.Tick(1f / 30);
+                int on = 0; foreach (int cw in crew) if (s.Ants[cw].Alive && s.Ants[cw].MutaP1 == gland.Id + 1) on++;
+                GD.Print($"[campaign-test] gland t+{t + 20}s: carved {gland.Done:0.0}/{gland.Work:0.0} carried {gland.Carried} home {gland.Home} at {gland.Pos} workers on it {on} queen {s.Ants[c.QueenId].Pos} stage {s.Mission.Stage} crew {string.Join(" ", crew.GetRange(0, Math.Min(3, crew.Count)).ConvertAll(cw => s.Ants[cw].Pos.ToString("F1") + "/" + s.Ants[cw].State + "/L" + s.Ants[cw].Layer))}");
+            }
+            Check(s.Winner == 0, "Timed out: workers cross, carve the dead queen's gland and carry it to the queen");
             Check(gland.Home && c.Mutations == mutationsBefore, "The story gland mutated the queen");
             Check(c.Gathered > 0, "No actual food was gathered");
             Check(s.Mission.Stage == ExpeditionStage.Complete, "Wrong victory condition");
