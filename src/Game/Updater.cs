@@ -18,7 +18,7 @@ namespace Mandible;
 /// Kaspersky, ...) exactly where the player's browser works.
 public partial class Updater : Node
 {
-    public const string Version = "0.17.3";
+    public const string Version = "0.17.4";
     const string Api = "https://api.github.com/repos/zaferdajani/Mandible/releases/latest";
     public const string Page = "https://github.com/zaferdajani/Mandible/releases/latest"; // the public code repo is the one release home
 
